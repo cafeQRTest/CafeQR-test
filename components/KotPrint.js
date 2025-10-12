@@ -115,7 +115,7 @@ export default function KotPrint({ order, onClose, onPrint }) {
           { namePrefix: 'Bluetooth Printer' }
         ],
         optionalServices: [
-          '0000FFE0-0000-1000-8000-00805f9b34fb', // Common thermal printer service
+          '0000ffe0-0000-1000-8000-00805f9b34fb', // Common thermal printer service
           '00001101-0000-1000-8000-00805f9b34fb'  // SPP service
         ]
       });
@@ -126,8 +126,8 @@ export default function KotPrint({ order, onClose, onPrint }) {
       // Try common service UUIDs
       let service, characteristic;
       try {
-        service = await server.getPrimaryService('0000FFE0-0000-1000-8000-00805f9b34fb');
-        characteristic = await service.getCharacteristic('0000FFE1-0000-1000-8000-00805f9b34fb');
+        service = await server.getPrimaryService('0000ffe0-0000-1000-8000-00805f9b34fb');
+        characteristic = await service.getCharacteristic('0000ffe1-0000-1000-8000-00805f9b34fb');
       } catch (e) {
         // Try alternative service
         service = await server.getPrimaryService('00001101-0000-1000-8000-00805f9b34fb');
