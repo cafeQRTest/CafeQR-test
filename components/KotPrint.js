@@ -1,6 +1,6 @@
-// components/KotPrint.js - COMPLETE ENHANCED VERSION
-
+// components/KotPrint.js
 import React, { useState } from 'react';
+import { downloadPdfAndShare, downloadTextAndShare } from '../utils/printUtils';
 
 function toDisplayItems(order) {
   if (Array.isArray(order.items) && order.items.length) {
@@ -16,304 +16,48 @@ function toDisplayItems(order) {
   return [];
 }
 
-// Detect platform capabilities
-function getPlatformCapabilities() {
-  const isAndroid = /Android/i.test(navigator.userAgent);
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-  const isWindows = /Windows/i.test(navigator.userAgent);
-  const isMac = /Macintosh/i.test(navigator.userAgent);
-  const isChrome = /Chrome/i.test(navigator.userAgent);
-  const isSafari = /Safari/i.test(navigator.userAgent) && !/Chrome/i.test(navigator.userAgent);
-  
-  return {
-    hasWebBluetooth: 'bluetooth' in navigator && isChrome && !isIOS,
-    hasWebSerial: 'serial' in navigator && isChrome,
-    platform: isAndroid ? 'android' : isIOS ? 'ios' : isWindows ? 'windows' : isMac ? 'mac' : 'unknown',
-    browser: isChrome ? 'chrome' : isSafari ? 'safari' : 'other'
-  };
-}
-
-// ESC/POS Commands Generator
-function buildESCPOSData(order) {
-  const items = toDisplayItems(order);
-  let commands = [];
-  
-  // Initialize printer
-  commands.push(0x1B, 0x40); // ESC @ - Initialize
-  
-  // Center alignment
-  commands.push(0x1B, 0x61, 0x01); // ESC a 1 - Center
-  
-  // Bold + Double height for header
-  commands.push(0x1B, 0x21, 0x30); // ESC ! 48 - Bold + Double height
-  const header = 'KOT\n';
-  commands.push(...Array.from(new TextEncoder().encode(header)));
-  
-  // Normal text
-  commands.push(0x1B, 0x21, 0x00); // ESC ! 0 - Normal
-  
-  // Left alignment
-  commands.push(0x1B, 0x61, 0x00); // ESC a 0 - Left
-  
-  // Order details
-  const orderInfo = [
-    `Table: ${order.table_number}\n`,
-    `Order: #${order.id?.slice(0, 8)?.toUpperCase()}\n`,
-    `Time: ${new Date(order.created_at).toLocaleTimeString()}\n`,
-    '================================\n'
-  ];
-  
-  orderInfo.forEach(line => {
-    commands.push(...Array.from(new TextEncoder().encode(line)));
-  });
-  
-  // Items
-  items.forEach(item => {
-    const line = `${item.quantity}x  ${item.name}\n`;
-    commands.push(...Array.from(new TextEncoder().encode(line)));
-  });
-  
-  // Footer
-  const footer = [
-    '================================\n',
-    `Printed: ${new Date().toLocaleString()}\n`,
-    '\n\n\n' // Paper feed
-  ];
-  
-  footer.forEach(line => {
-    commands.push(...Array.from(new TextEncoder().encode(line)));
-  });
-  
-  // Cut paper (if supported)
-  commands.push(0x1D, 0x56, 0x00); // GS V 0 - Full cut
-  
-  return new Uint8Array(commands);
-}
-
 export default function KotPrint({ order, onClose, onPrint }) {
-  const [printStatus, setPrintStatus] = useState('');
-  const [isConnecting, setIsConnecting] = useState(false);
-  const capabilities = getPlatformCapabilities();
+  const [status, setStatus] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  // Method 1: Web Bluetooth (Chrome on Android/Desktop)
-  const printViaBluetooth = async () => {
-    if (!capabilities.hasWebBluetooth) {
-      setPrintStatus('Web Bluetooth not supported on this device');
-      return;
-    }
-
-    setIsConnecting(true);
-    setPrintStatus('Connecting to Bluetooth printer...');
+  const handlePdfShare = async () => {
+    setIsProcessing(true);
+    setStatus('Generating PDF...');
     
-    try {
-      // Request device
-      const device = await navigator.bluetooth.requestDevice({
-        filters: [
-          { namePrefix: 'Thermal' },
-          { namePrefix: 'POS' },
-          { namePrefix: 'POSFLOW' },
-          { namePrefix: 'Bluetooth Printer' }
-        ],
-        optionalServices: [
-          '0000ffe0-0000-1000-8000-00805f9b34fb', // Common thermal printer service
-          '00001101-0000-1000-8000-00805f9b34fb'  // SPP service
-        ]
-      });
-
-      setPrintStatus('Connecting to GATT server...');
-      const server = await device.gatt.connect();
-      
-      // Try common service UUIDs
-      let service, characteristic;
-      try {
-        service = await server.getPrimaryService('0000ffe0-0000-1000-8000-00805f9b34fb');
-        characteristic = await service.getCharacteristic('0000ffe1-0000-1000-8000-00805f9b34fb');
-      } catch (e) {
-        // Try alternative service
-        service = await server.getPrimaryService('00001101-0000-1000-8000-00805f9b34fb');
-        const characteristics = await service.getCharacteristics();
-        characteristic = characteristics[0]; // Use first available
+    const result = await downloadPdfAndShare(order);
+    
+    if (result.success) {
+      if (result.method === 'share') {
+        setStatus('Shared successfully! Choose Thermer or another printing app.');
+      } else {
+        setStatus('PDF downloaded! Use Thermer or another app to print.');
       }
-
-      setPrintStatus('Sending data to printer...');
-      const escposData = buildESCPOSData(order);
-      
-      // Send data in chunks for better compatibility
-      const chunkSize = 20;
-      for (let i = 0; i < escposData.length; i += chunkSize) {
-        const chunk = escposData.slice(i, i + chunkSize);
-        await characteristic.writeValue(chunk);
-        await new Promise(resolve => setTimeout(resolve, 10)); // Small delay
+      if (onPrint) onPrint();
+    } else {
+      setStatus(`Error: ${result.error}`);
+    }
+    
+    setIsProcessing(false);
+  };
+  
+  const handleTextShare = async () => {
+    setIsProcessing(true);
+    setStatus('Generating text file...');
+    
+    const result = downloadTextAndShare(order);
+    
+    if (result.success) {
+      if (result.method === 'share') {
+        setStatus('Shared successfully! Choose Thermer or another printing app.');
+      } else {
+        setStatus('Text file downloaded! Use Thermer or another app to print.');
       }
-
-      setPrintStatus('Print successful!');
-      device.gatt.disconnect();
-      
       if (onPrint) onPrint();
-      setTimeout(() => onClose?.(), 1500);
-      
-    } catch (error) {
-      console.error('Bluetooth print error:', error);
-      setPrintStatus(`Bluetooth Error: ${error.message}`);
-    } finally {
-      setIsConnecting(false);
+    } else {
+      setStatus(`Error: ${result.error}`);
     }
-  };
-
-  // Method 2: Web Serial (Chrome for wired printers)
-  const printViaSerial = async () => {
-    if (!capabilities.hasWebSerial) {
-      setPrintStatus('Web Serial not supported');
-      return;
-    }
-
-    setIsConnecting(true);
-    setPrintStatus('Connecting to USB printer...');
     
-    try {
-      const port = await navigator.serial.requestPort();
-      await port.open({ baudRate: 9600 });
-
-      setPrintStatus('Sending data to printer...');
-      const writer = port.writable.getWriter();
-      const escposData = buildESCPOSData(order);
-      
-      await writer.write(escposData);
-      await writer.close();
-      await port.close();
-
-      setPrintStatus('Print successful!');
-      if (onPrint) onPrint();
-      setTimeout(() => onClose?.(), 1500);
-      
-    } catch (error) {
-      console.error('Serial print error:', error);
-      setPrintStatus(`USB Error: ${error.message}`);
-    } finally {
-      setIsConnecting(false);
-    }
-  };
-
-  // Method 3: Browser Print (Universal fallback)
-  const printViaBrowser = () => {
-    setPrintStatus('Opening browser print dialog...');
-    
-    const kotContent = document.getElementById('kot-printable');
-    if (!kotContent) return;
-
-    const printWindow = window.open('', '_blank', 'width=400,height=600');
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Kitchen Order Ticket</title>
-          <style>
-            @media print {
-              @page { 
-                size: 58mm auto; 
-                margin: 2mm; 
-              }
-              body { 
-                margin: 0; 
-                padding: 0; 
-                font-family: 'Courier New', monospace; 
-                font-size: 10px;
-                line-height: 1.2;
-              }
-            }
-            body {
-              font-family: 'Courier New', monospace;
-              font-size: 12px;
-              line-height: 1.4;
-              color: #000;
-              background: #fff;
-              padding: 8px;
-              width: 58mm;
-              max-width: 58mm;
-            }
-            .kot-row { 
-              display: flex; 
-              justify-content: space-between; 
-              margin-bottom: 4px; 
-            }
-            .label { font-weight: bold; }
-            .kot-divider { 
-              text-align: center; 
-              margin: 8px 0; 
-              font-weight: bold; 
-            }
-            .kot-item { 
-              display: flex; 
-              margin-bottom: 6px; 
-              gap: 8px; 
-            }
-            .item-qty { 
-              font-weight: bold; 
-              min-width: 30px; 
-            }
-            .item-name { 
-              flex: 1; 
-              word-wrap: break-word; 
-            }
-            .kot-footer { 
-              margin-top: 12px; 
-              text-align: center; 
-            }
-            .timestamp { 
-              font-size: 10px; 
-              color: #666; 
-            }
-          </style>
-        </head>
-        <body>
-          ${kotContent.innerHTML}
-        </body>
-      </html>
-    `);
-
-    printWindow.document.close();
-    printWindow.focus();
-
-    setTimeout(() => {
-      printWindow.print();
-      printWindow.close();
-      
-      if (onPrint) onPrint();
-      else onClose?.();
-    }, 250);
-  };
-
-  // Method 4: PDF Download (iOS/Safari fallback)
-  const downloadPDF = () => {
-    setPrintStatus('Generating PDF...');
-    
-    const items = toDisplayItems(order);
-    const textContent = [
-      'KITCHEN ORDER TICKET',
-      '========================',
-      `Table: ${order.table_number}`,
-      `Order: #${order.id?.slice(0, 8)?.toUpperCase()}`,
-      `Time: ${new Date(order.created_at).toLocaleTimeString()}`,
-      '========================',
-      ...items.map(item => `${item.quantity}x  ${item.name}`),
-      '========================',
-      `Printed: ${new Date().toLocaleString()}`,
-      '',
-      ''
-    ].join('\n');
-
-    const blob = new Blob([textContent], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `KOT-${order.id?.slice(0, 8)}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-
-    setPrintStatus('Download complete! Use "Print to PDF" from share menu');
-    if (onPrint) onPrint();
+    setIsProcessing(false);
   };
 
   const formatTime = (dateString) =>
@@ -333,13 +77,6 @@ export default function KotPrint({ order, onClose, onPrint }) {
             <div className="kot-header">
               <h2>Kitchen Order Ticket</h2>
               <button className="close-btn" onClick={onClose}>×</button>
-            </div>
-
-            {/* Platform Info */}
-            <div className="platform-info">
-              <small>
-                Platform: {capabilities.platform} | Browser: {capabilities.browser}
-              </small>
             </div>
 
             <div className="kot-ticket" id="kot-printable">
@@ -389,52 +126,36 @@ export default function KotPrint({ order, onClose, onPrint }) {
               </div>
             </div>
 
-            {/* Print Status */}
-            {printStatus && (
+            {/* Status Display */}
+            {status && (
               <div className="print-status">
-                {printStatus}
+                {status}
               </div>
             )}
 
-            {/* Print Options */}
+            {/* Action Buttons */}
             <div className="kot-actions">
-              {capabilities.hasWebBluetooth && (
-                <button 
-                  className="print-btn bluetooth" 
-                  onClick={printViaBluetooth}
-                  disabled={isConnecting}
-                >
-                  📱 Bluetooth Print
-                </button>
-              )}
-              
-              {capabilities.hasWebSerial && (
-                <button 
-                  className="print-btn serial" 
-                  onClick={printViaSerial}
-                  disabled={isConnecting}
-                >
-                  🔌 USB Print
-                </button>
-              )}
-              
               <button 
-                className="print-btn browser" 
-                onClick={printViaBrowser}
-                disabled={isConnecting}
+                className="print-btn pdf-btn" 
+                onClick={handlePdfShare}
+                disabled={isProcessing}
               >
-                🖨️ Browser Print
+                📱 Share PDF & Print
               </button>
               
-              {capabilities.platform === 'ios' && (
-                <button 
-                  className="print-btn pdf" 
-                  onClick={downloadPDF}
-                  disabled={isConnecting}
-                >
-                  📄 Download & Print
-                </button>
-              )}
+              <button 
+                className="print-btn text-btn" 
+                onClick={handleTextShare}
+                disabled={isProcessing}
+              >
+                📄 Share Text & Print
+              </button>
+            </div>
+
+            <div className="help-text">
+              <small>
+                💡 After sharing, choose <strong>Thermer</strong> or another printing app to print to your Bluetooth thermal printer.
+              </small>
             </div>
           </div>
         </div>
@@ -456,16 +177,11 @@ export default function KotPrint({ order, onClose, onPrint }) {
         .kot-print-content { padding: 20px; }
         .kot-header {
           display: flex; justify-content: space-between; align-items: center;
-          margin-bottom: 10px;
+          margin-bottom: 15px;
         }
         .close-btn {
           background: none; border: none; font-size: 24px;
           cursor: pointer; color: #666;
-        }
-        .platform-info {
-          margin-bottom: 15px; padding: 8px;
-          background: #f3f4f6; border-radius: 4px;
-          text-align: center;
         }
         .kot-ticket {
           font-family: 'Courier New', monospace;
@@ -488,44 +204,39 @@ export default function KotPrint({ order, onClose, onPrint }) {
         
         .print-status {
           background: #e5f3ff; border: 1px solid #b3d9ff;
-          padding: 10px; border-radius: 4px; margin-bottom: 15px;
+          padding: 12px; border-radius: 4px; margin-bottom: 15px;
           text-align: center; font-size: 14px;
         }
         
         .kot-actions { 
-          display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; 
+          display: flex; gap: 10px; justify-content: center; 
+          margin-bottom: 15px;
         }
         .print-btn {
           padding: 12px 20px; border-radius: 6px; border: none;
           cursor: pointer; font-size: 14px; font-weight: 500;
-          transition: all 0.2s;
+          transition: all 0.2s; flex: 1;
         }
         .print-btn:disabled {
           opacity: 0.6; cursor: not-allowed;
         }
-        .print-btn.bluetooth {
-          background: #1e40af; color: white;
-        }
-        .print-btn.bluetooth:hover:not(:disabled) {
-          background: #1d4ed8;
-        }
-        .print-btn.serial {
-          background: #059669; color: white;
-        }
-        .print-btn.serial:hover:not(:disabled) {
-          background: #047857;
-        }
-        .print-btn.browser {
+        .pdf-btn {
           background: #10b981; color: white;
         }
-        .print-btn.browser:hover:not(:disabled) {
+        .pdf-btn:hover:not(:disabled) {
           background: #059669;
         }
-        .print-btn.pdf {
-          background: #dc2626; color: white;
+        .text-btn {
+          background: #3b82f6; color: white;
         }
-        .print-btn.pdf:hover:not(:disabled) {
-          background: #b91c1c;
+        .text-btn:hover:not(:disabled) {
+          background: #2563eb;
+        }
+        
+        .help-text {
+          text-align: center; color: #666;
+          background: #f9fafb; padding: 10px; border-radius: 4px;
+          border-left: 4px solid #10b981;
         }
       `}</style>
     </>

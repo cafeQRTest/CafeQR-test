@@ -29,6 +29,7 @@
     "google-auth-library": "^10.3.0",
     "json-2-csv": "^5.5.9",
     "json2csv": "^6.0.0-alpha.2",
+    "jspdf": "^3.0.3",
     "next": "14.2.32",
     "node-fetch": "^3.3.2",
     "nodemailer": "^7.0.5",

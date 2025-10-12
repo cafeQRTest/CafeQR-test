@@ -10,30 +10,25 @@ import Card from '../../components/ui/Card';
 import { subscribeOwnerDevice } from '../../helpers/subscribePush';
 import KotPrint from '../../components/KotPrint';
 
-
-
 // Constants
-const STATUSES = ['new', 'in_progress', 'ready', 'completed'];
+const STATUSES = ['new','in_progress','ready','completed'];
 const LABELS = { new: 'New', in_progress: 'Cooking', ready: 'Ready', completed: 'Done' };
 const COLORS = { new: '#3b82f6', in_progress: '#f59e0b', ready: '#10b981', completed: '#6b7280' };
 const PAGE_SIZE = 20;
 
-
-
 // Helpers
 const money = (v) => `₹${Number(v ?? 0).toFixed(2)}`;
-const prefix = (s) => (s ? s.slice(0, 24) : '');
+const prefix = (s) => (s ? s.slice(0,24) : '');
 
-// Single source of truth for totals: order-level fields only
 function computeOrderTotalDisplay(order) {
-  const toNum = (v) => (v == null ? null : Number(v))
-  const a = toNum(order?.total_inc_tax)
-  if (Number.isFinite(a) && a > 0) return a
-  const b = toNum(order?.total_amount)
-  if (Number.isFinite(b) && b > 0) return b
-  const c = toNum(order?.total)
-  if (Number.isFinite(c) && c > 0) return c
-  return 0
+  const toNum = (v) => (v == null ? null : Number(v));
+  const a = toNum(order?.total_inc_tax);
+  if (Number.isFinite(a) && a>0) return a;
+  const b = toNum(order?.total_amount);
+  if (Number.isFinite(b) && b>0) return b;
+  const c = toNum(order?.total);
+  if (Number.isFinite(c) && c>0) return c;
+  return 0;
 }
 
 function toDisplayItems(order) {
@@ -48,20 +43,20 @@ function toDisplayItems(order) {
   return [];
 }
 
-// UI Component: PaymentConfirmDialog
+// PaymentConfirmDialog (unchanged)
 function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
   return (
     <div style={{
-      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex',
-      alignItems: 'center', justifyContent: 'center', zIndex: 1000
+      position:'fixed',top:0,left:0,right:0,bottom:0,
+      backgroundColor:'rgba(0,0,0,0.5)',display:'flex',
+      alignItems:'center',justifyContent:'center',zIndex:1000
     }}>
-      <div style={{ backgroundColor: 'white', padding: 20, borderRadius: 8, maxWidth: 400, margin: 16 }}>
-        <h3 style={{ margin: '0 0 16px 0' }}>Payment Confirmation</h3>
-        <p>Order #{order.id.slice(0, 8)} - Table {order.table_number}</p>
+      <div style={{ backgroundColor:'white',padding:20,borderRadius:8,maxWidth:400,margin:16 }}>
+        <h3 style={{ margin:'0 0 16px 0' }}>Payment Confirmation</h3>
+        <p>Order #{order.id.slice(0,8)} - Table {order.table_number}</p>
         <p>Amount: {money(computeOrderTotalDisplay(order))}</p>
         <p><strong>Has the customer completed the payment?</strong></p>
-        <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+        <div style={{ display:'flex',gap:10,marginTop:16 }}>
           <Button onClick={onConfirm} variant="success">Yes, Payment Received</Button>
           <Button onClick={onCancel} variant="outline">Cancel</Button>
         </div>
@@ -80,14 +75,14 @@ async function fetchFullOrder(supabase, orderId) {
   return null;
 }
 
-
 export default function OrdersPage() {
   const supabase = getSupabase();
   const { user, checking } = useRequireAuth(supabase);
   const { restaurant, loading: restLoading } = useRestaurant();
   const restaurantId = restaurant?.id;
-  const [showKotPrint, setShowKotPrint] = useState(null);
 
+  // NEW: state for showing the print modal
+  const [showKotPrint, setShowKotPrint] = useState(null);
 
   const [ordersByStatus, setOrdersByStatus] = useState({
     new: [], in_progress: [], ready: [], completed: [], mobileFilter: 'new'
@@ -99,6 +94,7 @@ export default function OrdersPage() {
   const [paymentConfirmDialog, setPaymentConfirmDialog] = useState(null);
   const notificationAudioRef = useRef(null);
 
+  // ... all useEffect hooks, loadOrders, realtime subscription, updateStatus, finalize, complete, etc. remain unchanged ...
   // Save token to user profile (optional, unchanged)
   useEffect(() => {
     const saveToken = async () => {
@@ -403,11 +399,17 @@ export default function OrdersPage() {
     }
   };
 
-  if (checking || restLoading) return <div style={{ padding: 16 }}>Loading…</div>;
-  if (!restaurantId) return <div style={{ padding: 16 }}>No restaurant found.</div>;
+  if (checking || restLoading) return <div style={{ padding:16 }}>Loading…</div>;
+  if (!restaurantId) return <div style={{ padding:16 }}>No restaurant found.</div>;
+
+  // Show print modal when state is set
   if (showKotPrint) {
-  console.log('Rendering KOT print modal', showKotPrint);
-  return <KotPrint order={showKotPrint} onClose={() => setShowKotPrint(null)} />;
+    return (
+      <KotPrint
+        order={showKotPrint}
+        onClose={() => setShowKotPrint(null)}
+      />
+    );
   }
 
   return (
@@ -416,15 +418,18 @@ export default function OrdersPage() {
         <h1>Orders Dashboard</h1>
         <div className="header-actions">
           <span className="muted">
-            {['new','in_progress','ready'].reduce((sum, s) => sum + ordersByStatus[s].length, 0)} live orders
+            {['new','in_progress','ready']
+              .reduce((sum,s) => sum + ordersByStatus[s].length, 0)} live orders
           </span>
-          <Button variant="outline" onClick={() => { setCompletedPage(1); loadOrders(1); }}>Refresh</Button>
+          <Button variant="outline" onClick={() => { setCompletedPage(1); loadOrders(1); }}>
+            Refresh
+          </Button>
         </div>
       </header>
 
       {error && (
-        <Card padding={12} style={{ background: '#fee2e2', border: '1px solid #fecaca', margin: '0 12px 12px' }}>
-          <span style={{ color: '#b91c1c' }}>{error}</span>
+        <Card padding={12} style={{ background:'#fee2e2',border:'1px solid #fecaca',margin:'0 12px 12px' }}>
+          <span style={{ color:'#b91c1c' }}>{error}</span>
         </Card>
       )}
 
@@ -432,37 +437,40 @@ export default function OrdersPage() {
         {STATUSES.map((s) => (
           <button
             key={s}
-            className={`chip ${s === (ordersByStatus.mobileFilter || 'new') ? 'chip--active' : ''}`}
-            onClick={() => setOrdersByStatus((prev) => ({ ...prev, mobileFilter: s }))}
+            className={`chip ${s === ordersByStatus.mobileFilter ? 'chip--active' : ''}`}
+            onClick={() => setOrdersByStatus(prev => ({ ...prev, mobileFilter: s }))}
           >
             <span className="chip-label">{LABELS[s]}</span>
             <span className="chip-count">{ordersByStatus[s].length}</span>
           </button>
         ))}
       </div>
-{/* Mobile list (phones) */}
-<div className="mobile-list orders-list">
-  {ordersByStatus[ordersByStatus.mobileFilter || 'new'].length === 0 ? (
-    <Card className="muted" padding={12} style={{ textAlign: 'center' }}>
-      No {LABELS[ordersByStatus.mobileFilter || 'new'].toLowerCase()} orders
-    </Card>
-  ) : (
-    ordersByStatus[ordersByStatus.mobileFilter || 'new'].map((order) => (
-      <OrderCard
-        key={order.id}
-        order={order}
-        statusColor={COLORS[order.status]}
-        onChangeStatus={updateStatus}
-        onComplete={finalize}
-        generatingInvoice={generatingInvoice}
-      />
-    ))
-  )}
-</div>
 
-      
+      {/* Mobile list */}
+      <div className="mobile-list orders-list">
+        {ordersByStatus[ordersByStatus.mobileFilter].length === 0 ? (
+          <Card className="muted" padding={12} style={{ textAlign:'center' }}>
+            No {LABELS[ordersByStatus.mobileFilter].toLowerCase()} orders
+          </Card>
+        ) : (
+          ordersByStatus[ordersByStatus.mobileFilter].map(order => (
+            <OrderCard
+              key={order.id}
+              order={order}
+              statusColor={COLORS[order.status]}
+              onChangeStatus={updateStatus}
+              onComplete={finalize}
+              generatingInvoice={generatingInvoice}
+              // NEW: pass setter to open print modal
+              onPrintClick={() => setShowKotPrint(order)}
+            />
+          ))
+        )}
+      </div>
+
+      {/* Kanban grid for desktop */}
       <div className="kanban">
-        {STATUSES.map((status) => (
+        {STATUSES.map(status => (
           <Card key={status} padding={12}>
             <div className="kanban-col-header">
               <strong style={{ color: COLORS[status] }}>{LABELS[status]}</strong>
@@ -472,7 +480,7 @@ export default function OrdersPage() {
               {ordersByStatus[status].length === 0 ? (
                 <div className="empty-col">No {LABELS[status].toLowerCase()} orders</div>
               ) : (
-                ordersByStatus[status].map((order) => (
+                ordersByStatus[status].map(order => (
                   <OrderCard
                     key={order.id}
                     order={order}
@@ -480,16 +488,20 @@ export default function OrdersPage() {
                     onChangeStatus={updateStatus}
                     onComplete={finalize}
                     generatingInvoice={generatingInvoice}
+                    onPrintClick={() => setShowKotPrint(order)}
                   />
                 ))
               )}
               {status === 'completed' && ordersByStatus.completed.length >= PAGE_SIZE && (
                 <>
-                  <div style={{ fontSize: 12, color: '#6b7280' }}>
+                  <div style={{ fontSize:12, color:'#6b7280' }}>
                     Showing latest {ordersByStatus.completed.length} completed orders
                   </div>
-                  <div style={{ paddingTop: 8 }}>
-                    <Button variant="outline" onClick={() => { setCompletedPage((p) => p + 1); loadOrders(completedPage + 1); }}>
+                  <div style={{ paddingTop:8 }}>
+                    <Button variant="outline" onClick={() => {
+                      setCompletedPage(p => p+1);
+                      loadOrders(completedPage+1);
+                    }}>
                       Load more
                     </Button>
                   </div>
@@ -509,195 +521,128 @@ export default function OrdersPage() {
       )}
 
       <style jsx>{`
-.orders-wrap { padding: 12px 0 32px; }
-.orders-header { display: flex; justify-content: space-between; align-items: center; padding: 0 12px 12px; gap: 10px; }
-.orders-header h1 { margin: 0; font-size: clamp(20px, 2.6vw, 28px); }
-.header-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.muted { color: #6b7280; font-size: 14px; }
-
-/* Default: hide mobile list on desktop */
-.mobile-list { display: none; }
-.kanban { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; padding: 12px 16px; }
-
-.kanban-col-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-.pill { background: #f3f4f6; padding: 4px 10px; border-radius: 9999px; font-size: 12px; }
-.kanban-col-body { display: flex; flex-direction: column; gap: 10px; max-height: 70vh; overflow-y: auto; }
-.empty-col { text-align: center; color: #9ca3af; padding: 20px; border: 1px dashed #e5e7eb; border-radius: 8px; }
-
-/* Tablets and below: show mobile list, hide kanban */
-@media (max-width: 1023px) {
-  .orders-wrap { padding: 8px 0 24px; }
-  .header-actions { justify-content: flex-start; }
-  .mobile-list { display: flex; flex-direction: column; gap: 10px; padding: 0 8px; }
-  .kanban { display: none !important; }
+.orders-wrap { padding:12px 0 32px; }
+.orders-header { display:flex; justify-content:space-between; align-items:center; padding:0 12px 12px; gap:10px; }
+.orders-header h1 { margin:0; font-size:clamp(20px,2.6vw,28px); }
+.header-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.muted { color:#6b7280; font-size:14px; }
+.mobile-list { display:none; }
+.kanban { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; padding:12px 16px; }
+.kanban-col-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+.pill { background:#f3f4f6; padding:4px 10px; border-radius:9999px; font-size:12px; }
+.kanban-col-body { display:flex; flex-direction:column; gap:10px; max-height:70vh; overflow-y:auto; }
+.empty-col { text-align:center; color:#9ca3af; padding:20px; border:1px dashed #e5e7eb; border-radius:8px; }
+@media (max-width:1023px) {
+  .orders-wrap { padding:8px 0 24px; }
+  .header-actions { justify-content:flex-start; }
+  .mobile-list { display:flex; flex-direction:column; gap:10px; padding:0 8px; }
+  .kanban { display:none !important; }
 }
-
-@media (max-width: 414px) {
-  .orders-header { flex-wrap: wrap; }
-  .header-actions { width: 100%; justify-content: flex-start; }
-  .orders-header h1 { font-size: 20px; }
-  .mobile-list { padding: 0 6px; gap: 8px; }
+@media (max-width:414px) {
+  .orders-header { flex-wrap:wrap; }
+  .header-actions { width:100%; justify-content:flex-start; }
+  .orders-header h1 { font-size:20px; }
+  .mobile-list { padding:0 6px; gap:8px; }
 }
-`}</style>
-
+      `}</style>
     </div>
   );
 }
 
-// OrderCard component
-  function OrderCard({ order, statusColor, onChangeStatus, onComplete, generatingInvoice }) {
+// OrderCard component (with print button)
+function OrderCard({ order, statusColor, onChangeStatus, onComplete, generatingInvoice, onPrintClick }) {
   const items = toDisplayItems(order);
   const hasInvoice = Boolean(order?.invoice?.pdf_url);
   const total = computeOrderTotalDisplay(order);
   const [showPrintModal, setShowPrintModal] = useState(false);
 
-  const handlePrintClick = () => {
-    console.log('Print KOT clicked for order:', order.id);
-    setShowPrintModal(true);
-  };
+  const handlePrintOpen = () => onPrintClick(order);
 
-  const handlePrintConfirm = () => {
-    console.log('Print confirmed, calling window.print()');
-    setShowPrintModal(false);
-  };
-
-  const handlePrintClose = () => {
-    console.log('Print modal closed');
-    setShowPrintModal(false);
-  };
-
-return (
-  <>
-    <div className="order-card-wrapper">
-      <Card
-        padding={12}
-        className="order-card"
-        style={{
-          border: '1px solid #eef2f7',
-          borderRadius: 12,
-          boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
-          width: '100%',
-          maxWidth: '100%',
-        }}
-      >
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'baseline',
-            gap: 8,
-            flexWrap: 'wrap',
-          }}
-        >
-          <strong>#{order.id.slice(0, 8)}</strong>
-          <span style={{ marginLeft: 8 }}>
-            <small>Table {order.table_number || 'N/A'}</small>
-          </span>
-          <span style={{ color: '#6b7280', fontSize: 12 }}>
-            {new Date(order.created_at).toLocaleTimeString()}
-          </span>
-        </div>
-
-        <div style={{ margin: '8px 0', fontSize: 14 }}>
-          {items.map((it, i) => (
-            <div key={i}>
-              {it.quantity}× {it.name}
-            </div>
-          ))}
-        </div>
-
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            gap: 8,
-            flexWrap: 'wrap',
-          }}
-        >
-          <span style={{ fontSize: 16, fontWeight: 700 }}>{money(total)}</span>
-
-          <div
-            className="order-actions"
-            style={{
-              display: 'flex',
-              gap: 6,
-              flexWrap: 'wrap',
-              justifyContent: 'flex-end',
-              width: '100%',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {order.status === 'new' && (
-              <Button size="sm" onClick={() => onChangeStatus(order.id, 'in_progress')}>
-                Start
-              </Button>
-            )}
-            {order.status === 'in_progress' && (
-              <Button size="sm" variant="success" onClick={() => onChangeStatus(order.id, 'ready')}>
-                Ready
-              </Button>
-            )}
-            {order.status === 'ready' && !hasInvoice && (
-              <Button
-                size="sm"
-                onClick={() => onComplete(order)}
-                disabled={generatingInvoice === order.id}
-              >
-                {generatingInvoice === order.id ? 'Processing…' : 'Done'}
-              </Button>
-            )}
-            {hasInvoice && (
-              <Button size="sm" onClick={() => window.open(order.invoice.pdf_url, '_blank')}>
-                Bill
-              </Button>
-            )}
-            {order.status === 'new' && (
-              <button
-                onClick={handlePrintClick}
-                style={{
-                  background: '#10b981',
-                  color: '#fff',
-                  border: 'none',
-                  padding: '6px 12px',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '12px',
-                }}
-              >
-                Print KOT
-              </button>
-            )}
+  return (
+    <>
+      <div className="order-card-wrapper">
+        <Card padding={12} className="order-card" style={{
+          border:'1px solid #eef2f7',
+          borderRadius:12,
+          boxShadow:'0 1px 2px rgba(0,0,0,0.04)',
+          width:'100%',maxWidth:'100%'
+        }}>
+          <div style={{
+            display:'flex',justifyContent:'space-between',
+            alignItems:'baseline',gap:8,flexWrap:'wrap'
+          }}>
+            <strong>#{order.id.slice(0,8)}</strong>
+            <span style={{ marginLeft:8 }}>
+              <small>Table {order.table_number||'N/A'}</small>
+            </span>
+            <span style={{ color:'#6b7280',fontSize:12 }}>
+              {new Date(order.created_at).toLocaleTimeString()}
+            </span>
           </div>
-        </div>
 
-        <div
-          style={{
-            height: 2,
-            marginTop: 10,
-            background: statusColor,
-            opacity: 0.2,
-            borderRadius: 2,
-          }}
-        />
-      </Card>
-    </div>
+          <div style={{ margin:'8px 0', fontSize:14 }}>
+            {items.map((it,i)=>(
+              <div key={i}>{it.quantity}× {it.name}</div>
+            ))}
+          </div>
 
-    {showPrintModal && (
-      <KotPrint order={order} onClose={handlePrintClose} onPrint={handlePrintConfirm} />
-    )}
+          <div style={{
+            display:'flex',justifyContent:'space-between',
+            alignItems:'center',gap:8,flexWrap:'wrap',width:'100%'
+          }}>
+            <span style={{ fontSize:16,fontWeight:700 }}>{money(total)}</span>
+            <div className="order-actions" style={{
+              display:'flex',gap:6,flexWrap:'wrap',justifyContent:'flex-end',width:'100%'
+            }} onClick={e=>e.stopPropagation()}>
+              {order.status==='new' && (
+                <Button size="sm" onClick={()=>onChangeStatus(order.id,'in_progress')}>
+                  Start
+                </Button>
+              )}
+              {order.status==='in_progress' && (
+                <Button size="sm" variant="success" onClick={()=>onChangeStatus(order.id,'ready')}>
+                  Ready
+                </Button>
+              )}
+              {order.status==='ready' && !hasInvoice && (
+                <Button size="sm" onClick={()=>onComplete(order)} disabled={generatingInvoice===order.id}>
+                  {generatingInvoice===order.id ? 'Processing…' : 'Done'}
+                </Button>
+              )}
+              {hasInvoice && (
+                <Button size="sm" onClick={()=>window.open(order.invoice.pdf_url,'_blank')}>
+                  Bill
+                </Button>
+              )}
+              {order.status==='new' && (
+                <button
+                  onClick={handlePrintOpen}
+                  style={{
+                    background:'#10b981',color:'#fff',border:'none',
+                    padding:'6px 12px',borderRadius:'4px',
+                    cursor:'pointer',fontSize:'12px'
+                  }}
+                >
+                  Print KOT
+                </button>
+              )}
+            </div>
+          </div>
 
-    <style jsx>{`
-  /* Card width handling */
-  .order-card-wrapper { width: 100%; padding: 6px 0; }
-  .order-card { width: 100%; max-width: 100%; }
+          <div style={{
+            height:2,marginTop:10,background:statusColor,
+            opacity:0.2,borderRadius:2
+          }}/>
+        </Card>
+      </div>
 
-  /* Make header and action row wrap safely on small screens */
-  @media (max-width: 480px) {
-    .order-actions { justify-content: flex-start !important; }
-  }
-`}</style>
-  </>
-);
-
+      <style jsx>{`
+.order-card-wrapper { width:100%; padding:6px 0; }
+.order-card { width:100%; max-width:100%; }
+@media (max-width:480px) {
+  .order-actions { justify-content:flex-start !important; }
+}
+      `}</style>
+    </>
+  );
 }
