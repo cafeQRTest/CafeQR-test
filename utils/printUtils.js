@@ -32,11 +32,11 @@ export async function downloadPdfAndShare(order) {
     
     let y = 8;
     const pageWidth = 58;
-    const leftMargin = 3;
+    const leftMargin = 1;
     const lineSpacing = 5;
     
     // Header - larger and centered
-    doc.setFontSize(12);
+    doc.setFontSize(14);
     doc.setFont('courier', 'bold');
     doc.text('KITCHEN ORDER', pageWidth/2, y, { align: 'center' });
     y += 6;
@@ -50,7 +50,7 @@ export async function downloadPdfAndShare(order) {
     y += 6;
     
     // Table info - larger text
-    doc.setFontSize(11);
+    doc.setFontSize(12);
     doc.setFont('courier', 'bold');
     doc.text('Table: ' + (order.table_number || 'N/A'), leftMargin, y);
     y += lineSpacing;
@@ -76,7 +76,7 @@ export async function downloadPdfAndShare(order) {
     y += 6;
     
     // Items section
-    doc.setFontSize(10);
+    doc.setFontSize(12);
     doc.setFont('courier', 'bold');
     if (items.length === 0) {
       doc.text('No items found', leftMargin, y);
