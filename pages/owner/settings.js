@@ -668,7 +668,7 @@ export default function SettingsPage() {
               </Field>
             </>
           )}
-          <div style={{ display: 'flex', gap: 24 }}>
+         {form.gst_enabled && <div style={{ display: 'flex', gap: 24 }}>
             <Field label="Default Tax Rate (GST %)" required hint="Common GST slabs in India are 5% and 18%">
               <select className="input" value={String(form.default_tax_rate)} onChange={onChange('default_tax_rate')}>
                 <option value={"5"}>5%</option>
@@ -686,8 +686,8 @@ export default function SettingsPage() {
               </label>
             </Field>
           </div>
+        }
         </Section>
-
         {/* Delivery Address */}
         <Section title="Delivery Address" icon="📍">
           <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))' }}>
