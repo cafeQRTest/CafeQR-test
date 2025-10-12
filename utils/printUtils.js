@@ -56,13 +56,9 @@ export async function downloadPdfAndShare(order) {
     doc.text('Order: #' + orderId, centerX, y, { align: 'center' });
     y += lineSpacing;
 
-    const timeStr = new Date(order.created_at).toLocaleTimeString('en-IN', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true,
-    });
-    doc.text('Time: ' + timeStr, centerX, y, { align: 'center' });
-    y += lineSpacing;
+const timeStr = new Date(order.created_at).toLocaleString('en-IN');
+doc.text('Time: ' + timeStr, centerX, y, { align: 'center' });
+y += lineSpacing;
 
     // Separator line
     doc.setFontSize(12);
@@ -166,45 +162,45 @@ export function downloadTextAndShare(order) {
       hour12: true,
     });
 
-    function center(str, width = 30) {
+    function center(str, width = 32) {
       const padLength = Math.max(0, Math.floor((width - str.length) / 2));
       return ' '.repeat(padLength) + str;
     }
 
     const lines = [
-      '', center('KITCHEN ORDER', 30),
+      '', center('KITCHEN ORDER', 32),
       center('TICKET', 30), '',
-      center('==============================', 30), '',
-      center('Table: ' + (order.table_number || 'N/A'), 30),
+      center('==============================', 32), '',
+      center('Table: ' + (order.table_number || 'N/A'), 32),
       center('Order: #' + orderId, 30),
       center('Time: ' + timeStr, 30), '',
-      center('==============================', 30), ''
+      center('==============================', 32), ''
     ];
 
     // Add items, center each line
     if (items.length === 0) {
-      lines.push(center('No items found', 30));
+      lines.push(center('No items found', 32));
     } else {
       items.forEach(item => {
         const qty = item.quantity || 1;
         const name = item.name || 'Item';
-        lines.push(center(qty + 'x  ' + name, 30));
+        lines.push(center(qty + 'x  ' + name, 32));
       });
     }
 
     lines.push('');
-    lines.push(center('==============================', 30));
+    lines.push(center('==============================', 32));
 
     // Special instructions
     if (order.special_instructions) {
       lines.push('');
-      lines.push(center('Special: ' + order.special_instructions, 30));
+      lines.push(center('Special: ' + order.special_instructions, 32));
       lines.push('');
-      lines.push(center('==============================', 30));
+      lines.push(center('==============================', 32));
     }
 
     lines.push('');
-    lines.push(center('Printed: ' + new Date().toLocaleString('en-IN'), 30));
+    lines.push(center('Printed: ' + new Date().toLocaleString('en-IN'), 32));
     lines.push('\n\n');
 
     const textContent = lines.join('\n');
