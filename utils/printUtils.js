@@ -20,76 +20,120 @@ export async function downloadPdfAndShare(order) {
   try {
     const items = toDisplayItems(order);
     
-    // Create PDF optimized for thermal printer (58mm width)
+    // Create PDF optimized for 58mm thermal printer (2.28 inches)
     const doc = new jsPDF({
       orientation: 'portrait',
       unit: 'mm',
-      format: [58, 200] // 58mm width, auto height
+      format: [58, Math.max(100, 40 + items.length * 8)] // Dynamic height based on content
     });
 
-    // Set font for better thermal printer compatibility
+    // Use monospace font for thermal printer compatibility
     doc.setFont('courier', 'normal');
-    doc.setFontSize(8);
     
-    const leftMargin = 2;
-    const pageWidth = 54; // Leave some margin
     let y = 8;
+    const pageWidth = 58;
+    const leftMargin = 3;
+    const lineSpacing = 5;
     
-    // Header - centered
-    doc.setFontSize(10);
-    doc.text('KITCHEN ORDER TICKET', pageWidth/2, y, { align: 'center' });
+    // Header - larger and centered
+    doc.setFontSize(12);
+    doc.setFont('courier', 'bold');
+    doc.text('KITCHEN ORDER', pageWidth/2, y, { align: 'center' });
+    y += 6;
+    doc.text('TICKET', pageWidth/2, y, { align: 'center' });
     y += 8;
     
-    // Divider
-    doc.setFontSize(8);
-    doc.text('================================', leftMargin, y);
+    // Separator line
+    doc.setFontSize(10);
+    doc.setFont('courier', 'normal');
+    doc.text('==============================', leftMargin, y);
     y += 6;
     
-    // Order details
-    doc.text(`Table: ${order.table_number || 'N/A'}`, leftMargin, y);
-    y += 5;
+    // Table info - larger text
+    doc.setFontSize(11);
+    doc.setFont('courier', 'bold');
+    doc.text('Table: ' + (order.table_number || 'N/A'), leftMargin, y);
+    y += lineSpacing;
     
-    doc.text(`Order: #${order.id?.slice(0,8)?.toUpperCase() || 'N/A'}`, leftMargin, y);
-    y += 5;
+    // Order ID
+    const orderId = order.id?.slice(0,8)?.toUpperCase() || 'N/A';
+    doc.text('Order: #' + orderId, leftMargin, y);
+    y += lineSpacing;
     
-    doc.text(`Time: ${new Date(order.created_at).toLocaleTimeString()}`, leftMargin, y);
+    // Time
+    const timeStr = new Date(order.created_at).toLocaleTimeString('en-IN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+    doc.text('Time: ' + timeStr, leftMargin, y);
+    y += 8;
+    
+    // Separator
+    doc.setFont('courier', 'normal');
+    doc.setFontSize(10);
+    doc.text('==============================', leftMargin, y);
     y += 6;
     
-    // Divider
-    doc.text('================================', leftMargin, y);
-    y += 6;
-    
-    // Items
+    // Items section
+    doc.setFontSize(10);
+    doc.setFont('courier', 'bold');
     if (items.length === 0) {
       doc.text('No items found', leftMargin, y);
-      y += 5;
+      y += lineSpacing;
     } else {
       items.forEach(item => {
-        const line = `${item.quantity || 1}x  ${item.name || 'Item'}`;
-        // Handle long item names by wrapping
-        const lines = doc.splitTextToSize(line, pageWidth - 4);
-        lines.forEach(textLine => {
-          doc.text(textLine, leftMargin, y);
-          y += 4;
+        const qty = (item.quantity || 1).toString();
+        const name = item.name || 'Item';
+        
+        // Format: "2x Peri Peri Alfaham"
+        const itemLine = qty + 'x  ' + name;
+        
+        // Handle long names by wrapping text
+        const maxWidth = pageWidth - 6; // Leave margin
+        const lines = doc.splitTextToSize(itemLine, maxWidth);
+        
+        lines.forEach(line => {
+          doc.text(line, leftMargin, y);
+          y += 4.5; // Tighter line spacing for items
         });
-        y += 1; // Extra space between items
+        
+        y += 1; // Small gap between items
       });
     }
     
     y += 3;
     
-    // Divider
-    doc.text('================================', leftMargin, y);
+    // Bottom separator
+    doc.setFont('courier', 'normal');
+    doc.text('==============================', leftMargin, y);
     y += 6;
     
-    // Footer
-    doc.setFontSize(7);
-    doc.text(`Printed: ${new Date().toLocaleString()}`, leftMargin, y);
+    // Special instructions if any
+    if (order.special_instructions) {
+      doc.setFontSize(9);
+      doc.setFont('courier', 'bold');
+      doc.text('Special:', leftMargin, y);
+      y += 4;
+      doc.setFont('courier', 'normal');
+      const instrLines = doc.splitTextToSize(order.special_instructions, pageWidth - 6);
+      instrLines.forEach(line => {
+        doc.text(line, leftMargin, y);
+        y += 4;
+      });
+      y += 3;
+    }
+    
+    // Timestamp
+    doc.setFontSize(8);
+    doc.setFont('courier', 'normal');
+    const printTime = new Date().toLocaleString('en-IN');
+    doc.text('Printed: ' + printTime, leftMargin, y);
     y += 8;
     
     // Generate PDF blob
     const pdfBlob = doc.output('blob');
-    const fileName = `KOT-${order.id?.slice(0,8) || Date.now()}.pdf`;
+    const fileName = `KOT-${orderId}.pdf`;
     
     // Try Web Share API first (works on Android)
     if (navigator.canShare) {
@@ -98,7 +142,7 @@ export async function downloadPdfAndShare(order) {
       if (navigator.canShare({ files: [file] })) {
         await navigator.share({
           title: 'Kitchen Order Ticket',
-          text: 'Please print this KOT',
+          text: 'Print this KOT on thermal printer',
           files: [file]
         });
         return { success: true, method: 'share' };
@@ -123,27 +167,64 @@ export async function downloadPdfAndShare(order) {
   }
 }
 
-// Alternative: Generate text version for maximum compatibility
+// Enhanced text version - properly formatted for thermal printers
 export function downloadTextAndShare(order) {
   try {
     const items = toDisplayItems(order);
+    const orderId = order.id?.slice(0,8)?.toUpperCase() || 'N/A';
+    const timeStr = new Date(order.created_at).toLocaleTimeString('en-IN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
     
-    const textContent = [
-      'KITCHEN ORDER TICKET',
-      '================================',
-      `Table: ${order.table_number || 'N/A'}`,
-      `Order: #${order.id?.slice(0,8)?.toUpperCase() || 'N/A'}`,
-      `Time: ${new Date(order.created_at).toLocaleTimeString()}`,
-      '================================',
-      ...items.map(item => `${item.quantity || 1}x  ${item.name || 'Item'}`),
-      '================================',
-      `Printed: ${new Date().toLocaleString()}`,
+    // Build content with proper thermal printer formatting
+    const lines = [
       '',
+      '       KITCHEN ORDER',
+      '          TICKET',
+      '',
+      '==============================',
+      '',
+      'Table: ' + (order.table_number || 'N/A'),
+      'Order: #' + orderId,
+      'Time: ' + timeStr,
+      '',
+      '==============================',
       ''
-    ].join('\n');
-
+    ];
+    
+    // Add items
+    if (items.length === 0) {
+      lines.push('No items found');
+    } else {
+      items.forEach(item => {
+        const qty = item.quantity || 1;
+        const name = item.name || 'Item';
+        lines.push(qty + 'x  ' + name);
+      });
+    }
+    
+    lines.push('');
+    lines.push('==============================');
+    
+    // Add special instructions if any
+    if (order.special_instructions) {
+      lines.push('');
+      lines.push('Special: ' + order.special_instructions);
+      lines.push('');
+      lines.push('==============================');
+    }
+    
+    lines.push('');
+    lines.push('Printed: ' + new Date().toLocaleString('en-IN'));
+    lines.push('');
+    lines.push(''); // Extra blank lines for easier tearing
+    lines.push('');
+    
+    const textContent = lines.join('\n');
     const blob = new Blob([textContent], { type: 'text/plain' });
-    const fileName = `KOT-${order.id?.slice(0,8) || Date.now()}.txt`;
+    const fileName = `KOT-${orderId}.txt`;
     
     // Try Web Share API
     if (navigator.canShare) {
@@ -152,7 +233,7 @@ export function downloadTextAndShare(order) {
       if (navigator.canShare({ files: [file] })) {
         navigator.share({
           title: 'Kitchen Order Ticket',
-          text: 'Please print this KOT',
+          text: 'Print this KOT on thermal printer',
           files: [file]
         });
         return { success: true, method: 'share' };
