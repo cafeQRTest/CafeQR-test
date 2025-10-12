@@ -1,7 +1,6 @@
 // utils/printUtils.js
 import { jsPDF } from 'jspdf';
 
-// Helper function to get display items (same as your existing logic)
 function toDisplayItems(order) {
   if (Array.isArray(order.items) && order.items.length) {
     return order.items;
@@ -19,126 +18,116 @@ function toDisplayItems(order) {
 export async function downloadPdfAndShare(order) {
   try {
     const items = toDisplayItems(order);
-    
-    // Create PDF optimized for 58mm thermal printer (2.28 inches)
+
     const doc = new jsPDF({
       orientation: 'portrait',
       unit: 'mm',
-      format: [58, Math.max(100, 40 + items.length * 8)] // Dynamic height based on content
+      format: [58, Math.max(100, 40 + items.length * 8)]
     });
 
-    // Use monospace font for thermal printer compatibility
     doc.setFont('courier', 'normal');
-    
-    let y = 8;
+
+    let y = 10;
     const pageWidth = 58;
-    const leftMargin = 1;
-    const lineSpacing = 5;
-    
-    // Header - larger and centered
+    const centerX = pageWidth / 2;
+    const lineSpacing = 7;
+
+    // Header
     doc.setFontSize(14);
     doc.setFont('courier', 'bold');
-    doc.text('KITCHEN ORDER', pageWidth/2, y, { align: 'center' });
-    y += 6;
-    doc.text('TICKET', pageWidth/2, y, { align: 'center' });
-    y += 8;
-    
+    doc.text('KITCHEN ORDER', centerX, y, { align: 'center' });
+    y += lineSpacing;
+    doc.text('TICKET', centerX, y, { align: 'center' });
+    y += lineSpacing;
+
     // Separator line
-    doc.setFontSize(10);
-    doc.setFont('courier', 'normal');
-    doc.text('==============================', leftMargin, y);
-    y += 6;
-    
-    // Table info - larger text
     doc.setFontSize(12);
+    doc.setFont('courier', 'normal');
+    doc.text('==============================', centerX, y, { align: 'center' });
+    y += lineSpacing;
+
+    // Table info
+    doc.setFontSize(13);
     doc.setFont('courier', 'bold');
-    doc.text('Table: ' + (order.table_number || 'N/A'), leftMargin, y);
+    doc.text('Table: ' + (order.table_number || 'N/A'), centerX, y, { align: 'center' });
     y += lineSpacing;
-    
-    // Order ID
-    const orderId = order.id?.slice(0,8)?.toUpperCase() || 'N/A';
-    doc.text('Order: #' + orderId, leftMargin, y);
+
+    const orderId = order.id?.slice(0, 8)?.toUpperCase() || 'N/A';
+    doc.text('Order: #' + orderId, centerX, y, { align: 'center' });
     y += lineSpacing;
-    
-    // Time
+
     const timeStr = new Date(order.created_at).toLocaleTimeString('en-IN', {
       hour: '2-digit',
       minute: '2-digit',
-      hour12: true
+      hour12: true,
     });
-    doc.text('Time: ' + timeStr, leftMargin, y);
-    y += 8;
-    
-    // Separator
-    doc.setFont('courier', 'normal');
-    doc.setFontSize(10);
-    doc.text('==============================', leftMargin, y);
-    y += 6;
-    
-    // Items section
+    doc.text('Time: ' + timeStr, centerX, y, { align: 'center' });
+    y += lineSpacing;
+
+    // Separator line
     doc.setFontSize(12);
+    doc.setFont('courier', 'normal');
+    doc.text('==============================', centerX, y, { align: 'center' });
+    y += lineSpacing;
+
+    doc.setFontSize(13);
     doc.setFont('courier', 'bold');
+
+    // Items
     if (items.length === 0) {
-      doc.text('No items found', leftMargin, y);
+      doc.text('No items found', centerX, y, { align: 'center' });
       y += lineSpacing;
     } else {
       items.forEach(item => {
         const qty = (item.quantity || 1).toString();
         const name = item.name || 'Item';
-        
-        // Format: "2x Peri Peri Alfaham"
         const itemLine = qty + 'x  ' + name;
-        
-        // Handle long names by wrapping text
-        const maxWidth = pageWidth - 6; // Leave margin
-        const lines = doc.splitTextToSize(itemLine, maxWidth);
-        
+
+        // Wrap long item names
+        const lines = doc.splitTextToSize(itemLine, pageWidth - 10); // fits well when centered
         lines.forEach(line => {
-          doc.text(line, leftMargin, y);
-          y += 4.5; // Tighter line spacing for items
+          doc.text(line, centerX, y, { align: 'center' });
+          y += 6;
         });
-        
-        y += 1; // Small gap between items
+        y += 2;
       });
     }
-    
-    y += 3;
-    
-    // Bottom separator
+    y += 2;
+
+    // Separator
+    doc.setFontSize(12);
     doc.setFont('courier', 'normal');
-    doc.text('==============================', leftMargin, y);
-    y += 6;
-    
-    // Special instructions if any
+    doc.text('==============================', centerX, y, { align: 'center' });
+    y += lineSpacing;
+
+    // Special instructions
     if (order.special_instructions) {
-      doc.setFontSize(9);
+      doc.setFontSize(10);
       doc.setFont('courier', 'bold');
-      doc.text('Special:', leftMargin, y);
-      y += 4;
+      doc.text('Special:', centerX, y, { align: 'center' });
+      y += 5;
       doc.setFont('courier', 'normal');
-      const instrLines = doc.splitTextToSize(order.special_instructions, pageWidth - 6);
+      const instrLines = doc.splitTextToSize(order.special_instructions, pageWidth - 10);
       instrLines.forEach(line => {
-        doc.text(line, leftMargin, y);
-        y += 4;
+        doc.text(line, centerX, y, { align: 'center' });
+        y += 5;
       });
-      y += 3;
+      y += 2;
     }
-    
+
     // Timestamp
-    doc.setFontSize(8);
+    doc.setFontSize(11);
     doc.setFont('courier', 'normal');
     const printTime = new Date().toLocaleString('en-IN');
-    doc.text('Printed: ' + printTime, leftMargin, y);
-    y += 8;
-    
+    doc.text('Printed: ' + printTime, centerX, y, { align: 'center' });
+    y += lineSpacing;
+
     // Generate PDF blob
     const pdfBlob = doc.output('blob');
     const fileName = `KOT-${orderId}.pdf`;
-    
-    // Try Web Share API first (works on Android)
+
     if (navigator.canShare) {
       const file = new File([pdfBlob], fileName, { type: 'application/pdf' });
-      
       if (navigator.canShare({ files: [file] })) {
         await navigator.share({
           title: 'Kitchen Order Ticket',
@@ -148,8 +137,7 @@ export async function downloadPdfAndShare(order) {
         return { success: true, method: 'share' };
       }
     }
-    
-    // Fallback: Download
+
     const url = URL.createObjectURL(pdfBlob);
     const a = document.createElement('a');
     a.href = url;
@@ -158,78 +146,73 @@ export async function downloadPdfAndShare(order) {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    
+
     return { success: true, method: 'download' };
-    
+
   } catch (error) {
     console.error('PDF generation error:', error);
     return { success: false, error: error.message };
   }
 }
 
-// Enhanced text version - properly formatted for thermal printers
+// Enhanced text version for thermal printers (items already centered as text lines)
 export function downloadTextAndShare(order) {
   try {
     const items = toDisplayItems(order);
-    const orderId = order.id?.slice(0,8)?.toUpperCase() || 'N/A';
+    const orderId = order.id?.slice(0, 8)?.toUpperCase() || 'N/A';
     const timeStr = new Date(order.created_at).toLocaleTimeString('en-IN', {
       hour: '2-digit',
       minute: '2-digit',
-      hour12: true
+      hour12: true,
     });
-    
-    // Build content with proper thermal printer formatting
+
+    function center(str, width = 30) {
+      const padLength = Math.max(0, Math.floor((width - str.length) / 2));
+      return ' '.repeat(padLength) + str;
+    }
+
     const lines = [
-      '',
-      '       KITCHEN ORDER',
-      '          TICKET',
-      '',
-      '==============================',
-      '',
-      'Table: ' + (order.table_number || 'N/A'),
-      'Order: #' + orderId,
-      'Time: ' + timeStr,
-      '',
-      '==============================',
-      ''
+      '', center('KITCHEN ORDER', 30),
+      center('TICKET', 30), '',
+      center('==============================', 30), '',
+      center('Table: ' + (order.table_number || 'N/A'), 30),
+      center('Order: #' + orderId, 30),
+      center('Time: ' + timeStr, 30), '',
+      center('==============================', 30), ''
     ];
-    
-    // Add items
+
+    // Add items, center each line
     if (items.length === 0) {
-      lines.push('No items found');
+      lines.push(center('No items found', 30));
     } else {
       items.forEach(item => {
         const qty = item.quantity || 1;
         const name = item.name || 'Item';
-        lines.push(qty + 'x  ' + name);
+        lines.push(center(qty + 'x  ' + name, 30));
       });
     }
-    
+
     lines.push('');
-    lines.push('==============================');
-    
-    // Add special instructions if any
+    lines.push(center('==============================', 30));
+
+    // Special instructions
     if (order.special_instructions) {
       lines.push('');
-      lines.push('Special: ' + order.special_instructions);
+      lines.push(center('Special: ' + order.special_instructions, 30));
       lines.push('');
-      lines.push('==============================');
+      lines.push(center('==============================', 30));
     }
-    
+
     lines.push('');
-    lines.push('Printed: ' + new Date().toLocaleString('en-IN'));
-    lines.push('');
-    lines.push(''); // Extra blank lines for easier tearing
-    lines.push('');
-    
+    lines.push(center('Printed: ' + new Date().toLocaleString('en-IN'), 30));
+    lines.push('\n\n');
+
     const textContent = lines.join('\n');
     const blob = new Blob([textContent], { type: 'text/plain' });
     const fileName = `KOT-${orderId}.txt`;
-    
-    // Try Web Share API
+
     if (navigator.canShare) {
       const file = new File([blob], fileName, { type: 'text/plain' });
-      
       if (navigator.canShare({ files: [file] })) {
         navigator.share({
           title: 'Kitchen Order Ticket',
@@ -239,8 +222,7 @@ export function downloadTextAndShare(order) {
         return { success: true, method: 'share' };
       }
     }
-    
-    // Fallback: Download
+
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -249,9 +231,9 @@ export function downloadTextAndShare(order) {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    
+
     return { success: true, method: 'download' };
-    
+
   } catch (error) {
     console.error('Text generation error:', error);
     return { success: false, error: error.message };
