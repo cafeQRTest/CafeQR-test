@@ -186,8 +186,9 @@ export default function KotPrint({ order, onClose, onPrint }) {
         .kot-ticket {
           font-family: 'Courier New', monospace;
           font-size: 12px; line-height: 1.4; color: #000;
-          background: #fff; padding: 16px; border: 2px dashed #333;
+          background: #fff; padding: 4px; border: 1px dashed #333;
           margin-bottom: 20px;
+	  width: auto;
         }
         .kot-info { margin-bottom: 12px; }
         .kot-row { display: flex; justify-content: space-between; margin-bottom: 4px; }

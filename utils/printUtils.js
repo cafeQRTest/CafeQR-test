@@ -26,7 +26,7 @@ export async function downloadPdfAndShare(order) {
     doc.setFont('courier', 'normal');
 
     let y = 10;
-    const lineSpacing = 7;
+    const lineSpacing = 6;
 
     // Header
     doc.setFontSize(14).setFont('courier','bold')
@@ -69,7 +69,7 @@ export async function downloadPdfAndShare(order) {
     } else {
       items.forEach(it => {
         const line = `${it.quantity||1}x  ${it.name}`;
-        const wrapped = doc.splitTextToSize(line, pageWidth - 2);
+        const wrapped = doc.splitTextToSize(line, pageWidth - 1);
         wrapped.forEach(l => {
           doc.text(l, centerX, y, { align: 'center' });
           y += 6;
@@ -126,5 +126,68 @@ export async function downloadPdfAndShare(order) {
   } catch(err) {
     console.error(err);
     return { success:false, error:err.message };
+  }
+}
+
+export async function downloadTextAndShare(order) {
+  try {
+    const items = toDisplayItems(order);
+    const orderId = order.id?.slice(0,8)?.toUpperCase()||'N/A';
+    // full timestamp
+    const dt = new Date(order.created_at).toLocaleString('en-IN', {
+      day:'2-digit', month:'2-digit', year:'numeric',
+      hour:'2-digit', minute:'2-digit', hour12:true
+    });
+
+    // Helper to center in 32-char width
+    const center = (str, w=32) => {
+      const p = Math.max(0, Math.floor((w - str.length)/2));
+      return ' '.repeat(p) + str;
+    };
+
+    const lines = [
+      center('KITCHEN ORDER'),
+      center('TICKET'),
+      center('=============================='),
+      center(`Table: ${order.table_number||'N/A'}`),
+      center(`Order: #${orderId}`),
+      center(`Time: ${dt}`),
+      center('=============================='),
+      ...(
+        items.length
+          ? items.flatMap(it => center(`${it.quantity||1}x  ${it.name}`))
+          : [ center('No items found') ]
+      ),
+      center('=============================='),
+      ...(order.special_instructions
+        ? [ center('Special:'), ...order.special_instructions.split('\n').map(l=>center(l)), center('==============================') ]
+        : []),
+      center(`Printed: ${new Date().toLocaleString('en-IN', {
+        day:'2-digit', month:'2-digit', year:'numeric',
+        hour:'2-digit', minute:'2-digit', hour12:true
+      })}`)
+    ];
+
+    const text = lines.join('\n');
+
+    // Share via Web Share API (plain text) so Thermer can consume
+    if (navigator.canShare && navigator.canShare({ text })) {
+      await navigator.share({ title:`KOT-${orderId}`, text });
+      return { success:true, method:'share' };
+    }
+
+    // Fallback to download if share unavailable
+    const blob = new Blob([text], { type:'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `KOT-${orderId}.txt`;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    return { success:true, method:'download' };
+  } catch(error) {
+    console.error(error);
+    return { success:false, error:error.message };
   }
 }
