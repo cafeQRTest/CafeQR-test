@@ -549,6 +549,17 @@ export default function OrdersPage() {
   );
 }
 
+function getOrderTypeLabel(order) {
+  if (!order) return '';
+  if (order.order_type === 'parcel') return 'Parcel';
+  if (order.order_type === 'dine-in') return 'Dine-in';
+  if (order.order_type === 'counter') {
+    if (order.table_number) return `Table ${order.table_number}`;
+    else return 'Counter';
+  }
+  return '';
+}
+
 // OrderCard component (with print button)
 function OrderCard({ order, statusColor, onChangeStatus, onComplete, generatingInvoice, onPrintClick }) {
   const items = toDisplayItems(order);
@@ -573,7 +584,7 @@ function OrderCard({ order, statusColor, onChangeStatus, onComplete, generatingI
           }}>
             <strong>#{order.id.slice(0,8)}</strong>
             <span style={{ marginLeft:8 }}>
-              <small>Table {order.table_number||'N/A'}</small>
+            <small>{getOrderTypeLabel(order)}</small>
             </span>
             <span style={{ color:'#6b7280',fontSize:12 }}>
               {new Date(order.created_at).toLocaleTimeString()}

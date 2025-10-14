@@ -6,7 +6,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !supabaseKey) {
     if (process.env.NODE_ENV !== 'production') {
@@ -20,6 +20,7 @@ export default async function handler(req, res) {
     const {
       restaurant_id,
       table_number,
+      order_type = 'counter', // <-- ADD THIS
       items,
       payment_method = 'cash',
       payment_status = 'pending',
@@ -130,7 +131,8 @@ export default async function handler(req, res) {
       .insert([
         {
           restaurant_id,
-          table_number: table_number || 1,
+          table_number: table_number || null,
+          order_type, // <-- ADD THIS
           status: 'new',
           payment_method,
           payment_status,

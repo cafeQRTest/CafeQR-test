@@ -181,3 +181,84 @@ img, svg, video { max-width: 100%; height: auto; }
   }
 }
 
+/* Existing globals remain. Add/override below to force mobile-like desktop. */
+
+.counter-shell { min-height: 100vh; display: flex; flex-direction: column; background: var(--bg); }
+.counter-header, .counter-search-bar { background: #fff; border-bottom: 1px solid #e5e7eb; padding: 1rem; }
+.counter-header-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.counter-title { flex: 1; font-size: 1.25rem; margin: 0; }
+.counter-cart-info { background: var(--brand); color: #fff; padding: 4px 8px; border-radius: 12px; font-size: 14px; font-weight: 600; }
+.counter-back-btn { background: none; border: none; cursor: pointer; font-size: 18px; }
+
+/* Inputs: 4 cols on very wide screens, otherwise stack */
+.counter-inputs-row { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px; align-items: end; }
+@media (max-width: 1280px) { .counter-inputs-row { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 720px)  { .counter-inputs-row { grid-template-columns: 1fr; } }
+
+.counter-filters { margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap; }
+
+.counter-category { margin-bottom: 24px; }
+.counter-category-title { font-size: 16px; font-weight: 600; color: #374151; margin: 0 0 8px 0; }
+
+/* Card grid: 1 col by default, grows with space but stays mobile-like */
+.counter-main-mobile-like { width: 100%; }
+.counter-menu-items { padding: 1rem; }
+.counter-category-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+@media (min-width: 1400px) { .counter-category-grid { grid-template-columns: repeat(3, minmax(260px, 1fr)); } }
+
+.counter-item-card { border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px; background: #fff; display: flex; flex-direction: column; justify-content: space-between; }
+.counter-item-card.item-out { opacity: 0.5; }
+.counter-item-info { display: flex; gap: 8px; margin-bottom: 8px; }
+.counter-item-info h3 { margin: 0 0 4px 0; font-size: 14px; font-weight: 600; }
+.counter-item-info h3 small { margin-left: 6px; color: #999; font-weight: 400; }
+.counter-item-info div:last-child > div { color: var(--brand); font-weight: 700; font-size: 16px; }
+.counter-item-actions { display: flex; justify-content: space-between; align-items: center; }
+
+.counter-cart-qty { display: flex; background: var(--brand); border-radius: 6px; overflow: hidden; }
+.counter-cart-qty > button { background: none; border: none; color: #fff; width: 32px; height: 32px; cursor: pointer; font-size: 16px; }
+.counter-cart-qty > div { background: #fff; color: var(--brand); min-width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-weight: 700; }
+
+/* Sticky mobile bar — visible at all sizes */
+.counter-mobile-cart-btn {
+  position: sticky; bottom: 0; width: 100%;
+  background: var(--brand); color: #fff; border: none;
+  padding: 14px 16px; font-size: 16px; font-weight: 700; z-index: 50;
+  border-top-left-radius: 0; border-top-right-radius: 0;
+}
+
+/* Drawer */
+.counter-drawer-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+  display: flex; align-items: flex-end; justify-content: center; z-index: 1000;
+}
+.counter-drawer {
+  width: 100%; max-width: 720px; height: 75vh;
+  background: #f8f9fa; border-top-left-radius: 14px; border-top-right-radius: 14px;
+  display: flex; flex-direction: column; box-shadow: var(--shadow-2);
+}
+.counter-drawer-head {
+  padding: 12px; border-bottom: 1px solid #e5e7eb;
+  display: flex; justify-content: space-between; align-items: center;
+  background: #fff; border-top-left-radius: 14px; border-top-right-radius: 14px;
+}
+.counter-drawer-body { flex: 1; overflow: auto; padding: 12px; background: #fff; }
+.counter-drawer-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 0; border-bottom: 1px solid #f1f5f9;
+}
+.counter-drawer-row .drawer-name { font-weight: 600; }
+.counter-drawer-row .drawer-sub { font-size: 12px; color: #6b7280; }
+.counter-drawer-foot { padding: 12px; border-top: 1px solid #e5e7eb; background: #fff; }
+.counter-drawer-foot .drawer-total {
+  display: flex; justify-content: space-between; font-weight: 700; font-size: 18px; margin-bottom: 10px;
+}
+
+/* Hide old two-column desktop sidebar on all sizes (mobile-like everywhere) */
+.two-col { grid-template-columns: 1fr !important; }
+
+/* Minor header/search paddings on small widths */
+@media (max-width: 600px) {
+  .counter-header, .counter-search-bar { padding: 0.75rem; }
+  .counter-category-title { font-size: 14px; }
+  .counter-cart-info { font-size: 12px; }
+}
