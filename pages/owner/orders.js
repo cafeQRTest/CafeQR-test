@@ -562,12 +562,13 @@ const complete = async (orderId, actualPaymentMethod = null) => {
       </div>
 
       {paymentConfirmDialog && (
-        <PaymentConfirmDialog
-          order={paymentConfirmDialog}
-          onConfirm={handlePaymentConfirmed}
-          onCancel={handlePaymentCanceled}
-        />
-      )}
+  <PaymentConfirmDialog
+    order={paymentConfirmDialog}
+    onConfirm={handlePaymentConfirmed}
+    onCancel={() => setPaymentConfirmDialog(null)}
+  />
+)}
+
 
       <style jsx>{`
 .orders-wrap { padding:12px 0 32px; }
@@ -665,10 +666,15 @@ function OrderCard({ order, statusColor, onChangeStatus, onComplete, generatingI
                 </Button>
               )}
               {order.status==='ready' && !hasInvoice && (
-                <Button size="sm" onClick={()=>onComplete(order)} disabled={generatingInvoice===order.id}>
-                  {generatingInvoice===order.id ? 'Processing…' : 'Done'}
-                </Button>
-              )}
+  	      <Button
+   	      size="sm"
+  	      onClick={() => onComplete(order)}          // ← pass the order object
+  	      disabled={generatingInvoice===order.id}
+	      >
+   	      {generatingInvoice===order.id ? 'Processing…' : 'Done'}
+  	      </Button>
+	      )}
+
               {hasInvoice && (
                 <Button size="sm" onClick={()=>window.open(order.invoice.pdf_url,'_blank')}>
                   Bill
