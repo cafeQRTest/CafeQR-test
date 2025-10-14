@@ -44,7 +44,14 @@ function toDisplayItems(order) {
 }
 
 // PaymentConfirmDialog (unchanged)
+// Enhanced PaymentConfirmDialog component
 function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
+  const [paymentMethod, setPaymentMethod] = useState('cash');
+  
+  const handleConfirm = () => {
+    onConfirm(paymentMethod); // Pass the payment method to parent
+  };
+
   return (
     <div style={{
       position:'fixed',top:0,left:0,right:0,bottom:0,
@@ -53,11 +60,39 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
     }}>
       <div style={{ backgroundColor:'white',padding:20,borderRadius:8,maxWidth:400,margin:16 }}>
         <h3 style={{ margin:'0 0 16px 0' }}>Payment Confirmation</h3>
-        <p>Order #{order.id.slice(0,8)} - Table {order.table_number}</p>
+        <p>Order #{order.id.slice(0,8)} - {getOrderTypeLabel(order)}</p>
         <p>Amount: {money(computeOrderTotalDisplay(order))}</p>
         <p><strong>Has the customer completed the payment?</strong></p>
+        
+        {/* Payment method selection */}
+        <div style={{ margin: '16px 0' }}>
+          <p style={{ margin: '8px 0', fontWeight: 'bold' }}>Payment Method:</p>
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <input 
+                type="radio" 
+                value="cash" 
+                checked={paymentMethod === 'cash'}
+                onChange={(e) => setPaymentMethod(e.target.value)}
+              />
+              Cash
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <input 
+                type="radio" 
+                value="online" 
+                checked={paymentMethod === 'online'}
+                onChange={(e) => setPaymentMethod(e.target.value)}
+              />
+              Online (UPI/Card)
+            </label>
+          </div>
+        </div>
+
         <div style={{ display:'flex',gap:10,marginTop:16 }}>
-          <Button onClick={onConfirm} variant="success">Yes, Payment Received</Button>
+          <Button onClick={handleConfirm} variant="success">
+            Yes, Payment Received ({paymentMethod === 'cash' ? 'Cash' : 'Online'})
+          </Button>
           <Button onClick={onCancel} variant="outline">Cancel</Button>
         </div>
       </div>
@@ -372,32 +407,47 @@ export default function OrdersPage() {
     }
   };
 
-  const handlePaymentConfirmed = () => {
-    if (!paymentConfirmDialog) return;
-    complete(paymentConfirmDialog.id);
-    setPaymentConfirmDialog(null);
-  };
-  const handlePaymentCanceled = () => setPaymentConfirmDialog(null);
+// Updated handler - receives payment method
+const handlePaymentConfirmed = (actualPaymentMethod) => {
+  if (!paymentConfirmDialog) return;
+  complete(paymentConfirmDialog.id, actualPaymentMethod);
+  setPaymentConfirmDialog(null);
+};
 
-  const complete = async (orderId) => {
-    if (!supabase) return;
-    setGeneratingInvoice(orderId);
-    try {
-      await supabase.from('orders').update({ status: 'completed' }).eq('id', orderId).eq('restaurant_id', restaurantId);
-      const resp = await fetch('/api/invoices/generate', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ order_id: orderId }),
-      });
-      if (!resp.ok) throw new Error('Invoice generation failed');
-      const { pdf_url } = await resp.json();
-      if (pdf_url) window.open(pdf_url, '_blank');
-      loadOrders();
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setGeneratingInvoice(null);
+// Updated complete function - no auto-open PDF + save payment method
+const complete = async (orderId, actualPaymentMethod = null) => {
+  if (!supabase) return;
+  setGeneratingInvoice(orderId);
+  try {
+    // Update order status to completed
+    const updateData = { status: 'completed' };
+    
+    // If actualPaymentMethod is provided (from payment confirmation), update it
+    if (actualPaymentMethod) {
+      updateData.payment_method = actualPaymentMethod;
+      updateData.actual_payment_method = actualPaymentMethod;
     }
-  };
+    
+    await supabase.from('orders').update(updateData).eq('id', orderId).eq('restaurant_id', restaurantId);
+    
+    // Generate invoice but don't auto-open
+    const resp = await fetch('/api/invoices/generate', {
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order_id: orderId }),
+    });
+    
+    if (!resp.ok) throw new Error('Invoice generation failed');
+    // Note: We're not opening the PDF automatically anymore
+    
+    loadOrders();
+  } catch (e) {
+    setError(e.message);
+  } finally {
+    setGeneratingInvoice(null);
+  }
+};
+
 
   if (checking || restLoading) return <div style={{ padding:16 }}>Loading…</div>;
   if (!restaurantId) return <div style={{ padding:16 }}>No restaurant found.</div>;
