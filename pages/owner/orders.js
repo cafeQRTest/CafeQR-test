@@ -43,7 +43,6 @@ function toDisplayItems(order) {
   return [];
 }
 
-// PaymentConfirmDialog (unchanged)
 // Enhanced PaymentConfirmDialog component
 function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
   const [paymentMethod, setPaymentMethod] = useState('cash');
