@@ -16,6 +16,15 @@ function toDisplayItems(order) {
   return [];
 }
 
+function getOrderTypeLabel(order) {
+  if (order.order_type === 'parcel') return 'Parcel';
+  if (order.order_type === 'dine-in') return 'Dine-in';
+  if (order.order_type === 'counter') {
+    return order.table_number ? `Table ${order.table_number}` : 'Counter';
+  }
+  return '';
+}
+
 export default function KotPrint({ order, onClose, onPrint }) {
   const [status, setStatus] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -83,7 +92,7 @@ export default function KotPrint({ order, onClose, onPrint }) {
               <div className="kot-info">
                 <div className="kot-row">
                   <span className="label">Table:</span>
-                  <span>{order.table_number}</span>
+ 		  <span>{getOrderTypeLabel(order)}</span>
                 </div>
                 <div className="kot-row">
                   <span className="label">Order ID:</span>

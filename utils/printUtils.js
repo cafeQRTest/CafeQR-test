@@ -13,6 +13,19 @@ function toDisplayItems(order) {
   return [];
 }
 
+function getOrderTypeLabel(order) {
+  if (!order) return '';
+  if (order.order_type === 'parcel') return 'Parcel';
+  if (order.order_type === 'dine-in') return 'Dine-in';
+  if (order.order_type === 'counter') {
+    if (order.table_number && order.table_number !== null) {
+      return `Table ${order.table_number}`;
+    }
+    return 'Counter';
+  }
+  return '';
+}
+
 export async function downloadPdfAndShare(order) {
   try {
     const items = toDisplayItems(order);
@@ -42,7 +55,7 @@ export async function downloadPdfAndShare(order) {
 
     // Table / Order ID
     doc.setFontSize(13).setFont('courier','bold')
-      .text('Table: ' + (order.table_number||'N/A'), centerX, y, { align: 'center' });
+      .text('Table: ' + getOrderTypeLabel(order), centerX, y, { align: 'center' });
     y += lineSpacing;
     const oid = order.id?.slice(0,8)?.toUpperCase()||'N/A';
     doc.text('Order: #' + oid, centerX, y, { align: 'center' });
@@ -149,7 +162,7 @@ export async function downloadTextAndShare(order) {
       center('KITCHEN ORDER'),
       center('TICKET'),
       center('=============================='),
-      center(`Table: ${order.table_number||'N/A'}`),
+      center(`Table: ${getOrderTypeLabel(order)}`),
       center(`Order: #${orderId}`),
       center(`Time: ${dt}`),
       center('=============================='),
