@@ -399,12 +399,15 @@ export default function OrdersPage() {
   }
 
   const finalize = (order) => {
-    if (order.payment_method === 'pay_at_counter' || order.payment_method === 'counter') {
-      setPaymentConfirmDialog(order);
-    } else {
-      complete(order.id);
-    }
-  };
+  const pm = String(order.payment_method || '').toLowerCase();
+  const isOnline = pm === 'upi' || pm === 'card' || pm === 'online';
+  const needsCounterConfirm = !isOnline; // everything except known online methods
+  if (needsCounterConfirm) {
+    setPaymentConfirmDialog(order);
+  } else {
+    complete(order.id);
+  }
+};
 
 // Updated handler - receives payment method
 const handlePaymentConfirmed = (actualPaymentMethod) => {
