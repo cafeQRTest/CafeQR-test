@@ -99,6 +99,40 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
   );
 }
 
+function CancelConfirmDialog({ order, onConfirm, onCancel }) {
+  const [reason, setReason] = useState('');
+  return (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+      backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex',
+      alignItems: 'center', justifyContent: 'center', zIndex: 1000
+    }}>
+      <div style={{ backgroundColor: 'white', padding: 20, borderRadius: 8, maxWidth: 400, margin: 16 }}>
+        <h3 style={{ margin: '0 0 16px 0' }}>Cancel Order Confirmation</h3>
+        <p>Are you sure you want to cancel order #{order.id.slice(0, 8)} - Table {order.table_number}?</p>
+        <label>
+          Reason for cancellation:
+          <textarea
+            value={reason}
+            onChange={e => setReason(e.target.value)}
+            rows={3}
+            style={{ width: '100%', marginTop: 8 }}
+            placeholder="Enter cancellation reason"
+          />
+        </label>
+        <div style={{ display: 'flex', gap: 10, marginTop: 16, justifyContent: 'flex-end' }}>
+          <Button onClick={() => onConfirm(reason)} variant="danger" disabled={!reason.trim()}>
+            Confirm Cancel
+          </Button>
+          <Button onClick={onCancel} variant="outline">
+            Cancel
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 async function fetchFullOrder(supabase, orderId) {
   const { data, error } = await supabase
     .from('orders')
@@ -117,6 +151,7 @@ export default function OrdersPage() {
 
   // NEW: state for showing the print modal
   const [showKotPrint, setShowKotPrint] = useState(null);
+  const [cancelOrderDialog, setCancelOrderDialog] = useState(null);
 
   const [ordersByStatus, setOrdersByStatus] = useState({
     new: [], in_progress: [], ready: [], completed: [], mobileFilter: 'new'
@@ -236,6 +271,23 @@ export default function OrdersPage() {
     }, 30000);
     return () => clearInterval(interval);
   }, []);
+
+const onCancelOrderOpen = (order) => setCancelOrderDialog(order);
+const handleCancelConfirm = async (reason) => {
+  if (!cancelOrderDialog) return;
+  try {
+       await supabase
+       .from('orders')
+       .update({ status: 'cancelled', description: reason })
+       .eq('id', cancelOrderDialog.id)
+       .eq('restaurant_id', restaurantId);
+       loadOrders();
+       setCancelOrderDialog(null);
+      } catch (error) {
+          setError(error.message);
+     }
+};
+const handleCancelDismiss = () => setCancelOrderDialog(null);
 
   // Fetch orders helper
   async function fetchBucket(status, page = 1) {
@@ -513,8 +565,8 @@ const complete = async (orderId, actualPaymentMethod = null) => {
               onChangeStatus={updateStatus}
               onComplete={finalize}
               generatingInvoice={generatingInvoice}
-              // NEW: pass setter to open print modal
               onPrintClick={() => setShowKotPrint(order)}
+              onCancelOrderOpen={onCancelOrderOpen}
             />
           ))
         )}
@@ -541,6 +593,7 @@ const complete = async (orderId, actualPaymentMethod = null) => {
                     onComplete={finalize}
                     generatingInvoice={generatingInvoice}
                     onPrintClick={() => setShowKotPrint(order)}
+                    onCancelOrderOpen={onCancelOrderOpen}
                   />
                 ))
               )}
@@ -565,12 +618,20 @@ const complete = async (orderId, actualPaymentMethod = null) => {
       </div>
 
       {paymentConfirmDialog && (
-  <PaymentConfirmDialog
-    order={paymentConfirmDialog}
-    onConfirm={handlePaymentConfirmed}
-    onCancel={() => setPaymentConfirmDialog(null)}
-  />
-)}
+        <PaymentConfirmDialog
+          order={paymentConfirmDialog}
+          onConfirm={handlePaymentConfirmed}
+          onCancel={() => setPaymentConfirmDialog(null)}
+        />
+      )}
+
+      {cancelOrderDialog && (
+        <CancelConfirmDialog
+          order={cancelOrderDialog}
+          onConfirm={handleCancelConfirm}
+          onCancel={handleCancelDismiss}
+        />
+      )}
 
 
       <style jsx>{`
@@ -614,7 +675,7 @@ function getOrderTypeLabel(order) {
 }
 
 // OrderCard component (with print button)
-function OrderCard({ order, statusColor, onChangeStatus, onComplete, generatingInvoice, onPrintClick }) {
+function OrderCard({ order, statusColor, onChangeStatus, onComplete, generatingInvoice, onPrintClick, onCancelOrderOpen }) {
   const items = toDisplayItems(order);
   const hasInvoice = Boolean(order?.invoice?.pdf_url);
   const total = computeOrderTotalDisplay(order);
@@ -659,14 +720,47 @@ function OrderCard({ order, statusColor, onChangeStatus, onComplete, generatingI
               display:'flex',gap:6,flexWrap:'wrap',justifyContent:'flex-end',width:'100%'
             }} onClick={e=>e.stopPropagation()}>
               {order.status==='new' && (
-                <Button size="sm" onClick={()=>onChangeStatus(order.id,'in_progress')}>
-                  Start
-                </Button>
+                <>
+                  <Button size="sm" onClick={() => onChangeStatus(order.id, 'in_progress')}>
+                    Start
+                  </Button>
+                   <Button
+                    size="sm"
+                    variant="danger"
+                    onClick={() => onCancelOrderOpen(order)}
+                  >
+                    Cancel
+                  </Button>
+                  <button
+                    onClick={handlePrintOpen}
+                    style={{
+                      background: '#10b981',
+                      color: '#fff',
+                      border: 'none',
+                      padding: '6px 12px',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '12px',
+                    }}
+                  >
+                    Print KOT
+                  </button>
+                </>
+
               )}
               {order.status==='in_progress' && (
-                <Button size="sm" variant="success" onClick={()=>onChangeStatus(order.id,'ready')}>
-                  Ready
-                </Button>
+                <>
+             <Button size="sm" variant="success" onClick={() => onChangeStatus(order.id, 'ready')}>
+              Ready
+             </Button>
+             <Button
+               size="sm"
+               variant="danger"
+               onClick={() => onCancelOrderOpen(order)}
+             >
+             Cancel
+            </Button>
+           </>
               )}
               {order.status==='ready' && !hasInvoice && (
   	      <Button
@@ -682,18 +776,6 @@ function OrderCard({ order, statusColor, onChangeStatus, onComplete, generatingI
                 <Button size="sm" onClick={()=>window.open(order.invoice.pdf_url,'_blank')}>
                   Bill
                 </Button>
-              )}
-              {order.status==='new' && (
-                <button
-                  onClick={handlePrintOpen}
-                  style={{
-                    background:'#10b981',color:'#fff',border:'none',
-                    padding:'6px 12px',borderRadius:'4px',
-                    cursor:'pointer',fontSize:'12px'
-                  }}
-                >
-                  Print KOT
-                </button>
               )}
             </div>
           </div>
