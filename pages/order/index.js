@@ -1,37 +1,58 @@
+// pages/order/index.js
 import { useRouter } from 'next/router'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-// 1. IMPORT the singleton function
 import { getSupabase } from '../../services/supabase'
 
-// 2. REMOVE the supabase prop
 export default function OrderPage() {
-  // 3. GET the singleton instance
-  const supabase = getSupabase();
   const router = useRouter()
   const { r: restaurantId, t: tableNumber } = router.query
 
-  // 2. REMOVE the useRequireAuth hook
-  // const { checking } = useRequireAuth(supabase)
-
-  // Core state
+  // 1. Run subscription guard first
+  const [allowed, setAllowed] = useState(null)
+  const supabase = getSupabase()
   const [restaurant, setRestaurant] = useState(null)
   const [menuItems, setMenuItems] = useState([])
   const [cart, setCart] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
-  const [filterMode, setFilterMode] = useState('all') // all, veg, popular
+  const [filterMode, setFilterMode] = useState('all')
+const menuMapRef = useRef(new Map())
+const cacheMenuIntoMap = (list) => {
+  const m = new Map()
+  ;(list || []).forEach((row) => m.set(row.id, row))
+  menuMapRef.current = m
+}
 
-  // Map cache to patch realtime updates without rebuilding arrays
-  const menuMapRef = useRef(new Map())
-  const cacheMenuIntoMap = (list) => {
-    const m = new Map()
-    ;(list || []).forEach((row) => m.set(row.id, row))
-    menuMapRef.current = m
+  // …rest of your code unchanged
+
+  useEffect(() => {
+  if (!restaurantId) {
+    console.log('No restaurantId, skip subscription check')
+    return
   }
+  console.log('Fetching subscription status for', restaurantId)
+  fetch(`/api/subscription/status?restaurant_id=${restaurantId}`)
+    .then((r) => r.json())
+    .then((data) => {
+      console.log('Subscription status:', data)
+      setAllowed(data.is_active)
+    })
+    .catch(() => {
+      console.log('Error fetching subscription status, blocking')
+      setAllowed(false)
+    })
+}, [restaurantId])
 
-  // Load persisted cart for this restaurant/table (no changes needed)
+
+  
+
+  // 2. Now it’s safe to initialize Supabase and load data
+ 
+
+
+
   useEffect(() => {
     if (!restaurantId || !tableNumber) return
     const key = `cart_${restaurantId}_${tableNumber}`
@@ -41,14 +62,12 @@ export default function OrderPage() {
     }
   }, [restaurantId, tableNumber])
 
-  // Persist cart changes (no changes needed)
   useEffect(() => {
     if (!restaurantId || !tableNumber) return
     const key = `cart_${restaurantId}_${tableNumber}`
     localStorage.setItem(key, JSON.stringify(cart))
   }, [cart, restaurantId, tableNumber])
 
-  // Initial data load
   useEffect(() => {
     if (!restaurantId) return
     let cancelled = false
@@ -58,7 +77,6 @@ export default function OrderPage() {
         setLoading(true)
         setError('')
 
-        // 3. USE the singleton instance
         const { data: rest, error: restErr } = await supabase
           .from('restaurants')
           .select('id, name, online_paused, restaurant_profiles(brand_color, phone)')
@@ -68,10 +86,9 @@ export default function OrderPage() {
         if (!rest) throw new Error('Restaurant not found')
         if (rest.online_paused) throw new Error('Restaurant is currently closed')
 
-        // 3. USE the singleton instance
         const { data: menu, error: menuErr } = await supabase
           .from('menu_items')
-          .select('id, name, price, description, category, veg, status,  is_packaged_good')
+          .select('id, name, price, description, category, veg, status, is_packaged_good')
           .eq('restaurant_id', restaurantId)
           .order('category', { ascending: true })
           .order('name', { ascending: true })
@@ -97,13 +114,11 @@ export default function OrderPage() {
 
     loadData()
     return () => { cancelled = true }
-  }, [restaurantId]) // supabase is no longer a dependency
+  }, [restaurantId, supabase])
 
-  // Realtime
   useEffect(() => {
     if (!restaurantId) return
 
-    // 3. USE the singleton instance
     const channel = supabase
       .channel(`menu-items-${restaurantId}`)
       .on(
@@ -142,9 +157,8 @@ export default function OrderPage() {
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
-  }, [restaurantId]) // supabase is no longer a dependency
+  }, [restaurantId, supabase])
   
-  // All functions below (addToCart, etc.) do not use supabase and need no changes.
   const addToCart = (item) => {
     if (item.status && item.status !== 'available') {
       alert('This item is currently out of stock.')
@@ -186,7 +200,18 @@ export default function OrderPage() {
   const cartTotal = useMemo(() => cart.reduce((s, i) => s + i.price * i.quantity, 0), [cart])
   const cartItemsCount = useMemo(() => cart.reduce((s, i) => s + i.quantity, 0), [cart])
 
-  // 2. REMOVE the checking condition
+  if (allowed === null) {
+    return <div style={{ padding: 50, textAlign: 'center' }}>Checking subscription…</div>
+  }
+  if (!allowed) {
+    return (
+      <div style={{ padding: 50, textAlign: 'center' }}>
+        <h2>Subscription Required</h2>
+        <p>This restaurant's subscription has expired. Please ask the owner to <a href="/owner/subscription">renew here</a> before ordering.</p>
+      </div>
+    )
+  }
+
   if (loading) return <div style={{padding: 40, textAlign: 'center'}}>Loading menu...</div>
   if (error) return <div style={{padding: 40, textAlign: 'center', color: 'red'}}>{error}</div>
 

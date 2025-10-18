@@ -1,47 +1,50 @@
 // pages/owner/subscription.js
-import { useState, useEffect } from 'react';
-import { useRestaurant } from '../../context/RestaurantContext';
-import { useRouter } from 'next/router';
+import { useState, useEffect } from 'react'
+import { useRestaurant } from '../../context/RestaurantContext'
+import { useRouter } from 'next/router'
 
 export default function SubscriptionPage() {
-  const { restaurant } = useRestaurant();
-  const router = useRouter();
-  const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState(null);
+  const { restaurant } = useRestaurant()
+  const router = useRouter()
+  const [loading, setLoading] = useState(false)
+  const [status, setStatus] = useState(null)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
-    if (restaurant?.id) {
-      fetchStatus();
-    }
-  }, [restaurant]);
+    if (restaurant?.id) fetchStatus()
+  }, [restaurant])
 
   async function fetchStatus() {
     try {
-      const res = await fetch(`/api/subscription/status?restaurant_id=${restaurant.id}`);
-      const data = await res.json();
-      setStatus(data);
-    } catch (error) {
-      console.error('Failed to fetch status:', error);
+      const res = await fetch(`/api/subscription/status?restaurant_id=${restaurant.id}`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      setStatus(data)
+    } catch (err) {
+      setError(err.message)
     }
   }
 
   async function handlePayment() {
-    setLoading(true);
+    setLoading(true)
+    setError(null)
+
     try {
-      // Create order
       const res = await fetch('/api/subscription/create-payment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ restaurant_id: restaurant.id })
-      });
+        body: JSON.stringify({ restaurant_id: restaurant.id }),
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || 'Payment order failed')
+      }
+      const { order_id, amount, currency, key_id } = await res.json()
 
-      const { order_id, amount, currency, key_id } = await res.json();
-
-      // Load Razorpay script
-      const script = document.createElement('script');
-      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-      script.async = true;
-      document.body.appendChild(script);
+      const script = document.createElement('script')
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js'
+      script.async = true
+      document.body.appendChild(script)
 
       script.onload = () => {
         const options = {
@@ -51,34 +54,60 @@ export default function SubscriptionPage() {
           name: 'CafeQR Subscription',
           description: 'Monthly Subscription - ₹99',
           order_id,
-          handler: function (response) {
-            alert('Payment successful! Your subscription is now active.');
-            router.push('/owner/orders');
+          handler: async function (response) {
+            // Activate immediately
+            await fetch('/api/subscription/activate', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ restaurant_id: restaurant.id }),
+            })
+            alert('Payment successful! Your subscription is now active.')
+            fetchStatus()
           },
           prefill: {
             name: restaurant.name,
-            email: restaurant.owner_email
+            email: restaurant.owner_email,
           },
-          theme: { color: '#3399cc' }
-        };
+          theme: { color: '#007bff' },
+          modal: {
+            ondismiss: () => setLoading(false),
+          },
+        }
+        const rzp = new window.Razorpay(options)
+        rzp.open()
+        setLoading(false)
+      }
 
-        const razorpay = new window.Razorpay(options);
-        razorpay.open();
-      };
-    } catch (error) {
-      console.error('Payment failed:', error);
-      alert('Payment failed. Please try again.');
-    } finally {
-      setLoading(false);
+      script.onerror = () => {
+        throw new Error('Failed to load Razorpay')
+      }
+    } catch (err) {
+      setError(err.message)
+      alert('Payment failed: ' + err.message)
+      setLoading(false)
     }
   }
 
-  if (!status) return <div>Loading...</div>;
+  if (!restaurant) {
+    return <div style={{ padding: 50, textAlign: 'center' }}>Loading restaurant…</div>
+  }
+  if (error) {
+    return (
+      <div style={{ padding: 50, textAlign: 'center', color: 'red' }}>
+        <h3>Error</h3>
+        <p>{error}</p>
+        <button onClick={fetchStatus}>Retry</button>
+      </div>
+    )
+  }
+  if (!status) {
+    return <div style={{ padding: 50, textAlign: 'center' }}>Loading subscription status…</div>
+  }
 
   return (
     <div style={{ maxWidth: 600, margin: '50px auto', padding: 20 }}>
       <h1>Subscription</h1>
-      
+
       {status.is_active ? (
         <div style={{ padding: 20, background: '#d4edda', borderRadius: 8, marginBottom: 20 }}>
           <h3 style={{ color: '#155724', margin: 0 }}>✓ Active Subscription</h3>
@@ -95,29 +124,29 @@ export default function SubscriptionPage() {
 
       <div style={{ padding: 30, border: '2px solid #007bff', borderRadius: 8, textAlign: 'center' }}>
         <h2>₹99 / Month</h2>
-        <ul style={{ textAlign: 'left', marginBottom: 20 }}>
-          <li>Unlimited Orders</li>
-          <li>QR Code Menus</li>
-          <li>Owner Dashboard</li>
-          <li>Kitchen Display</li>
-          <li>Customer Ordering</li>
+        <ul style={{ textAlign: 'left', marginBottom: 20, listStyle: 'none', paddingLeft: 0 }}>
+          <li>✓ Unlimited Orders</li>
+          <li>✓ QR Code Menus</li>
+          <li>✓ Owner Dashboard</li>
+          <li>✓ Kitchen Display</li>
+          <li>✓ Customer Ordering</li>
         </ul>
-        <button 
+        <button
           onClick={handlePayment}
           disabled={loading}
           style={{
             padding: '15px 40px',
             fontSize: 18,
-            background: '#007bff',
+            background: loading ? '#ccc' : '#007bff',
             color: 'white',
             border: 'none',
             borderRadius: 5,
-            cursor: loading ? 'not-allowed' : 'pointer'
+            cursor: loading ? 'not-allowed' : 'pointer',
           }}
         >
-          {loading ? 'Processing...' : status.is_active ? 'Renew Subscription' : 'Subscribe Now'}
+          {loading ? 'Processing…' : status.is_active ? 'Renew Subscription' : 'Subscribe Now'}
         </button>
       </div>
     </div>
-  );
+  )
 }

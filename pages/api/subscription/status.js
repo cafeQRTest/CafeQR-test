@@ -9,6 +9,8 @@ export default async function handler(req, res) {
   try {
     const { restaurant_id } = req.query;
     
+    console.log('[subscription-status] Checking for restaurant_id:', restaurant_id);
+    
     if (!restaurant_id) {
       return res.status(400).json({ error: 'restaurant_id is required' });
     }
@@ -19,12 +21,20 @@ export default async function handler(req, res) {
       .from('restaurant_subscriptions')
       .select('*')
       .eq('restaurant_id', restaurant_id)
-      .single();
+      .maybeSingle();
 
-    if (error || !subscription) {
-      return res.status(404).json({ 
+    if (error) {
+      console.error('[subscription-status] DB Error:', error);
+      return res.status(500).json({ error: 'Database error' });
+    }
+
+    if (!subscription) {
+      console.log('[subscription-status] No subscription found, returning inactive');
+      return res.status(200).json({ 
         is_active: false,
-        error: 'No subscription found' 
+        status: 'none',
+        days_left: 0,
+        subscription: null
       });
     }
 
@@ -33,7 +43,7 @@ export default async function handler(req, res) {
     let daysLeft = 0;
 
     // Check if trial is active
-    if (subscription.status === 'trial') {
+    if (subscription.status === 'trial' && subscription.trial_ends_at) {
       const trialEnd = new Date(subscription.trial_ends_at);
       isActive = now <= trialEnd;
       daysLeft = Math.ceil((trialEnd - now) / (1000 * 60 * 60 * 24));
@@ -45,6 +55,8 @@ export default async function handler(req, res) {
       isActive = now <= periodEnd;
       daysLeft = Math.ceil((periodEnd - now) / (1000 * 60 * 60 * 24));
     }
+
+    console.log('[subscription-status] Returning:', { isActive, status: subscription.status, daysLeft });
 
     return res.status(200).json({
       is_active: isActive,

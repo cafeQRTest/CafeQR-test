@@ -14,44 +14,51 @@ export default async function handler(req, res) {
 
   try {
     const { restaurant_id } = req.body;
-    
-    if (!restaurant_id) {
-      return res.status(400).json({ error: 'restaurant_id is required' });
-    }
+    if (!restaurant_id) return res.status(400).json({ error: 'restaurant_id is required' });
 
     const supabase = getServerSupabase();
-    
-    // Get subscription details
-    const { data: subscription } = await supabase
+
+    let { data: subscription } = await supabase
       .from('restaurant_subscriptions')
       .select('*')
       .eq('restaurant_id', restaurant_id)
-      .single();
+      .maybeSingle();
 
     if (!subscription) {
-      return res.status(404).json({ error: 'Subscription not found' });
+      const { data: newSub, error } = await supabase
+        .from('restaurant_subscriptions')
+        .insert({
+          restaurant_id,
+          status: 'pending',
+          amount_paise: 9900,
+          currency: 'INR',
+          plan_code: 'RZP_MONTH_99'
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      subscription = newSub;
     }
 
-    // Get restaurant details for receipt
     const { data: restaurant } = await supabase
       .from('restaurants')
       .select('name, owner_email')
       .eq('id', restaurant_id)
       .single();
 
-    // Create Razorpay order
+    // Shorten receipt to <=40 chars
+    const base = `sub_${restaurant_id}`;
+    const receiptId = base.length <= 35
+      ? `${base}_${Date.now()}`
+      : `${base.slice(0,35)}_${Date.now()}`.slice(0,40);
+
     const order = await razorpay.orders.create({
-      amount: 9900, // Rs 99 in paise
+      amount: 9900,
       currency: 'INR',
-      receipt: `sub_${restaurant_id}_${Date.now()}`,
-      notes: {
-        restaurant_id,
-        restaurant_name: restaurant?.name || 'Unknown',
-        type: 'subscription_renewal'
-      }
+      receipt: receiptId,
+      notes: { restaurant_id }
     });
 
-    // Save order ID to subscription
     await supabase
       .from('restaurant_subscriptions')
       .update({ razorpay_order_id: order.id })
@@ -63,9 +70,11 @@ export default async function handler(req, res) {
       currency: order.currency,
       key_id: process.env.RAZORPAY_KEY_ID
     });
-
   } catch (error) {
     console.error('[create-payment] Error:', error);
-    return res.status(500).json({ error: 'Failed to create payment order' });
+    return res.status(500).json({
+      error: 'Failed to create payment order',
+      details: error.error?.description || error.message
+    });
   }
 }

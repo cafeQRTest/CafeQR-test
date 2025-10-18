@@ -1,42 +1,37 @@
 // pages/kitchen/index.js
+import React, { useEffect, useRef, useState } from 'react'
+import { useRequireAuth } from '../../lib/useRequireAuth'
+import { useRestaurant } from '../../context/RestaurantContext'
+import Card from '../../components/ui/Card'
+import Button from '../../components/ui/Button'
+import { getSupabase } from '../../services/supabase'
 
-import React, { useEffect, useRef, useState } from 'react';
-import { useRequireAuth } from '../../lib/useRequireAuth';
-import { useRestaurant } from '../../context/RestaurantContext';
-import Card from '../../components/ui/Card';
-import Button from '../../components/ui/Button';
-import { getSupabase } from '../../services/supabase'; // 1. IMPORT
-
-
-// Helper to handle both JSONB items and relational order_items
+// Helper functions (before component)
 function toDisplayItems(order) {
-  console.log('Processing order for items:', order);
+  console.log('Processing order for items:', order)
   
-  // Try order_items first (relational data)
   if (Array.isArray(order.order_items) && order.order_items.length > 0) {
-    console.log('Using order_items:', order.order_items);
+    console.log('Using order_items:', order.order_items)
     return order.order_items.map((oi) => ({
       name: oi.menu_items?.name || oi.item_name || 'Item',
       quantity: oi.quantity || 1,
       price: oi.price || 0,
-    }));
+    }))
   }
   
-  // Fallback to items (JSONB data)
   if (Array.isArray(order.items) && order.items.length > 0) {
-    console.log('Using items:', order.items);
-    return order.items;
+    console.log('Using items:', order.items)
+    return order.items
   }
   
-  console.warn('No items found in order:', order);
-  return [];
+  console.warn('No items found in order:', order)
+  return []
 }
 
-// Kitchen order card component
 function KitchenOrderCard({ order, onStart }) {
-  const items = toDisplayItems(order);
-  console.log('KitchenOrderCard rendering order:', order);
-  console.log('Items derived using toDisplayItems:', items);
+  const items = toDisplayItems(order)
+  console.log('KitchenOrderCard rendering order:', order)
+  console.log('Items derived using toDisplayItems:', items)
 
   return (
     <Card padding={16} style={{ border: '1px solid #ddd', borderRadius: 8 }}>
@@ -98,130 +93,119 @@ function KitchenOrderCard({ order, onStart }) {
         </Button>
       </div>
     </Card>
-  );
+  )
 }
 
-// Push notifications component with improved error handling
 function EnableAlertsButton({ restaurantId, userEmail }) {
-  const [enabled, setEnabled] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [enabled, setEnabled] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
 
   useEffect(() => {
     const checkPermission = async () => {
       try {
-        // Check if running in secure context and Notification API is supported
         if (!window.isSecureContext || typeof Notification === 'undefined') {
-          console.warn('Notifications not supported: insecure context or API unavailable');
-          return;
+          console.warn('Notifications not supported: insecure context or API unavailable')
+          return
         }
         
         if (Notification.permission === 'granted') {
-          // Check if we have a valid service worker registration
-          const registration = await navigator.serviceWorker.ready;
+          const registration = await navigator.serviceWorker.ready
           if (registration) {
-            setEnabled(true);
+            setEnabled(true)
           }
         }
       } catch (error) {
-        console.error('Error checking notification permission:', error);
+        console.error('Error checking notification permission:', error)
       }
-    };
-    checkPermission();
-  }, []);
+    }
+    checkPermission()
+  }, [])
 
   const enablePush = async () => {
-    setLoading(true);
-    setError(null);
+    setLoading(true)
+    setError(null)
     
     try {
-      // Check if running in secure context
       if (!window.isSecureContext) {
-        throw new Error('Notifications require HTTPS');
+        throw new Error('Notifications require HTTPS')
       }
 
-      // Check if Notification API is supported
       if (typeof Notification === 'undefined') {
-        throw new Error('Notifications not supported in this browser');
+        throw new Error('Notifications not supported in this browser')
       }
 
-      // Request permission
-      const permission = await Notification.requestPermission();
+      const permission = await Notification.requestPermission()
       if (permission !== 'granted') {
-        throw new Error('Notification permission denied');
+        throw new Error('Notification permission denied')
       }
       
-      // Wait for service worker to be ready
-      const registration = await navigator.serviceWorker.ready;
+      const registration = await navigator.serviceWorker.ready
       if (!registration) {
-        throw new Error('Service worker not available');
+        throw new Error('Service worker not available')
       }
       
-      // Try to get Firebase messaging
-      let messaging;
+      let messaging
       try {
-        const { getMessagingIfSupported } = await import('../../lib/firebaseClient');
-        messaging = await getMessagingIfSupported();
+        const { getMessagingIfSupported } = await import('../../lib/firebaseClient')
+        messaging = await getMessagingIfSupported()
       } catch (firebaseError) {
-        console.warn('Firebase messaging not available:', firebaseError);
-        // Continue without Firebase - basic notifications will still work
+        console.warn('Firebase messaging not available:', firebaseError)
       }
       
-      let deviceToken = null;
+      let deviceToken = null
       if (messaging && process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY) {
         try {
-          const { getToken } = await import('firebase/messaging');
+          const { getToken } = await import('firebase/messaging')
           deviceToken = await getToken(messaging, {
             vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
             serviceWorkerRegistration: registration,
-          });
+          })
         } catch (tokenError) {
-          console.warn('Failed to get Firebase token:', tokenError);
+          console.warn('Failed to get Firebase token:', tokenError)
         }
       }
       
-      // Subscribe to push notifications
       const subscribeData = {
         restaurantId,
         userEmail,
         platform: 'web',
         enabled: true
-      };
+      }
       
       if (deviceToken) {
-        subscribeData.deviceToken = deviceToken;
+        subscribeData.deviceToken = deviceToken
       }
       
       const res = await fetch('/api/push/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(subscribeData),
-      });
+      })
       
       if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error(`Subscribe failed: ${res.status} ${errorText}`);
+        const errorText = await res.text()
+        throw new Error(`Subscribe failed: ${res.status} ${errorText}`)
       }
       
-      const result = await res.json();
-      console.log('Push subscription successful:', result);
+      const result = await res.json()
+      console.log('Push subscription successful:', result)
       
-      setEnabled(true);
+      setEnabled(true)
       
-      // Show success notification
       new Notification('🔔 Kitchen Alerts Enabled!', {
         body: 'You will now receive notifications for new orders.',
         icon: '/favicon.ico',
         tag: 'push-enabled',
-      });
+      })
       
     } catch (e) {
-      console.error('Error enabling push notifications:', e);
-      setError(e.message);
+      console.error('Error enabling push notifications:', e)
+      setError(e.message)
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   if (error) {
     return (
@@ -233,7 +217,7 @@ function EnableAlertsButton({ restaurantId, userEmail }) {
           {error}
         </span>
       </div>
-    );
+    )
   }
 
   return (
@@ -245,34 +229,43 @@ function EnableAlertsButton({ restaurantId, userEmail }) {
     >
       {loading ? 'Enabling...' : enabled ? '🔔 Alerts Active' : 'Enable Alerts'}
     </Button>
-  );
+  )
 }
 
-export default function KitchenPage() { 
-  const supabase = getSupabase(); // Get the singleton instance
-  const { checking, user } = useRequireAuth(); 
-  const { restaurant, loading: restLoading } = useRestaurant();
-  const restaurantId = restaurant?.id;
-  const [newOrders, setNewOrders] = useState([]);
-  const [connectionStatus, setConnectionStatus] = useState('disconnected');
-  const audioRef = useRef(null);
-  const channelRef = useRef(null);
-  const reconnectTimeoutRef = useRef(null);
+// SINGLE EXPORT DEFAULT
+export default function KitchenPage() {
+  const supabase = getSupabase()
+  const { checking, user } = useRequireAuth()
+  const { restaurant, loading: restLoading } = useRestaurant()
+  const restaurantId = restaurant?.id
+  const [newOrders, setNewOrders] = useState([])
+  const [connectionStatus, setConnectionStatus] = useState('disconnected')
+  const audioRef = useRef(null)
+  const channelRef = useRef(null)
+  const reconnectTimeoutRef = useRef(null)
+  const [allowed, setAllowed] = useState(null)
 
-  // Preload notification sound
+  // Subscription guard
   useEffect(() => {
-    const audio = new Audio('/notification-sound.mp3');
-    audio.preload = 'auto';
-    audioRef.current = audio;
-  }, []);
+    if (!restaurantId) return
+    fetch(`/api/subscription/status?restaurant_id=${restaurantId}`)
+      .then(r => r.json())
+      .then(data => setAllowed(data.is_active))
+      .catch(() => setAllowed(false))
+  }, [restaurantId])
 
-  // Initial fetch of new orders
   useEffect(() => {
-    if (!restaurantId || !supabase) return;
+    const audio = new Audio('/notification-sound.mp3')
+    audio.preload = 'auto'
+    audioRef.current = audio
+  }, [])
+
+  useEffect(() => {
+    if (!restaurantId || !supabase) return
     
     const fetchOrders = async () => {
       try {
-        console.log('🔄 Fetching initial orders for restaurant:', restaurantId);
+        console.log('🔄 Fetching initial orders for restaurant:', restaurantId)
         const { data, error } = await supabase
           .from('orders')
           .select(`
@@ -284,43 +277,40 @@ export default function KitchenPage() {
           `)
           .eq('restaurant_id', restaurantId)
           .eq('status', 'new')
-          .order('created_at', { ascending: true });
+          .order('created_at', { ascending: true })
         
-        if (error) throw error;
+        if (error) throw error
         
-        console.log('📦 Initial orders fetched:', data);
-        setNewOrders(data || []);
+        console.log('📦 Initial orders fetched:', data)
+        setNewOrders(data || [])
       } catch (error) {
-        console.error('❌ Error fetching initial orders:', error);
+        console.error('❌ Error fetching initial orders:', error)
       }
-    };
+    }
     
-    fetchOrders();
-  }, [restaurantId, supabase]);
+    fetchOrders()
+  }, [restaurantId, supabase])
 
-  // Real-time subscription with improved error handling and reconnection
   useEffect(() => {
-    if (!restaurantId || !supabase) return;
+    if (!restaurantId || !supabase) return
 
     const setupRealTimeSubscription = () => {
-      // Clean up existing channel and timeout
       if (channelRef.current) {
-        console.log('🧹 Cleaning up existing channel');
-        supabase.removeChannel(channelRef.current);
-        channelRef.current = null;
+        console.log('🧹 Cleaning up existing channel')
+        supabase.removeChannel(channelRef.current)
+        channelRef.current = null
       }
       
       if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-        reconnectTimeoutRef.current = null;
+        clearTimeout(reconnectTimeoutRef.current)
+        reconnectTimeoutRef.current = null
       }
 
-      // Create new channel with unique name
-      const channelName = `kitchen-orders-${restaurantId}-${Date.now()}`;
-      console.log('🔗 Creating channel:', channelName);
+      const channelName = `kitchen-orders-${restaurantId}-${Date.now()}`
+      console.log('🔗 Creating channel:', channelName)
       
       const channel = supabase
-        .channel(`kitchen-orders-${restaurantId}-${Date.now()}`)
+        .channel(channelName)
         .on(
           'postgres_changes',
           {
@@ -330,16 +320,15 @@ export default function KitchenPage() {
             filter: `restaurant_id=eq.${restaurantId}`,
           },
           async (payload) => {
-            console.log('🔥 Kitchen realtime payload received:', payload);
+            console.log('🔥 Kitchen realtime payload received:', payload)
             
             try {
-              const orderData = payload.new;
+              const orderData = payload.new
               if (!orderData) {
-                console.log('❌ No new order data in payload');
-                return;
+                console.log('❌ No new order data in payload')
+                return
               }
 
-              // Fetch complete order with relations to ensure we have all data
               const { data: completeOrder, error } = await supabase
                 .from('orders')
                 .select(`
@@ -350,152 +339,156 @@ export default function KitchenPage() {
                   )
                 `)
                 .eq('id', orderData.id)
-                .single();
+                .single()
 
               if (error) {
-                console.error('❌ Error fetching complete order:', error);
-                return;
+                console.error('❌ Error fetching complete order:', error)
+                return
               }
 
               if (!completeOrder) {
-                console.log('❌ No complete order data returned');
-                return;
+                console.log('❌ No complete order data returned')
+                return
               }
 
-              console.log('📦 Complete order data:', completeOrder);
+              console.log('📦 Complete order data:', completeOrder)
 
               setNewOrders((prev) => {
-                const filtered = prev.filter((o) => o.id !== completeOrder.id);
+                const filtered = prev.filter((o) => o.id !== completeOrder.id)
                 
                 if (payload.eventType === 'INSERT' && completeOrder.status === 'new') {
-                  console.log('🆕 Adding new order to kitchen dashboard');
+                  console.log('🆕 Adding new order to kitchen dashboard')
                   
-                  // Play notification sound
                   if (audioRef.current) {
                     audioRef.current.play().catch((err) => 
                       console.warn('🔇 Audio play failed:', err)
-                    );
+                    )
                   }
                   
-                  // Show browser notification if supported
                   if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
                     try {
                       new Notification('🔔 New Kitchen Order!', {
                         body: `Table ${completeOrder.table_number || 'N/A'} • #${completeOrder.id.slice(0, 8)}`,
                         icon: '/favicon.ico',
                         tag: `order-${completeOrder.id}`,
-                      });
+                      })
                     } catch (notifError) {
-                      console.warn('❌ Notification failed:', notifError);
+                      console.warn('❌ Notification failed:', notifError)
                     }
                   }
                   
-                  return [completeOrder, ...filtered];
+                  return [completeOrder, ...filtered]
                 }
                 
                 if (payload.eventType === 'UPDATE') {
-                  console.log(`📝 Order ${completeOrder.id} updated, status: ${completeOrder.status}`);
-                  return completeOrder.status === 'new' ? [completeOrder, ...filtered] : filtered;
+                  console.log(`📝 Order ${completeOrder.id} updated, status: ${completeOrder.status}`)
+                  return completeOrder.status === 'new' ? [completeOrder, ...filtered] : filtered
                 }
                 
                 if (payload.eventType === 'DELETE') {
-                  console.log(`🗑️ Order ${orderData.id} deleted`);
-                  return filtered;
+                  console.log(`🗑️ Order ${orderData.id} deleted`)
+                  return filtered
                 }
                 
-                return prev;
-              });
+                return prev
+              })
             } catch (error) {
-              console.error('❌ Error processing realtime event:', error);
+              console.error('❌ Error processing realtime event:', error)
             }
           }
         )
         .subscribe((status) => {
-          console.log('📡 Channel subscription status:', status);
-          setConnectionStatus(status);
+          console.log('📡 Channel subscription status:', status)
+          setConnectionStatus(status)
           
           if (status === 'SUBSCRIBED') {
-            console.log('✅ Successfully subscribed to kitchen orders');
+            console.log('✅ Successfully subscribed to kitchen orders')
           } else if (status === 'CHANNEL_ERROR') {
-            console.error('❌ Channel subscription error - will retry in 5 seconds');
-            // Auto-reconnect after 5 seconds
+            console.error('❌ Channel subscription error - will retry in 5 seconds')
             reconnectTimeoutRef.current = setTimeout(() => {
-              console.log('🔄 Attempting to reconnect...');
-              setupRealTimeSubscription();
-            }, 5000);
+              console.log('🔄 Attempting to reconnect...')
+              setupRealTimeSubscription()
+            }, 5000)
           } else if (status === 'TIMED_OUT') {
-            console.error('⏰ Channel subscription timed out - will retry in 3 seconds');
-            // Auto-reconnect after 3 seconds
+            console.error('⏰ Channel subscription timed out - will retry in 3 seconds')
             reconnectTimeoutRef.current = setTimeout(() => {
-              console.log('🔄 Attempting to reconnect...');
-              setupRealTimeSubscription();
-            }, 3000);
+              console.log('🔄 Attempting to reconnect...')
+              setupRealTimeSubscription()
+            }, 3000)
           }
-        });
+        })
 
-      channelRef.current = channel;
-    };
+      channelRef.current = channel
+    }
 
-    setupRealTimeSubscription();
+    setupRealTimeSubscription()
 
-    // Cleanup function
     return () => {
-      console.log('🧹 Cleaning up kitchen dashboard subscription');
+      console.log('🧹 Cleaning up kitchen dashboard subscription')
       
       if (channelRef.current) {
-        supabase.removeChannel(channelRef.current);
-        channelRef.current = null;
+        supabase.removeChannel(channelRef.current)
+        channelRef.current = null
       }
       
       if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-        reconnectTimeoutRef.current = null;
+        clearTimeout(reconnectTimeoutRef.current)
+        reconnectTimeoutRef.current = null
       }
-    };
-  }, [restaurantId, supabase]);
+    }
+  }, [restaurantId, supabase])
 
-  // Handler to move order to "in_progress"
   const handleStart = async (orderId) => {
     try {
-      console.log(`🚀 Starting order: ${orderId}`);
+      console.log(`🚀 Starting order: ${orderId}`)
       const { error } = await supabase
         .from('orders')
         .update({ status: 'in_progress' })
         .eq('id', orderId)
-        .eq('restaurant_id', restaurantId);
+        .eq('restaurant_id', restaurantId)
         
-      if (error) throw error;
+      if (error) throw error
       
-      // Optimistically remove from local state
-      setNewOrders((prev) => prev.filter((o) => o.id !== orderId));
-      console.log(`✅ Order ${orderId} moved to in_progress`);
+      setNewOrders((prev) => prev.filter((o) => o.id !== orderId))
+      console.log(`✅ Order ${orderId} moved to in_progress`)
     } catch (e) {
-      console.error('❌ Error starting order:', e);
-      alert('Failed to start order. Please try again.');
+      console.error('❌ Error starting order:', e)
+      alert('Failed to start order. Please try again.')
     }
-  };
+  }
 
-  if (checking || restLoading) return <div>Loading…</div>;
-  if (!restaurantId) return <div>No restaurant found.</div>;
+  if (allowed === null) {
+    return <div style={{ padding: 50, textAlign: 'center' }}>Checking subscription…</div>
+  }
+  if (!allowed) {
+    return (
+      <div style={{ padding: 50, textAlign: 'center' }}>
+        <h2>Subscription Required</h2>
+        <p>Your subscription has expired. Please <a href="/owner/subscription">renew here</a> to access the kitchen dashboard.</p>
+      </div>
+    )
+  }
 
-  // Connection status indicator
+  if (checking || restLoading) return <div>Loading…</div>
+  if (!restaurantId) return <div>No restaurant found.</div>
+
   const getStatusColor = () => {
     switch (connectionStatus) {
-      case 'SUBSCRIBED': return '#22c55e';
-      case 'CHANNEL_ERROR': return '#ef4444';
-      case 'TIMED_OUT': return '#f59e0b';
-      default: return '#6b7280';
+      case 'SUBSCRIBED': return '#22c55e'
+      case 'CHANNEL_ERROR': return '#ef4444'
+      case 'TIMED_OUT': return '#f59e0b'
+      default: return '#6b7280'
     }
-  };
+  }
 
   const getStatusText = () => {
     switch (connectionStatus) {
-      case 'SUBSCRIBED': return '🟢 Connected';
-      case 'CHANNEL_ERROR': return '🔴 Error (Reconnecting...)';
-      case 'TIMED_OUT': return '🟡 Timeout (Reconnecting...)';
-      default: return '⚫ Connecting...';
+      case 'SUBSCRIBED': return '🟢 Connected'
+      case 'CHANNEL_ERROR': return '🔴 Error (Reconnecting...)'
+      case 'TIMED_OUT': return '🟡 Timeout (Reconnecting...)'
+      default: return '⚫ Connecting...'
     }
-  };
+  }
 
   return (
     <div style={{ padding: 16 }}>
@@ -546,5 +539,5 @@ export default function KitchenPage() {
         </div>
       )}
     </div>
-  );
+  )
 }
