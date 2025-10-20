@@ -1,9 +1,9 @@
-// pages/_app.js
 import '../styles/responsive.css'
 import '../styles/globals.css'
 import '../styles/theme.css'
 import Layout from '../components/Layout'
 import { RestaurantProvider } from '../context/RestaurantContext'
+import { SubscriptionProvider, useSubscription } from '../context/SubscriptionContext'
 import { useRouter } from 'next/router'
 import { useEffect, useState } from 'react'
 import { Capacitor } from '@capacitor/core'
@@ -11,48 +11,47 @@ import { getFCMToken } from '../lib/firebase/messaging'
 
 const OWNER_PREFIX = '/owner'
 const CUSTOMER_PREFIX = '/order'
+const PUBLIC_EXEMPT = ['/order/success', '/order/thank-you']
 
-function safeInitNative(router, postSubscribe) {
+async function postSubscribe(token, platform) {
+  if (!token) return
+  let rid = null
+  try {
+    const url = new URL(window.location.href)
+    rid = url.searchParams.get('r') || url.searchParams.get('rid') || localStorage.getItem('active_restaurant_id')
+  } catch {}
+  if (!rid) return
+  try {
+    await fetch(`${process.env.NEXT_PUBLIC_API_BASE || ''}/api/push/subscribe-bridge`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ restaurantId: rid, platform, deviceToken: token }),
+    })
+  } catch {}
+}
+
+function safeInitNative(router) {
   return async () => {
     try {
       const { PushNotifications } = await import('@capacitor/push-notifications')
-      try {
-        await PushNotifications.createChannel({
-          id: 'orders_v2',
-          name: 'Orders',
-          description: 'Order alerts',
-          importance: 5,
-          sound: 'beep',
-          lights: true,
-          vibration: true,
-          visibility: 1,
-        })
-      } catch {}
-      try { await PushNotifications.removeAllListeners() } catch {}
-      PushNotifications.addListener('pushNotificationReceived', n =>
-        console.log('Push foreground:', n?.title)
-      )
+      await PushNotifications.createChannel({ id:'orders_v2', name:'Orders', description:'Order alerts', importance:5 }).catch(() => {})
+      PushNotifications.removeAllListeners().catch(() => {})
       PushNotifications.addListener('pushNotificationActionPerformed', action => {
         const url = action.notification?.data?.url || '/owner/orders'
-        try { router.push(url) } catch { window.location.href = url }
+        router.push(url).catch(() => { window.location.href = url })
       })
       const perm = await PushNotifications.requestPermissions()
       if (perm.receive !== 'granted') return
-      PushNotifications.addListener('registration', async ({ value }) => {
+      PushNotifications.addListener('registration', ({ value }) => {
         localStorage.setItem('fcm_token', value)
-        await postSubscribe(value, 'android')
+        postSubscribe(value, 'android')
       })
-      PushNotifications.addListener('registrationError', err =>
-        console.error('[PushInit] registrationError', err)
-      )
       await PushNotifications.register()
-    } catch (e) {
-      console.warn('Native init skipped:', e?.message || e)
-    }
+    } catch {}
   }
 }
 
-function safeInitWebOnly(postSubscribe) {
+function safeInitWebOnly() {
   return async () => {
     try {
       const token = await getFCMToken()
@@ -60,136 +59,124 @@ function safeInitWebOnly(postSubscribe) {
         localStorage.setItem('fcm_token', token)
         await postSubscribe(token, 'web')
       }
-    } catch (e) {
-      console.log('Web push skipped:', e?.message || e)
-    }
+    } catch {}
   }
 }
 
-const getApiBase = () => {
-  if (typeof window === 'undefined') return ''
-  const isProd = process.env.NODE_ENV === 'production'
-  const envBase = process.env.NEXT_PUBLIC_API_BASE || ''
-  if (Capacitor?.isNativePlatform?.()) {
-    if (!isProd && envBase) return envBase
-    if (!isProd) return 'http://10.0.2.2:3000'
-  }
-  return ''
-}
-
-const getActiveRestaurantId = () => {
-  if (typeof window === 'undefined') return null
-  try {
-    const url = new URL(window.location.href)
-    return (
-      window.__activeRestaurantId ||
-      url.searchParams.get('r') ||
-      url.searchParams.get('rid') ||
-      localStorage.getItem('active_restaurant_id') ||
-      null
-    )
-  } catch {
-    return null
-  }
-}
-
-const postSubscribe = async (token, platform) => {
+async function ensureSubscribed() {
+  if (typeof window === 'undefined') return
+  const token = localStorage.getItem('fcm_token')
   if (!token) return
-  const rid = getActiveRestaurantId()
-  if (!rid) return
-  const payload = { restaurantId: rid, platform, deviceToken: token }
-  const url = `${getApiBase()}/api/push/subscribe-bridge`
+  await postSubscribe(token, Capacitor.isNativePlatform() ? 'android' : 'web')
+}
+
+async function startTrialIfNeeded(restaurantId) {
+  if (!restaurantId) return
   try {
-    console.log('[Subscribe] POST ->', url)
-    const ctrl = new AbortController()
-    const timer = setTimeout(() => ctrl.abort(), 10000)
-    const res = await fetch(url, {
+    await fetch('/api/subscription/start-trial', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-      signal: ctrl.signal,
+      body: JSON.stringify({ restaurant_id: restaurantId }),
     })
-    clearTimeout(timer)
-    console.log('[Subscribe] response:', res.status, await res.text())
-  } catch (e) {
-    console.error('[Subscribe] request failed:', e?.message || e)
-  }
+  } catch {}
 }
 
-const ensureSubscribed = async () => {
-  if (typeof window === 'undefined') return
-  try {
-    const rid = getActiveRestaurantId()
-    const token = localStorage.getItem('fcm_token')
-    if (rid && token) {
-      await postSubscribe(token, Capacitor.isNativePlatform() ? 'android' : 'web')
+function GlobalSubscriptionGate({ children }) {
+  const router = useRouter()
+  const path = router.pathname
+  const isOwner = path.startsWith(OWNER_PREFIX)
+  const onSubPage = path === '/owner/subscription'
+  const exempt = PUBLIC_EXEMPT.includes(path)
+  const { subscription, loading } = useSubscription()
+
+  useEffect(() => {
+    if (!router.isReady || loading) return
+    if (isOwner && !onSubPage && !subscription?.is_active) {
+      router.replace(`/owner/subscription${window.location.search}`)
     }
-  } catch (e) {
-    console.warn('ensureSubscribed skipped:', e?.message || e)
+  }, [router, loading, isOwner, onSubPage, subscription])
+
+  if (
+    (path.startsWith('/order') || path.startsWith('/kitchen')) &&
+    !exempt &&
+    !loading &&
+    !subscription?.is_active
+  ) {
+    return (
+      <div style={{ padding: 80, textAlign: 'center', color: '#dc2626', fontSize: 18 }}>
+        <strong>Subscription expired or inactive.</strong><br />
+        Online menu & orders unavailable.
+      </div>
+    )
   }
+  return <>{children}</>
 }
 
 function MyApp({ Component, pageProps }) {
   const router = useRouter()
-  const path = router.pathname || ''
-  const isOwnerRoute = path.startsWith(OWNER_PREFIX)
-  const isCustomerRoute = path.startsWith(CUSTOMER_PREFIX)
-  const [statusChecked, setStatusChecked] = useState(false)
+  const [ready, setReady] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  // Track client mount
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   useEffect(() => {
-    if (typeof window === 'undefined') return
+    if (!router.isReady || ready) return
+    let isMounted = true
     const init = async () => {
       if (Capacitor.isNativePlatform()) {
-        await safeInitNative(router, postSubscribe)()
+        await safeInitNative(router)()
       } else {
-        await safeInitWebOnly(postSubscribe)()
+        await safeInitWebOnly()()
       }
-      setTimeout(() => ensureSubscribed(), 1200)
+      setTimeout(ensureSubscribed, 1200)
+      if (isMounted) setReady(true)
     }
     init()
-    const onRoute = () => ensureSubscribed()
-    router.events?.on?.('routeChangeComplete', onRoute)
-    window.addEventListener('focus', onRoute)
-    return () => {
-      router.events?.off?.('routeChangeComplete', onRoute)
-      window.removeEventListener('focus', onRoute)
-    }
-  }, [router.events, router])
+    return () => { isMounted = false }
+  }, [router, ready])
 
   useEffect(() => {
-    if (!isOwnerRoute) return
-    const rid = getActiveRestaurantId()
-    if (!rid) return
-    const gate = async () => {
-      try {
-        const res = await fetch(`/api/subscription/status?restaurant_id=${rid}`)
-        const json = await res.json()
-        if (!json.is_active && router.pathname !== '/owner/subscription') {
-          router.replace('/owner/subscription')
-        }
-      } catch (e) {
-        console.error('[gate] status check failed', e)
-      } finally {
-        setStatusChecked(true)
+    if (!router.isReady || !ready) return
+    const onRoute = url => {
+      ensureSubscribed()
+      if (url === '/owner') {
+        startTrialIfNeeded(new URL(window.location.href).searchParams.get('r'))
       }
     }
-    gate()
-  }, [isOwnerRoute, router])
+    window.addEventListener('focus', ensureSubscribed)
+    router.events.on('routeChangeComplete', onRoute)
+    return () => {
+      router.events.off('routeChangeComplete', onRoute)
+      window.removeEventListener('focus', ensureSubscribed)
+    }
+  }, [router, ready])
 
-  if (isOwnerRoute && !statusChecked) {
-    return <div style={{ padding: 50, textAlign: 'center' }}>Checking subscription…</div>
+  // Hydration-safe: don't render layout until mounted + router ready
+  if (!mounted || !router.isReady) {
+    return <div>Loading...</div>
   }
+
+  const path = router.pathname || ''
+  const isOwner = path.startsWith(OWNER_PREFIX)
+  const isCustomer = path.startsWith(CUSTOMER_PREFIX)
 
   return (
     <RestaurantProvider>
-      <Layout
-        title={pageProps?.title}
-        showSidebar={isOwnerRoute}
-        hideChrome={isCustomerRoute}
-        showHeader={isCustomerRoute}
-      >
-        <Component {...pageProps} />
-      </Layout>
+      <SubscriptionProvider>
+        <GlobalSubscriptionGate>
+          <Layout
+            title={pageProps.title}
+            showSidebar={isOwner}
+            hideChrome={isCustomer}
+            showCustomerHeader={isCustomer}
+          >
+            <Component {...pageProps} />
+          </Layout>
+        </GlobalSubscriptionGate>
+      </SubscriptionProvider>
     </RestaurantProvider>
   )
 }

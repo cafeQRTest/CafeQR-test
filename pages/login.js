@@ -1,58 +1,63 @@
-// In: pages/login.js
-
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/router';
-import Link from 'next/link';
-import { getSupabase } from '../services/supabase'; // 1. IMPORT
+// pages/login.js
+import { useState } from 'react'
+import { useRouter } from 'next/router'
+import Link from 'next/link'
+import { getSupabase } from '../services/supabase'
 
 export default function LoginPage() {
-  const router = useRouter();
-  const supabase = getSupabase(); // 2. GET the singleton instance
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState('');
-  const [showForgot, setShowForgot] = useState(false);
-
-  // *** FIX: REMOVED the problematic useEffect hook that was causing the refresh loop.
-  // Auth redirection is now handled by the useRequireAuth hook on protected pages.
-  // This page is public and does not need to check the session itself.
+  const router = useRouter()
+  const supabase = getSupabase()
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [message, setMessage] = useState('')
+  const [showForgot, setShowForgot] = useState(false)
 
   const handleLogin = async (e) => {
-    e.preventDefault();
-    if (!supabase) return;
-    setLoading(true);
-    setMessage('');
-    setShowForgot(false);
+    e.preventDefault()
+    if (!supabase) return
+    setLoading(true)
+    setMessage('')
+    setShowForgot(false)
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+
       if (error) {
-        setLoading(false);
-        const msg = (error.message || '').toLowerCase();
+        setLoading(false)
+        const msg = (error.message || '').toLowerCase()
         if (msg.includes('email not confirmed')) {
-          setMessage('Please confirm your email first. Check your inbox for the verification link.');
+          setMessage('Please confirm your email first. Check your inbox for the verification link.')
         } else if (msg.includes('invalid login credentials')) {
-          setMessage('Incorrect email or password. Please try again.');
-          setShowForgot(true);
+          setMessage('Incorrect email or password. Please try again.')
+          setShowForgot(true)
         } else {
-          setMessage('Login error: ' + error.message);
+          setMessage('Login error: ' + error.message)
         }
-        return;
+        return
       }
 
-      // On successful login, Supabase now automatically handles the session.
-      // The user will be redirected by the auth guard on the next page they visit.
-      const dest = (router.query && router.query.redirect) ? String(router.query.redirect) : '/owner';
-      router.push(dest);
+      // NEW: Ensure trial started on login
+      if (data?.user?.id) {
+        try {
+          await fetch('/api/subscription/start-trial', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ restaurant_id: data.user.id }),
+          })
+        } catch (e) {
+          console.error('Trial check failed:', e)
+        }
+      }
 
+      const dest = router.query?.redirect ? String(router.query.redirect) : '/owner'
+      router.push(dest)
     } catch (e) {
-      setLoading(false);
-      setMessage('An unexpected error occurred during login.');
-      console.error('Unhandled login error:', e);
+      setLoading(false)
+      setMessage('An unexpected error occurred during login.')
+      console.error('Unhandled login error:', e)
     }
-  };
+  }
 
   return (
     <div style={{ maxWidth: 420, margin: '0 auto', padding: 24 }}>
@@ -80,7 +85,11 @@ export default function LoginPage() {
         <button
           type="submit"
           disabled={loading}
-          style={{ padding: '10px 16px', marginBottom: 12, cursor: loading ? 'not-allowed' : 'pointer' }}
+          style={{
+            padding: '10px 16px',
+            marginBottom: 12,
+            cursor: loading ? 'not-allowed' : 'pointer',
+          }}
         >
           {loading ? 'Logging in…' : 'Login'}
         </button>
@@ -94,7 +103,7 @@ export default function LoginPage() {
             backgroundColor: '#fff3f3',
             border: '1px solid #ffb3b3',
             borderRadius: 6,
-            marginBottom: 12
+            marginBottom: 12,
           }}
         >
           {message}
@@ -116,5 +125,5 @@ export default function LoginPage() {
         </Link>
       </p>
     </div>
-  );
+  )
 }

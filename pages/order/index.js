@@ -9,7 +9,6 @@ export default function OrderPage() {
   const { r: restaurantId, t: tableNumber } = router.query
 
   // 1. Run subscription guard first
-  const [allowed, setAllowed] = useState(null)
   const supabase = getSupabase()
   const [restaurant, setRestaurant] = useState(null)
   const [menuItems, setMenuItems] = useState([])
@@ -27,24 +26,7 @@ const cacheMenuIntoMap = (list) => {
 
   // …rest of your code unchanged
 
-  useEffect(() => {
-  if (!restaurantId) {
-    console.log('No restaurantId, skip subscription check')
-    return
-  }
-  console.log('Fetching subscription status for', restaurantId)
-  fetch(`/api/subscription/status?restaurant_id=${restaurantId}`)
-    .then((r) => r.json())
-    .then((data) => {
-      console.log('Subscription status:', data)
-      setAllowed(data.is_active)
-    })
-    .catch(() => {
-      console.log('Error fetching subscription status, blocking')
-      setAllowed(false)
-    })
-}, [restaurantId])
-
+  
 
   
 
@@ -200,20 +182,7 @@ const cacheMenuIntoMap = (list) => {
   const cartTotal = useMemo(() => cart.reduce((s, i) => s + i.price * i.quantity, 0), [cart])
   const cartItemsCount = useMemo(() => cart.reduce((s, i) => s + i.quantity, 0), [cart])
 
-  if (allowed === null) {
-    return <div style={{ padding: 50, textAlign: 'center' }}>Checking subscription…</div>
-  }
-  if (!allowed) {
-    return (
-      <div style={{ padding: 50, textAlign: 'center' }}>
-        <h2>Subscription Required</h2>
-        <p>This restaurant's subscription has expired. Please ask the owner to <a href="/owner/subscription">renew here</a> before ordering.</p>
-      </div>
-    )
-  }
 
-  if (loading) return <div style={{padding: 40, textAlign: 'center'}}>Loading menu...</div>
-  if (error) return <div style={{padding: 40, textAlign: 'center', color: 'red'}}>{error}</div>
 
   const brandColor = restaurant?.restaurant_profiles?.brand_color || '#f59e0b'
 

@@ -42,21 +42,31 @@ export default async function handler(req, res) {
     let isActive = false;
     let daysLeft = 0;
 
-    // Check if trial is active
+    // Check trial status
     if (subscription.status === 'trial' && subscription.trial_ends_at) {
       const trialEnd = new Date(subscription.trial_ends_at);
-      isActive = now <= trialEnd;
-      daysLeft = Math.ceil((trialEnd - now) / (1000 * 60 * 60 * 24));
+      if (now <= trialEnd) {
+        isActive = true;
+        daysLeft = Math.ceil((trialEnd - now) / (1000 * 60 * 60 * 24));
+      }
     }
     
-    // Check if paid subscription is active
+    // Check active paid subscription
     if (subscription.status === 'active' && subscription.current_period_end) {
       const periodEnd = new Date(subscription.current_period_end);
-      isActive = now <= periodEnd;
-      daysLeft = Math.ceil((periodEnd - now) / (1000 * 60 * 60 * 24));
+      if (now <= periodEnd) {
+        isActive = true;
+        daysLeft = Math.ceil((periodEnd - now) / (1000 * 60 * 60 * 24));
+      }
     }
 
-    console.log('[subscription-status] Returning:', { isActive, status: subscription.status, daysLeft });
+    console.log('[subscription-status] Result:', { 
+      isActive, 
+      status: subscription.status, 
+      daysLeft,
+      now: now.toISOString(),
+      period_end: subscription.current_period_end
+    });
 
     return res.status(200).json({
       is_active: isActive,

@@ -1,3 +1,5 @@
+//pages/owner/settings.js
+
 import React, { useEffect, useState } from 'react';
 import { useRequireAuth } from '../../lib/useRequireAuth';
 import { useRestaurant } from '../../context/RestaurantContext';

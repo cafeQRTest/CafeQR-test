@@ -1,6 +1,7 @@
 //pages/owner/orders.js 
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { useRouter } from 'next/router'; // <-- Import useRouter at the top!
 import { Capacitor } from '@capacitor/core';
 import { getSupabase } from '../../services/supabase';
 import { useRequireAuth } from '../../lib/useRequireAuth';
@@ -145,6 +146,7 @@ async function fetchFullOrder(supabase, orderId) {
 
 export default function OrdersPage() {
   const supabase = getSupabase();
+  const router = useRouter(); // <-- Add this inside the component!
   const { user, checking } = useRequireAuth(supabase);
   const { restaurant, loading: restLoading } = useRestaurant();
   const restaurantId = restaurant?.id;
@@ -165,6 +167,8 @@ export default function OrdersPage() {
 
   // ... all useEffect hooks, loadOrders, realtime subscription, updateStatus, finalize, complete, etc. remain unchanged ...
   // Save token to user profile (optional, unchanged)
+
+
   useEffect(() => {
     const saveToken = async () => {
       if (!user || !supabase) return;
@@ -506,15 +510,15 @@ const complete = async (orderId, actualPaymentMethod = null) => {
   if (checking || restLoading) return <div style={{ padding:16 }}>Loading…</div>;
   if (!restaurantId) return <div style={{ padding:16 }}>No restaurant found.</div>;
 
-  // Show print modal when state is set
-  if (showKotPrint) {
-    return (
-      <KotPrint
-        order={showKotPrint}
-        onClose={() => setShowKotPrint(null)}
-      />
-    );
-  }
+  // // Show print modal when state is set
+  // if (showKotPrint) {
+  //   return (
+  //     <KotPrint
+  //       order={showKotPrint}
+  //       onClose={() => setShowKotPrint(null)}
+  //     />
+  //   );
+  // }
 
   return (
     <div className="orders-wrap">

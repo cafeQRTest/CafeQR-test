@@ -1,3 +1,5 @@
+//pages/byo-pg/settings.jsx
+
 import React, { useEffect, useState } from 'react';
 // 1. IMPORT the singleton function
 import { getSupabase } from '../../services/supabase';

@@ -1,7 +1,7 @@
-// In: context/RestaurantContext.js
-
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { getSupabase } from '../services/supabase'; // 1. IMPORT
+// context/RestaurantContext.js
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/router';
+import { getSupabase } from '../services/supabase';
 
 const RestaurantCtx = createContext({
   restaurant: null,
@@ -10,71 +10,113 @@ const RestaurantCtx = createContext({
   refresh: async () => {},
 });
 
-// 2. REMOVE the supabase prop
 export function RestaurantProvider({ children }) {
+  const router = useRouter();
+  const supabase = getSupabase();
   const [restaurant, setRestaurant] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const supabase = getSupabase(); // 3. GET the singleton instance
 
-  async function resolveRestaurant() {
-    if (!supabase) {
-      setLoading(false);
-      return;
-    }
-    
-    setLoading(true);
-    setError('');
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const user = session?.user;
-
-      if (!user) {
-        setRestaurant(null);
-        setLoading(false);
-        return;
-      }
-
-      const email = user.email || user.user_metadata?.email;
-      if (!email) {
-        setError('User email not found.');
-        setRestaurant(null);
-        setLoading(false);
-        return;
-      }
-
-      const { data: rest, error: rerr } = await supabase
-        .from('restaurants')
-        .select('id,name,online_paused,owner_email')
-        .eq('owner_email', email)
-        .maybeSingle();
-
-      if (rerr) throw rerr;
-      setRestaurant(rest || null);
-    } catch (e) {
-      setError(e.message || 'Failed to resolve restaurant');
-      setRestaurant(null);
-    } finally {
-      setLoading(false);
-    }
-  }
+  // Resolve active restaurant ID from URL or storage (for order/kitchen)
+  const ridFromUrlOrStorage = useMemo(() => {
+    if (typeof window === 'undefined') return null;
+    const q = router?.query || {};
+    return (
+      q.r ||
+      q.rid ||
+      window.__activeRestaurantId ||
+      localStorage.getItem('active_restaurant_id') ||
+      null
+    );
+  }, [router?.query]);
 
   useEffect(() => {
-    if (supabase) {
-      resolveRestaurant();
-      const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
-        resolveRestaurant();
-      });
-      return () => subscription?.unsubscribe();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [supabase]);
+    let cancelled = false;
 
-  return (
-    <RestaurantCtx.Provider value={{ restaurant, loading, error, refresh: resolveRestaurant }}>
-      {children}
-    </RestaurantCtx.Provider>
+    async function resolve() {
+      if (!supabase) {
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      setError('');
+
+      try {
+        let found = null;
+
+        // 1) Owner pages: resolve by logged-in owner email (no rid needed)
+        if (router.pathname?.startsWith('/owner') && !ridFromUrlOrStorage) {
+          const { data: { session } } = await supabase.auth.getSession();
+          const email = session?.user?.email || session?.user?.user_metadata?.email;
+          if (email) {
+            const { data, error } = await supabase
+              .from('restaurants')
+              .select('*')
+              .eq('owner_email', email)
+              .maybeSingle();
+            if (error) throw error;
+            found = data || null;
+          }
+        }
+
+        // 2) Public/kitchen/customer (or owner with explicit rid): resolve by rid
+        if (!found && ridFromUrlOrStorage) {
+          const { data, error } = await supabase
+            .from('restaurants')
+            .select('*')
+            .eq('id', ridFromUrlOrStorage)
+            .maybeSingle();
+          if (error) throw error;
+          found = data || null;
+        }
+
+        if (!cancelled) setRestaurant(found);
+      } catch (e) {
+        if (!cancelled) {
+          setError(e?.message || 'Failed to resolve restaurant');
+          setRestaurant(null);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    resolve();
+
+    // Listen to auth changes for owner routes
+    if (router.pathname?.startsWith('/owner')) {
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
+        resolve();
+      });
+      return () => {
+        cancelled = true;
+        subscription?.unsubscribe();
+      };
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase, ridFromUrlOrStorage, router.pathname]);
+
+  const value = useMemo(
+    () => ({
+      restaurant,
+      loading,
+      error,
+      refresh: async () => {
+        const q = router.query;
+        await router.replace(
+          { pathname: router.pathname, query: { ...q, _r: Date.now() } },
+          undefined,
+          { shallow: true }
+        );
+      },
+    }),
+    [restaurant, loading, error, router]
   );
+
+  return <RestaurantCtx.Provider value={value}>{children}</RestaurantCtx.Provider>;
 }
 
 export function useRestaurant() {

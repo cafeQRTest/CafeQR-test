@@ -1,3 +1,5 @@
+//pages/api/subscription/activate
+
 import { getServerSupabase } from '../../../services/supabase-server';
 
 export default async function handler(req, res) {

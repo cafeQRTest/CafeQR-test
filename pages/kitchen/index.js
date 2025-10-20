@@ -243,17 +243,9 @@ export default function KitchenPage() {
   const audioRef = useRef(null)
   const channelRef = useRef(null)
   const reconnectTimeoutRef = useRef(null)
-  const [allowed, setAllowed] = useState(null)
 
   // Subscription guard
-  useEffect(() => {
-    if (!restaurantId) return
-    fetch(`/api/subscription/status?restaurant_id=${restaurantId}`)
-      .then(r => r.json())
-      .then(data => setAllowed(data.is_active))
-      .catch(() => setAllowed(false))
-  }, [restaurantId])
-
+  
   useEffect(() => {
     const audio = new Audio('/notification-sound.mp3')
     audio.preload = 'auto'
@@ -457,21 +449,9 @@ export default function KitchenPage() {
     }
   }
 
-  if (allowed === null) {
-    return <div style={{ padding: 50, textAlign: 'center' }}>Checking subscription…</div>
-  }
-  if (!allowed) {
-    return (
-      <div style={{ padding: 50, textAlign: 'center' }}>
-        <h2>Subscription Required</h2>
-        <p>Your subscription has expired. Please <a href="/owner/subscription">renew here</a> to access the kitchen dashboard.</p>
-      </div>
-    )
-  }
 
-  if (checking || restLoading) return <div>Loading…</div>
-  if (!restaurantId) return <div>No restaurant found.</div>
 
+  
   const getStatusColor = () => {
     switch (connectionStatus) {
       case 'SUBSCRIBED': return '#22c55e'
