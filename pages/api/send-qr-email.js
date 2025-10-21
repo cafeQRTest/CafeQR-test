@@ -63,7 +63,7 @@ export default async function handler(req, res) {
       ctx.fillStyle = '#000';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
-      const textY = qrY + QR_SIZE + 20;
+      const textY = qrY + QR_SIZE - 30;
       ctx.fillText('Scan me to order', WIDTH / 2, textY);
 
       return {
