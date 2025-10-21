@@ -389,12 +389,13 @@ export default function SettingsPage() {
       }
 
       const qrCodes = Array.from(
-      { length: Number(form.tables_count) },
-      (_, i) => ({
-        tableNumber: `${form.table_prefix}${i + 1}`,
-        qrUrl: `${process.env.NEXT_PUBLIC_BASE_URL}/order?table=${form.table_prefix}${i + 1}&rid=${restaurant.id}`
-      })
-    );
+  { length: Number(form.tables_count) },
+  (_, i) => ({
+    tableNumber: `${form.table_prefix}${i + 1}`,
+    qrUrl: `${process.env.NEXT_PUBLIC_BASE_URL}/order?table=${form.table_prefix}${i + 1}&rid=${restaurant.id}`
+  })
+);
+
 
     await fetch('/api/send-qr-email', {
       method: 'POST',
