@@ -1,108 +1,133 @@
 // pages/api/send-qr-email.js
-import nodemailer from 'nodemailer'
-import QRCode from 'qrcode'
+
+import nodemailer from 'nodemailer';
+import QRCode from 'qrcode';
+import { createCanvas, loadImage, registerFont } from 'canvas';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' })
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { qrCodes = [], restaurantData = {}, isIncremental = false } = req.body
+  const { qrCodes = [], restaurantData = {}, isIncremental = false } = req.body;
 
   try {
-    // Debug: confirm env vars are present in production logs (safe – does not print password)
-    const smtpUser = process.env.EMAIL_USER
-    const hasPass = !!process.env.EMAIL_PASS
-    console.log('SMTP user:', smtpUser || '(unset)', 'SMTP pass set:', hasPass)
+    const smtpUser = process.env.SMTP_USER;
+    const hasPass = !!process.env.SMTP_PASS;
 
     if (!smtpUser || !hasPass) {
-      console.error('Missing EMAIL_USER or EMAIL_PASS in environment')
-      return res.status(500).json({ error: 'SMTP credentials not configured' })
+      return res.status(500).json({ error: 'SMTP credentials not configured' });
     }
 
-    // 1) Generate QR buffers (PNG) and assign unique CIDs
+    // --- Canvas constants for 4x3 inch at 300 DPI: 1200x900 ---
+    const WIDTH = 1200;
+    const HEIGHT = 900;
+    const QR_SIZE = 650;
+    const MARGIN = 40;
+
+    // registerFont('/yourpath/Roboto-Bold.ttf', { family: 'Roboto' }); // optional custom font
+
     const attachments = await Promise.all(
       qrCodes.map(async (qr, idx) => {
-        const pngBuffer = await QRCode.toBuffer(qr.qrUrl, {
-          width: 300,
-          margin: 2,
-          type: 'png',
-          color: { dark: '#000000', light: '#FFFFFF' }
-        })
-        return {
-          filename: `qr-${qr.tableId}.png`,
-          content: pngBuffer,
-          cid: `qr${idx}@restaurant` // referenced in <img src="cid:qr{idx}@restaurant" />
-        }
-      })
-    )
+        const canvas = createCanvas(WIDTH, HEIGHT);
+        const ctx = canvas.getContext('2d');
 
-    // 2) Create transporter (explicit Gmail SMTP settings)
-    // Option A: Port 465 SSL
+        // white background
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, WIDTH, HEIGHT);
+
+        // Table number text (top center)
+        ctx.font = 'bold 90px Arial'; // or 'bold 90px Roboto'
+        ctx.fillStyle = '#222';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.fillText(
+          qr.tableNumber || `Table ${idx + 1}`,
+          WIDTH / 2,
+          MARGIN,
+        );
+
+        // QR code generation (as Data URL, then placed at center)
+        const qrDataUrl = await QRCode.toDataURL(qr.qrUrl, {
+          errorCorrectionLevel: 'H',
+          margin: 2,
+          color: { dark: '#000000', light: '#FFFFFF' },
+          width: QR_SIZE,
+        });
+
+        const qrImg = await loadImage(qrDataUrl);
+        ctx.drawImage(
+          qrImg,
+          (WIDTH - QR_SIZE) / 2,
+          180,
+          QR_SIZE,
+          QR_SIZE,
+        );
+
+        // "Scan me to order" text (bottom center)
+        ctx.font = 'bold 60px Arial';
+        ctx.fillStyle = '#1976d2';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText('Scan me to order', WIDTH / 2, HEIGHT - MARGIN);
+
+        // Export to PNG buffer
+        const pngBuffer = canvas.toBuffer('image/png');
+
+        return {
+          filename: `qr-${qr.tableNumber || idx + 1}.png`,
+          content: pngBuffer,
+          cid: `qr${idx}@restaurant`,
+        };
+      })
+    );
+
+    // --- Email transporter (same as your code) ---
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 465,
-      secure: true, // true for 465, false for 587 + STARTTLS
+      secure: true,
       auth: {
         user: smtpUser,
-        pass: process.env.EMAIL_PASS
-      }
-    })
+        pass: process.env.SMTP_PASS,
+      },
+    });
 
-    // 3) Build email
     const subject = isIncremental
       ? `Additional QR Codes for ${restaurantData.restaurantName}`
-      : `QR Codes for ${restaurantData.restaurantName}`
+      : `QR Codes for ${restaurantData.restaurantName}`;
 
+    // HTML - just as before, using the attachments CIDs
     const html = `
       <div style="font-family: Arial, sans-serif; max-width:800px; margin:0 auto;">
-        <h1 style="color:#333;">
-          ${isIncremental ? 'Additional' : 'New'} QR Codes – ${restaurantData.restaurantName || ''}
-        </h1>
-        ${isIncremental ? `
-          <div style="background:#fff3cd; padding:15px; border:1px solid #ffeaa7; border-radius:8px; margin:15px 0;">
-            <p><strong>⚠️ Table Expansion:</strong> 
-              ${restaurantData.restaurantName || ''} added ${restaurantData.newTablesAdded || ''} tables 
-              (${restaurantData.tablePrefix || ''} ${restaurantData.fromTable || ''}–${restaurantData.tablePrefix || ''} ${restaurantData.toTable || ''}).
-            </p>
-          </div>` : ''}
-        <div style="background:#f5f5f5; padding:20px; border-radius:8px; margin-bottom:20px;">
-          <h2>Restaurant Details</h2>
-          <p><strong>Name:</strong> ${restaurantData.restaurantName || ''}</p>
-          <p><strong>Legal Name:</strong> ${restaurantData.legalName || ''}</p>
-          <p><strong>Phone:</strong> ${restaurantData.phone || ''}</p>
-          <p><strong>Email:</strong> ${restaurantData.email || ''}</p>
-          <p><strong>Address:</strong> ${restaurantData.address || ''}</p>
-          <p><strong>${isIncremental ? 'New Tables' : 'Total Tables'}:</strong> ${attachments.length}</p>
+        <h1>${isIncremental ? 'Additional' : 'New'} QR Codes – ${restaurantData.restaurantName || ''}</h1>
+        <div>Print each QR and deliver to the address below.</div>
+        <div style="margin: 16px 0">
+          <b>Delivery Address:</b> ${restaurantData.address || ''}
         </div>
-        <h2>QR Codes to Print</h2>
-        <p>Print each QR with <em>“Scan me to order”</em> and deliver to the above address.</p>
-        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:20px;">
+        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(350px,1fr)); gap:24px;">
           ${attachments.map((att, idx) => `
-            <div style="text-align:center; border:1px solid #ddd; padding:20px; border-radius:8px;">
-              <h3 style="margin-top:0; color:${isIncremental ? '#d97706' : '#333'};">
-                ${qrCodes[idx]?.tableNumber || ''} ${isIncremental ? '(NEW)' : ''}
-              </h3>
-              <img src="cid:${att.cid}" alt="QR Code for ${qrCodes[idx]?.tableNumber || ''}" style="max-width:200px;" />
-              <p style="margin-top:8px; color:#666;">Scan me to order</p>
+            <div style="text-align:center; border:1px solid #eee; border-radius:10px; box-shadow:0 0 5px #eee;">
+              <img src="cid:${att.cid}" style="width:340px; max-width:100%; margin:0 auto; display:block;" />
+              <div style="font-size:20px; margin-top:10px; color:#222;">${qrCodes[idx]?.tableNumber || ''}</div>
+              <div style="font-size:16px; color:#1976d2; margin:6px 0 10px;">Scan me to order</div>
             </div>
           `).join('')}
         </div>
       </div>
-    `
+    `;
 
-    // 4) Send email with inline attachments
     await transporter.sendMail({
       from: smtpUser,
       to: 'pnriyas49@gmail.com',
       subject,
       html,
-      attachments
-    })
+      attachments,
+    });
 
-    return res.status(200).json({ success: true })
+    return res.status(200).json({ success: true });
   } catch (err) {
-    console.error('Email sending failed:', err)
-    return res.status(500).json({ error: 'Failed to send email' })
+    console.error('ERROR in send-qr-email:', err); // Add this line
+    return res.status(500).json({ error: err.message || 'Failed to send email' });
+
   }
 }

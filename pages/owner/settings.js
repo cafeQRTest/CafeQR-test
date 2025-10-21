@@ -388,9 +388,39 @@ export default function SettingsPage() {
           .eq('id', restaurant.id);
       }
 
+      const qrCodes = Array.from(
+      { length: Number(form.tables_count) },
+      (_, i) => ({
+        tableNumber: `${form.table_prefix}${i + 1}`,
+        qrUrl: `${process.env.NEXT_PUBLIC_BASE_URL}/order?table=${form.table_prefix}${i + 1}&rid=${restaurant.id}`
+      })
+    );
+
+    await fetch('/api/send-qr-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        qrCodes,
+        restaurantData: {
+          restaurantName: form.restaurant_name,
+          legalName: form.legal_name,
+          phone: form.phone,
+          email: form.support_email,
+          address: [
+            form.shipping_address_line1,
+            form.shipping_address_line2,
+            form.shipping_city,
+            form.shipping_state,
+            form.shipping_pincode
+          ].filter(Boolean).join(', ')
+        }
+      })
+    });
+
+
       setOriginalTables(newTableCount);
       setIsFirstTime(false);
-      setSuccess('Settings saved successfully!');
+      setSuccess('Settings saved and QR email sent successfully!');
     } catch (err) {
       setError(err.message);
     } finally {

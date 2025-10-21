@@ -1,3 +1,5 @@
+//pages/onboarding/complete.js
+
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
 import { useRequireAuth } from '../../lib/useRequireAuth'
