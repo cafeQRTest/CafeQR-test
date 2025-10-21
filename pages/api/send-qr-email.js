@@ -1,9 +1,19 @@
 // pages/api/send-qr-email.js
 
-import path from 'path'; 
+import path from 'path';
 import nodemailer from 'nodemailer';
 import QRCode from 'qrcode';
 import { createCanvas, loadImage, registerFont } from 'canvas';
+
+// You only need to register once at top of file or inside handler
+registerFont(path.join(process.cwd(), 'fonts/NotoSans-Bold.ttf'), {
+  family: 'NotoSans',
+  weight: 'bold',
+});
+registerFont(path.join(process.cwd(), 'fonts/NotoSans-Regular.ttf'), {
+  family: 'NotoSans',
+  weight: 'normal',
+});
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -16,12 +26,6 @@ export default async function handler(req, res) {
   if (!smtpUser || !smtpPass) {
     return res.status(500).json({ error: 'SMTP credentials not configured' });
   }
-
-  // register the bundled font
-  registerFont(path.join(process.cwd(), 'fonts/Roboto-Bold.ttf'), {
-    family: 'Roboto',
-    weight: 'bold',
-  });
 
   const WIDTH = 1200;
   const HEIGHT = 900;
@@ -36,8 +40,8 @@ export default async function handler(req, res) {
       ctx.fillStyle = '#fff';
       ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
-      // Table number text
-      ctx.font = 'bold 100px Roboto';
+      // Table number text using NotoSans-Bold
+      ctx.font = 'bold 100px NotoSans';
       ctx.fillStyle = '#000';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
@@ -54,8 +58,8 @@ export default async function handler(req, res) {
       const qrY = 180;
       ctx.drawImage(qrImg, (WIDTH - QR_SIZE) / 2, qrY, QR_SIZE, QR_SIZE);
 
-      // “Scan me to order” text below
-      ctx.font = 'bold 70px Roboto';
+      // “Scan me to order” text below using NotoSans-Bold or NotoSans-Regular
+      ctx.font = 'bold 70px NotoSans';
       ctx.fillStyle = '#000';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
@@ -69,6 +73,9 @@ export default async function handler(req, res) {
       };
     })
   );
+
+
+
 
   // HTML without duplicate text
   const html = `
