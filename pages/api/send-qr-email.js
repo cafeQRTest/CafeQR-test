@@ -1,5 +1,6 @@
 // pages/api/send-qr-email.js
 
+import path from 'path'; 
 import nodemailer from 'nodemailer';
 import QRCode from 'qrcode';
 import { createCanvas, loadImage, registerFont } from 'canvas';
