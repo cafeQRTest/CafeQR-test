@@ -6,11 +6,11 @@ import QRCode from 'qrcode';
 import { createCanvas, loadImage, registerFont } from 'canvas';
 
 // You only need to register once at top of file or inside handler
-registerFont(path.join(process.cwd(), 'fonts/NotoSans-Bold.ttf'), {
+registerFont(path.join(process.cwd(), 'public/fonts/NotoSans-Bold.ttf'), {
   family: 'NotoSans',
   weight: 'bold',
 });
-registerFont(path.join(process.cwd(), 'fonts/NotoSans-Regular.ttf'), {
+registerFont(path.join(process.cwd(), 'public/fonts/NotoSans-Regular.ttf'), {
   family: 'NotoSans',
   weight: 'normal',
 });
