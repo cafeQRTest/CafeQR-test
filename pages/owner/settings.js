@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useRequireAuth } from '../../lib/useRequireAuth';
 import { useRestaurant } from '../../context/RestaurantContext';
+import { useSubscription } from '../../context/SubscriptionContext'; // ADD THIS LINE
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import { getSupabase } from '../../services/supabase'; // 1. IMPORT
@@ -42,6 +43,7 @@ export default function SettingsPage() {
   const supabase = getSupabase();
   const { checking } = useRequireAuth(supabase);
   const { restaurant, loading: loadingRestaurant } = useRestaurant();
+  const { refresh: refreshSubscription } = useSubscription();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -234,201 +236,276 @@ export default function SettingsPage() {
     return /^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifsc.trim().toUpperCase());
   }
 
-  async function save(e) {
-    e.preventDefault();
-    setSaving(true);
-    setError('');
-    setSuccess('');
-    try {
-      const required = ['legal_name', 'restaurant_name', 'phone', 'support_email'];
-      if (form.online_payment_enabled) {
-        if (form.use_own_gateway) {
-          required.push('razorpay_key_id', 'razorpay_key_secret');
-        } else {
-          required.push('bank_account_holder_name', 'bank_account_number', 'bank_ifsc', 'beneficiary_name', 'business_type', 'legal_pan');
-        }
+async function save(e) {
+  e.preventDefault();
+  setSaving(true);
+  setError('');
+  setSuccess('');
+  
+  try {
+    // STEP 1: Quick validation
+    const required = ['legal_name', 'restaurant_name', 'phone', 'support_email'];
+    if (form.online_payment_enabled) {
+      if (form.use_own_gateway) {
+        required.push('razorpay_key_id', 'razorpay_key_secret');
+      } else {
+        required.push('bank_account_holder_name', 'bank_account_number', 'bank_ifsc', 'beneficiary_name', 'business_type', 'legal_pan');
       }
-
-      const missing = required.filter(f => !form[f] || !form[f].toString().trim());
-      if (missing.length) throw new Error(`Missing required fields: ${missing.join(', ')}`);
-
-      if (form.online_payment_enabled && !form.use_own_gateway) {
-        if (form.beneficiary_name.trim() !== form.legal_name.trim()) {
-          throw new Error('Beneficiary Name must match Legal Name');
-        }
-        if (!validateBusinessType(form.business_type)) {
-          throw new Error('Invalid business type selected');
-        }
-        if (!validateIFSC(form.bank_ifsc)) {
-          throw new Error('Invalid IFSC code format');
-        }
-      }
-
-      if (form.upi_id && !validateUPI(form.upi_id)) {
-        throw new Error('Invalid UPI format. Example: name@bankhandle');
-      }
-
-      const newTableCount = Number(form.tables_count);
-      if (!isFirstTime && newTableCount < originalTables) {
-        throw new Error('Cannot decrease number of tables');
-      }
-
-      const {
-        // exclude fields not in table or handled separately
-        useswiggy,
-        usezomato,
-        ...rest
-      } = form;
-
-      const payload = {
-        restaurant_id: restaurant.id,
-        legal_name: rest.legal_name,
-        phone: rest.phone,
-        support_email: rest.support_email,
-        gst_enabled: rest.gst_enabled,
-        gstin: rest.gstin,
-        default_tax_rate: Number(rest.default_tax_rate) || 5,
-        prices_include_tax: !!rest.prices_include_tax,
-        shipping_name: rest.shipping_name,
-        shipping_phone: rest.shipping_phone,
-        shipping_address_line1: rest.shipping_address_line1,
-        shipping_address_line2: rest.shipping_address_line2,
-        shipping_city: rest.shipping_city,
-        shipping_state: rest.shipping_state,
-        shipping_pincode: rest.shipping_pincode,
-        tables_count: newTableCount,
-        table_prefix: rest.table_prefix,
-        upi_id: rest.upi_id.trim(),
-        online_payment_enabled: !!rest.online_payment_enabled,
-        use_own_gateway: !!rest.use_own_gateway,
-        razorpay_key_id: rest.razorpay_key_id,
-        razorpay_key_secret: rest.razorpay_key_secret,
-        bank_account_holder_name: rest.bank_account_holder_name,
-        bank_account_number: rest.bank_account_number,
-        bank_email: rest.bank_email,
-        bank_phone: rest.bank_phone,
-        bank_ifsc: rest.bank_ifsc.trim().toUpperCase(),
-        profile_category: rest.profile_category,
-        profile_subcategory: rest.profile_subcategory,
-        business_type: rest.business_type,
-        legal_pan: rest.legal_pan.trim().toUpperCase(),
-        legal_gst: rest.legal_gst,
-        beneficiary_name: rest.beneficiary_name,
-        brand_logo_url: rest.brand_logo_url,
-        brand_color: rest.brand_color,
-        website_url: rest.website_url,
-        instagram_handle: rest.instagram_handle,
-        facebook_page: rest.facebook_page,
-        description: rest.description,
-        swiggy_enabled: !!rest.swiggy_enabled,
-        swiggy_api_key: rest.swiggy_api_key,
-        swiggy_api_secret: rest.swiggy_api_secret,
-        swiggy_webhook_secret: rest.swiggy_webhook_secret,
-        zomato_enabled: !!rest.zomato_enabled,
-        zomato_api_key: rest.zomato_api_key,
-        zomato_api_secret: rest.zomato_api_secret,
-        zomato_webhook_secret: rest.zomato_webhook_secret,
-      };
-
-      const { error: upsertError } = await supabase
-        .from('restaurant_profiles')
-        .upsert(payload, { onConflict: 'restaurant_id' });
-      if (upsertError) throw upsertError;
-
-      await supabase
-        .from('restaurants')
-        .update({ name: rest.restaurant_name })
-        .eq('id', restaurant.id);
-
-      if (rest.online_payment_enabled && !rest.use_own_gateway && !routeAccountId) {
-        const profile = {
-          category: rest.profile_category,
-          subcategory: rest.profile_subcategory,
-          addresses: {
-            registered: {
-              street1: rest.shipping_address_line1.trim(),
-              street2: rest.shipping_address_line2.trim(),
-              city: rest.shipping_city.trim(),
-              state: rest.shipping_state.trim(),
-              postal_code: rest.shipping_pincode.trim(),
-              country: 'IN',
-            },
-          },
-        };
-        const legalInfo = { pan: rest.legal_pan.trim().toUpperCase() };
-        if (rest.gst_enabled && rest.legal_gst.trim()) {
-          legalInfo.gst = rest.legal_gst.trim().toUpperCase();
-        }
-        const resp = await fetch('/api/route/create-account', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            legal_name: rest.legal_name,
-            beneficiary_name: rest.beneficiary_name,
-            display_name: rest.restaurant_name,
-            business_type: rest.business_type,
-            account_number: rest.bank_account_number,
-            ifsc: rest.bank_ifsc.trim().toUpperCase(),
-            email: rest.bank_email?.trim() || rest.support_email.trim(),
-            phone: rest.bank_phone?.trim() || rest.phone.trim(),
-            owner_id: restaurant.id,
-            profile,
-            legal_info: legalInfo,
-          }),
-        });
-        if (!resp.ok) {
-          const err = await resp.json();
-          throw new Error(err.error || 'Failed to create linked Route account');
-        }
-        const accountId = await resp.json();
-        setRouteAccountId(accountId);
-        await supabase
-          .from('restaurants')
-          .update({ route_account_id: accountId })
-          .eq('id', restaurant.id);
-      }
-
-      const qrCodes = Array.from(
-  { length: Number(form.tables_count) },
-  (_, i) => ({
-    tableNumber: `${form.table_prefix}${i + 1}`,  // For display
-    qrUrl: `${process.env.NEXT_PUBLIC_BASE_URL}/order?r=${restaurant.id}&t=${i + 1}`  // For QR navigation
-  })
-);
-
-
-
-    await fetch('/api/send-qr-email', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        qrCodes,
-        restaurantData: {
-          restaurantName: form.restaurant_name,
-          legalName: form.legal_name,
-          phone: form.phone,
-          email: form.support_email,
-          address: [
-            form.shipping_address_line1,
-            form.shipping_address_line2,
-            form.shipping_city,
-            form.shipping_state,
-            form.shipping_pincode
-          ].filter(Boolean).join(', ')
-        }
-      })
-    });
-
-
-      setOriginalTables(newTableCount);
-      setIsFirstTime(false);
-      setSuccess('Settings saved and QR email sent successfully!');
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSaving(false);
     }
+
+    const missing = required.filter(f => !form[f] || !form[f].toString().trim());
+    if (missing.length) throw new Error(`Missing required fields: ${missing.join(', ')}`);
+
+    if (form.online_payment_enabled && !form.use_own_gateway) {
+      if (form.beneficiary_name.trim() !== form.legal_name.trim()) {
+        throw new Error('Beneficiary Name must match Legal Name');
+      }
+      if (!validateBusinessType(form.business_type)) {
+        throw new Error('Invalid business type selected');
+      }
+      if (!validateIFSC(form.bank_ifsc)) {
+        throw new Error('Invalid IFSC code format');
+      }
+    }
+
+    if (form.upi_id && !validateUPI(form.upi_id)) {
+      throw new Error('Invalid UPI format. Example: name@bankhandle');
+    }
+
+    const newTableCount = Number(form.tables_count);
+    if (!isFirstTime && newTableCount < originalTables) {
+      throw new Error('Cannot decrease number of tables');
+    }
+
+    // STEP 2: Ensure restaurant record exists
+    const { data: restCheck } = await supabase
+      .from('restaurants')
+      .select('id')
+      .eq('id', restaurant.id)
+      .maybeSingle();
+
+    if (!restCheck) {
+      const { error: createRestErr } = await supabase
+        .from('restaurants')
+        .insert({ id: restaurant.id, name: form.restaurant_name });
+
+      if (createRestErr) throw new Error("Failed to create restaurant");
+    }
+
+    const { useswiggy, usezomato, ...rest } = form;
+
+    const payload = {
+      restaurant_id: restaurant.id,
+      legal_name: rest.legal_name,
+      phone: rest.phone,
+      support_email: rest.support_email,
+      gst_enabled: rest.gst_enabled,
+      gstin: rest.gstin,
+      default_tax_rate: Number(rest.default_tax_rate) || 5,
+      prices_include_tax: !!rest.prices_include_tax,
+      shipping_name: rest.shipping_name,
+      shipping_phone: rest.shipping_phone,
+      shipping_address_line1: rest.shipping_address_line1,
+      shipping_address_line2: rest.shipping_address_line2,
+      shipping_city: rest.shipping_city,
+      shipping_state: rest.shipping_state,
+      shipping_pincode: rest.shipping_pincode,
+      tables_count: newTableCount,
+      table_prefix: rest.table_prefix,
+      upi_id: rest.upi_id.trim(),
+      online_payment_enabled: !!rest.online_payment_enabled,
+      use_own_gateway: !!rest.use_own_gateway,
+      razorpay_key_id: rest.razorpay_key_id,
+      razorpay_key_secret: rest.razorpay_key_secret,
+      bank_account_holder_name: rest.bank_account_holder_name,
+      bank_account_number: rest.bank_account_number,
+      bank_email: rest.bank_email,
+      bank_phone: rest.bank_phone,
+      bank_ifsc: rest.bank_ifsc.trim().toUpperCase(),
+      profile_category: rest.profile_category,
+      profile_subcategory: rest.profile_subcategory,
+      business_type: rest.business_type,
+      legal_pan: rest.legal_pan.trim().toUpperCase(),
+      legal_gst: rest.legal_gst,
+      beneficiary_name: rest.beneficiary_name,
+      brand_logo_url: rest.brand_logo_url,
+      brand_color: rest.brand_color,
+      website_url: rest.website_url,
+      instagram_handle: rest.instagram_handle,
+      facebook_page: rest.facebook_page,
+      description: rest.description,
+      swiggy_enabled: !!rest.swiggy_enabled,
+      swiggy_api_key: rest.swiggy_api_key,
+      swiggy_api_secret: rest.swiggy_api_secret,
+      swiggy_webhook_secret: rest.swiggy_webhook_secret,
+      zomato_enabled: !!rest.zomato_enabled,
+      zomato_api_key: rest.zomato_api_key,
+      zomato_api_secret: rest.zomato_api_secret,
+      zomato_webhook_secret: rest.zomato_webhook_secret,
+    };
+
+    // STEP 3: Show immediate success & disable saving
+    setSaving(false);
+    setSuccess('✓ Settings saved! Preparing your account...');
+    setOriginalTables(newTableCount);
+    setIsFirstTime(false);
+
+    // STEP 4: All heavy work in background (parallel execution)
+    Promise.all([
+      // Save profile
+      (async () => {
+        try {
+          const { error: upsertError } = await supabase
+            .from('restaurant_profiles')
+            .upsert(payload, { 
+              onConflict: 'restaurant_id',
+              ignoreDuplicates: false 
+            });
+
+          if (upsertError) {
+            console.error('Profile upsert failed:', upsertError);
+            throw upsertError;
+          }
+        } catch (err) {
+          console.error('Profile upsert error:', err);
+        }
+      })(),
+
+      // Update restaurant
+      (async () => {
+        try {
+          await supabase
+            .from('restaurants')
+            .update({ name: rest.restaurant_name })
+            .eq('id', restaurant.id);
+        } catch (err) {
+          console.error('Restaurant update error:', err);
+        }
+      })(),
+
+      // Create Route account if needed
+      (async () => {
+        try {
+          if (!rest.online_payment_enabled || rest.use_own_gateway || routeAccountId) {
+            return;
+          }
+
+          const profile = {
+            category: rest.profile_category,
+            subcategory: rest.profile_subcategory,
+            addresses: {
+              registered: {
+                street1: rest.shipping_address_line1.trim(),
+                street2: rest.shipping_address_line2.trim(),
+                city: rest.shipping_city.trim(),
+                state: rest.shipping_state.trim(),
+                postal_code: rest.shipping_pincode.trim(),
+                country: 'IN',
+              },
+            },
+          };
+
+          const legalInfo = { pan: rest.legal_pan.trim().toUpperCase() };
+          if (rest.gst_enabled && rest.legal_gst.trim()) {
+            legalInfo.gst = rest.legal_gst.trim().toUpperCase();
+          }
+
+          const resp = await fetch('/api/route/create-account', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              legal_name: rest.legal_name,
+              beneficiary_name: rest.beneficiary_name,
+              display_name: rest.restaurant_name,
+              business_type: rest.business_type,
+              account_number: rest.bank_account_number,
+              ifsc: rest.bank_ifsc.trim().toUpperCase(),
+              email: rest.bank_email?.trim() || rest.support_email.trim(),
+              phone: rest.bank_phone?.trim() || rest.phone.trim(),
+              owner_id: restaurant.id,
+              profile,
+              legal_info: legalInfo,
+            }),
+          });
+
+          if (!resp.ok) {
+            const err = await resp.json();
+            console.error('Route account error:', err);
+            return;
+          }
+
+          const accountId = await resp.json();
+          setRouteAccountId(accountId);
+
+          await supabase
+            .from('restaurants')
+            .update({ route_account_id: accountId })
+            .eq('id', restaurant.id);
+        } catch (err) {
+          console.error('Route account creation error:', err);
+        }
+      })(),
+
+      // Start trial if first time
+      (async () => {
+        try {
+          if (!isFirstTime) return;
+
+          const res = await fetch('/api/subscription/start-trial', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ restaurant_id: restaurant.id }),
+          });
+
+          if (!res.ok) {
+            const trialErr = await res.json().catch(() => ({}));
+            console.warn('Trial creation warning:', trialErr.message);
+          }
+        } catch (err) {
+          console.warn('Trial error (non-critical):', err.message);
+        }
+      })(),
+    ]).catch(console.error);
+
+    // SEND QR EMAIL SEPARATELY - FIRE & FORGET (NOT in Promise.all)
+    if (form.tables_count) {
+      const qrCodes = Array.from({ length: Number(form.tables_count) }, (_, i) => ({
+        tableNumber: `${form.table_prefix}${i + 1}`,
+        qrUrl: `${process.env.NEXT_PUBLIC_BASE_URL}/order?r=${restaurant.id}&t=${i + 1}`,
+      }));
+
+      fetch('/api/send-qr-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          qrCodes,
+          restaurantData: {
+            restaurantName: form.restaurant_name,
+            legalName: form.legal_name,
+            phone: form.phone,
+            email: form.support_email,
+            address: [
+              form.shipping_address_line1,
+              form.shipping_address_line2,
+              form.shipping_city,
+              form.shipping_state,
+              form.shipping_pincode,
+            ].filter(Boolean).join(', '),
+          },
+        }),
+      }).catch(err => console.warn('QR email failed (background):', err.message));
+    }
+
+    // Refresh subscription after delay
+    setTimeout(() => refreshSubscription(), 1000);
+
+  } catch (err) {
+    console.error('Save error:', err);
+    setError(err.message || 'Failed to save settings');
+    setSaving(false);
   }
+}
+
 
   if (checking || loadingRestaurant) return <div>Loading...</div>;
   if (loading) return <div>Loading settings...</div>;
@@ -881,6 +958,7 @@ export default function SettingsPage() {
           <Button disabled={saving} type="submit">
             {saving ? 'Saving...' : isFirstTime ? 'Complete Setup' : 'Save Changes'}
           </Button>
+
         </div>
       </form>
 

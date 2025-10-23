@@ -1,4 +1,4 @@
-//pages/api/subscription/activate
+//pages/api/subscription/activate.js
 
 import { getServerSupabase } from '../../../services/supabase-server';
 
@@ -16,7 +16,7 @@ export default async function handler(req, res) {
     .from('restaurant_subscriptions')
     .update({
       status: 'active',
-      current_period_start: now.toISOString(),
+      is_active: true,
       current_period_end: periodEnd.toISOString(),
       next_due_at: periodEnd.toISOString()
     })

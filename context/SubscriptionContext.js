@@ -2,7 +2,12 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { useRestaurant } from './RestaurantContext';
 
-const Ctx = createContext({ subscription: null, loading: true, error: '', refresh: async () => {} });
+const Ctx = createContext({ 
+  subscription: null, 
+  loading: true, 
+  error: '', 
+  refresh: async () => {} 
+});
 
 export function SubscriptionProvider({ children }) {
   const { restaurant, loading: restLoading } = useRestaurant();
@@ -32,4 +37,12 @@ export function SubscriptionProvider({ children }) {
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
-export const useSubscription = () => useContext(Ctx);
+
+// Single export with refresh method included
+export const useSubscription = () => {
+  const context = useContext(Ctx);
+  return {
+    ...context,
+    refresh: context.refresh // Ensure refresh is always available
+  };
+};

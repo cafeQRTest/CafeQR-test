@@ -1,4 +1,5 @@
 // pages/api/subscription/status.js
+
 import { getServerSupabase } from '../../../services/supabase-server';
 
 export default async function handler(req, res) {
@@ -8,15 +9,11 @@ export default async function handler(req, res) {
 
   try {
     const { restaurant_id } = req.query;
-    
-    console.log('[subscription-status] Checking for restaurant_id:', restaurant_id);
-    
     if (!restaurant_id) {
       return res.status(400).json({ error: 'restaurant_id is required' });
     }
 
     const supabase = getServerSupabase();
-    
     const { data: subscription, error } = await supabase
       .from('restaurant_subscriptions')
       .select('*')
@@ -29,8 +26,7 @@ export default async function handler(req, res) {
     }
 
     if (!subscription) {
-      console.log('[subscription-status] No subscription found, returning inactive');
-      return res.status(200).json({ 
+      return res.status(200).json({
         is_active: false,
         status: 'none',
         days_left: 0,
@@ -42,7 +38,6 @@ export default async function handler(req, res) {
     let isActive = false;
     let daysLeft = 0;
 
-    // Check trial status
     if (subscription.status === 'trial' && subscription.trial_ends_at) {
       const trialEnd = new Date(subscription.trial_ends_at);
       if (now <= trialEnd) {
@@ -50,8 +45,6 @@ export default async function handler(req, res) {
         daysLeft = Math.ceil((trialEnd - now) / (1000 * 60 * 60 * 24));
       }
     }
-    
-    // Check active paid subscription
     if (subscription.status === 'active' && subscription.current_period_end) {
       const periodEnd = new Date(subscription.current_period_end);
       if (now <= periodEnd) {
@@ -59,14 +52,6 @@ export default async function handler(req, res) {
         daysLeft = Math.ceil((periodEnd - now) / (1000 * 60 * 60 * 24));
       }
     }
-
-    console.log('[subscription-status] Result:', { 
-      isActive, 
-      status: subscription.status, 
-      daysLeft,
-      now: now.toISOString(),
-      period_end: subscription.current_period_end
-    });
 
     return res.status(200).json({
       is_active: isActive,

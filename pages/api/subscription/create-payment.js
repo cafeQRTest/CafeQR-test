@@ -1,4 +1,5 @@
 // pages/api/subscription/create-payment.js
+
 import Razorpay from 'razorpay';
 import { getServerSupabase } from '../../../services/supabase-server';
 
@@ -30,9 +31,7 @@ export default async function handler(req, res) {
         .insert({
           restaurant_id,
           status: 'pending',
-          amount_paise: 9900,
-          currency: 'INR',
-          plan_code: 'RZP_MONTH_99'
+          is_active: false
         })
         .select()
         .single();

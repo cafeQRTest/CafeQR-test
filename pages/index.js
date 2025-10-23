@@ -1,3 +1,5 @@
+//pages/index.js
+
 import Link from 'next/link'
 import Image from 'next/image'
 // 1. IMPORT the singleton function

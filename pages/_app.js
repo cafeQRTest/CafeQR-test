@@ -1,3 +1,5 @@
+//pages/_app.js
+
 import '../styles/responsive.css'
 import '../styles/globals.css'
 import '../styles/theme.css'
@@ -70,17 +72,6 @@ async function ensureSubscribed() {
   await postSubscribe(token, Capacitor.isNativePlatform() ? 'android' : 'web')
 }
 
-async function startTrialIfNeeded(restaurantId) {
-  if (!restaurantId) return
-  try {
-    await fetch('/api/subscription/start-trial', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ restaurant_id: restaurantId }),
-    })
-  } catch {}
-}
-
 function GlobalSubscriptionGate({ children }) {
   const router = useRouter()
   const path = router.pathname
@@ -92,7 +83,7 @@ function GlobalSubscriptionGate({ children }) {
   useEffect(() => {
     if (!router.isReady || loading) return
     if (isOwner && !onSubPage && !subscription?.is_active) {
-      router.replace(`/owner/subscription${window.location.search}`)
+      router.replace(`/owner/settings${window.location.search}`)
     }
   }, [router, loading, isOwner, onSubPage, subscription])
 
@@ -122,6 +113,7 @@ function MyApp({ Component, pageProps }) {
     setMounted(true)
   }, [])
 
+  // Initialize FCM
   useEffect(() => {
     if (!router.isReady || ready) return
     let isMounted = true
@@ -138,16 +130,17 @@ function MyApp({ Component, pageProps }) {
     return () => { isMounted = false }
   }, [router, ready])
 
+  // Setup route listeners
   useEffect(() => {
     if (!router.isReady || !ready) return
-    const onRoute = url => {
+    
+    const onRoute = () => {
       ensureSubscribed()
-      if (url === '/owner') {
-        startTrialIfNeeded(new URL(window.location.href).searchParams.get('r'))
-      }
     }
+    
     window.addEventListener('focus', ensureSubscribed)
     router.events.on('routeChangeComplete', onRoute)
+    
     return () => {
       router.events.off('routeChangeComplete', onRoute)
       window.removeEventListener('focus', ensureSubscribed)
