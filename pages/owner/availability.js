@@ -1,3 +1,5 @@
+//pages/owner/availability.js
+
 import React, { useEffect, useMemo, useState } from "react";
 import styled from "styled-components";
 import { useRequireAuth } from "../../lib/useRequireAuth";
