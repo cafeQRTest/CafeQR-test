@@ -23,7 +23,7 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 
 /* Form Elements (keep 16px to avoid iOS zoom) */
 input, select, textarea {
-  width: 100%; padding: 0.75rem; font-size: 16px;
+   padding: 0.75rem; font-size: 16px;
   border: 1px solid var(--border); border-radius: 4px; outline: none;
 }
 input:focus, select:focus, textarea:focus { border-color: var(--brand); box-shadow: var(--focus); }
@@ -121,6 +121,7 @@ img, svg, video { max-width: 100%; height: auto; }
   border: 1px solid #e5e7eb;
   border-radius: 14px;
   background: #fff;
+  color: #0b1220;
   cursor: pointer;
   padding: 6px 8px;
   min-height: 32px;

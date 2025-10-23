@@ -163,7 +163,7 @@ html, body {
 /* Inputs Full-Width on Mobile */
 @media (max-width: 600px) {
   input, select, textarea {
-    width: 100% !important;
+    /* width: 100% !important; */
   }
 }
 
