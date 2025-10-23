@@ -1,10 +1,12 @@
-// pages/owner/subscription.js
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRestaurant } from '../../context/RestaurantContext'
+import { useRouter } from 'next/router'
 
 export default function SubscriptionPage() {
   const { restaurant } = useRestaurant()
+  const router = useRouter()
+  const [loading, setLoading] = useState(false)
   const [status, setStatus] = useState(null)
   const [error, setError] = useState(null)
 
@@ -24,6 +26,69 @@ export default function SubscriptionPage() {
       setStatus({ found: true, ...data })
     } catch (err) {
       setError(err.message)
+    }
+  }
+
+  async function handlePayment() {
+    setLoading(true)
+    setError(null)
+
+    try {
+      const res = await fetch('/api/subscription/create-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ restaurant_id: restaurant.id }),
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || 'Payment order failed')
+      }
+      const { order_id, amount, currency, key_id } = await res.json()
+
+      const script = document.createElement('script')
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js'
+      script.async = true
+      document.body.appendChild(script)
+
+      script.onload = () => {
+        const options = {
+          key: key_id,
+          amount,
+          currency,
+          name: 'CafeQR Subscription',
+          description: 'Monthly Subscription - ₹99',
+          order_id,
+          handler: async function (response) {
+            // Activate immediately
+            await fetch('/api/subscription/activate', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ restaurant_id: restaurant.id }),
+            })
+            alert('Payment successful! Your subscription is now active.')
+            fetchStatus()
+          },
+          prefill: {
+            name: restaurant.name,
+            email: restaurant.owner_email,
+          },
+          theme: { color: '#007bff' },
+          modal: {
+            ondismiss: () => setLoading(false),
+          },
+        }
+        const rzp = new window.Razorpay(options)
+        rzp.open()
+        setLoading(false)
+      }
+
+      script.onerror = () => {
+        throw new Error('Failed to load Razorpay')
+      }
+    } catch (err) {
+      setError(err.message)
+      alert('Payment failed: ' + err.message)
+      setLoading(false)
     }
   }
 
@@ -54,7 +119,6 @@ export default function SubscriptionPage() {
     return <div style={{ padding: 50, textAlign: 'center' }}>Loading subscription status…</div>
   }
 
-  // Render active or expired UI...
   return (
     <div style={{ maxWidth: 600, margin: '50px auto', padding: 20 }}>
       <h1>Subscription</h1>

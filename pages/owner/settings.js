@@ -241,9 +241,10 @@ async function save(e) {
   setSaving(true);
   setError('');
   setSuccess('');
-  
+  const startTime = Date.now();
   try {
     // STEP 1: Quick validation
+    console.time("Validation");
     const required = ['legal_name', 'restaurant_name', 'phone', 'support_email'];
     if (form.online_payment_enabled) {
       if (form.use_own_gateway) {
@@ -349,12 +350,14 @@ async function save(e) {
     setSuccess('✓ Settings saved! Preparing your account...');
     setOriginalTables(newTableCount);
     setIsFirstTime(false);
+    console.timeEnd("Validation");
 
     // STEP 4: All heavy work in background (parallel execution)
     Promise.all([
       // Save profile
       (async () => {
         try {
+          console.time("Supabase upsert: restaurantprofiles");
           const { error: upsertError } = await supabase
             .from('restaurant_profiles')
             .upsert(payload, { 
@@ -362,24 +365,32 @@ async function save(e) {
               ignoreDuplicates: false 
             });
 
+
           if (upsertError) {
             console.error('Profile upsert failed:', upsertError);
             throw upsertError;
           }
         } catch (err) {
           console.error('Profile upsert error:', err);
+        } finally {
+          console.timeEnd("Supabase Upsert restaurant_profiles");
         }
       })(),
 
       // Update restaurant
       (async () => {
         try {
+          console.time("Supabase update: restaurants");
           await supabase
             .from('restaurants')
             .update({ name: rest.restaurant_name })
             .eq('id', restaurant.id);
+            console.timeEnd("Supabase update: restaurants");
+
         } catch (err) {
           console.error('Restaurant update error:', err);
+        }finally {
+          console.timeEnd("Supabase Update restaurants name");
         }
       })(),
 
@@ -448,6 +459,7 @@ async function save(e) {
 
       // Start trial if first time
       (async () => {
+        console.time("Start Trial API");
         try {
           if (!isFirstTime) return;
 
@@ -463,12 +475,19 @@ async function save(e) {
           }
         } catch (err) {
           console.warn('Trial error (non-critical):', err.message);
+        } finally {
+          console.timeEnd("Start Trial API");
         }
+
       })(),
-    ]).catch(console.error);
+    ]).then(() => {
+      console.timeEnd("Total Save Function");
+      console.log("Total time for settings save (including background tasks):", Date.now() - overallStartTime, "ms");
+    }).catch(console.error);
 
     // SEND QR EMAIL SEPARATELY - FIRE & FORGET (NOT in Promise.all)
     if (form.tables_count) {
+      console.time("Send QR Email (Fire & Forget)");
       const qrCodes = Array.from({ length: Number(form.tables_count) }, (_, i) => ({
         tableNumber: `${form.table_prefix}${i + 1}`,
         qrUrl: `${process.env.NEXT_PUBLIC_BASE_URL}/order?r=${restaurant.id}&t=${i + 1}`,
@@ -493,11 +512,19 @@ async function save(e) {
             ].filter(Boolean).join(', '),
           },
         }),
-      }).catch(err => console.warn('QR email failed (background):', err.message));
+      }).catch(err => {
+        console.warn('QR email failed (background):', err.message);
+        console.timeEnd("Send QR Email (Fire & Forget)");
+      });
     }
 
     // Refresh subscription after delay
-    setTimeout(() => refreshSubscription(), 1000);
+    setTimeout(() => {
+      console.time("RefreshSubscription Timeout");
+      refreshSubscription();
+      console.timeEnd("RefreshSubscription Timeout");
+    }, 1000);
+
 
   } catch (err) {
     console.error('Save error:', err);
