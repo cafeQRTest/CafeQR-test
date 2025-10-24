@@ -10,7 +10,7 @@ import { useRouter } from 'next/router'
 import { useEffect, useState } from 'react'
 import { Capacitor } from '@capacitor/core'
 import { getFCMToken } from '../lib/firebase/messaging'
-import { getSupabase, restoreSessionFromStorage } from '../services/supabase'
+import { getSupabase, forceSupabaseSessionRestore } from '../services/supabase'
 
 const OWNER_PREFIX = '/owner'
 const CUSTOMER_PREFIX = '/order'
@@ -131,7 +131,7 @@ function MyApp({ Component, pageProps }) {
     
     const initSession = async () => {
       // Force restore from storage immediately on mount
-      await restoreSessionFromStorage()
+      await forceSupabaseSessionRestore()
       if (isMounted) setReady(true)
     }
     
