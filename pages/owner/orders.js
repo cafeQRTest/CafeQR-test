@@ -511,14 +511,14 @@ const complete = async (orderId, actualPaymentMethod = null) => {
   if (!restaurantId) return <div style={{ padding:16 }}>No restaurant found.</div>;
 
   // // Show print modal when state is set
-  // if (showKotPrint) {
-  //   return (
-  //     <KotPrint
-  //       order={showKotPrint}
-  //       onClose={() => setShowKotPrint(null)}
-  //     />
-  //   );
-  // }
+   if (showKotPrint) {
+     return (
+       <KotPrint
+         order={showKotPrint}
+         onClose={() => setShowKotPrint(null)}
+       />
+   );
+    }
 
   return (
     <div className="orders-wrap">
