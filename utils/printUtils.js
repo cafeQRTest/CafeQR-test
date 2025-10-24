@@ -1,5 +1,3 @@
-//utils/printUtils.js 
-
 function toDisplayItems(order) {
   if (Array.isArray(order.items) && order.items.length) return order.items;
   if (Array.isArray(order.order_items) && order.order_items.length) {
@@ -37,7 +35,7 @@ export async function downloadTextAndShare(order, bill, restaurantProfile) {
       'RESTAURANT'
     ).toUpperCase();
     
-    // Build address - wrapped for 50mm width
+    // Build address - wrapped for 32 chars
     const addressParts = [
       restaurantProfile?.profile_address_street1,
       restaurantProfile?.profile_address_street2,
@@ -50,6 +48,7 @@ export async function downloadTextAndShare(order, bill, restaurantProfile) {
       : (order?.restaurant_address || '');
     
     const gstin = restaurantProfile?.legal_gst || restaurantProfile?.gstin || '';
+    const fssai = restaurantProfile?.fssai || '';
     const phone = restaurantProfile?.phone || order?.restaurant_phone || '';
     
     // Bill details
@@ -93,56 +92,52 @@ export async function downloadTextAndShare(order, bill, restaurantProfile) {
       0
     );
 
-    // Build text for 50mm (33 chars max)
-    const W = 33; // Character width for 50mm thermal printer
+    // ======= ADJUSTED WIDTH TO 32 CHARS =======
+    const W = 32;
     
     const center = (str) => {
+      if (str.length > W) str = str.substring(0, W);
       const padding = Math.max(0, Math.floor((W - str.length) / 2));
       return ' '.repeat(padding) + str;
     };
     
-    const leftAlign = (str) => str;
-    
-    const rightAlign = (str) => {
-      const padding = Math.max(0, W - str.length);
-      return ' '.repeat(padding) + str;
-    };
+    const dashes = () => '-'.repeat(W);
 
     // Build lines
     const lines = [
       // === HEADER (CENTER ALIGNED) ===
       center(restaurantName),
       ...wrapText(address, W).map(line => center(line)),
-      gstin ? center(`GSTIN: ${gstin}`) : null,
-      phone ? center(`Ph: ${phone}`) : null,
+      phone ? center(`Contact No.: ${phone}`) : null,
       '',
-      center('=' .repeat(W)),
+      center(dashes()),
+      '',
       
-      // === ORDER INFO (LEFT + RIGHT ALIGNED) ===
-      buildLRLine(leftAlign(`Order: #${orderId}`), rightAlign(dateStr), W),
-      buildLRLine(leftAlign(`Type: ${orderType}`), rightAlign(timeStr), W),
+      // === ORDER INFO (LEFT ALIGNED) ===
+      `Serial No: - ${dateStr}`,
+      `Bill No: - ${timeStr}`,
+      `Order: #${orderId}`,
+      `Order Type: ${orderType}`,
+      center(dashes()),
       
-      center('-'.repeat(W)),
+      // === ITEMS HEADER ===
+      'ITEM         QTY  RATE  TOTAL',
       
-      // === ITEMS HEADER (LEFT ALIGNED) ===
-      buildItemHeader(W),
-      
-      // === ITEMS (LEFT ALIGNED) ===
+      // === ITEMS ===
       ...items.map(it => buildItemRow(it, W)),
       
-      center('-'.repeat(W)),
+      center(dashes()),
+      '',
       
       // === TOTALS (LEFT ALIGNED) ===
-      buildLRLine(leftAlign('Net Amt:'), rightAlign(`₹${netAmount.toFixed(2)}`), W),
-      ...(taxAmount > 0 ? [buildLRLine(leftAlign('Tax:'), rightAlign(`₹${taxAmount.toFixed(2)}`), W)] : []),
-      buildLRLine(leftAlign('Total:'), rightAlign(`₹${grandTotal.toFixed(2)}`), W),
-      
-      center('='.repeat(W)),
+      `Net Amt: ${netAmount.toFixed(2)}`,
+      ...(taxAmount > 0 ? [`Tax: ${taxAmount.toFixed(2)}`] : []),
+      `Grand Total: ${grandTotal.toFixed(2)}`,
+      center(dashes()),
+      '',
       
       // === FOOTER (CENTER ALIGNED) ===
-      '',
-      center('THANK YOU!'),
-      center('VISIT AGAIN'),
+      center('** THANK YOU! VISIT AGAIN !! **'),
       '',
     ].filter(Boolean);
 
@@ -175,18 +170,20 @@ export async function downloadTextAndShare(order, bill, restaurantProfile) {
   }
 }
 
-// Helper: Wrap text for 50mm width
+// Helper: Wrap text for 32 chars width
 function wrapText(text, width) {
   if (!text) return [];
   const lines = [];
   let currentLine = '';
   
   text.split(' ').forEach(word => {
-    if ((currentLine + word).length <= width) {
-      currentLine += (currentLine ? ' ' : '') + word;
+    const testLine = currentLine ? `${currentLine} ${word}` : word;
+    if (testLine.length <= width) {
+      currentLine = testLine;
     } else {
       if (currentLine) lines.push(currentLine);
-      currentLine = word;
+      // If single word is too long, truncate it
+      currentLine = word.length > width ? word.substring(0, width) : word;
     }
   });
   
@@ -194,27 +191,27 @@ function wrapText(text, width) {
   return lines;
 }
 
-// Helper: Build left-right aligned line
-function buildLRLine(left, right, width) {
-  const gap = width - left.length - right.length;
-  return left + ' '.repeat(Math.max(1, gap)) + right;
-}
-
-// Helper: Item header
-function buildItemHeader(width) {
-  return 'Item      Qty    Rate   Total';
-}
-
-// Helper: Build item row (LEFT ALIGNED)
+// Helper: Build item row (SIMPLIFIED FOR 32 CHARS)
 function buildItemRow(item, width) {
-  const name = (item.name || '').substring(0, 10).padEnd(10);
-  const qty = String(item.quantity || 1).padStart(3);
-  const rate = Number(item.price || 0).toFixed(2).padStart(5);
-  const total = (Number(item.price || 0) * Number(item.quantity || 1))
-    .toFixed(2)
-    .padStart(6);
+  // Item name: 12 chars max
+  const name = (item.name || '').substring(0, 12).padEnd(13);
   
-  return `${name}${qty}${rate}${total}`;
+  // Quantity: 1 char + 'x'
+  const qty = `${item.quantity}`.padStart(1);
+  
+  // Rate: show as integer if possible
+  const rateNum = Number(item.price || 0);
+  const rate = rateNum % 1 === 0 
+    ? rateNum.toFixed(0).padStart(4)
+    : rateNum.toFixed(2).padStart(4);
+  
+  // Total
+  const totalNum = rateNum * Number(item.quantity || 1);
+  const total = totalNum % 1 === 0
+    ? totalNum.toFixed(0).padStart(5)
+    : totalNum.toFixed(2).padStart(5);
+  
+  return `${name}${qty}${rate}.00${total}.00`;
 }
 
 export async function downloadPdfAndShare(order, bill, restaurantProfile) {
