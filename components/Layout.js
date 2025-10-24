@@ -1,5 +1,3 @@
-//components/layout
-
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/router'
@@ -16,7 +14,7 @@ import {
   FaUtensils,
   FaSignOutAlt,
   FaCreditCard,
-  FaCashRegister,  // imported new icons
+  FaCashRegister,
   FaBoxes,
 } from 'react-icons/fa'
 import { signOutAndRedirect } from '../lib/authActions'
@@ -190,6 +188,7 @@ function Sidebar({ collapsed }) {
   const supabase = getSupabase()
   const { restaurant } = useRestaurant()
   const hasAggregatorIntegration = Boolean(restaurant?.swiggy_api_key || restaurant?.zomato_api_key)
+  const [signingOut, setSigningOut] = useState(false)
 
   const items = [
     { href: '/owner', label: 'Overview', icon: <FaHome /> },
@@ -226,10 +225,13 @@ function Sidebar({ collapsed }) {
   })
 
   const handleSignOut = async () => {
+    setSigningOut(true)
     try {
       await signOutAndRedirect(supabase, router.replace)
     } catch (err) {
+      console.error('Sign out error:', err)
       alert(`Sign out failed: ${err.message}`)
+      setSigningOut(false)
     }
   }
 
@@ -264,6 +266,7 @@ function Sidebar({ collapsed }) {
       </nav>
       <button
         onClick={handleSignOut}
+        disabled={signingOut}
         title="Sign Out"
         style={{
           marginTop: 16,
@@ -275,21 +278,26 @@ function Sidebar({ collapsed }) {
           background: 'transparent',
           border: '1px solid #e5e7eb',
           borderRadius: 8,
-          color: '#6b7280',
-          cursor: 'pointer',
+          color: signingOut ? '#d1d5db' : '#6b7280',
+          cursor: signingOut ? 'not-allowed' : 'pointer',
           justifyContent: collapsed ? 'center' : 'flex-start',
+          transition: 'all 0.2s ease',
+          opacity: signingOut ? 0.6 : 1,
         }}
       >
         <FaSignOutAlt />
-        {!collapsed && <span>Sign Out</span>}
+        {!collapsed && <span>{signingOut ? 'Signing Out...' : 'Sign Out'}</span>}
       </button>
     </aside>
   )
 }
 
 function MobileSidebar({ onNavigate }) {
+  const router = useRouter()
+  const supabase = getSupabase()
   const { restaurant } = useRestaurant()
   const hasAggregatorIntegration = Boolean(restaurant?.swiggy_api_key || restaurant?.zomato_api_key)
+  const [signingOut, setSigningOut] = useState(false)
 
   const items = [
     { href: '/owner', label: 'Overview', icon: <FaHome /> },
@@ -310,6 +318,18 @@ function MobileSidebar({ onNavigate }) {
       label: 'Aggregator Orders',
       icon: <FaUtensils />,
     })
+  }
+
+  const handleSignOut = async () => {
+    setSigningOut(true)
+    try {
+      await signOutAndRedirect(supabase, router.replace)
+      onNavigate() // Close drawer after successful sign out
+    } catch (err) {
+      console.error('Sign out error:', err)
+      alert(`Sign out failed: ${err.message}`)
+      setSigningOut(false)
+    }
   }
 
   return (
@@ -337,22 +357,29 @@ function MobileSidebar({ onNavigate }) {
         </Link>
       ))}
       <div style={{ borderTop: '1px solid #e5e7eb', margin: '12px 0' }} />
-      <Link
-        href="/logout"
-        onClick={onNavigate}
+      <button
+        onClick={handleSignOut}
+        disabled={signingOut}
         style={{
           display: 'flex',
           alignItems: 'center',
           gap: 12,
           padding: '12px',
           borderRadius: 8,
-          color: '#dc2626',
+          color: signingOut ? '#fca5a5' : '#dc2626',
+          background: 'transparent',
+          border: 'none',
+          cursor: signingOut ? 'not-allowed' : 'pointer',
           textDecoration: 'none',
+          fontSize: 'inherit',
+          fontFamily: 'inherit',
+          opacity: signingOut ? 0.6 : 1,
+          transition: 'all 0.2s ease',
         }}
       >
         <FaSignOutAlt />
-        <span>Sign Out</span>
-      </Link>
+        <span>{signingOut ? 'Signing Out...' : 'Sign Out'}</span>
+      </button>
     </nav>
   )
 }
@@ -372,7 +399,7 @@ function Footer() {
         color: '#6b7280',
       }}
     >
-      <span>🔒 Powered by The Online Wala</span>
+      <span>🔒 Powered by SharpINtell</span>
       <span>•</span>
       <span>Secure payments by Razorpay</span>
       <Link href="/privacy-policy" style={{ color: '#2563eb', textDecoration: 'underline' }}>

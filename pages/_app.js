@@ -10,6 +10,8 @@ import { useRouter } from 'next/router'
 import { useEffect, useState } from 'react'
 import { Capacitor } from '@capacitor/core'
 import { getFCMToken } from '../lib/firebase/messaging'
+import { getSupabase } from '../services/supabase'
+
 
 const OWNER_PREFIX = '/owner'
 const CUSTOMER_PREFIX = '/order'
@@ -75,18 +77,29 @@ async function ensureSubscribed() {
 function GlobalSubscriptionGate({ children }) {
   const router = useRouter()
   const path = router.pathname
-  const isOwner = path.startsWith(OWNER_PREFIX)
+  const isOwner = path.startsWith('/owner')
   const onSubPage = path === '/owner/subscription'
-  const exempt = PUBLIC_EXEMPT.includes(path)
+  const exempt = ['/order/success', '/order/thank-you'].includes(path)
   const { subscription, loading } = useSubscription()
 
   useEffect(() => {
-    if (!router.isReady || loading) return
-    if (isOwner && !onSubPage && !subscription?.is_active) {
-      router.replace(`/owner/settings${window.location.search}`)
+    let mounted = true
+    async function checkAndRedirect() {
+      const supabase = getSupabase()
+      const { data } = await supabase.auth.getSession()
+      const session = data?.session
+      if (!router.isReady || loading) return
+      if (isOwner && !onSubPage && (!subscription?.is_active)) {
+        if (session) { // Only redirect if user IS LOGGED IN
+          router.replace(`/owner/settings${window.location.search}`)
+        }
+      }
     }
+    checkAndRedirect()
+    return () => { mounted = false }
   }, [router, loading, isOwner, onSubPage, subscription])
 
+  // Customer/kitchen path blocking logic (unchanged)
   if (
     (path.startsWith('/order') || path.startsWith('/kitchen')) &&
     !exempt &&
@@ -102,6 +115,8 @@ function GlobalSubscriptionGate({ children }) {
   }
   return <>{children}</>
 }
+
+
 
 function MyApp({ Component, pageProps }) {
   const router = useRouter()
