@@ -33,36 +33,46 @@ function KitchenOrderCard({ order, onStart }) {
   console.log('KitchenOrderCard rendering order:', order)
   console.log('Items derived using toDisplayItems:', items)
 
-  return (
-    <Card padding={16} style={{ border: '1px solid #ddd', borderRadius: 8 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-        <strong>#{order.id.slice(0, 8)}</strong>
-        <span style={{ fontSize: 12, color: '#666' }}>
+   return (
+    <Card padding={12} style={{ 
+      border: '1px solid #ddd', 
+      borderRadius: 8,
+      display: 'flex',
+      flexDirection: 'column',
+      height: '100%'
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, gap: 8 }}>
+        <strong style={{ fontSize: '14px', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          #{order.id.slice(0, 8)}
+        </strong>
+        <span style={{ fontSize: 11, color: '#666', whiteSpace: 'nowrap' }}>
           Table {order.table_number || 'N/A'}
         </span>
       </div>
-      <div style={{ marginBottom: 8, fontSize: 12, color: '#888' }}>
+      
+      <div style={{ marginBottom: 8, fontSize: 11, color: '#888' }}>
         {new Date(order.created_at).toLocaleTimeString()}
       </div>
-      <div style={{ marginBottom: 12 }}>
+      
+      <div style={{ marginBottom: 10, flex: 1, fontSize: '13px' }}>
         {items.length === 0 ? (
           <div style={{ 
-            fontSize: 14, 
+            fontSize: 12, 
             fontStyle: 'italic', 
             color: '#ff6b6b',
-            padding: '8px',
+            padding: '6px',
             backgroundColor: '#ffe0e0',
             borderRadius: '4px',
             border: '1px solid #ffcccc'
           }}>
-            ⚠️ Loading items... (Order: #{order.id.slice(0, 8)})
+            ⚠️ Loading...
           </div>
         ) : (
           items.map((item, i) => (
-            <div key={i} style={{ fontSize: 14, marginBottom: 4 }}>
+            <div key={i} style={{ marginBottom: 3, overflow: 'hidden' }}>
               <strong>{item.quantity || 1}×</strong> {item.name}
               {item.price && (
-                <span style={{ color: '#666', fontSize: 12, marginLeft: 8 }}>
+                <span style={{ color: '#666', fontSize: 11, marginLeft: 4 }}>
                   ₹{item.price}
                 </span>
               )}
@@ -73,23 +83,34 @@ function KitchenOrderCard({ order, onStart }) {
       
       {order.special_instructions && (
         <div style={{ 
-          marginBottom: 12, 
-          padding: 8, 
+          marginBottom: 10, 
+          padding: 6, 
           backgroundColor: '#fff3cd', 
           border: '1px solid #ffeaa7',
           borderRadius: 4,
-          fontSize: 12
+          fontSize: 11
         }}>
-          <strong>Special Instructions:</strong> {order.special_instructions}
+          <strong>Notes:</strong> {order.special_instructions.substring(0, 40)}...
         </div>
       )}
       
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontSize: 12, color: '#666' }}>
-          Total: ₹{order.total_amount || order.subtotal || 0}
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center',
+        gap: 8,
+        marginTop: 'auto'
+      }}>
+        <span style={{ fontSize: 11, color: '#666' }}>
+          ₹{order.total_amount || order.subtotal || 0}
         </span>
-        <Button size="sm" variant="success" onClick={() => onStart(order.id)}>
-          Start Cooking 🍳
+        <Button 
+          size="sm" 
+          variant="success" 
+          onClick={() => onStart(order.id)}
+          style={{ padding: '6px 12px', fontSize: '12px', whiteSpace: 'nowrap' }}
+        >
+          Start 🍳
         </Button>
       </div>
     </Card>
@@ -245,6 +266,38 @@ export default function KitchenPage() {
   const reconnectTimeoutRef = useRef(null)
 
   // Subscription guard
+  
+   useEffect(() => {
+    document.body.classList.add('kitchen-dashboard')
+    return () => {
+      document.body.classList.remove('kitchen-dashboard')
+    }
+  }, [])
+
+// ============ ADD HERE: Fullscreen and keyboard shortcut ============
+  useEffect(() => {
+    // Request fullscreen for TV/monitoring display
+    const requestFullscreen = () => {
+      if (document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch(() => {
+          // Silently fail if fullscreen not available
+        })
+      }
+    }
+
+ const handleKeyPress = (e) => {
+      if (e.key === 'F' || e.key === 'f') {
+        if (document.fullscreenElement) {
+          document.exitFullscreen()
+        } else {
+          requestFullscreen()
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyPress)
+    return () => window.removeEventListener('keydown', handleKeyPress)
+  }, [])
   
   useEffect(() => {
     const audio = new Audio('/notification-sound.mp3')
@@ -471,10 +524,20 @@ export default function KitchenPage() {
   }
 
   return (
-    <div style={{ padding: 16 }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+    // Remove padding entirely, let CSS handle it
+    <div style={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
+      <header style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        padding: '16px 24px',
+        flexShrink: 0,
+        borderBottom: '1px solid #e5e7eb'
+      }}>
         <div>
-          <h1 style={{ margin: 0, marginBottom: 4 }}>Kitchen Dashboard</h1>
+          <h1 style={{ margin: 0, marginBottom: 4, fontSize: '28px', fontWeight: 'bold' }}>
+            Kitchen Dashboard
+          </h1>
           <div style={{ 
             fontSize: 12, 
             color: getStatusColor(),
@@ -483,7 +546,7 @@ export default function KitchenPage() {
             {getStatusText()}
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
           <EnableAlertsButton restaurantId={restaurantId} userEmail={user?.email} />
           <Button onClick={() => window.location.reload()} size="sm">
             🔄 Refresh
@@ -491,33 +554,38 @@ export default function KitchenPage() {
         </div>
       </header>
 
-      {newOrders.length === 0 ? (
-        <Card padding={24} style={{ textAlign: 'center' }}>
-          <div style={{ marginBottom: 8, fontSize: 18 }}>🍽️ No new orders</div>
-          <div style={{ fontSize: 12, color: '#666', marginBottom: 8 }}>
-            Waiting for customers to place orders...
+      <div style={{ flex: 1, overflow: 'auto', padding: '16px 8px' }}>
+        {newOrders.length === 0 ? (
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '300px' }}>
+            <Card padding={24} style={{ textAlign: 'center', maxWidth: '500px' }}>
+              <div style={{ marginBottom: 8, fontSize: 18 }}>🍽️ No new orders</div>
+              <div style={{ fontSize: 12, color: '#666', marginBottom: 8 }}>
+                Waiting for customers to place orders...
+              </div>
+              <div style={{ fontSize: 10, color: '#999' }}>
+                Restaurant: {restaurantId?.slice(0, 8)}...
+              </div>
+            </Card>
           </div>
-          <div style={{ fontSize: 10, color: '#999' }}>
-            Restaurant: {restaurantId?.slice(0, 8)}...
+        ) : (
+          <div>
+            <div style={{ 
+              paddingLeft: '8px',
+              marginBottom: 12, 
+              fontSize: 14, 
+              color: '#333',
+              fontWeight: 'bold'
+            }}>
+              📋 {newOrders.length} New Order{newOrders.length === 1 ? '' : 's'}
+            </div>
+            <div className="kitchen-orders-grid">
+              {newOrders.map((order) => (
+                <KitchenOrderCard key={order.id} order={order} onStart={handleStart} />
+              ))}
+            </div>
           </div>
-        </Card>
-      ) : (
-        <div>
-          <div style={{ 
-            marginBottom: 12, 
-            fontSize: 14, 
-            color: '#333',
-            fontWeight: 'bold'
-          }}>
-            📋 {newOrders.length} New Order{newOrders.length === 1 ? '' : 's'}
-          </div>
-          <div style={{ display: 'grid', gap: 12 }}>
-            {newOrders.map((order) => (
-              <KitchenOrderCard key={order.id} order={order} onStart={handleStart} />
-            ))}
-          </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   )
 }

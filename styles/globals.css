@@ -6,7 +6,8 @@ html, body {
   background: var(--bg);
   color: var(--text);
   font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-  max-width: 100%;
+  width: 100vw !important;
+  max-width: 100vw !important;
   overflow-x: hidden;
 }
 *, *::before, *::after { box-sizing: border-box; }
@@ -263,3 +264,69 @@ img, svg, video { max-width: 100%; height: auto; }
   .counter-category-title { font-size: 14px; }
   .counter-cart-info { font-size: 12px; }
 }
+
+/* Kitchen Orders Grid - MOBILE FIRST */
+.kitchen-orders-grid {
+  display: grid;
+  gap: 12px;
+  padding: 0;
+  margin: 0;
+  width: 100%;
+  grid-template-columns: 1fr;  /* Mobile: single column */
+}
+
+/* Small tablets: 2 columns */
+@media (min-width: 600px) {
+  .kitchen-orders-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Tablets: 3 columns */
+@media (min-width: 900px) {
+  .kitchen-orders-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* Laptops: 4 columns */
+@media (min-width: 1200px) {
+  .kitchen-orders-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+/* Large monitors: 5 columns */
+@media (min-width: 1600px) {
+  .kitchen-orders-grid {
+    grid-template-columns: repeat(5, 1fr);
+    gap: 16px;
+  }
+}
+
+/* TV/XL screens: 6 columns with max size */
+@media (min-width: 2000px) {
+  .kitchen-orders-grid {
+    grid-template-columns: repeat(6, 1fr);
+    gap: 16px;
+  }
+}
+
+/* Prevent cards from growing too wide */
+.kitchen-orders-grid > * {
+  max-width: 100%;
+  min-width: 0;
+}
+
+/* Hide sidebar on kitchen dashboard page */
+body.kitchen-dashboard .sidebar {
+  display: none !important;
+}
+
+/* Give main content full width on kitchen dashboard */
+body.kitchen-dashboard .main-content {
+  width: 100vw !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
