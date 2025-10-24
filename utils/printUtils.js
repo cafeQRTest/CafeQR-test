@@ -1,4 +1,4 @@
-import { jsPDF } from 'jspdf';
+//utils/printUtils.js 
 
 function toDisplayItems(order) {
   if (Array.isArray(order.items) && order.items.length) return order.items;
@@ -25,22 +25,19 @@ function getOrderTypeLabel(order) {
   return '';
 }
 
-// ============================================
-// TEXT FORMAT (PROVEN WORKING METHOD)
-// ============================================
 export async function downloadTextAndShare(order, bill, restaurantProfile) {
   try {
     const items = toDisplayItems(order);
     
-    // Get restaurant details (with fallbacks)
+    // Get restaurant details
     const restaurantName = (
       restaurantProfile?.restaurant_name || 
       restaurantProfile?.legal_name ||
       order?.restaurant_name || 
-      'Cafe\'s Menu'
+      'RESTAURANT'
     ).toUpperCase();
     
-    // Build address from components
+    // Build address - wrapped for 50mm width
     const addressParts = [
       restaurantProfile?.profile_address_street1,
       restaurantProfile?.profile_address_street2,
@@ -56,16 +53,17 @@ export async function downloadTextAndShare(order, bill, restaurantProfile) {
     const phone = restaurantProfile?.phone || order?.restaurant_phone || '';
     
     // Bill details
-    const billNo = bill?.bill_number || '-';
-    const serialNo = bill?.id?.slice(0, 8)?.toUpperCase() || '-';
     const orderId = order?.id?.slice(0, 8)?.toUpperCase() || 'N/A';
     const orderType = getOrderTypeLabel(order);
     
     // Date & Time
-    const dt = new Date(order.created_at).toLocaleString('en-IN', {
+    const orderDate = new Date(order.created_at);
+    const dateStr = orderDate.toLocaleDateString('en-IN', {
       day: '2-digit',
       month: '2-digit',
-      year: 'numeric',
+      year: 'numeric'
+    });
+    const timeStr = orderDate.toLocaleTimeString('en-IN', {
       hour: '2-digit',
       minute: '2-digit',
       hour12: true
@@ -95,53 +93,62 @@ export async function downloadTextAndShare(order, bill, restaurantProfile) {
       0
     );
 
-    // Helper to center in 42-char width (58mm thermal)
-    const center = (str, w = 42) => {
-      const p = Math.max(0, Math.floor((w - str.length) / 2));
-      return ' '.repeat(p) + str;
+    // Build text for 50mm (33 chars max)
+    const W = 33; // Character width for 50mm thermal printer
+    
+    const center = (str) => {
+      const padding = Math.max(0, Math.floor((W - str.length) / 2));
+      return ' '.repeat(padding) + str;
+    };
+    
+    const leftAlign = (str) => str;
+    
+    const rightAlign = (str) => {
+      const padding = Math.max(0, W - str.length);
+      return ' '.repeat(padding) + str;
     };
 
-    // Build lines array
+    // Build lines
     const lines = [
+      // === HEADER (CENTER ALIGNED) ===
       center(restaurantName),
-      center(address),
+      ...wrapText(address, W).map(line => center(line)),
       gstin ? center(`GSTIN: ${gstin}`) : null,
-      phone ? center(`Contact No.: ${phone}`) : null,
+      phone ? center(`Ph: ${phone}`) : null,
       '',
-      center('----------------------------------------'),
-      center(`Serial No: ${serialNo}   ${dt.split(',')[0]}`),
-      center(`Bill No: ${billNo}    ${dt.split(',')[1].trim()}`),
-      center(`Order: #${orderId}`),
-      center(`Order Type: ${orderType}`),
-      center('----------------------------------------'),
-      center('ITEM           QTY   RATE   TOTAL'),
-      ...(items.length
-        ? items.flatMap(it => {
-            const name = (it.name || '').substring(0, 12).padEnd(12);
-            const qty = String(it.quantity || 1).padStart(3);
-            const rate = Number(it.price || 0).toFixed(2).padStart(6);
-            const amt = (Number(it.price || 0) * Number(it.quantity || 1))
-              .toFixed(2)
-              .padStart(7);
-            return center(`${name}${qty}${rate}${amt}`);
-          })
-        : [center('No items found')]),
-      center('----------------------------------------'),
-      center(`Net Amt: ${netAmount.toFixed(2)}`),
-      ...(taxAmount > 0 ? [center(`Tax: ${taxAmount.toFixed(2)}`)] : []),
-      center(`Grand Total: ${grandTotal.toFixed(2)}`),
-      center('----------------------------------------'),
+      center('=' .repeat(W)),
+      
+      // === ORDER INFO (LEFT + RIGHT ALIGNED) ===
+      buildLRLine(leftAlign(`Order: #${orderId}`), rightAlign(dateStr), W),
+      buildLRLine(leftAlign(`Type: ${orderType}`), rightAlign(timeStr), W),
+      
+      center('-'.repeat(W)),
+      
+      // === ITEMS HEADER (LEFT ALIGNED) ===
+      buildItemHeader(W),
+      
+      // === ITEMS (LEFT ALIGNED) ===
+      ...items.map(it => buildItemRow(it, W)),
+      
+      center('-'.repeat(W)),
+      
+      // === TOTALS (LEFT ALIGNED) ===
+      buildLRLine(leftAlign('Net Amt:'), rightAlign(`₹${netAmount.toFixed(2)}`), W),
+      ...(taxAmount > 0 ? [buildLRLine(leftAlign('Tax:'), rightAlign(`₹${taxAmount.toFixed(2)}`), W)] : []),
+      buildLRLine(leftAlign('Total:'), rightAlign(`₹${grandTotal.toFixed(2)}`), W),
+      
+      center('='.repeat(W)),
+      
+      // === FOOTER (CENTER ALIGNED) ===
       '',
-      center('PLEASE CONSUME ALL FOOD WITHIN'),
-      center('1 HOUR FROM COOKING TO KEEP'),
-      center('IT SAFE FROM BACTERIA.'),
-      center('"YOUR HEALTH IS OUR PRIORITY"'),
-      center('** THANK YOU! VISIT AGAIN !! **'),
+      center('THANK YOU!'),
+      center('VISIT AGAIN'),
+      '',
     ].filter(Boolean);
 
     const text = lines.join('\n');
 
-    // Share via Web Share API (plain text)
+    // Share via Web Share API
     if (navigator.canShare && navigator.canShare({ text })) {
       await navigator.share({
         title: `BILL-${orderId}`,
@@ -168,9 +175,48 @@ export async function downloadTextAndShare(order, bill, restaurantProfile) {
   }
 }
 
-// ============================================
-// PDF FORMAT (FALLBACK ONLY)
-// ============================================
+// Helper: Wrap text for 50mm width
+function wrapText(text, width) {
+  if (!text) return [];
+  const lines = [];
+  let currentLine = '';
+  
+  text.split(' ').forEach(word => {
+    if ((currentLine + word).length <= width) {
+      currentLine += (currentLine ? ' ' : '') + word;
+    } else {
+      if (currentLine) lines.push(currentLine);
+      currentLine = word;
+    }
+  });
+  
+  if (currentLine) lines.push(currentLine);
+  return lines;
+}
+
+// Helper: Build left-right aligned line
+function buildLRLine(left, right, width) {
+  const gap = width - left.length - right.length;
+  return left + ' '.repeat(Math.max(1, gap)) + right;
+}
+
+// Helper: Item header
+function buildItemHeader(width) {
+  return 'Item      Qty    Rate   Total';
+}
+
+// Helper: Build item row (LEFT ALIGNED)
+function buildItemRow(item, width) {
+  const name = (item.name || '').substring(0, 10).padEnd(10);
+  const qty = String(item.quantity || 1).padStart(3);
+  const rate = Number(item.price || 0).toFixed(2).padStart(5);
+  const total = (Number(item.price || 0) * Number(item.quantity || 1))
+    .toFixed(2)
+    .padStart(6);
+  
+  return `${name}${qty}${rate}${total}`;
+}
+
 export async function downloadPdfAndShare(order, bill, restaurantProfile) {
   return downloadTextAndShare(order, bill, restaurantProfile);
 }
