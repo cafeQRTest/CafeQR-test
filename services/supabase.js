@@ -1,82 +1,82 @@
-// In: services/supabase.js
+// services/supabase.js
 
-import { createClient } from '@supabase/supabase-js';
-import { Capacitor } from '@capacitor/core';
-import { Preferences } from '@capacitor/preferences';
+import { createClient } from '@supabase/supabase-js'
+import { Capacitor } from '@capacitor/core'
+import { Preferences } from '@capacitor/preferences'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error("Supabase URL and Anon Key must be defined in .env.local");
+  throw new Error("Supabase URL and Anon Key must be defined in .env.local")
 }
 
-/**
- * A "dummy" storage adapter for the server-side rendering (SSR) context.
- * It has the same interface as localStorage but does nothing, preventing
- * "localStorage is not defined" errors during the Next.js build process.
- */
 const ServerStorageAdapter = {
   getItem: () => null,
   setItem: () => {},
   removeItem: () => {},
-};
+}
 
-/**
- * A platform-aware storage adapter.
- * - Uses Capacitor Preferences for native mobile.
- * - Uses localStorage for web browsers.
- * - Is assigned the dummy adapter for server-side execution.
- */
 const storageAdapter = {
   getItem: async (key) => {
     if (Capacitor.isNativePlatform()) {
-      const { value } = await Preferences.get({ key });
-      return value;
+      const { value } = await Preferences.get({ key })
+      return value
     }
-    // Check if running in a browser before using localStorage
     if (typeof window !== 'undefined') {
-      return localStorage.getItem(key);
+      return localStorage.getItem(key)
     }
-    return null;
+    return null
   },
   setItem: async (key, value) => {
     if (Capacitor.isNativePlatform()) {
-      await Preferences.set({ key, value });
+      await Preferences.set({ key, value })
     } else if (typeof window !== 'undefined') {
-      localStorage.setItem(key, value);
+      localStorage.setItem(key, value)
     }
   },
   removeItem: async (key) => {
     if (Capacitor.isNativePlatform()) {
-      await Preferences.remove({ key });
+      await Preferences.remove({ key })
     } else if (typeof window !== 'undefined') {
-      localStorage.removeItem(key);
+      localStorage.removeItem(key)
     }
   },
-};
+}
 
-/**
- * @type {import('@supabase/supabase-js').SupabaseClient}
- */
-let supabaseInstance;
+let supabaseInstance
 
-/**
- * Returns a singleton instance of the Supabase client, initialized with the
- * correct storage adapter depending on the execution environment.
- */
 export function getSupabase() {
   if (!supabaseInstance) {
     supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
-        // Use the platform-aware adapter for client-side, and the dummy
-        // adapter for server-side.
         storage: typeof window === 'undefined' ? ServerStorageAdapter : storageAdapter,
         autoRefreshToken: true,
         persistSession: true,
         detectSessionInUrl: false,
       },
-    });
+    })
   }
-  return supabaseInstance;
+  return supabaseInstance
+}
+
+/**
+ * EXPORTED FUNCTION: Force restore session from persistent storage on cold start.
+ * Works for both web (localStorage) and native (Capacitor Preferences).
+ */
+export async function forceSupabaseSessionRestore() {
+  if (typeof window === 'undefined') return
+
+  const supabase = getSupabase()
+  try {
+    // This forces Supabase to call getSession() from the storage adapter
+    const { data: { session }, error } = await supabase.auth.getSession()
+    if (!error && session) {
+      console.log('[Auth] Session restored from storage')
+      return session
+    }
+  } catch (err) {
+    console.error('[Auth] Failed to restore session:', err)
+  }
+  return null
 }

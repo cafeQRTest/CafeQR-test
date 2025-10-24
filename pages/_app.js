@@ -10,8 +10,7 @@ import { useRouter } from 'next/router'
 import { useEffect, useState } from 'react'
 import { Capacitor } from '@capacitor/core'
 import { getFCMToken } from '../lib/firebase/messaging'
-import { getSupabase } from '../services/supabase'
-
+import { getSupabase, restoreSessionFromStorage } from '../services/supabase'
 
 const OWNER_PREFIX = '/owner'
 const CUSTOMER_PREFIX = '/order'
@@ -90,7 +89,7 @@ function GlobalSubscriptionGate({ children }) {
       const session = data?.session
       if (!router.isReady || loading) return
       if (isOwner && !onSubPage && (!subscription?.is_active)) {
-        if (session) { // Only redirect if user IS LOGGED IN
+        if (session) {
           router.replace(`/owner/settings${window.location.search}`)
         }
       }
@@ -99,7 +98,6 @@ function GlobalSubscriptionGate({ children }) {
     return () => { mounted = false }
   }, [router, loading, isOwner, onSubPage, subscription])
 
-  // Customer/kitchen path blocking logic (unchanged)
   if (
     (path.startsWith('/order') || path.startsWith('/kitchen')) &&
     !exempt &&
@@ -116,8 +114,6 @@ function GlobalSubscriptionGate({ children }) {
   return <>{children}</>
 }
 
-
-
 function MyApp({ Component, pageProps }) {
   const router = useRouter()
   const [ready, setReady] = useState(false)
@@ -128,9 +124,24 @@ function MyApp({ Component, pageProps }) {
     setMounted(true)
   }, [])
 
+  // CRITICAL: Restore session on app cold-start
+  useEffect(() => {
+    if (!mounted) return
+    let isMounted = true
+    
+    const initSession = async () => {
+      // Force restore from storage immediately on mount
+      await restoreSessionFromStorage()
+      if (isMounted) setReady(true)
+    }
+    
+    initSession()
+    return () => { isMounted = false }
+  }, [mounted])
+
   // Initialize FCM
   useEffect(() => {
-    if (!router.isReady || ready) return
+    if (!router.isReady || !ready) return
     let isMounted = true
     const init = async () => {
       if (Capacitor.isNativePlatform()) {
@@ -162,7 +173,6 @@ function MyApp({ Component, pageProps }) {
     }
   }, [router, ready])
 
-  // Hydration-safe: don't render layout until mounted + router ready
   if (!mounted || !router.isReady) {
     return <div>Loading...</div>
   }

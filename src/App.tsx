@@ -45,20 +45,20 @@ const App: React.FC = () => {
 
     const initializeApp = async () => {
       try {
-        // 1. First restore any saved session
-        await restoreSession();
-        console.log('Session restoration attempted');
+        // 1. First restore any saved session from Preferences
+        const restored = await restoreSession();
+        console.log('[App] Session restoration:', restored ? 'success' : 'none');
 
         // 2. Set up auth state listener to save/clear sessions
         const { data: listener } = supabase.auth.onAuthStateChange(
           async (event, session) => {
-            console.log('Auth state changed:', event);
+            console.log('[App] Auth state changed:', event);
             if (session) {
               await saveSession();
-              console.log('Session saved to storage');
+              console.log('[App] Session saved to storage');
             } else if (event === 'SIGNED_OUT') {
               await clearSession();
-              console.log('Session cleared from storage');
+              console.log('[App] Session cleared from storage');
             }
           }
         );
@@ -71,40 +71,35 @@ const App: React.FC = () => {
 
         // Cleanup function
         return () => {
-          listener.subscription.unsubscribe();
+          listener?.subscription?.unsubscribe();
         };
       } catch (error) {
-        console.error('App initialization failed:', error);
+        console.error('[App] Initialization failed:', error);
         if (mounted) setAppReady(true); // Still allow app to load
       }
     };
 
     const initPush = async () => {
       try {
-        // Create Android channel (safe to call repeatedly)
         await PushNotifications.createChannel({
           id: 'orders',
           name: 'Order Alerts',
-          importance: 5,       // High => sound + heads-up
-          sound: 'beep.wav',    // Ensure 'beep.wav' exists in Android res/raw
+          importance: 5,
+          sound: 'beep.wav',
           vibration: true,
         });
 
-        // 1) Add listeners FIRST so native callbacks are not missed
         PushNotifications.addListener('registration', (token) => {
           if (!mounted) return;
-          console.log('FCM Token:', token.value);
-          // TODO: Send token.value to backend if needed
+          console.log('[Push] FCM Token:', token.value);
         });
 
         PushNotifications.addListener('registrationError', (err) => {
-          console.log('FCM registration error:', JSON.stringify(err));
+          console.log('[Push] FCM registration error:', JSON.stringify(err));
         });
 
-        // Foreground message handler - show explicit notification
         PushNotifications.addListener('pushNotificationReceived', (notif) => {
-          console.log('Push received (foreground):', notif);
-          // Show a local notification to force heads-up display
+          console.log('[Push] Push received (foreground):', notif);
           new Notification(notif.title, {
             body: notif.body,
             icon: notif.data?.icon || '/favicon.ico',
@@ -112,18 +107,17 @@ const App: React.FC = () => {
         });
 
         PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
-          console.log('Notification tap (background):', JSON.stringify(action.notification));
+          console.log('[Push] Notification tap (background):', JSON.stringify(action.notification));
         });
 
-        // 2) Ask permission and register
         const perm = await PushNotifications.requestPermissions();
         if (perm.receive === 'granted') {
           await PushNotifications.register();
         } else {
-          console.log('Push permission not granted');
+          console.log('[Push] Permission not granted');
         }
       } catch (e) {
-        console.log('Push init failed:', String(e));
+        console.log('[Push] Init failed:', String(e));
       }
     };
 
