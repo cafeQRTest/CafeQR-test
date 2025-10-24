@@ -1,5 +1,3 @@
-//components/KotPrint.js
-
 import React, { useState, useEffect } from 'react';
 import { downloadTextAndShare } from '../utils/printUtils';
 import { getSupabase } from '../services/supabase';
@@ -31,29 +29,38 @@ export default function KotPrint({ order, onClose, onPrint }) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [bill, setBill] = useState(null);
   const [restaurantProfile, setRestaurantProfile] = useState(null);
+  const [loadingData, setLoadingData] = useState(true);
 
   // Fetch bill and restaurant profile data
   useEffect(() => {
     async function fetchData() {
-      const supabase = getSupabase();
-      
-      // Fetch bill
-      const { data: billData } = await supabase
-        .from('bills')
-        .select('*')
-        .eq('order_id', order.id)
-        .single();
-      
-      if (billData) setBill(billData);
+      try {
+        const supabase = getSupabase();
+        
+        // Fetch bill
+        const { data: billData, error: billError } = await supabase
+          .from('bills')
+          .select('*')
+          .eq('order_id', order.id)
+          .single();
+        
+        if (billData) setBill(billData);
+        if (billError) console.warn('Bill fetch error:', billError);
 
-      // Fetch restaurant PROFILE (not restaurants table!)
-      const { data: profileData } = await supabase
-        .from('restaurant_profiles')
-        .select('*')
-        .eq('restaurant_id', order.restaurant_id)
-        .single();
-      
-      if (profileData) setRestaurantProfile(profileData);
+        // Fetch restaurant profile
+        const { data: profileData, error: profileError } = await supabase
+          .from('restaurant_profiles')
+          .select('*')
+          .eq('restaurant_id', order.restaurant_id)
+          .single();
+        
+        if (profileData) setRestaurantProfile(profileData);
+        if (profileError) console.warn('Profile fetch error:', profileError);
+      } catch (err) {
+        console.error('Error fetching data:', err);
+      } finally {
+        setLoadingData(false);
+      }
     }
 
     if (order) fetchData();
@@ -63,17 +70,22 @@ export default function KotPrint({ order, onClose, onPrint }) {
     setIsProcessing(true);
     setStatus('Generating bill for printing...');
     
-    const result = await downloadTextAndShare(order, bill, restaurantProfile);
-    
-    if (result.success) {
-      if (result.method === 'share') {
-        setStatus('Shared successfully! Choose Thermer or another printing app.');
+    try {
+      const result = await downloadTextAndShare(order, bill, restaurantProfile);
+      
+      if (result.success) {
+        if (result.method === 'share') {
+          setStatus('Shared successfully! Choose Thermer or another printing app.');
+        } else {
+          setStatus('File downloaded! Use Thermer or another app to print.');
+        }
+        if (onPrint) onPrint();
       } else {
-        setStatus('File downloaded! Use Thermer or another app to print.');
+        setStatus(`Error: ${result.error}`);
       }
-      if (onPrint) onPrint();
-    } else {
-      setStatus(`Error: ${result.error}`);
+    } catch (err) {
+      setStatus(`Error: ${err.message}`);
+      console.error(err);
     }
     
     setIsProcessing(false);
@@ -87,9 +99,28 @@ export default function KotPrint({ order, onClose, onPrint }) {
     });
 
   const items = toDisplayItems(order);
-  const grandTotal = Number(bill?.grand_total || bill?.total_inc_tax || order?.total_inc_tax || order?.total_amount || order?.total || 0);
-  const netAmount = Number(bill?.subtotal || order?.subtotal || order?.total_amount || order?.total || 0);
-  const taxAmount = Number(bill?.tax_total || bill?.total_tax || order?.tax_amount || order?.total_tax || 0);
+  const grandTotal = Number(
+    bill?.grand_total || 
+    bill?.total_inc_tax || 
+    order?.total_inc_tax || 
+    order?.total_amount || 
+    order?.total || 
+    0
+  );
+  const netAmount = Number(
+    bill?.subtotal || 
+    order?.subtotal || 
+    order?.total_amount || 
+    order?.total || 
+    0
+  );
+  const taxAmount = Number(
+    bill?.tax_total || 
+    bill?.total_tax || 
+    order?.tax_amount || 
+    order?.total_tax || 
+    0
+  );
 
   return (
     <>
@@ -101,85 +132,93 @@ export default function KotPrint({ order, onClose, onPrint }) {
               <button className="close-btn" onClick={onClose}>×</button>
             </div>
 
-            <div className="kot-ticket" id="kot-printable">
-              <div className="kot-info">
-                <div className="kot-row">
-                  <span className="label">Order Type:</span>
- 		  <span>{getOrderTypeLabel(order)}</span>
+            {loadingData ? (
+              <div className="print-status">
+                Loading bill details...
+              </div>
+            ) : (
+              <>
+                <div className="kot-ticket" id="kot-printable">
+                  <div className="kot-info">
+                    <div className="kot-row">
+                      <span className="label">Order Type:</span>
+                      <span>{getOrderTypeLabel(order)}</span>
+                    </div>
+                    <div className="kot-row">
+                      <span className="label">Order ID:</span>
+                      <span>#{order.id?.slice(0, 8)?.toUpperCase()}</span>
+                    </div>
+                    <div className="kot-row">
+                      <span className="label">Time:</span>
+                      <span>{formatTime(order.created_at)}</span>
+                    </div>
+                    <div className="kot-row">
+                      <span className="label">Net Amount:</span>
+                      <span>₹{netAmount.toFixed(2)}</span>
+                    </div>
+                    {taxAmount > 0 && (
+                      <div className="kot-row">
+                        <span className="label">Tax:</span>
+                        <span>₹{taxAmount.toFixed(2)}</span>
+                      </div>
+                    )}
+                    <div className="kot-row">
+                      <span className="label"><strong>Grand Total:</strong></span>
+                      <span><strong>₹{grandTotal.toFixed(2)}</strong></span>
+                    </div>
+                  </div>
+
+                  <div className="kot-divider">----------------------------</div>
+
+                  <div className="kot-items">
+                    {items.length === 0 ? (
+                      <div style={{ fontStyle: 'italic', color: '#888' }}>No items found</div>
+                    ) : (
+                      items.map((item, idx) => (
+                        <div key={idx} className="kot-item">
+                          <div className="item-qty">{item.quantity}x</div>
+                          <div className="item-name">{item.name}</div>
+                          <div className="item-price">₹{Number(item.price || 0).toFixed(2)}</div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  <div className="kot-divider">----------------------------</div>
+
+                  {order.special_instructions && (
+                    <div className="kot-notes">
+                      <div className="label">Special Instructions:</div>
+                      <div className="notes-text">{order.special_instructions}</div>
+                    </div>
+                  )}
                 </div>
-                <div className="kot-row">
-                  <span className="label">Order ID:</span>
-                  <span>#{order.id?.slice(0, 8)?.toUpperCase()}</span>
-                </div>
-                <div className="kot-row">
-                  <span className="label">Time:</span>
-                  <span>{formatTime(order.created_at)}</span>
-                </div>
-                <div className="kot-row">
-                  <span className="label">Net Amount:</span>
-                  <span>₹{netAmount.toFixed(2)}</span>
-                </div>
-                {taxAmount > 0 && (
-                  <div className="kot-row">
-                    <span className="label">Tax:</span>
-                    <span>₹{taxAmount.toFixed(2)}</span>
+
+                {/* Status Display */}
+                {status && (
+                  <div className="print-status">
+                    {status}
                   </div>
                 )}
-                <div className="kot-row">
-                  <span className="label"><strong>Grand Total:</strong></span>
-                  <span><strong>₹{grandTotal.toFixed(2)}</strong></span>
+
+                {/* Action Button */}
+                <div className="kot-actions">
+                  <button 
+                    className="print-btn text-btn" 
+                    onClick={handleTextShare}
+                    disabled={isProcessing}
+                  >
+                    📄 Share & Print Bill
+                  </button>
                 </div>
-              </div>
 
-              <div className="kot-divider">----------------------------</div>
-
-              <div className="kot-items">
-                {items.length === 0 ? (
-                  <div style={{ fontStyle: 'italic', color: '#888' }}>No items found</div>
-                ) : (
-                  items.map((item, idx) => (
-                    <div key={idx} className="kot-item">
-                      <div className="item-qty">{item.quantity}x</div>
-                      <div className="item-name">{item.name}</div>
-                      <div className="item-price">₹{Number(item.price || 0).toFixed(2)}</div>
-                    </div>
-                  ))
-                )}
-              </div>
-
-              <div className="kot-divider">----------------------------</div>
-
-              {order.special_instructions && (
-                <div className="kot-notes">
-                  <div className="label">Special Instructions:</div>
-                  <div className="notes-text">{order.special_instructions}</div>
+                <div className="help-text">
+                  <small>
+                    💡 After sharing, choose <strong>Thermer</strong> or another printing app to print to your Bluetooth thermal printer.
+                  </small>
                 </div>
-              )}
-            </div>
-
-            {/* Status Display */}
-            {status && (
-              <div className="print-status">
-                {status}
-              </div>
+              </>
             )}
-
-            {/* Action Button */}
-            <div className="kot-actions">
-              <button 
-                className="print-btn text-btn" 
-                onClick={handleTextShare}
-                disabled={isProcessing}
-              >
-                📄 Share & Print Bill
-              </button>
-            </div>
-
-            <div className="help-text">
-              <small>
-                💡 After sharing, choose <strong>Thermer</strong> or another printing app to print to your Bluetooth thermal printer.
-              </small>
-            </div>
           </div>
         </div>
       </div>
@@ -208,14 +247,13 @@ export default function KotPrint({ order, onClose, onPrint }) {
         }
         .kot-ticket {
           font-family: 'Courier New', monospace;
-          font-size: 12px; line-height: 1.4; color: #000;
+          font-size: 11px; line-height: 1.3; color: #000;
           background: #fff; padding: 12px; border: 1px dashed #333;
-          margin-bottom: 20px;
-	  width: auto;
+          margin-bottom: 20px; width: auto;
         }
         .kot-info { margin-bottom: 12px; }
         .kot-row { display: flex; justify-content: space-between; margin-bottom: 6px; }
-        .label { font-weight: bold; }
+        .label { font-weight: bold; min-width: 100px; }
         .kot-divider { text-align: center; margin: 8px 0; font-weight: bold; }
         .kot-items { margin: 12px 0; }
         .kot-item { display: flex; margin-bottom: 6px; gap: 8px; justify-content: space-between; }
