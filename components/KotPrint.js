@@ -51,15 +51,29 @@ export default function KotPrint({ order, onClose, onPrint }) {
           .single();
         
         if (profileData) setRestaurantProfile(profileData);
-      } catch (err) {
-        console.error('Error fetching data:', err);
-      } finally {
-        setLoadingData(false);
-      }
-    }
+      if (profileError) console.warn('Profile fetch error:', profileError);
 
-    if (order) fetchData();
-  }, [order]);
+      // ✅ ADD THIS: Fetch restaurant name from restaurants table
+      const { data: restaurantData, error: restaurantError } = await supabase
+        .from('restaurants')
+        .select('name')
+        .eq('id', order.restaurant_id)
+        .single();
+      
+      if (restaurantData && !restaurantError) {
+        // Merge restaurant name into order object
+        order.restaurant_name = restaurantData.name;
+      }
+
+    } catch (err) {
+      console.error('Error fetching data:', err);
+    } finally {
+      setLoadingData(false);
+    }
+  }
+
+  if (order) fetchData();
+}, [order]);
 
   const handleTextShare = async () => {
     setIsProcessing(true);

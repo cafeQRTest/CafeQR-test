@@ -29,7 +29,7 @@ export async function downloadTextAndShare(order, bill, restaurantProfile) {
     
     // Get restaurant details
     const restaurantName = (
-      restaurantProfile?.restaurant_name || 
+      order?.restaurant_name || 
       restaurantProfile?.legal_name ||
       order?.restaurant_name || 
       'RESTAURANT'
