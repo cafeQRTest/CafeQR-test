@@ -88,11 +88,10 @@ export async function downloadTextAndShare(order, bill, restaurantProfile) {
     
     // Build address - wrapped for 32 chars
     const addressParts = [
-      restaurantProfile?.profile_address_street1,
-      restaurantProfile?.profile_address_street2,
-      restaurantProfile?.profile_address_city,
-      restaurantProfile?.profile_address_state,
-      restaurantProfile?.profile_address_pincode
+      restaurantProfile?.shipping_address_line1,    // ✅ Exists in schema
+  restaurantProfile?.shipping_city,              // ✅ Exists in schema
+  restaurantProfile?.shipping_state,             // ✅ Exists in schema
+  restaurantProfile?.shipping_pincode  
     ].filter(Boolean);
     const address = addressParts.length > 0 
       ? addressParts.join(', ') 
