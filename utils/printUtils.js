@@ -162,7 +162,7 @@ export async function downloadTextAndShare(order, bill, restaurantProfile) {
     lines.push('');
     
     // === DATE & TIME (RIGHT ALIGNED) ===
-    lines.push(rightAlign(`${dateStr} ${timeStr}`, W));
+    lines.push(`${dateStr} ${timeStr}`);
     lines.push(`Order: #${orderId}`);
     lines.push(`Order Type: ${orderType}`);
     
@@ -170,7 +170,7 @@ export async function downloadTextAndShare(order, bill, restaurantProfile) {
     lines.push('');
     
     // === ITEMS HEADER ===
-    lines.push('ITEM        QTY RATE TOTAL');
+    lines.push('ITEM         QTY  RATE  TOTAL');
     
     // === ITEMS (with word-wrapping for names) ===
     items.forEach(item => {
@@ -206,11 +206,16 @@ export async function downloadTextAndShare(order, bill, restaurantProfile) {
     lines.push('');
     
     // === TOTALS (LEFT ALIGNED) ===
-    lines.push(`Net Amt: ${netAmount.toFixed(2)}`);
-    if (taxAmount > 0) {
+        if (taxAmount > 0) {
+      // Net Amt = Grand Total - Tax
+      const netAmt = grandTotal - taxAmount;
+      lines.push(`Net Amt: ${netAmt.toFixed(2)}`);
       lines.push(`Tax: ${taxAmount.toFixed(2)}`);
+      lines.push(`Grand Total: ${grandTotal.toFixed(2)}`);
+    } else {
+      // If no tax, only show Grand Total
+      lines.push(`Total: ${grandTotal.toFixed(2)}`);
     }
-    lines.push(`Grand Total: ${grandTotal.toFixed(2)}`);
     
     lines.push(dashes());
     lines.push('');
