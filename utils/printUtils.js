@@ -23,15 +23,68 @@ function getOrderTypeLabel(order) {
   return '';
 }
 
+// Helper: Wrap text for 32 chars width
+function wrapText(text, width) {
+  if (!text) return [];
+  const lines = [];
+  let currentLine = '';
+  
+  text.split(' ').forEach(word => {
+    const testLine = currentLine ? `${currentLine} ${word}` : word;
+    if (testLine.length <= width) {
+      currentLine = testLine;
+    } else {
+      if (currentLine) lines.push(currentLine);
+      // If single word is too long, truncate it
+      currentLine = word.length > width ? word.substring(0, width) : word;
+    }
+  });
+  
+  if (currentLine) lines.push(currentLine);
+  return lines;
+}
+
+// Helper: Right-align text
+function rightAlign(str, width) {
+  if (str.length > width) str = str.substring(0, width);
+  const padding = Math.max(0, width - str.length);
+  return ' '.repeat(padding) + str;
+}
+
+// Helper: Center text
+function center(str, width) {
+  if (str.length > width) str = str.substring(0, width);
+  const padding = Math.max(0, Math.floor((width - str.length) / 2));
+  return ' '.repeat(padding) + str;
+}
+
+// Helper: Build item row with word-wrapped name
+function buildItemRow(item, width) {
+  // Format: NAME (wrapped to 14 chars) | QTY | RATE | TOTAL
+  // For now, first line only - we'll handle multi-line items separately
+  
+  const name = (item.name || '').substring(0, 14).padEnd(14);
+  const qty = `${item.quantity}`.padStart(2);
+  
+  const rateNum = Number(item.price || 0);
+  const rate = rateNum % 1 === 0 
+    ? rateNum.toFixed(0).padStart(4)
+    : rateNum.toFixed(2).padStart(4);
+  
+  const totalNum = rateNum * Number(item.quantity || 1);
+  const total = totalNum % 1 === 0
+    ? totalNum.toFixed(0).padStart(5)
+    : totalNum.toFixed(2).padStart(5);
+  
+  return `${name}${qty}  ${rate}  ${total}`;
+}
+
 export async function downloadTextAndShare(order, bill, restaurantProfile) {
   try {
     const items = toDisplayItems(order);
     
-    // Get restaurant details
-    const restaurantName = (
-  order?.restaurant_name ||           // ✅ PRIMARY: Display name from restaurants.name
-  'RESTAURANT'                        // Fallback only if not available
-).toUpperCase();
+    // Get restaurant details - ALWAYS use display name
+    const restaurantName = (order?.restaurant_name || 'RESTAURANT').toUpperCase();
     
     // Build address - wrapped for 32 chars
     const addressParts = [
@@ -45,8 +98,6 @@ export async function downloadTextAndShare(order, bill, restaurantProfile) {
       ? addressParts.join(', ') 
       : (order?.restaurant_address || '');
     
-    const gstin = restaurantProfile?.legal_gst || restaurantProfile?.gstin || '';
-    const fssai = restaurantProfile?.fssai || '';
     const phone = restaurantProfile?.phone || order?.restaurant_phone || '';
     
     // Bill details
@@ -90,54 +141,84 @@ export async function downloadTextAndShare(order, bill, restaurantProfile) {
       0
     );
 
-    // ======= ADJUSTED WIDTH TO 32 CHARS =======
+    // ======= WIDTH = 32 CHARS =======
     const W = 32;
-    
-    const center = (str) => {
-      if (str.length > W) str = str.substring(0, W);
-      const padding = Math.max(0, Math.floor((W - str.length) / 2));
-      return ' '.repeat(padding) + str;
-    };
-    
     const dashes = () => '-'.repeat(W);
 
     // Build lines
-    const lines = [
-      // === HEADER (CENTER ALIGNED) ===
-      center(restaurantName),
-      ...wrapText(address, W).map(line => center(line)),
-      phone ? center(`Contact No.: ${phone}`) : null,
-      '',
-      center(dashes()),
-      '',
+    const lines = [];
+    
+    // === HEADER (CENTER ALIGNED) ===
+    lines.push(center(restaurantName, W));
+    
+    // Address (wrapped & centered)
+    wrapText(address, W).forEach(line => {
+      lines.push(center(line, W));
+    });
+    
+    if (phone) lines.push(center(`Contact No.: ${phone}`, W));
+    
+    lines.push('');
+    lines.push(dashes());
+    lines.push('');
+    
+    // === DATE & TIME (RIGHT ALIGNED) ===
+    lines.push(rightAlign(`${dateStr} ${timeStr}`, W));
+    lines.push(`Order: #${orderId}`);
+    lines.push(`Order Type: ${orderType}`);
+    
+    lines.push(dashes());
+    lines.push('');
+    
+    // === ITEMS HEADER ===
+    lines.push('ITEM        QTY RATE TOTAL');
+    
+    // === ITEMS (with word-wrapping for names) ===
+    items.forEach(item => {
+      const itemName = item.name || 'Item';
+      const nameLines = wrapText(itemName, 14);
       
-      // === ORDER INFO (LEFT ALIGNED) ===
-      `Serial No: - ${dateStr}`,
-      `Bill No: - ${timeStr}`,
-      `Order: #${orderId}`,
-      `Order Type: ${orderType}`,
-      center(dashes()),
+      if (nameLines.length === 0) return;
       
-      // === ITEMS HEADER ===
-      'ITEM         QTY  RATE  TOTAL',
+      // First line with quantities/rates/totals
+      const rateNum = Number(item.price || 0);
+      const totalNum = rateNum * Number(item.quantity || 1);
       
-      // === ITEMS ===
-      ...items.map(it => buildItemRow(it, W)),
+      const rate = rateNum % 1 === 0 
+        ? rateNum.toFixed(0).padStart(4)
+        : rateNum.toFixed(2).padStart(4);
       
-      center(dashes()),
-      '',
+      const total = totalNum % 1 === 0
+        ? totalNum.toFixed(0).padStart(5)
+        : totalNum.toFixed(2).padStart(5);
       
-      // === TOTALS (LEFT ALIGNED) ===
-      `Net Amt: ${netAmount.toFixed(2)}`,
-      ...(taxAmount > 0 ? [`Tax: ${taxAmount.toFixed(2)}`] : []),
-      `Grand Total: ${grandTotal.toFixed(2)}`,
-      center(dashes()),
-      '',
+      const qty = `${item.quantity}`.padStart(2);
+      const firstLine = nameLines[0].padEnd(14) + qty + '  ' + rate + '  ' + total;
+      lines.push(firstLine);
       
-      // === FOOTER (CENTER ALIGNED) ===
-      center('** THANK YOU! VISIT AGAIN !! **'),
-      '',
-    ].filter(Boolean);
+      // Additional name lines (if wrapped to multiple lines)
+      for (let i = 1; i < nameLines.length; i++) {
+        lines.push(nameLines[i].padEnd(14));
+      }
+    });
+    
+    lines.push('');
+    lines.push(dashes());
+    lines.push('');
+    
+    // === TOTALS (LEFT ALIGNED) ===
+    lines.push(`Net Amt: ${netAmount.toFixed(2)}`);
+    if (taxAmount > 0) {
+      lines.push(`Tax: ${taxAmount.toFixed(2)}`);
+    }
+    lines.push(`Grand Total: ${grandTotal.toFixed(2)}`);
+    
+    lines.push(dashes());
+    lines.push('');
+    
+    // === FOOTER (CENTER ALIGNED) ===
+    lines.push(center('** THANK YOU! VISIT AGAIN !! **', W));
+    lines.push('');
 
     const text = lines.join('\n');
 
@@ -166,50 +247,6 @@ export async function downloadTextAndShare(order, bill, restaurantProfile) {
     console.error(error);
     return { success: false, error: error.message };
   }
-}
-
-// Helper: Wrap text for 32 chars width
-function wrapText(text, width) {
-  if (!text) return [];
-  const lines = [];
-  let currentLine = '';
-  
-  text.split(' ').forEach(word => {
-    const testLine = currentLine ? `${currentLine} ${word}` : word;
-    if (testLine.length <= width) {
-      currentLine = testLine;
-    } else {
-      if (currentLine) lines.push(currentLine);
-      // If single word is too long, truncate it
-      currentLine = word.length > width ? word.substring(0, width) : word;
-    }
-  });
-  
-  if (currentLine) lines.push(currentLine);
-  return lines;
-}
-
-// Helper: Build item row (SIMPLIFIED FOR 32 CHARS)
-function buildItemRow(item, width) {
-  // Item name: 12 chars max
-  const name = (item.name || '').substring(0, 12).padEnd(13);
-  
-  // Quantity: 1 char + 'x'
-  const qty = `${item.quantity}`.padStart(1);
-  
-  // Rate: show as integer if possible
-  const rateNum = Number(item.price || 0);
-  const rate = rateNum % 1 === 0 
-    ? rateNum.toFixed(0).padStart(4)
-    : rateNum.toFixed(2).padStart(4);
-  
-  // Total
-  const totalNum = rateNum * Number(item.quantity || 1);
-  const total = totalNum % 1 === 0
-    ? totalNum.toFixed(0).padStart(5)
-    : totalNum.toFixed(2).padStart(5);
-  
-  return `${name}${qty}${rate}.00${total}.00`;
 }
 
 export async function downloadPdfAndShare(order, bill, restaurantProfile) {
