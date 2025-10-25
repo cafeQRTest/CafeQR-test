@@ -1,3 +1,5 @@
+// page-variants/restaurants/[id].web.js
+
 import { useState } from 'react'
 import QRCode from 'qrcode'
 

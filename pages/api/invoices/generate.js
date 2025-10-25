@@ -23,7 +23,7 @@ export default async function handler(req, res) {
     // Ensure PDF URL is fully qualified for mobile browsers
     const fullUrl = result?.pdfUrl?.startsWith('http') 
       ? result.pdfUrl
-      : `${process.env.NEXT_PUBLIC_BASE_URL || 'https://restaurant-qr-app-clean.vercel.app'}${result.pdfUrl}`
+      : `${process.env.NEXT_PUBLIC_BASE_URL || 'https://cafe-qr-app.vercel.app'}${result.pdfUrl}`
 
     return res.status(200).json({ pdf_url: fullUrl })
   } catch (error) {
@@ -49,7 +49,7 @@ export default async function handler(req, res) {
       // Ensure existing PDF URL is also fully qualified
       const fullUrl = data?.pdf_url?.startsWith('http') 
         ? data.pdf_url
-        : `${process.env.NEXT_PUBLIC_BASE_URL || 'https://restaurant-qr-app-clean.vercel.app'}${data.pdf_url}`
+        : `${process.env.NEXT_PUBLIC_BASE_URL || 'https://cafe-qr-app.vercel.app'}${data.pdf_url}`
 
       return res.status(200).json({ pdf_url: fullUrl })
     }
