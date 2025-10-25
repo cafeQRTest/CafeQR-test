@@ -455,14 +455,15 @@ const handleCancelDismiss = () => setCancelOrderDialog(null);
   }
 
   const finalize = (order) => {
-  const pm = String(order.payment_method || '').toLowerCase();
-  const isOnline = pm === 'upi' || pm === 'card' || pm === 'online';
-  const needsCounterConfirm = !isOnline; // everything except known online methods
-  if (needsCounterConfirm) {
-    setPaymentConfirmDialog(order);
-  } else {
+  // If invoice already exists, customer paid online - skip dialog
+  if (order?.invoice?.pdf_url) {
     complete(order.id);
+    return;
   }
+
+  // No invoice = counter payment - show payment confirmation dialog
+  // Restaurant owner will confirm cash/online payment at counter
+  setPaymentConfirmDialog(order);
 };
 
 // Updated handler - receives payment method
@@ -683,7 +684,10 @@ function OrderCard({ order, statusColor, onChangeStatus, onComplete, generatingI
   const items = toDisplayItems(order);
   const hasInvoice = Boolean(order?.invoice?.pdf_url);
   const total = computeOrderTotalDisplay(order);
-  const [showPrintModal, setShowPrintModal] = useState(false);
+  
+  // Check if payment was completed online
+  const pm = String(order.payment_method || '').toLowerCase();
+  const isOnlinePaid = pm === 'upi' || pm === 'card' || pm === 'online';
 
   const handlePrintOpen = () => onPrintClick(order);
 
@@ -723,6 +727,8 @@ function OrderCard({ order, statusColor, onChangeStatus, onComplete, generatingI
             <div className="order-actions" style={{
               display:'flex',gap:6,flexWrap:'wrap',justifyContent:'flex-end',width:'100%'
             }} onClick={e=>e.stopPropagation()}>
+              
+              {/* NEW orders */}
               {order.status==='new' && (
                 <>
                   <Button size="sm" onClick={() => onChangeStatus(order.id, 'in_progress')}>
@@ -750,8 +756,9 @@ function OrderCard({ order, statusColor, onChangeStatus, onComplete, generatingI
                     Print KOT
                   </button>
                 </>
-
               )}
+
+              {/* IN_PROGRESS orders */}
               {order.status==='in_progress' && (
                 <>
              <Button size="sm" variant="success" onClick={() => onChangeStatus(order.id, 'ready')}>
@@ -766,20 +773,41 @@ function OrderCard({ order, statusColor, onChangeStatus, onComplete, generatingI
             </Button>
            </>
               )}
-              {order.status==='ready' && !hasInvoice && (
+
+              {/* READY orders - show Done button for both online-paid and counter-payment orders */}
+              {order.status==='ready' && (
   	      <Button
    	      size="sm"
-  	      onClick={() => onComplete(order)}          // ← pass the order object
+  	      onClick={() => onComplete(order)}
   	      disabled={generatingInvoice===order.id}
 	      >
    	      {generatingInvoice===order.id ? 'Processing…' : 'Done'}
   	      </Button>
 	      )}
 
-              {hasInvoice && (
-                <Button size="sm" onClick={()=>window.open(order.invoice.pdf_url,'_blank')}>
-                  Bill
-                </Button>
+              {/* COMPLETED orders - show Bill + Print KOT buttons */}
+              {order.status==='completed' && (
+                <>
+                  {hasInvoice && (
+                    <Button size="sm" onClick={()=>window.open(order.invoice.pdf_url,'_blank')}>
+                      Bill
+                    </Button>
+                  )}
+                  <button
+                    onClick={handlePrintOpen}
+                    style={{
+                      background: '#10b981',
+                      color: '#fff',
+                      border: 'none',
+                      padding: '6px 12px',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '12px',
+                    }}
+                  >
+                    Print KOT
+                  </button>
+                </>
               )}
             </div>
           </div>

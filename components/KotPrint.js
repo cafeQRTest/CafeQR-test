@@ -1,3 +1,5 @@
+//components/KotPrint
+
 import React, { useState, useEffect } from 'react';
 import { downloadTextAndShare } from '../utils/printUtils';
 import { getSupabase } from '../services/supabase';

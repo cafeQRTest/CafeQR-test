@@ -1,3 +1,5 @@
+//utils/printUtils
+
 function toDisplayItems(order) {
   if (Array.isArray(order.items) && order.items.length) return order.items;
   if (Array.isArray(order.order_items) && order.order_items.length) {
