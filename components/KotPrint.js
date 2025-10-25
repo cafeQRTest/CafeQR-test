@@ -32,28 +32,30 @@ export default function KotPrint({ order, onClose, onPrint }) {
   const [loadingData, setLoadingData] = useState(true);
 
   useEffect(() => {
-    async function fetchData() {
-      try {
-        const supabase = getSupabase();
-        
-        const { data: billData } = await supabase
-          .from('bills')
-          .select('*')
-          .eq('order_id', order.id)
-          .single();
-        
-        if (billData) setBill(billData);
+  async function fetchData() {
+    try {
+      const supabase = getSupabase();
+      
+      // Fetch bill
+      const { data: billData } = await supabase
+        .from('bills')
+        .select('*')
+        .eq('order_id', order.id)
+        .single();
+      
+      if (billData) setBill(billData);
 
-        const { data: profileData } = await supabase
-          .from('restaurant_profiles')
-          .select('*')
-          .eq('restaurant_id', order.restaurant_id)
-          .single();
-        
-        if (profileData) setRestaurantProfile(profileData);
-      if (profileError) console.warn('Profile fetch error:', profileError);
+      // Fetch restaurant profile
+      const { data: profileData } = await supabase
+        .from('restaurant_profiles')
+        .select('*')
+        .eq('restaurant_id', order.restaurant_id)
+        .single();
+      
+      if (profileData) setRestaurantProfile(profileData);
 
-      // ✅ ADD THIS: Fetch restaurant name from restaurants table
+      // ✅ CRITICAL: Always fetch restaurant name from restaurants table
+      // This ensures ALL order types (Table, Parcel, Counter) get the correct display name
       const { data: restaurantData, error: restaurantError } = await supabase
         .from('restaurants')
         .select('name')
@@ -62,6 +64,7 @@ export default function KotPrint({ order, onClose, onPrint }) {
       
       if (restaurantData && !restaurantError) {
         // Merge restaurant name into order object
+        // This ensures order.restaurant_name is always set before printing
         order.restaurant_name = restaurantData.name;
       }
 

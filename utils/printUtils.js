@@ -29,11 +29,9 @@ export async function downloadTextAndShare(order, bill, restaurantProfile) {
     
     // Get restaurant details
     const restaurantName = (
-      order?.restaurant_name || 
-      restaurantProfile?.legal_name ||
-      order?.restaurant_name || 
-      'RESTAURANT'
-    ).toUpperCase();
+  order?.restaurant_name ||           // ✅ PRIMARY: Display name from restaurants.name
+  'RESTAURANT'                        // Fallback only if not available
+).toUpperCase();
     
     // Build address - wrapped for 32 chars
     const addressParts = [
