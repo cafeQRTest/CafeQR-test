@@ -232,8 +232,8 @@ const enrichedItems = orderItems.map(oi => {
           tax_rate: it.taxRate,
           is_packaged_good: it.isPackaged
         })),
-        restaurant: {
-          name: profile?.restaurant_name || restaurant.name || profile?.legal_name,
+                restaurant: {
+          name: restaurant.name,
           address: [
             profile?.shipping_address_line1,
             profile?.shipping_address_line2,
