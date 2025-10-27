@@ -1,4 +1,5 @@
-// services/invoiceService.js
+//services/invoiceService.js
+
 import { createClient } from '@supabase/supabase-js'
 import { generateBillPdf } from '../lib/generateBillPdf'
 
@@ -64,7 +65,56 @@ export class InvoiceService {
         .eq('restaurant_id', order.restaurant_id)
         .maybeSingle()
 
-      // 3️⃣ Effective flags for restaurant service items
+      // 3️⃣ Get fiscal year info
+      const currentFY = getFiscalYear()
+      const fyStartDate = getFiscalYearStartDate(currentFY)
+      const fyStartDateStr = fyStartDate.toISOString().split('T')[0]
+
+      // 4️⃣ ✅ ENSURED COUNTER INITIALIZATION (prevents race conditions)
+      const { data: counterExists, error: checkErr } = await supabase
+        .from('invoice_counters')
+        .select('id')
+        .eq('restaurant_id', restaurant.id)
+        .eq('fy_start', fyStartDateStr)
+        .maybeSingle()
+
+      if (!counterExists) {
+        // Pre-create counter row to prevent race condition
+        const { error: createErr } = await supabase
+          .from('invoice_counters')
+          .insert({
+            restaurant_id: restaurant.id,
+            fy_start: fyStartDateStr,
+            last_number: 0
+          })
+        
+        if (createErr && !createErr.message.includes('duplicate')) {
+          console.error('Counter creation error:', createErr)
+          throw new Error('Failed to initialize invoice counter')
+        }
+      }
+
+      // 5️⃣ ✅ CALL RPC WITH LOCKING (atomic increment)
+      const { data: counterResult, error: counterRpcErr } = await supabase
+        .rpc('increment_invoice_counter', {
+          p_restaurant_id: restaurant.id,
+          p_fy_start: fyStartDateStr
+        })
+
+      if (counterRpcErr || !counterResult || counterResult.length === 0) {
+        console.error('Counter RPC error:', counterRpcErr)
+        throw new Error('Failed to generate invoice number (counter increment failed)')
+      }
+
+      const nextInvoiceNum = counterResult[0]?.new_counter
+      if (!nextInvoiceNum) {
+        throw new Error('Invalid counter response from database')
+      }
+
+      const invoiceNo = `${currentFY}/${String(nextInvoiceNum).padStart(6, '0')}`
+      console.log(`✓ Generated invoice number: ${invoiceNo}`)
+
+      // 6️⃣ Effective flags for restaurant service items
       const gstEnabled = (order.gst_enabled ?? profile?.gst_enabled) ?? false
       const baseRate = gstEnabled ? Number(profile?.default_tax_rate ?? 0) : 0
       const includeFlag = profile?.prices_include_tax
@@ -72,7 +122,7 @@ export class InvoiceService {
         ? (includeFlag === true || includeFlag === 'true' || includeFlag === 1 || includeFlag === '1')
         : false
 
-      // 4️⃣ Normalize items with packaged branching
+      // 7️⃣ Normalize items
       const orderItems = Array.isArray(order.order_items) 
         ? order.order_items 
         : (Array.isArray(order.items) ? order.items : [])
@@ -100,7 +150,7 @@ export class InvoiceService {
         }
       })
 
-      // 5️⃣ Compute totals with same branching
+      // 8️⃣ Compute totals
       const computed = enrichedItems.reduce((acc, it) => {
         const r = it.taxRate / 100
         if (servicePricesIncludeTax) {
@@ -125,25 +175,7 @@ export class InvoiceService {
       const totalTax   = Number(order.total_tax ?? order.tax_amount ?? computed.tax)
       const totalInc   = Number(order.total_inc_tax ?? order.total_amount ?? computed.total)
 
-      // 6️⃣ ✅ IMPROVED: GENERATE RESTAURANT-SPECIFIC INVOICE NUMBER WITH ATOMIC LOCK
-      const currentFY = getFiscalYear()
-      const fyStartDate = getFiscalYearStartDate(currentFY)
-      
-      const { data: counterNum, error: counterRpcErr } = await supabase
-  .rpc('increment_invoice_counter', {
-    p_restaurant_id: restaurant.id,
-    p_fy_start: fyStartDate.toISOString().split('T')[0]
-  })
-
-if (counterRpcErr || !counterNum) {
-  console.error('Counter RPC error:', counterRpcErr)
-  throw new Error('Failed to generate invoice number (counter lock)')
-}
-
-      const nextInvoiceNum = Array.isArray(counterNum) ? counterNum[0]?.new_counter : counterNum
-const invoiceNo = `${currentFY}/${String(nextInvoiceNum).padStart(6, '0')}`
-
-      // 7️⃣ ✅ IMPROVED: Create invoice header with audit tracking
+      // 9️⃣ Create invoice with unique invoice_no
       const { data: inv, error: invError } = await supabase
         .from('invoices')
         .upsert({
@@ -164,7 +196,6 @@ const invoiceNo = `${currentFY}/${String(nextInvoiceNum).padStart(6, '0')}`
           sgst: gstEnabled ? totalTax / 2 : 0,
           igst: 0,
           payment_method: order.payment_method || 'cash',
-          // ✅ NEW AUDIT FIELDS
           generation_method: regenerationReason ? 'regenerated' : 'auto',
           regenerated_from_invoice_id: existing?.id || null,
           regeneration_reason: regenerationReason || null
@@ -174,7 +205,7 @@ const invoiceNo = `${currentFY}/${String(nextInvoiceNum).padStart(6, '0')}`
       
       if (invError || !inv) throw new Error(invError?.message || 'Failed to create invoice')
 
-      // 8️⃣ Recreate invoice line items to avoid duplicates
+      // 🔟 Recreate invoice line items
       await supabase.from('invoice_items').delete().eq('invoice_id', inv.id)
       let lineNo = 1
       
@@ -213,7 +244,7 @@ const invoiceNo = `${currentFY}/${String(nextInvoiceNum).padStart(6, '0')}`
         })
       }
 
-      // 9️⃣ Generate PDF and update invoice with URL
+      // 1️⃣1️⃣ Generate PDF
       const pdfPayload = {
         invoice: {
           invoice_no: inv.invoice_no,

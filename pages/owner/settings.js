@@ -485,38 +485,47 @@ async function save(e) {
       console.log("Total time for settings save (including background tasks):", Date.now() - overallStartTime, "ms");
     }).catch(console.error);
 
-    // SEND QR EMAIL SEPARATELY - FIRE & FORGET (NOT in Promise.all)
-    if (form.tables_count) {
-      console.time("Send QR Email (Fire & Forget)");
-      const qrCodes = Array.from({ length: Number(form.tables_count) }, (_, i) => ({
-        tableNumber: `${form.table_prefix}${i + 1}`,
-        qrUrl: `${process.env.NEXT_PUBLIC_BASE_URL}/order?r=${restaurant.id}&t=${i + 1}`,
-      }));
+   // SEND QR EMAIL SEPARATELY - FIRE & FORGET (ONLY if tables_count INCREMENTED)
+if (form.tables_count && form.tables_count > originalTables) {
+  console.time("Send QR Email (Fire & Forget)");
+  
+  // Generate QR codes ONLY for NEW tables
+  const newTablesCount = form.tables_count - originalTables;
+  const startTableNum = originalTables + 1;
+  
+  const qrCodes = Array.from({ length: newTablesCount }, (_, i) => ({
+    tableNumber: `${form.table_prefix}${startTableNum + i}`,
+    qrUrl: `${process.env.NEXT_PUBLIC_BASE_URL}/order?r=${restaurant.id}&t=${startTableNum + i}`,
+  }));
 
-      fetch('/api/send-qr-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          qrCodes,
-          restaurantData: {
-            restaurantName: form.restaurant_name,
-            legalName: form.legal_name,
-            phone: form.phone,
-            email: form.support_email,
-            address: [
-              form.shipping_address_line1,
-              form.shipping_address_line2,
-              form.shipping_city,
-              form.shipping_state,
-              form.shipping_pincode,
-            ].filter(Boolean).join(', '),
-          },
-        }),
-      }).catch(err => {
-        console.warn('QR email failed (background):', err.message);
-        console.timeEnd("Send QR Email (Fire & Forget)");
-      });
-    }
+  fetch('/api/send-qr-email', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      qrCodes,
+      restaurantData: {
+        restaurantName: form.restaurant_name,
+        legalName: form.legal_name,
+        phone: form.phone,
+        email: form.support_email,
+        recipientName: form.shipping_name,           
+        recipientPhone: form.shipping_phone,
+        address: [
+          form.shipping_address_line1,
+          form.shipping_address_line2,
+          form.shipping_city,
+          form.shipping_state,
+          form.shipping_pincode,
+        ].filter(Boolean).join(', '),
+      },
+      isIncremental: true,  // Mark as incremental/additional QR codes
+    }),
+  }).catch(err => {
+    console.warn('QR email failed (background):', err.message);
+    console.timeEnd("Send QR Email (Fire & Forget)");
+  });
+}
+
 
     // Refresh subscription after delay
     setTimeout(() => {
