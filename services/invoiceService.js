@@ -25,15 +25,17 @@ function getFiscalYearStartDate(fy) {
 }
 
 export class InvoiceService {
-  static async createInvoiceFromOrder(orderId) {
+  static async createInvoiceFromOrder(orderId, regenerationReason = null) {
     try {
-      // Return if already exists
+      // 1️⃣ Check if invoice already exists
       const { data: existing, error: existingErr } = await supabase
         .from('invoices')
         .select('id, invoice_no, invoice_date, pdf_url, restaurant_id, order_id')
         .eq('order_id', orderId)
         .maybeSingle()
-      if (!existingErr && existing) {
+      
+      if (!existingErr && existing && !regenerationReason) {
+        // Return existing invoice if not regenerating
         return {
           invoiceId: existing.id,
           invoiceNo: existing.invoice_no,
@@ -41,39 +43,41 @@ export class InvoiceService {
         }
       }
 
-      // Fetch order, restaurant, profile
+      // 2️⃣ Fetch order, restaurant, profile
       const { data: order, error: orderError } = await supabase
         .from('orders')
         .select('*, order_items(*)')
         .eq('id', orderId)
         .single()
       if (orderError || !order) throw new Error(`Order ${orderId} not found`)
+
       const { data: restaurant, error: restErr } = await supabase
         .from('restaurants')
         .select('*')
         .eq('id', order.restaurant_id)
         .single()
       if (restErr || !restaurant) throw new Error(`Restaurant ${order.restaurant_id} not found`)
+
       const { data: profile } = await supabase
         .from('restaurant_profiles')
         .select('*')
         .eq('restaurant_id', order.restaurant_id)
         .maybeSingle()
 
-      // Effective flags for restaurant service items
+      // 3️⃣ Effective flags for restaurant service items
       const gstEnabled = (order.gst_enabled ?? profile?.gst_enabled) ?? false
-      const baseRate = gstEnabled ? Number(profile?.default_tax_rate ?? 0) : 0;
+      const baseRate = gstEnabled ? Number(profile?.default_tax_rate ?? 0) : 0
       const includeFlag = profile?.prices_include_tax
       const servicePricesIncludeTax = gstEnabled
         ? (includeFlag === true || includeFlag === 'true' || includeFlag === 1 || includeFlag === '1')
         : false
 
-      // 3) Normalize items with packaged branching
-const orderItems = Array.isArray(order.order_items) 
-  ? order.order_items 
-  : (Array.isArray(order.items) ? order.items : [])
+      // 4️⃣ Normalize items with packaged branching
+      const orderItems = Array.isArray(order.order_items) 
+        ? order.order_items 
+        : (Array.isArray(order.items) ? order.items : [])
 
-const enrichedItems = orderItems.map(oi => {
+      const enrichedItems = orderItems.map(oi => {
         const isPackaged = !!oi.is_packaged_good
         const qty = Number(oi.quantity ?? 1)
         const taxRate = Number(oi.tax_rate ?? 0)
@@ -96,7 +100,7 @@ const enrichedItems = orderItems.map(oi => {
         }
       })
 
-      // 4) Compute totals with same branching
+      // 5️⃣ Compute totals with same branching
       const computed = enrichedItems.reduce((acc, it) => {
         const r = it.taxRate / 100
         if (servicePricesIncludeTax) {
@@ -121,41 +125,31 @@ const enrichedItems = orderItems.map(oi => {
       const totalTax   = Number(order.total_tax ?? order.tax_amount ?? computed.tax)
       const totalInc   = Number(order.total_inc_tax ?? order.total_amount ?? computed.total)
 
-      // 5) GENERATE RESTAURANT-SPECIFIC INVOICE NUMBER
+      // 6️⃣ ✅ IMPROVED: GENERATE RESTAURANT-SPECIFIC INVOICE NUMBER WITH ATOMIC LOCK
       const currentFY = getFiscalYear()
       const fyStartDate = getFiscalYearStartDate(currentFY)
-      const { data: counter, error: counterReadErr } = await supabase
-        .from('invoice_counters')
-        .select('last_number')
-        .eq('restaurant_id', restaurant.id)
-        .eq('fy_start', fyStartDate.toISOString().split('T')[0])
-        .maybeSingle()
-      let nextInvoiceNum = 1
-      if (!counterReadErr && counter) {
-        nextInvoiceNum = (counter.last_number || 0) + 1
-      }
-      const { error: counterUpsertErr } = await supabase
-        .from('invoice_counters')
-        .upsert({
-          restaurant_id: restaurant.id,
-          fy_start: fyStartDate.toISOString().split('T')[0],
-          last_number: nextInvoiceNum
-        }, {
-          onConflict: 'restaurant_id,fy_start'
-        })
-      if (counterUpsertErr) {
-        console.error('Invoice counter update error:', counterUpsertErr)
-        throw new Error('Failed to generate invoice number')
-      }
-      const invoiceNo = `${currentFY}/${String(nextInvoiceNum).padStart(6, '0')}`
+      
+      const { data: counterNum, error: counterRpcErr } = await supabase
+  .rpc('increment_invoice_counter', {
+    p_restaurant_id: restaurant.id,
+    p_fy_start: fyStartDate.toISOString().split('T')[0]
+  })
 
-      // 6) Create invoice header via UPSERT to avoid unique-constraint errors
+if (counterRpcErr || !counterNum) {
+  console.error('Counter RPC error:', counterRpcErr)
+  throw new Error('Failed to generate invoice number (counter lock)')
+}
+
+      const nextInvoiceNum = Array.isArray(counterNum) ? counterNum[0]?.new_counter : counterNum
+const invoiceNo = `${currentFY}/${String(nextInvoiceNum).padStart(6, '0')}`
+
+      // 7️⃣ ✅ IMPROVED: Create invoice header with audit tracking
       const { data: inv, error: invError } = await supabase
         .from('invoices')
         .upsert({
           restaurant_id: restaurant.id,
           order_id: order.id,
-          invoice_no: invoiceNo, // Now restaurant-specific
+          invoice_no: invoiceNo,
           invoice_date: new Date().toISOString(),
           customer_name: order.customer_name || null,
           customer_gstin: order.customer_gstin || null,
@@ -169,18 +163,25 @@ const enrichedItems = orderItems.map(oi => {
           cgst: gstEnabled ? totalTax / 2 : 0,
           sgst: gstEnabled ? totalTax / 2 : 0,
           igst: 0,
-          payment_method: order.payment_method || 'cash'
+          payment_method: order.payment_method || 'cash',
+          // ✅ NEW AUDIT FIELDS
+          generation_method: regenerationReason ? 'regenerated' : 'auto',
+          regenerated_from_invoice_id: existing?.id || null,
+          regeneration_reason: regenerationReason || null
         }, { onConflict: 'order_id' })
         .select()
         .single()
+      
       if (invError || !inv) throw new Error(invError?.message || 'Failed to create invoice')
 
-      // 7) Recreate invoice line items to avoid duplicates
+      // 8️⃣ Recreate invoice line items to avoid duplicates
       await supabase.from('invoice_items').delete().eq('invoice_id', inv.id)
       let lineNo = 1
+      
       for (const it of enrichedItems) {
         const r = it.taxRate / 100
         let ex, inc, tax, unitExResolved
+        
         if (it.isPackaged || servicePricesIncludeTax) {
           inc = it.unitResolved * it.qty
           ex  = r > 0 ? inc / (1 + r) : inc
@@ -192,10 +193,12 @@ const enrichedItems = orderItems.map(oi => {
           inc = ex + tax
           unitExResolved = it.unitResolved
         }
+        
         const exR = Number(ex.toFixed(2))
         const taxR = Number(tax.toFixed(2))
         const incR = Number(inc.toFixed(2))
         const unitExR = Number(unitExResolved.toFixed(2))
+        
         await supabase.from('invoice_items').insert({
           invoice_id: inv.id,
           line_no: lineNo++,
@@ -210,7 +213,7 @@ const enrichedItems = orderItems.map(oi => {
         })
       }
 
-      // 8) Generate PDF and update invoice with URL
+      // 9️⃣ Generate PDF and update invoice with URL
       const pdfPayload = {
         invoice: {
           invoice_no: inv.invoice_no,
@@ -232,7 +235,7 @@ const enrichedItems = orderItems.map(oi => {
           tax_rate: it.taxRate,
           is_packaged_good: it.isPackaged
         })),
-                restaurant: {
+        restaurant: {
           name: restaurant.name,
           address: [
             profile?.shipping_address_line1,
@@ -245,8 +248,10 @@ const enrichedItems = orderItems.map(oi => {
           email: profile?.support_email || ''
         }
       }
+      
       const { pdfUrl } = await generateBillPdf(pdfPayload, restaurant.id)
       await supabase.from('invoices').update({ pdf_url: pdfUrl }).eq('id', inv.id)
+      
       return { invoiceId: inv.id, invoiceNo: inv.invoice_no, pdfUrl }
     } catch (error) {
       console.error('Invoice generation error:', error)

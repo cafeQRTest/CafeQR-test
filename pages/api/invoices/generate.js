@@ -18,9 +18,9 @@ export default async function handler(req, res) {
   }
 
   try {
-    const result = await InvoiceService.createInvoiceFromOrder(order_id)
+    // Pass regeneration reason as null (indicating fresh generation)
+    const result = await InvoiceService.createInvoiceFromOrder(order_id, null)
 
-    // Ensure PDF URL is fully qualified for mobile browsers
     const fullUrl = result?.pdfUrl?.startsWith('http') 
       ? result.pdfUrl
       : `${process.env.NEXT_PUBLIC_BASE_URL || 'https://cafe-qr-app.vercel.app'}${result.pdfUrl}`
@@ -34,7 +34,6 @@ export default async function handler(req, res) {
       msg.includes('invoices_order_id_key')
 
     if (isDuplicate) {
-      // Fetch and return existing invoice
       const { data, error: fetchErr } = await supabase
         .from('invoices')
         .select('pdf_url')
@@ -46,7 +45,6 @@ export default async function handler(req, res) {
         return res.status(500).json({ error: 'Could not retrieve existing invoice' })
       }
 
-      // Ensure existing PDF URL is also fully qualified
       const fullUrl = data?.pdf_url?.startsWith('http') 
         ? data.pdf_url
         : `${process.env.NEXT_PUBLIC_BASE_URL || 'https://cafe-qr-app.vercel.app'}${data.pdf_url}`
