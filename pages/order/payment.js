@@ -281,7 +281,7 @@ export default function PaymentPage() {
           tax: calculateTotals.taxAmount,
           total_amount: calculateTotals.totalInc,
           special_instructions: specialInstructions.trim(),
-          payment_method: 'byo',
+          payment_method: 'online',
         };
 
         localStorage.setItem('pending_order', JSON.stringify(pendingOrder));
