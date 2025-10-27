@@ -1,94 +1,55 @@
-// pages/api/admin/regenerate-specific-invoices.js
-import { InvoiceService } from '../../../services/invoiceService'
-import { createClient } from '@supabase/supabase-js'
+//pages/api/admin/regenerate-all-invoices.js
 
+import { InvoiceService, getNextInvoiceNumber } from '../../../services/invoiceService'
+import { createClient } from '@supabase/supabase-js'
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' })
-  }
-
-  const { order_ids, admin_key } = req.body
-
-  if (admin_key !== process.env.ADMIN_REGENERATE_KEY) {
-    return res.status(403).json({ error: 'Invalid admin key' })
-  }
-
-  if (!Array.isArray(order_ids) || order_ids.length === 0) {
-    return res.status(400).json({ error: 'order_ids array is required' })
-  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  const { admin_key } = req.body
+  if (admin_key !== process.env.ADMIN_REGENERATE_KEY) return res.status(403).json({ error: 'Invalid admin key' })
 
   try {
-    console.log(`=== SELECTIVE INVOICE REGENERATION ===`)
-    console.log(`Regenerating ${order_ids.length} invoices`)
+    // Find all restaurants
+    const { data: restaurants } = await supabase.from('restaurants').select('id')
+    let results = []
+    for (const rest of restaurants) {
+      // For each FY
+      // Find unique FYs for which there are orders
+      const { data: years } = await supabase
+        .from('orders')
+        .select('created_at')
+        .eq('restaurant_id', rest.id)
 
-    const results = {
-      success: [],
-      failed: [],
-      skipped: []
-    }
-
-    for (const orderId of order_ids) {
-      try {
-        // Get existing invoice
-        const { data: existingInv } = await supabase
-          .from('invoices')
+      if (!years?.length) continue
+      const fyears = Array.from(new Set(years.map((o) => getFiscalYear(o.created_at))))
+      for (const fy of fyears) {
+        const fyStart = getFiscalYearStartDate(fy)
+        const fyStartStr = fyStart.toISOString().split('T')[0]
+        // Delete existing invoices (danger!)
+        await supabase.from('invoices')
+          .delete()
+          .eq('restaurant_id', rest.id)
+          .like('invoice_no', `${fy}/%`)
+        await supabase.from('invoice_counters')
+          .upsert({ restaurant_id: rest.id, fy_start: fyStartStr, last_number: 0 }, { onConflict: 'restaurant_id,fy_start' })
+        // Find completed orders in this FY, oldest first
+        const { data: orders } = await supabase.from('orders')
           .select('id')
-          .eq('order_id', orderId)
-          .single()
-
-        if (!existingInv) {
-          results.skipped.push({ orderId, reason: 'No existing invoice' })
-          continue
+          .eq('restaurant_id', rest.id)
+          .order('created_at', { ascending: true })
+        for (const od of orders) {
+          await InvoiceService.createInvoiceFromOrder(od.id, 'full_regeneration')
         }
-
-        // Delete old invoice items
-        await supabase.from('invoice_items').delete().eq('invoice_id', existingInv.id)
-
-        // Regenerate with reason tracking
-        const result = await InvoiceService.createInvoiceFromOrder(
-          orderId, 
-          'manual_regeneration'
-        )
-
-        results.success.push({
-          orderId,
-          invoiceNo: result.invoiceNo,
-          pdfUrl: result.pdfUrl
-        })
-
-        console.log(`✓ ${result.invoiceNo} regenerated`)
-
-        // Small delay to prevent connection pool exhaustion
-        await new Promise(resolve => setTimeout(resolve, 200))
-      } catch (err) {
-        console.error(`✗ Order ${orderId}: ${err.message}`)
-        results.failed.push({
-          orderId,
-          error: err.message
-        })
       }
+      results.push({ restaurant_id: rest.id, fiscal_years: fyears })
     }
-
-    console.log(`\n=== REGENERATION COMPLETE ===`)
-    console.log(`Success: ${results.success.length} | Failed: ${results.failed.length} | Skipped: ${results.skipped.length}`)
-
-    return res.status(200).json({
-      message: 'Selective invoice regeneration completed',
-      summary: {
-        total: order_ids.length,
-        successful: results.success.length,
-        failed: results.failed.length,
-        skipped: results.skipped.length
-      },
-      details: results
-    })
-  } catch (error) {
-    console.error('Regeneration error:', error)
-    return res.status(500).json({ error: error.message })
+    return res.status(200).json({ message: 'All invoices regenerated', details: results })
+  } catch (err) {
+    console.error('Full regen error', err)
+    return res.status(500).json({ error: err.message })
   }
 }
