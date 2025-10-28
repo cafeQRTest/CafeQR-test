@@ -5,7 +5,7 @@ import Card from '../../components/ui/Card'
 import Table from '../../components/ui/Table'
 import DateRangePicker from '../../components/ui/DateRangePicker'
 import { getSupabase } from '../../services/supabase'
-import { downloadTextAndShare } from '../../utils/printUtils'
+import { printSalesReport } from '../../utils/printSalesReport'
 
 export default function SalesPage() {
   const supabase = getSupabase()
@@ -20,6 +20,7 @@ export default function SalesPage() {
 
   const [activeReport, setActiveReport] = useState(0)
   const [salesData, setSalesData] = useState([])
+  const [allSalesData, setAllSalesData] = useState([]) // Store unfiltered data
   const [summaryStats, setSummaryStats] = useState({
     totalOrders: 0,
     totalRevenue: 0,
@@ -27,8 +28,7 @@ export default function SalesPage() {
     avgOrderValue: 0,
     totalTax: 0,
     cgst: 0,
-    sgst: 0,
-    totalDiscount: 0
+    sgst: 0
   })
   const [paymentBreakdown, setPaymentBreakdown] = useState([])
   const [orderTypeBreakdown, setOrderTypeBreakdown] = useState([])
@@ -48,7 +48,6 @@ export default function SalesPage() {
     if (!restaurantId || !supabase) return
     
     const fetchData = async () => {
-      // Restaurant profile
       const { data: profile } = await supabase
         .from('restaurant_profiles')
         .select('*')
@@ -57,7 +56,6 @@ export default function SalesPage() {
       
       if (profile) setRestaurantProfile(profile)
 
-      // Menu categories from menu_items
       const { data: items } = await supabase
         .from('menu_items')
         .select('category')
@@ -76,7 +74,17 @@ export default function SalesPage() {
   useEffect(() => {
     if (checking || restLoading || !restaurantId || !supabase) return
     loadAllReportsData()
-  }, [checking, restLoading, restaurantId, range, supabase, selectedCategory])
+  }, [checking, restLoading, restaurantId, range, supabase])
+
+  // Apply category filter to existing data
+  useEffect(() => {
+    if (!selectedCategory) {
+      setSalesData(allSalesData)
+    } else {
+      const filtered = allSalesData.filter(item => item.category === selectedCategory)
+      setSalesData(filtered)
+    }
+  }, [selectedCategory, allSalesData])
 
   const loadAllReportsData = async () => {
     if (!supabase) return
@@ -95,8 +103,7 @@ export default function SalesPage() {
           items,
           payment_method,
           actual_payment_method,
-          order_type,
-          gst_enabled
+          order_type
         `)
         .eq('restaurant_id', restaurantId)
         .gte('created_at', range.start.toISOString())
@@ -109,11 +116,10 @@ export default function SalesPage() {
       let totalOrders = orderData.length
       let totalRevenue = 0
       let totalTax = 0
-      let cgst = 0
-      let sgst = 0
       let totalQuantity = 0
       const itemCounts = {}
       const itemRevenue = {}
+      const itemCategories = {}
       const categoryMap = {}
 
       orderData.forEach(o => {
@@ -121,10 +127,6 @@ export default function SalesPage() {
         const tax = Number(o.total_tax ?? 0)
         totalRevenue += revenue
         totalTax += tax
-
-        // All India transactions: CGST = SGST = tax/2
-        cgst += tax / 2
-        sgst += tax / 2
 
         if (Array.isArray(o.items)) {
           o.items.forEach(item => {
@@ -134,18 +136,18 @@ export default function SalesPage() {
             const price = Number(item.price) || 0
             const itemTotal = quantity * price
 
-            // Item-wise: apply selected category filter
-            if (!selectedCategory || itemCategory === selectedCategory) {
-              itemCounts[name] = (itemCounts[name] || 0) + quantity
-              itemRevenue[name] = (itemRevenue[name] || 0) + itemTotal
-              totalQuantity += quantity
-            }
+            itemCounts[name] = (itemCounts[name] || 0) + quantity
+            itemRevenue[name] = (itemRevenue[name] || 0) + itemTotal
+            itemCategories[name] = itemCategory
+            totalQuantity += quantity
 
-            // Category totals (all items, unfiltered)
             categoryMap[itemCategory] = (categoryMap[itemCategory] || 0) + itemTotal
           })
         }
       })
+
+      const cgst = totalTax / 2
+      const sgst = totalTax / 2
 
       setSummaryStats({
         totalOrders,
@@ -154,18 +156,20 @@ export default function SalesPage() {
         avgOrderValue: totalOrders > 0 ? totalRevenue / totalOrders : 0,
         totalTax,
         cgst: Math.round(cgst * 100) / 100,
-        sgst: Math.round(sgst * 100) / 100,
-        totalDiscount: 0
+        sgst: Math.round(sgst * 100) / 100
       })
 
-      // Item-wise (filtered)
+      // Item-wise (store all with categories)
       const itemsArray = Object.entries(itemCounts)
         .map(([name, quantity]) => ({
           item_name: name,
           quantity_sold: quantity,
-          revenue: itemRevenue[name] || 0
+          revenue: itemRevenue[name] || 0,
+          category: itemCategories[name]
         }))
         .sort((a, b) => b.revenue - a.revenue)
+      
+      setAllSalesData(itemsArray)
       setSalesData(itemsArray)
 
       // Payment methods
@@ -200,7 +204,7 @@ export default function SalesPage() {
         percentage: totalRevenue > 0 ? ((data.amount / totalRevenue) * 100).toFixed(1) : '0.0'
       })))
 
-      // Tax (CGST + SGST only, no IGST)
+      // Tax (CGST + SGST only)
       setTaxBreakdown([
         { tax_type: 'CGST', amount: Math.round(cgst * 100) / 100 },
         { tax_type: 'SGST', amount: Math.round(sgst * 100) / 100 },
@@ -245,48 +249,17 @@ export default function SalesPage() {
   const formatPercent = n => `${Number(n).toFixed(1)}%`
 
   const handlePrint = async () => {
-    // Generate full sales report text (48-char width for 2-inch thermal printer)
-    const W = 48
-    const lines = []
-    const dashes = () => '='.repeat(W)
-    const center = (str) => {
-      const padding = Math.max(0, Math.floor((W - str.length) / 2))
-      return ' '.repeat(padding) + str
-    }
-
-    lines.push(dashes())
-    lines.push(center('SALES REPORT'))
-    lines.push(dashes())
-    lines.push(`Period: ${range.start.toLocaleDateString('en-IN')} - ${range.end.toLocaleDateString('en-IN')}`)
-    lines.push('')
-    lines.push(`Total Orders: ${summaryStats.totalOrders}`)
-    lines.push(`Total Revenue: ${formatCurrency(summaryStats.totalRevenue)}`)
-    lines.push(`Avg Order: ${formatCurrency(summaryStats.avgOrderValue)}`)
-    lines.push(`Items Sold: ${summaryStats.totalItems}`)
-    lines.push(`Total Tax: ${formatCurrency(summaryStats.totalTax)}`)
-    lines.push(`  CGST: ${formatCurrency(summaryStats.cgst)}`)
-    lines.push(`  SGST: ${formatCurrency(summaryStats.sgst)}`)
-    lines.push('')
-    lines.push(dashes())
-    lines.push(center('** END OF REPORT **'))
-    lines.push('')
-
-    const text = lines.join('\n')
-    
-    // Use existing print utility (Web Share or download as .txt)
-    const result = await downloadTextAndShare(
-      { 
-        id: `SalesReport-${Date.now()}`,
-        created_at: new Date().toISOString(),
-        restaurant_name: restaurantProfile?.restaurant_name || 'Restaurant'
-      },
-      { grand_total: summaryStats.totalRevenue, tax_total: summaryStats.totalTax },
+    await printSalesReport({
+      range,
+      summaryStats,
+      salesData: allSalesData, // Print ALL items
+      paymentBreakdown,
+      orderTypeBreakdown,
+      taxBreakdown,
+      hourlyBreakdown,
+      categoryBreakdown,
       restaurantProfile
-    )
-    
-    if (!result.success) {
-      alert('Print failed: ' + result.error)
-    }
+    })
   }
 
   if (checking || restLoading) return <div style={{ padding: 16 }}>Loading…</div>
@@ -298,17 +271,11 @@ export default function SalesPage() {
         <h1>Sales Reports</h1>
         <div className="sales-controls">
           <DateRangePicker start={range.start} end={range.end} onChange={setRange} />
-          <button className="sales-print-btn" onClick={handlePrint}>
-            🖨️ Print
-          </button>
+          <button className="sales-print-btn" onClick={handlePrint}>🖨️ Print</button>
         </div>
       </div>
 
-      {error && (
-        <Card style={{ marginBottom: 12, borderColor: '#fecaca', background: '#fff1f2', color: '#b91c1c', padding: 12 }}>
-          {error}
-        </Card>
-      )}
+      {error && <Card style={{ marginBottom: 12, borderColor: '#fecaca', background: '#fff1f2', color: '#b91c1c', padding: 12 }}>{error}</Card>}
 
       {loading ? (
         <div style={{ textAlign: 'center', padding: 32 }}>Loading reports…</div>

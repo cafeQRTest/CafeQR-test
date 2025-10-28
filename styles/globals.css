@@ -331,12 +331,14 @@ body.kitchen-dashboard .main-content {
 }
 
 /* ============================================
-   SALES PAGE STYLES (Mobile-First)
+   SALES PAGE STYLES (Mobile-First, Fixed Carousel)
    ============================================ */
 .sales-page-container {
   max-width: 100%;
   margin: 0 auto;
   padding: 8px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .sales-header {
@@ -348,24 +350,28 @@ body.kitchen-dashboard .main-content {
 
 .sales-header h1 {
   margin: 0;
-  font-size: 1.5rem;
+  font-size: 1.25rem;
+  font-weight: 700;
 }
 
 .sales-controls {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  align-items: center;
 }
 
 .sales-print-btn {
   background: #182c4c;
   color: #fff;
   border: none;
-  padding: 8px 14px;
-  border-radius: 4px;
+  padding: 8px 16px;
+  border-radius: 6px;
   font-size: 14px;
+  font-weight: 600;
   cursor: pointer;
   transition: background 0.2s;
+  white-space: nowrap;
 }
 
 .sales-print-btn:hover {
@@ -377,11 +383,16 @@ body.kitchen-dashboard .main-content {
   grid-template-columns: repeat(2, 1fr);
   gap: 8px;
   margin-bottom: 12px;
+  width: 100%;
 }
 
 .sales-total-card {
   text-align: center;
-  padding: 12px 8px !important;
+  padding: 10px 6px !important;
+  min-height: 70px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .sales-label {
@@ -390,6 +401,7 @@ body.kitchen-dashboard .main-content {
   text-transform: uppercase;
   margin-bottom: 4px;
   font-weight: 600;
+  line-height: 1.2;
 }
 
 .sales-value {
@@ -398,29 +410,40 @@ body.kitchen-dashboard .main-content {
   color: #111827;
 }
 
-/* Horizontal Carousel */
+/* ===== CAROUSEL SCROLLING ===== */
 .sales-carousel {
   display: flex;
   gap: 6px;
-  overflow-x: auto;
+  overflow-x: scroll;
+  overflow-y: hidden;
   margin-bottom: 12px;
-  padding-bottom: 8px;
+  padding: 4px 0 10px 0;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
+  scrollbar-color: #cbd5e0 transparent;
+  width: 100%;
 }
 
 .sales-carousel::-webkit-scrollbar {
-  height: 4px;
+  height: 6px;
+}
+
+.sales-carousel::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .sales-carousel::-webkit-scrollbar-thumb {
   background: #cbd5e0;
-  border-radius: 4px;
+  border-radius: 3px;
+}
+
+.sales-carousel::-webkit-scrollbar-thumb:hover {
+  background: #a0aec0;
 }
 
 .sales-carousel-btn {
   flex-shrink: 0;
-  padding: 8px 12px;
+  padding: 8px 14px;
   background: #f9fafb;
   border: 1px solid #e5e7eb;
   border-radius: 6px;
@@ -430,6 +453,7 @@ body.kitchen-dashboard .main-content {
   white-space: nowrap;
   transition: all 0.2s;
   color: #374151;
+  min-width: fit-content;
 }
 
 .sales-carousel-btn:hover {
@@ -440,26 +464,38 @@ body.kitchen-dashboard .main-content {
   background: #2563eb;
   color: #fff;
   border-color: #2563eb;
+  font-weight: 600;
 }
 
 .sales-category-select {
-  padding: 6px 8px;
+  padding: 6px 10px;
   font-size: 14px;
   border-radius: 4px;
   border: 1px solid #d1d5db;
+  background: #fff;
+  cursor: pointer;
 }
 
 .sales-table-wrapper {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
+  width: 100%;
 }
 
 /* Tablet & Up */
 @media (min-width: 600px) {
+  .sales-page-container {
+    padding: 16px;
+  }
+  
   .sales-header {
     flex-direction: row;
     justify-content: space-between;
     align-items: center;
+  }
+  
+  .sales-header h1 {
+    font-size: 1.75rem;
   }
   
   .sales-totals-grid {
@@ -473,17 +509,24 @@ body.kitchen-dashboard .main-content {
   .sales-value {
     font-size: 18px;
   }
+  
+  .sales-total-card {
+    min-height: 80px;
+  }
 }
 
 /* Desktop */
 @media (min-width: 1024px) {
   .sales-page-container {
     max-width: 1200px;
-    padding: 16px;
+    padding: 20px;
   }
   
   .sales-header h1 {
     font-size: 2rem;
   }
+  
+  .sales-value {
+    font-size: 20px;
+  }
 }
-
