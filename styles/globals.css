@@ -330,3 +330,160 @@ body.kitchen-dashboard .main-content {
   padding: 0 !important;
 }
 
+/* ============================================
+   SALES PAGE STYLES (Mobile-First)
+   ============================================ */
+.sales-page-container {
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 8px;
+}
+
+.sales-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.sales-header h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.sales-controls {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sales-print-btn {
+  background: #182c4c;
+  color: #fff;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.sales-print-btn:hover {
+  background: #0057b7;
+}
+
+.sales-totals-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.sales-total-card {
+  text-align: center;
+  padding: 12px 8px !important;
+}
+
+.sales-label {
+  font-size: 10px;
+  color: #6b7280;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+.sales-value {
+  font-size: 16px;
+  font-weight: 700;
+  color: #111827;
+}
+
+/* Horizontal Carousel */
+.sales-carousel {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.sales-carousel::-webkit-scrollbar {
+  height: 4px;
+}
+
+.sales-carousel::-webkit-scrollbar-thumb {
+  background: #cbd5e0;
+  border-radius: 4px;
+}
+
+.sales-carousel-btn {
+  flex-shrink: 0;
+  padding: 8px 12px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+  color: #374151;
+}
+
+.sales-carousel-btn:hover {
+  background: #e5e7eb;
+}
+
+.sales-carousel-btn.active {
+  background: #2563eb;
+  color: #fff;
+  border-color: #2563eb;
+}
+
+.sales-category-select {
+  padding: 6px 8px;
+  font-size: 14px;
+  border-radius: 4px;
+  border: 1px solid #d1d5db;
+}
+
+.sales-table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Tablet & Up */
+@media (min-width: 600px) {
+  .sales-header {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+  
+  .sales-totals-grid {
+    grid-template-columns: repeat(5, 1fr);
+  }
+  
+  .sales-label {
+    font-size: 11px;
+  }
+  
+  .sales-value {
+    font-size: 18px;
+  }
+}
+
+/* Desktop */
+@media (min-width: 1024px) {
+  .sales-page-container {
+    max-width: 1200px;
+    padding: 16px;
+  }
+  
+  .sales-header h1 {
+    font-size: 2rem;
+  }
+}
+
