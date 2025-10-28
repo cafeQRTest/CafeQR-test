@@ -86,164 +86,179 @@ export default function SalesPage() {
     }
   }, [selectedCategory, allSalesData])
 
-  const loadAllReportsData = async () => {
-    if (!supabase) return
-    setLoading(true)
-    setError('')
-    try {
-      const { data: orders, error: ordersError } = await supabase
-        .from('orders')
-        .select(`
-          id,
-          total_amount,
-          total_inc_tax,
-          total_tax,
-          created_at,
-          status,
-          items,
-          payment_method,
-          actual_payment_method,
-          order_type
-        `)
-        .eq('restaurant_id', restaurantId)
-        .gte('created_at', range.start.toISOString())
-        .lte('created_at', range.end.toISOString())
-        .neq('status', 'cancelled')
+ const loadAllReportsData = async () => {
+  if (!supabase) return
+  setLoading(true)
+  setError('')
+  try {
+    // First fetch all menu items with categories
+    const { data: menuItems, error: menuErr } = await supabase
+      .from('menu_items')
+      .select('id, name, category')
+      .eq('restaurant_id', restaurantId)
 
-      if (ordersError) throw ordersError
-      const orderData = Array.isArray(orders) ? orders : []
+    if (menuErr) throw menuErr
 
-      let totalOrders = orderData.length
-      let totalRevenue = 0
-      let totalTax = 0
-      let totalQuantity = 0
-      const itemCounts = {}
-      const itemRevenue = {}
-      const itemCategories = {}
-      const categoryMap = {}
-
-      orderData.forEach(o => {
-        const revenue = Number(o.total_inc_tax ?? o.total_amount ?? 0)
-        const tax = Number(o.total_tax ?? 0)
-        totalRevenue += revenue
-        totalTax += tax
-
-        if (Array.isArray(o.items)) {
-          o.items.forEach(item => {
-            const name = item.name || 'Unknown Item'
-            const itemCategory = item.category || 'Uncategorized'
-            const quantity = Number(item.quantity) || 1
-            const price = Number(item.price) || 0
-            const itemTotal = quantity * price
-
-            itemCounts[name] = (itemCounts[name] || 0) + quantity
-            itemRevenue[name] = (itemRevenue[name] || 0) + itemTotal
-            itemCategories[name] = itemCategory
-            totalQuantity += quantity
-
-            categoryMap[itemCategory] = (categoryMap[itemCategory] || 0) + itemTotal
-          })
-        }
+    // Create a map of item_name => category from menu_items
+    const itemCategoryMap = {}
+    if (Array.isArray(menuItems)) {
+      menuItems.forEach(item => {
+        itemCategoryMap[item.name] = item.category || 'Uncategorized'
       })
-
-      const cgst = totalTax / 2
-      const sgst = totalTax / 2
-
-      setSummaryStats({
-        totalOrders,
-        totalRevenue,
-        totalItems: totalQuantity,
-        avgOrderValue: totalOrders > 0 ? totalRevenue / totalOrders : 0,
-        totalTax,
-        cgst: Math.round(cgst * 100) / 100,
-        sgst: Math.round(sgst * 100) / 100
-      })
-
-      // Item-wise (store all with categories)
-      const itemsArray = Object.entries(itemCounts)
-        .map(([name, quantity]) => ({
-          item_name: name,
-          quantity_sold: quantity,
-          revenue: itemRevenue[name] || 0,
-          category: itemCategories[name]
-        }))
-        .sort((a, b) => b.revenue - a.revenue)
-      
-      setAllSalesData(itemsArray)
-      setSalesData(itemsArray)
-
-      // Payment methods
-      const paymentMap = {}
-      orderData.forEach(o => {
-        const method = o.actual_payment_method || o.payment_method || 'unknown'
-        const amount = Number(o.total_inc_tax ?? o.total_amount ?? 0)
-        if (!paymentMap[method]) paymentMap[method] = { count: 0, amount: 0 }
-        paymentMap[method].count += 1
-        paymentMap[method].amount += amount
-      })
-      setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
-        payment_method: method,
-        order_count: data.count,
-        total_amount: data.amount,
-        percentage: totalRevenue > 0 ? ((data.amount / totalRevenue) * 100).toFixed(1) : '0.0'
-      })))
-
-      // Order types
-      const orderTypeMap = {}
-      orderData.forEach(o => {
-        const type = o.order_type || 'counter'
-        const amount = Number(o.total_inc_tax ?? o.total_amount ?? 0)
-        if (!orderTypeMap[type]) orderTypeMap[type] = { count: 0, amount: 0 }
-        orderTypeMap[type].count += 1
-        orderTypeMap[type].amount += amount
-      })
-      setOrderTypeBreakdown(Object.entries(orderTypeMap).map(([type, data]) => ({
-        order_type: type,
-        order_count: data.count,
-        total_amount: data.amount,
-        percentage: totalRevenue > 0 ? ((data.amount / totalRevenue) * 100).toFixed(1) : '0.0'
-      })))
-
-      // Tax (CGST + SGST only)
-      setTaxBreakdown([
-        { tax_type: 'CGST', amount: Math.round(cgst * 100) / 100 },
-        { tax_type: 'SGST', amount: Math.round(sgst * 100) / 100 },
-        { tax_type: 'Total Tax', amount: Math.round(totalTax * 100) / 100 }
-      ])
-
-      // Hourly
-      const hourlyMap = {}
-      orderData.forEach(o => {
-        const hour = new Date(o.created_at).getHours()
-        const amount = Number(o.total_inc_tax ?? o.total_amount ?? 0)
-        if (!hourlyMap[hour]) hourlyMap[hour] = { count: 0, amount: 0 }
-        hourlyMap[hour].count += 1
-        hourlyMap[hour].amount += amount
-      })
-      setHourlyBreakdown(
-        Array.from({ length: 24 }, (_, i) => ({
-          hour: `${String(i).padStart(2, '0')}:00`,
-          order_count: hourlyMap[i]?.count || 0,
-          total_amount: hourlyMap[i]?.amount || 0
-        })).filter(h => h.order_count > 0)
-      )
-
-      // Category-wise
-      setCategoryBreakdown(Object.entries(categoryMap)
-        .map(([cat, amount]) => ({
-          category: cat || 'Uncategorized',
-          total_amount: amount,
-          percentage: totalRevenue > 0 ? ((amount / totalRevenue) * 100).toFixed(1) : '0.0'
-        }))
-        .sort((a, b) => b.total_amount - a.total_amount)
-      )
-
-    } catch (err) {
-      setError(err.message || 'Failed to load sales data')
-    } finally {
-      setLoading(false)
     }
+
+    const { data: orders, error: ordersError } = await supabase
+      .from('orders')
+      .select(`
+        id,
+        total_amount,
+        total_inc_tax,
+        total_tax,
+        created_at,
+        status,
+        items,
+        payment_method,
+        actual_payment_method,
+        order_type
+      `)
+      .eq('restaurant_id', restaurantId)
+      .gte('created_at', range.start.toISOString())
+      .lte('created_at', range.end.toISOString())
+      .neq('status', 'cancelled')
+
+    if (ordersError) throw ordersError
+    const orderData = Array.isArray(orders) ? orders : []
+
+    let totalOrders = orderData.length
+    let totalRevenue = 0
+    let totalTax = 0
+    let totalQuantity = 0
+    const itemCounts = {}
+    const itemRevenue = {}
+    const categoryMap = {}
+
+    orderData.forEach(o => {
+      const revenue = Number(o.total_inc_tax ?? o.total_amount ?? 0)
+      const tax = Number(o.total_tax ?? 0)
+      totalRevenue += revenue
+      totalTax += tax
+
+      if (Array.isArray(o.items)) {
+        o.items.forEach(item => {
+          const name = item.name || 'Unknown Item'
+          // GET CATEGORY FROM MENU_ITEMS MAP (NOT FROM ORDER ITEMS)
+          const itemCategory = itemCategoryMap[name] || item.category || 'Uncategorized'
+          const quantity = Number(item.quantity) || 1
+          const price = Number(item.price) || 0
+          const itemTotal = quantity * price
+
+          itemCounts[name] = (itemCounts[name] || 0) + quantity
+          itemRevenue[name] = (itemRevenue[name] || 0) + itemTotal
+          totalQuantity += quantity
+
+          categoryMap[itemCategory] = (categoryMap[itemCategory] || 0) + itemTotal
+        })
+      }
+    })
+
+    const cgst = totalTax / 2
+    const sgst = totalTax / 2
+
+    setSummaryStats({
+      totalOrders,
+      totalRevenue,
+      totalItems: totalQuantity,
+      avgOrderValue: totalOrders > 0 ? totalRevenue / totalOrders : 0,
+      totalTax,
+      cgst: Math.round(cgst * 100) / 100,
+      sgst: Math.round(sgst * 100) / 100
+    })
+
+    // Item-wise with CORRECT categories from menu_items
+    const itemsArray = Object.entries(itemCounts)
+      .map(([name, quantity]) => ({
+        item_name: name,
+        quantity_sold: quantity,
+        revenue: itemRevenue[name] || 0,
+        category: itemCategoryMap[name] || 'Uncategorized'
+      }))
+      .sort((a, b) => b.revenue - a.revenue)
+    
+    setAllSalesData(itemsArray)
+    setSalesData(itemsArray)
+
+    // Payment methods
+    const paymentMap = {}
+    orderData.forEach(o => {
+      const method = o.actual_payment_method || o.payment_method || 'unknown'
+      const amount = Number(o.total_inc_tax ?? o.total_amount ?? 0)
+      if (!paymentMap[method]) paymentMap[method] = { count: 0, amount: 0 }
+      paymentMap[method].count += 1
+      paymentMap[method].amount += amount
+    })
+    setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
+      payment_method: method,
+      order_count: data.count,
+      total_amount: data.amount,
+      percentage: totalRevenue > 0 ? ((data.amount / totalRevenue) * 100).toFixed(1) : '0.0'
+    })))
+
+    // Order types
+    const orderTypeMap = {}
+    orderData.forEach(o => {
+      const type = o.order_type || 'counter'
+      const amount = Number(o.total_inc_tax ?? o.total_amount ?? 0)
+      if (!orderTypeMap[type]) orderTypeMap[type] = { count: 0, amount: 0 }
+      orderTypeMap[type].count += 1
+      orderTypeMap[type].amount += amount
+    })
+    setOrderTypeBreakdown(Object.entries(orderTypeMap).map(([type, data]) => ({
+      order_type: type,
+      order_count: data.count,
+      total_amount: data.amount,
+      percentage: totalRevenue > 0 ? ((data.amount / totalRevenue) * 100).toFixed(1) : '0.0'
+    })))
+
+    // Tax (CGST + SGST only)
+    setTaxBreakdown([
+      { tax_type: 'CGST', amount: Math.round(cgst * 100) / 100 },
+      { tax_type: 'SGST', amount: Math.round(sgst * 100) / 100 },
+      { tax_type: 'Total Tax', amount: Math.round(totalTax * 100) / 100 }
+    ])
+
+    // Hourly
+    const hourlyMap = {}
+    orderData.forEach(o => {
+      const hour = new Date(o.created_at).getHours()
+      const amount = Number(o.total_inc_tax ?? o.total_amount ?? 0)
+      if (!hourlyMap[hour]) hourlyMap[hour] = { count: 0, amount: 0 }
+      hourlyMap[hour].count += 1
+      hourlyMap[hour].amount += amount
+    })
+    setHourlyBreakdown(
+      Array.from({ length: 24 }, (_, i) => ({
+        hour: `${String(i).padStart(2, '0')}:00`,
+        order_count: hourlyMap[i]?.count || 0,
+        total_amount: hourlyMap[i]?.amount || 0
+      })).filter(h => h.order_count > 0)
+    )
+
+    // Category-wise
+    setCategoryBreakdown(Object.entries(categoryMap)
+      .map(([cat, amount]) => ({
+        category: cat || 'Uncategorized',
+        total_amount: amount,
+        percentage: totalRevenue > 0 ? ((amount / totalRevenue) * 100).toFixed(1) : '0.0'
+      }))
+      .sort((a, b) => b.total_amount - a.total_amount)
+    )
+
+  } catch (err) {
+    setError(err.message || 'Failed to load sales data')
+  } finally {
+    setLoading(false)
   }
+}
 
   const formatCurrency = n => `₹${Number(n).toFixed(2)}`
   const formatPercent = n => `${Number(n).toFixed(1)}%`
