@@ -1,3 +1,5 @@
+//components/layout
+
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/router'
@@ -7,6 +9,7 @@ import {
   FaHome,
   FaList,
   FaClock,
+  FaLeaf,
   FaTags,
   FaChartBar,
   FaCog,
@@ -199,6 +202,7 @@ function Sidebar({ collapsed }) {
     { href: '/owner/availability', label: 'Availability', icon: <FaClock /> },
     { href: '/owner/promotions', label: 'Promotions', icon: <FaTags /> },
     { href: '/owner/analytics', label: 'Analytics', icon: <FaChartBar /> },
+    { href: '/owner/production', label: 'Production', icon: <FaLeaf /> }, // Add this import: import { FaLeaf } from 'react-icons/fa'
     { href: '/owner/sales', label: 'Sales', icon: <FaCreditCard /> },
     { href: '/owner/settings', label: 'Settings', icon: <FaCog /> },
     { href: '/owner/billing', label: 'Billing', icon: <FaFileInvoice /> },

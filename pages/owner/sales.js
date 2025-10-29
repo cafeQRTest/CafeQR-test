@@ -49,28 +49,34 @@ export default function SalesPage() {
     if (!restaurantId || !supabase) return
     
     const fetchData = async () => {
-      const { data: profile } = await supabase
-        .from('restaurant_profiles')
-        .select('*')
-        .eq('restaurant_id', restaurantId)
-        .single()
-      
-      if (profile) setRestaurantProfile(profile)
-
-      const { data: items } = await supabase
-        .from('menu_items')
-        .select('category')
-        .eq('restaurant_id', restaurantId)
-        .neq('category', null)
-      
-      if (items) {
-        const uniqueCats = [...new Set(items.map(m => m.category))]
-        setMenuCategories(uniqueCats.filter(c => c && c.trim() !== ''))
-      }
-    }
+    // Fetch restaurant data from 'restaurants' table
+    const { data: restaurantData } = await supabase
+      .from('restaurants')
+      .select('name')
+      .eq('id', restaurantId)
+      .single()
     
-    fetchData()
-  }, [restaurantId, supabase])
+    if (restaurantData) {
+      setRestaurantProfile(prev => ({
+        ...prev,
+        restaurant_name: restaurantData.name
+      }))
+    }
+
+    const { data: items } = await supabase
+      .from('menu_items')
+      .select('category')
+      .eq('restaurant_id', restaurantId)
+      .neq('category', null)
+    
+    if (items) {
+      const uniqueCats = [...new Set(items.map(m => m.category))]
+      setMenuCategories(uniqueCats.filter(c => c && c.trim() !== ''))
+    }
+  }
+  
+  fetchData()
+}, [restaurantId, supabase])
 
   useEffect(() => {
     if (checking || restLoading || !restaurantId || !supabase) return
