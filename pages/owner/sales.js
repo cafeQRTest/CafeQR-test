@@ -6,6 +6,8 @@ import Table from '../../components/ui/Table'
 import DateRangePicker from '../../components/ui/DateRangePicker'
 import { getSupabase } from '../../services/supabase'
 import { printSalesReport } from '../../utils/printSalesReport'
+import { exportSalesReportToCSV, exportSalesReportToExcel } from '../../utils/exportSalesReport'
+
 
 export default function SalesPage() {
   const supabase = getSupabase()
@@ -20,7 +22,7 @@ export default function SalesPage() {
 
   const [activeReport, setActiveReport] = useState(0)
   const [salesData, setSalesData] = useState([])
-  const [allSalesData, setAllSalesData] = useState([]) // Store unfiltered data
+  const [allSalesData, setAllSalesData] = useState([])
   const [summaryStats, setSummaryStats] = useState({
     totalOrders: 0,
     totalRevenue: 0,
@@ -43,7 +45,6 @@ export default function SalesPage() {
 
   const reports = ['Summary', 'Item-wise', 'Payment Methods', 'Order Types', 'Tax Report', 'Hourly Sales', 'Categories']
 
-  // Fetch restaurant profile and menu categories
   useEffect(() => {
     if (!restaurantId || !supabase) return
     
@@ -76,7 +77,6 @@ export default function SalesPage() {
     loadAllReportsData()
   }, [checking, restLoading, restaurantId, range, supabase])
 
-  // Apply category filter to existing data
   useEffect(() => {
     if (!selectedCategory) {
       setSalesData(allSalesData)
@@ -86,179 +86,170 @@ export default function SalesPage() {
     }
   }, [selectedCategory, allSalesData])
 
- const loadAllReportsData = async () => {
-  if (!supabase) return
-  setLoading(true)
-  setError('')
-  try {
-    // First fetch all menu items with categories
-    const { data: menuItems, error: menuErr } = await supabase
-      .from('menu_items')
-      .select('id, name, category')
-      .eq('restaurant_id', restaurantId)
+  const loadAllReportsData = async () => {
+    if (!supabase) return
+    setLoading(true)
+    setError('')
+    try {
+      const { data: menuItems, error: menuErr } = await supabase
+        .from('menu_items')
+        .select('id, name, category')
+        .eq('restaurant_id', restaurantId)
 
-    if (menuErr) throw menuErr
+      if (menuErr) throw menuErr
 
-    // Create a map of item_name => category from menu_items
-    const itemCategoryMap = {}
-    if (Array.isArray(menuItems)) {
-      menuItems.forEach(item => {
-        itemCategoryMap[item.name] = item.category || 'Uncategorized'
-      })
-    }
-
-    const { data: orders, error: ordersError } = await supabase
-      .from('orders')
-      .select(`
-        id,
-        total_amount,
-        total_inc_tax,
-        total_tax,
-        created_at,
-        status,
-        items,
-        payment_method,
-        actual_payment_method,
-        order_type
-      `)
-      .eq('restaurant_id', restaurantId)
-      .gte('created_at', range.start.toISOString())
-      .lte('created_at', range.end.toISOString())
-      .neq('status', 'cancelled')
-
-    if (ordersError) throw ordersError
-    const orderData = Array.isArray(orders) ? orders : []
-
-    let totalOrders = orderData.length
-    let totalRevenue = 0
-    let totalTax = 0
-    let totalQuantity = 0
-    const itemCounts = {}
-    const itemRevenue = {}
-    const categoryMap = {}
-
-    orderData.forEach(o => {
-      const revenue = Number(o.total_inc_tax ?? o.total_amount ?? 0)
-      const tax = Number(o.total_tax ?? 0)
-      totalRevenue += revenue
-      totalTax += tax
-
-      if (Array.isArray(o.items)) {
-        o.items.forEach(item => {
-          const name = item.name || 'Unknown Item'
-          // GET CATEGORY FROM MENU_ITEMS MAP (NOT FROM ORDER ITEMS)
-          const itemCategory = itemCategoryMap[name] || item.category || 'Uncategorized'
-          const quantity = Number(item.quantity) || 1
-          const price = Number(item.price) || 0
-          const itemTotal = quantity * price
-
-          itemCounts[name] = (itemCounts[name] || 0) + quantity
-          itemRevenue[name] = (itemRevenue[name] || 0) + itemTotal
-          totalQuantity += quantity
-
-          categoryMap[itemCategory] = (categoryMap[itemCategory] || 0) + itemTotal
+      const itemCategoryMap = {}
+      if (Array.isArray(menuItems)) {
+        menuItems.forEach(item => {
+          itemCategoryMap[item.name] = item.category || 'Uncategorized'
         })
       }
-    })
 
-    const cgst = totalTax / 2
-    const sgst = totalTax / 2
+      const { data: orders, error: ordersError } = await supabase
+        .from('orders')
+        .select(`
+          id,
+          total_amount,
+          total_inc_tax,
+          total_tax,
+          created_at,
+          status,
+          items,
+          payment_method,
+          actual_payment_method,
+          order_type
+        `)
+        .eq('restaurant_id', restaurantId)
+        .gte('created_at', range.start.toISOString())
+        .lte('created_at', range.end.toISOString())
+        .neq('status', 'cancelled')
 
-    setSummaryStats({
-      totalOrders,
-      totalRevenue,
-      totalItems: totalQuantity,
-      avgOrderValue: totalOrders > 0 ? totalRevenue / totalOrders : 0,
-      totalTax,
-      cgst: Math.round(cgst * 100) / 100,
-      sgst: Math.round(sgst * 100) / 100
-    })
+      if (ordersError) throw ordersError
+      const orderData = Array.isArray(orders) ? orders : []
 
-    // Item-wise with CORRECT categories from menu_items
-    const itemsArray = Object.entries(itemCounts)
-      .map(([name, quantity]) => ({
-        item_name: name,
-        quantity_sold: quantity,
-        revenue: itemRevenue[name] || 0,
-        category: itemCategoryMap[name] || 'Uncategorized'
-      }))
-      .sort((a, b) => b.revenue - a.revenue)
-    
-    setAllSalesData(itemsArray)
-    setSalesData(itemsArray)
+      let totalOrders = orderData.length
+      let totalRevenue = 0
+      let totalTax = 0
+      let totalQuantity = 0
+      const itemCounts = {}
+      const itemRevenue = {}
+      const categoryMap = {}
 
-    // Payment methods
-    const paymentMap = {}
-    orderData.forEach(o => {
-      const method = o.actual_payment_method || o.payment_method || 'unknown'
-      const amount = Number(o.total_inc_tax ?? o.total_amount ?? 0)
-      if (!paymentMap[method]) paymentMap[method] = { count: 0, amount: 0 }
-      paymentMap[method].count += 1
-      paymentMap[method].amount += amount
-    })
-    setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
-      payment_method: method,
-      order_count: data.count,
-      total_amount: data.amount,
-      percentage: totalRevenue > 0 ? ((data.amount / totalRevenue) * 100).toFixed(1) : '0.0'
-    })))
+      orderData.forEach(o => {
+        const revenue = Number(o.total_inc_tax ?? o.total_amount ?? 0)
+        const tax = Number(o.total_tax ?? 0)
+        totalRevenue += revenue
+        totalTax += tax
 
-    // Order types
-    const orderTypeMap = {}
-    orderData.forEach(o => {
-      const type = o.order_type || 'counter'
-      const amount = Number(o.total_inc_tax ?? o.total_amount ?? 0)
-      if (!orderTypeMap[type]) orderTypeMap[type] = { count: 0, amount: 0 }
-      orderTypeMap[type].count += 1
-      orderTypeMap[type].amount += amount
-    })
-    setOrderTypeBreakdown(Object.entries(orderTypeMap).map(([type, data]) => ({
-      order_type: type,
-      order_count: data.count,
-      total_amount: data.amount,
-      percentage: totalRevenue > 0 ? ((data.amount / totalRevenue) * 100).toFixed(1) : '0.0'
-    })))
+        if (Array.isArray(o.items)) {
+          o.items.forEach(item => {
+            const name = item.name || 'Unknown Item'
+            const itemCategory = itemCategoryMap[name] || item.category || 'Uncategorized'
+            const quantity = Number(item.quantity) || 1
+            const price = Number(item.price) || 0
+            const itemTotal = quantity * price
 
-    // Tax (CGST + SGST only)
-    setTaxBreakdown([
-      { tax_type: 'CGST', amount: Math.round(cgst * 100) / 100 },
-      { tax_type: 'SGST', amount: Math.round(sgst * 100) / 100 },
-      { tax_type: 'Total Tax', amount: Math.round(totalTax * 100) / 100 }
-    ])
+            itemCounts[name] = (itemCounts[name] || 0) + quantity
+            itemRevenue[name] = (itemRevenue[name] || 0) + itemTotal
+            totalQuantity += quantity
 
-    // Hourly
-    const hourlyMap = {}
-    orderData.forEach(o => {
-      const hour = new Date(o.created_at).getHours()
-      const amount = Number(o.total_inc_tax ?? o.total_amount ?? 0)
-      if (!hourlyMap[hour]) hourlyMap[hour] = { count: 0, amount: 0 }
-      hourlyMap[hour].count += 1
-      hourlyMap[hour].amount += amount
-    })
-    setHourlyBreakdown(
-      Array.from({ length: 24 }, (_, i) => ({
-        hour: `${String(i).padStart(2, '0')}:00`,
-        order_count: hourlyMap[i]?.count || 0,
-        total_amount: hourlyMap[i]?.amount || 0
-      })).filter(h => h.order_count > 0)
-    )
+            categoryMap[itemCategory] = (categoryMap[itemCategory] || 0) + itemTotal
+          })
+        }
+      })
 
-    // Category-wise
-    setCategoryBreakdown(Object.entries(categoryMap)
-      .map(([cat, amount]) => ({
-        category: cat || 'Uncategorized',
-        total_amount: amount,
-        percentage: totalRevenue > 0 ? ((amount / totalRevenue) * 100).toFixed(1) : '0.0'
-      }))
-      .sort((a, b) => b.total_amount - a.total_amount)
-    )
+      const cgst = totalTax / 2
+      const sgst = totalTax / 2
 
-  } catch (err) {
-    setError(err.message || 'Failed to load sales data')
-  } finally {
-    setLoading(false)
+      setSummaryStats({
+        totalOrders,
+        totalRevenue,
+        totalItems: totalQuantity,
+        avgOrderValue: totalOrders > 0 ? totalRevenue / totalOrders : 0,
+        totalTax,
+        cgst: Math.round(cgst * 100) / 100,
+        sgst: Math.round(sgst * 100) / 100
+      })
+
+      const itemsArray = Object.entries(itemCounts)
+        .map(([name, quantity]) => ({
+          item_name: name,
+          quantity_sold: quantity,
+          revenue: itemRevenue[name] || 0,
+          category: itemCategoryMap[name] || 'Uncategorized'
+        }))
+        .sort((a, b) => b.revenue - a.revenue)
+      
+      setAllSalesData(itemsArray)
+      setSalesData(itemsArray)
+
+      const paymentMap = {}
+      orderData.forEach(o => {
+        const method = o.actual_payment_method || o.payment_method || 'unknown'
+        const amount = Number(o.total_inc_tax ?? o.total_amount ?? 0)
+        if (!paymentMap[method]) paymentMap[method] = { count: 0, amount: 0 }
+        paymentMap[method].count += 1
+        paymentMap[method].amount += amount
+      })
+      setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
+        payment_method: method,
+        order_count: data.count,
+        total_amount: data.amount,
+        percentage: totalRevenue > 0 ? ((data.amount / totalRevenue) * 100).toFixed(1) : '0.0'
+      })))
+
+      const orderTypeMap = {}
+      orderData.forEach(o => {
+        const type = o.order_type || 'counter'
+        const amount = Number(o.total_inc_tax ?? o.total_amount ?? 0)
+        if (!orderTypeMap[type]) orderTypeMap[type] = { count: 0, amount: 0 }
+        orderTypeMap[type].count += 1
+        orderTypeMap[type].amount += amount
+      })
+      setOrderTypeBreakdown(Object.entries(orderTypeMap).map(([type, data]) => ({
+        order_type: type,
+        order_count: data.count,
+        total_amount: data.amount,
+        percentage: totalRevenue > 0 ? ((data.amount / totalRevenue) * 100).toFixed(1) : '0.0'
+      })))
+
+      setTaxBreakdown([
+        { tax_type: 'CGST', amount: Math.round(cgst * 100) / 100 },
+        { tax_type: 'SGST', amount: Math.round(sgst * 100) / 100 },
+        { tax_type: 'Total Tax', amount: Math.round(totalTax * 100) / 100 }
+      ])
+
+      const hourlyMap = {}
+      orderData.forEach(o => {
+        const hour = new Date(o.created_at).getHours()
+        const amount = Number(o.total_inc_tax ?? o.total_amount ?? 0)
+        if (!hourlyMap[hour]) hourlyMap[hour] = { count: 0, amount: 0 }
+        hourlyMap[hour].count += 1
+        hourlyMap[hour].amount += amount
+      })
+      setHourlyBreakdown(
+        Array.from({ length: 24 }, (_, i) => ({
+          hour: `${String(i).padStart(2, '0')}:00`,
+          order_count: hourlyMap[i]?.count || 0,
+          total_amount: hourlyMap[i]?.amount || 0
+        })).filter(h => h.order_count > 0)
+      )
+
+      setCategoryBreakdown(Object.entries(categoryMap)
+        .map(([cat, amount]) => ({
+          category: cat || 'Uncategorized',
+          total_amount: amount,
+          percentage: totalRevenue > 0 ? ((amount / totalRevenue) * 100).toFixed(1) : '0.0'
+        }))
+        .sort((a, b) => b.total_amount - a.total_amount)
+      )
+
+    } catch (err) {
+      setError(err.message || 'Failed to load sales data')
+    } finally {
+      setLoading(false)
+    }
   }
-}
 
   const formatCurrency = n => `₹${Number(n).toFixed(2)}`
   const formatPercent = n => `${Number(n).toFixed(1)}%`
@@ -267,7 +258,7 @@ export default function SalesPage() {
     await printSalesReport({
       range,
       summaryStats,
-      salesData: allSalesData, // Print ALL items
+      salesData: allSalesData,
       paymentBreakdown,
       orderTypeBreakdown,
       taxBreakdown,
@@ -276,6 +267,52 @@ export default function SalesPage() {
       restaurantProfile
     })
   }
+
+  const handleExportCSV = async () => {
+  try {
+    const success = exportSalesReportToCSV({
+      range,
+      summaryStats,
+      salesData: allSalesData,
+      paymentBreakdown,
+      orderTypeBreakdown,
+      taxBreakdown,
+      hourlyBreakdown,
+      categoryBreakdown,
+      restaurantProfile
+    })
+
+    if (success) {
+      // Show success message (optional)
+      console.log('✅ CSV exported successfully')
+    }
+  } catch (error) {
+    console.error('CSV export error:', error)
+  }
+}
+
+const handleExportExcel = async () => {
+  try {
+    const success = exportSalesReportToExcel({
+      range,
+      summaryStats,
+      salesData: allSalesData,
+      paymentBreakdown,
+      orderTypeBreakdown,
+      taxBreakdown,
+      hourlyBreakdown,
+      categoryBreakdown,
+      restaurantProfile
+    })
+
+    if (success) {
+      // Show success message (optional)
+      console.log('✅ Excel exported successfully')
+    }
+  } catch (error) {
+    console.error('Excel export error:', error)
+  }
+}
 
   if (checking || restLoading) return <div style={{ padding: 16 }}>Loading…</div>
   if (!restaurantId) return <div style={{ padding: 16 }}>No restaurant selected</div>
@@ -287,6 +324,8 @@ export default function SalesPage() {
         <div className="sales-controls">
           <DateRangePicker start={range.start} end={range.end} onChange={setRange} />
           <button className="sales-print-btn" onClick={handlePrint}>🖨️ Print</button>
+      <button className="sales-print-btn" onClick={handleExportCSV}>📥 CSV</button>
+  <button className="sales-print-btn" onClick={handleExportExcel}>📊 Excel</button>
         </div>
       </div>
 
@@ -319,7 +358,6 @@ export default function SalesPage() {
             </Card>
           </div>
 
-          {/* Carousel Tabs */}
           <div className="sales-carousel">
             {reports.map((name, idx) => (
               <button
@@ -332,11 +370,10 @@ export default function SalesPage() {
             ))}
           </div>
 
-          {/* Report Content */}
           {activeReport === 0 && (
-            <Card style={{ marginTop: 12, padding: 16 }}>
-              <h3 style={{ marginTop: 0 }}>Sales Summary</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, fontSize: '14px' }}>
+            <Card style={{ marginTop: 10, padding: 12 }}>
+              <h3 style={{ marginTop: 0, fontSize: '1rem' }}>Sales Summary</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: '13px' }}>
                 <div><strong>Period:</strong></div>
                 <div>{range.start.toLocaleDateString()} - {range.end.toLocaleDateString()}</div>
                 <div><strong>Total Orders:</strong></div>
@@ -352,9 +389,9 @@ export default function SalesPage() {
           )}
 
           {activeReport === 1 && (
-            <Card style={{ marginTop: 12, padding: 12 }}>
-              <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                <h3 style={{ margin: 0 }}>Item-wise Sales</h3>
+            <Card style={{ marginTop: 10, padding: 10 }}>
+              <div style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <h3 style={{ margin: 0, fontSize: '0.95rem' }}>Item-wise Sales</h3>
                 {menuCategories.length > 0 && (
                   <select
                     className="sales-category-select"
@@ -380,8 +417,8 @@ export default function SalesPage() {
           )}
 
           {activeReport === 2 && (
-            <Card style={{ marginTop: 12, padding: 12 }}>
-              <h3 style={{ marginTop: 0 }}>Payment Methods</h3>
+            <Card style={{ marginTop: 10, padding: 10 }}>
+              <h3 style={{ marginTop: 0, fontSize: '0.95rem' }}>Payment Methods</h3>
               <div className="sales-table-wrapper">
                 <Table
                   columns={[
@@ -397,8 +434,8 @@ export default function SalesPage() {
           )}
 
           {activeReport === 3 && (
-            <Card style={{ marginTop: 12, padding: 12 }}>
-              <h3 style={{ marginTop: 0 }}>Order Types</h3>
+            <Card style={{ marginTop: 10, padding: 10 }}>
+              <h3 style={{ marginTop: 0, fontSize: '0.95rem' }}>Order Types</h3>
               <div className="sales-table-wrapper">
                 <Table
                   columns={[
@@ -414,8 +451,8 @@ export default function SalesPage() {
           )}
 
           {activeReport === 4 && (
-            <Card style={{ marginTop: 12, padding: 12 }}>
-              <h3 style={{ marginTop: 0 }}>GST Tax Report</h3>
+            <Card style={{ marginTop: 10, padding: 10 }}>
+              <h3 style={{ marginTop: 0, fontSize: '0.95rem' }}>GST Tax Report</h3>
               <div className="sales-table-wrapper">
                 <Table
                   columns={[
@@ -429,8 +466,8 @@ export default function SalesPage() {
           )}
 
           {activeReport === 5 && (
-            <Card style={{ marginTop: 12, padding: 12 }}>
-              <h3 style={{ marginTop: 0 }}>Hourly Sales</h3>
+            <Card style={{ marginTop: 10, padding: 10 }}>
+              <h3 style={{ marginTop: 0, fontSize: '0.95rem' }}>Hourly Sales</h3>
               <div className="sales-table-wrapper">
                 <Table
                   columns={[
@@ -445,8 +482,8 @@ export default function SalesPage() {
           )}
 
           {activeReport === 6 && (
-            <Card style={{ marginTop: 12, padding: 12 }}>
-              <h3 style={{ marginTop: 0 }}>Categories</h3>
+            <Card style={{ marginTop: 10, padding: 10 }}>
+              <h3 style={{ marginTop: 0, fontSize: '0.95rem' }}>Categories</h3>
               <div className="sales-table-wrapper">
                 <Table
                   columns={[
