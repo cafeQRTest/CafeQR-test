@@ -1,6 +1,5 @@
 // utils/exportSalesReport.js
 
-// utils/exportSalesReport.js - UPDATED CSV FUNCTION ONLY
 
 export const exportSalesReportToCSV = ({
   range,

@@ -4,7 +4,7 @@ export const exportProductionToCSV = ({
   date,
   restaurantName,
   productionRecords,
-  itemBalances
+  balanceReport
 }) => {
   try {
     const dateStr = new Date(date).toLocaleDateString()
@@ -20,35 +20,35 @@ export const exportProductionToCSV = ({
     // Production Records Section
     if (productionRecords.length > 0) {
       csvContent += `PRODUCTION RECORDS\n`
-      csvContent += `Shift,Item,Quantity Produced,Quantity Transferred\n`
+      csvContent += `Shift,Item,Quantity Produced,Cost/Unit,Total Cost\n`
       
       productionRecords.forEach(record => {
-        record.production_items?.forEach(item => {
-          csvContent += `${record.shift},${item.item_name},${item.quantity_produced},${item.quantity_transferred || 0}\n`
+        record.items?.forEach(item => {
+          const totalCost = item.quantity_produced * (item.cost_per_unit || 0)
+          csvContent += `${record.shift},${item.item_name},${item.quantity_produced},${item.cost_per_unit || 0},${totalCost.toFixed(2)}\n`
         })
       })
       csvContent += '\n'
     }
 
     // Balance Report Section
-    if (itemBalances.length > 0) {
+    if (balanceReport.length > 0) {
       csvContent += `ITEM BALANCE REPORT\n`
-      csvContent += `Item,Produced,Sold,Transferred,Balance\n`
+      csvContent += `Item,Produced,Sold,Balance,Status\n`
       
-      itemBalances.forEach(item => {
-        csvContent += `"${item.item_name}",${item.quantity_produced},${item.quantity_sold},${item.quantity_transferred},${item.quantity_remaining}\n`
+      balanceReport.forEach(item => {
+        csvContent += `"${item.item_name}",${item.produced},${item.sold},${item.balance},"${item.wasteStatus}"\n`
       })
       csvContent += '\n'
 
       // Summary
-      const totalProduced = itemBalances.reduce((sum, item) => sum + item.quantity_produced, 0)
-      const totalSold = itemBalances.reduce((sum, item) => sum + item.quantity_sold, 0)
-      const totalTransferred = itemBalances.reduce((sum, item) => sum + item.quantity_transferred, 0)
-      const totalRemaining = itemBalances.reduce((sum, item) => sum + item.quantity_remaining, 0)
+      const totalProduced = balanceReport.reduce((sum, item) => sum + item.produced, 0)
+      const totalSold = balanceReport.reduce((sum, item) => sum + item.sold, 0)
+      const totalBalance = balanceReport.reduce((sum, item) => sum + item.balance, 0)
 
       csvContent += `SUMMARY\n`
-      csvContent += `Total Produced,Total Sold,Total Transferred,Total Remaining\n`
-      csvContent += `${totalProduced},${totalSold},${totalTransferred},${totalRemaining}\n`
+      csvContent += `Total Produced,Total Sold,Total Balance\n`
+      csvContent += `${totalProduced},${totalSold},${totalBalance}\n`
     }
 
     // Create Blob and Download
@@ -77,7 +77,7 @@ export const exportProductionToExcel = ({
   date,
   restaurantName,
   productionRecords,
-  itemBalances
+  balanceReport
 }) => {
   try {
     const dateStr = new Date(date).toLocaleDateString()
@@ -94,6 +94,8 @@ export const exportProductionToExcel = ({
         .header { background-color: #f3f4f6; padding: 15px; margin-bottom: 20px; }
         .summary { background-color: #f0fdf4; padding: 12px; border-left: 4px solid #10b981; margin-top: 16px; }
         .summary-item { margin: 8px 0; }
+        .warning { color: #f59e0b; font-weight: 600; }
+        .success { color: #059669; font-weight: 600; }
       </style>
     `
 
@@ -107,7 +109,7 @@ export const exportProductionToExcel = ({
       </head>
       <body>
         <div class="header">
-          <h1>📊 Production Report - ${restaurantName}</h1>
+          <h1>🏭 Production Report - ${restaurantName}</h1>
           <p><strong>Date:</strong> ${dateStr}</p>
           <p><strong>Generated:</strong> ${new Date().toLocaleString()}</p>
         </div>
@@ -123,20 +125,23 @@ export const exportProductionToExcel = ({
               <th>Shift</th>
               <th>Item</th>
               <th>Produced</th>
-              <th>Transferred</th>
+              <th>Cost/Unit</th>
+              <th>Total Cost</th>
             </tr>
           </thead>
           <tbody>
       `
 
       productionRecords.forEach(record => {
-        record.production_items?.forEach(item => {
+        record.items?.forEach(item => {
+          const totalCost = item.quantity_produced * (item.cost_per_unit || 0)
           htmlContent += `
             <tr>
               <td style="text-transform: capitalize;">${record.shift}</td>
               <td>${item.item_name}</td>
               <td style="text-align: center; font-weight: 500;">${item.quantity_produced}</td>
-              <td style="text-align: center; color: #f59e0b;">${item.quantity_transferred || 0}</td>
+              <td style="text-align: right;">₹${(item.cost_per_unit || 0).toFixed(2)}</td>
+              <td style="text-align: right; font-weight: 600;">₹${totalCost.toFixed(2)}</td>
             </tr>
           `
         })
@@ -149,7 +154,7 @@ export const exportProductionToExcel = ({
     }
 
     // Balance Report Section
-    if (itemBalances.length > 0) {
+    if (balanceReport.length > 0) {
       htmlContent += `
         <h2>Item Balance Report</h2>
         <table>
@@ -158,33 +163,32 @@ export const exportProductionToExcel = ({
               <th>Item</th>
               <th>Produced</th>
               <th>Sold</th>
-              <th>Transferred</th>
               <th>Balance</th>
+              <th>Status</th>
             </tr>
           </thead>
           <tbody>
       `
 
-      itemBalances.forEach(item => {
-        const balanceColor = item.quantity_remaining < 0 ? '#dc2626' : '#059669'
+      balanceReport.forEach(item => {
+        const balanceColor = item.balance < 0 ? '#dc2626' : item.balance === 0 ? '#059669' : '#f59e0b'
         htmlContent += `
           <tr>
             <td>${item.item_name}</td>
-            <td style="text-align: center;">${item.quantity_produced}</td>
-            <td style="text-align: center; color: #f59e0b;">${item.quantity_sold}</td>
-            <td style="text-align: center; color: #3b82f6;">${item.quantity_transferred}</td>
+            <td style="text-align: center;">${item.produced}</td>
+            <td style="text-align: center; color: #3b82f6;">${item.sold}</td>
             <td style="text-align: center; font-weight: 600; color: ${balanceColor};">
-              ${item.quantity_remaining}
+              ${item.balance}
             </td>
+            <td style="font-size: 12px;">${item.wasteStatus}</td>
           </tr>
         `
       })
 
       // Summary
-      const totalProduced = itemBalances.reduce((sum, item) => sum + item.quantity_produced, 0)
-      const totalSold = itemBalances.reduce((sum, item) => sum + item.quantity_sold, 0)
-      const totalTransferred = itemBalances.reduce((sum, item) => sum + item.quantity_transferred, 0)
-      const totalRemaining = itemBalances.reduce((sum, item) => sum + item.quantity_remaining, 0)
+      const totalProduced = balanceReport.reduce((sum, item) => sum + item.produced, 0)
+      const totalSold = balanceReport.reduce((sum, item) => sum + item.sold, 0)
+      const totalBalance = balanceReport.reduce((sum, item) => sum + item.balance, 0)
 
       htmlContent += `
           </tbody>
@@ -194,8 +198,7 @@ export const exportProductionToExcel = ({
           <h3 style="margin-top: 0;">Summary</h3>
           <div class="summary-item"><strong>Total Produced:</strong> ${totalProduced} units</div>
           <div class="summary-item"><strong>Total Sold:</strong> ${totalSold} units</div>
-          <div class="summary-item"><strong>Total Transferred:</strong> ${totalTransferred} units</div>
-          <div class="summary-item"><strong>Total Remaining:</strong> ${totalRemaining} units</div>
+          <div class="summary-item"><strong>Total Remaining:</strong> ${totalBalance} units</div>
         </div>
       `
     }
@@ -226,104 +229,6 @@ export const exportProductionToExcel = ({
     return true
   } catch (error) {
     console.error('Error exporting Excel:', error)
-    return false
-  }
-}
-
-export const printProductionReport = ({
-  date,
-  restaurantName,
-  productionRecords,
-  itemBalances
-}) => {
-  try {
-    const dateStr = new Date(date).toLocaleDateString()
-    
-    let printContent = `
-      <html>
-        <head>
-          <title>Production Report</title>
-          <style>
-            body { font-family: Arial, sans-serif; margin: 20px; }
-            h1 { text-align: center; }
-            table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-            th, td { border: 1px solid #000; padding: 8px; text-align: left; }
-            th { background-color: #f0f0f0; font-weight: bold; }
-            .page-break { page-break-after: always; }
-            .center { text-align: center; }
-          </style>
-        </head>
-        <body>
-          <h1>Production Report</h1>
-          <p><strong>Restaurant:</strong> ${restaurantName}</p>
-          <p><strong>Date:</strong> ${dateStr}</p>
-          <p><strong>Printed:</strong> ${new Date().toLocaleString()}</p>
-          
-          <h2>Production Records</h2>
-          <table>
-            <tr>
-              <th>Shift</th>
-              <th>Item</th>
-              <th>Produced</th>
-              <th>Transferred</th>
-            </tr>
-    `
-
-    productionRecords.forEach(record => {
-      record.production_items?.forEach(item => {
-        printContent += `
-          <tr>
-            <td>${record.shift}</td>
-            <td>${item.item_name}</td>
-            <td class="center">${item.quantity_produced}</td>
-            <td class="center">${item.quantity_transferred || 0}</td>
-          </tr>
-        `
-      })
-    })
-
-    printContent += `
-          </table>
-          
-          <div class="page-break"></div>
-          
-          <h2>Item Balance Report</h2>
-          <table>
-            <tr>
-              <th>Item</th>
-              <th>Produced</th>
-              <th>Sold</th>
-              <th>Transferred</th>
-              <th>Balance</th>
-            </tr>
-    `
-
-    itemBalances.forEach(item => {
-      printContent += `
-        <tr>
-          <td>${item.item_name}</td>
-          <td class="center">${item.quantity_produced}</td>
-          <td class="center">${item.quantity_sold}</td>
-          <td class="center">${item.quantity_transferred}</td>
-          <td class="center">${item.quantity_remaining}</td>
-        </tr>
-      `
-    })
-
-    printContent += `
-          </table>
-        </body>
-      </html>
-    `
-
-    const printWindow = window.open('', '', 'height=500,width=900')
-    printWindow.document.write(printContent)
-    printWindow.document.close()
-    printWindow.print()
-
-    return true
-  } catch (error) {
-    console.error('Error printing report:', error)
     return false
   }
 }

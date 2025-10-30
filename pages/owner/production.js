@@ -4,6 +4,8 @@ import { useRestaurant } from '../../context/RestaurantContext'
 import Card from '../../components/ui/Card'
 import Table from '../../components/ui/Table'
 import { getSupabase } from '../../services/supabase'
+import { exportProductionToCSV, exportProductionToExcel } from '../../utils/exportProductionReport'
+
 
 export default function ProductionPage() {
   const supabase = getSupabase()
@@ -317,6 +319,40 @@ export default function ProductionPage() {
     setEditingItems([])
   }
 
+  const handleExportCSV = () => {
+  const success = exportProductionToCSV({
+    date: selectedReportDate,
+    restaurantName: restaurant?.restaurant_name || 'Restaurant',
+    productionRecords: productionRecords,
+    balanceReport: balanceReport
+  })
+
+  if (success) {
+    setSuccess('✅ CSV exported successfully!')
+    setTimeout(() => setSuccess(''), 2000)
+  } else {
+    setError('❌ Failed to export CSV')
+    setTimeout(() => setError(''), 2000)
+  }
+}
+
+const handleExportExcel = () => {
+  const success = exportProductionToExcel({
+    date: selectedReportDate,
+    restaurantName: restaurant?.restaurant_name || 'Restaurant',
+    productionRecords: productionRecords,
+    balanceReport: balanceReport
+  })
+
+  if (success) {
+    setSuccess('✅ Excel exported successfully!')
+    setTimeout(() => setSuccess(''), 2000)
+  } else {
+    setError('❌ Failed to export Excel')
+    setTimeout(() => setError(''), 2000)
+  }
+}
+
   if (checking || restLoading) return <div style={{ padding: 16 }}>Loading…</div>
   if (!restaurantId) return <div style={{ padding: 16 }}>No restaurant selected</div>
 
@@ -583,6 +619,51 @@ export default function ProductionPage() {
                 fontSize: 14
               }}
             />
+       {/* ✅ EXPORT BUTTONS */}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={handleExportCSV}
+            disabled={loading || (productionRecords.length === 0 && balanceReport.length === 0)}
+            style={{
+              padding: '10px 16px',
+              background: '#059669',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 6,
+              cursor: loading || (productionRecords.length === 0 && balanceReport.length === 0) ? 'not-allowed' : 'pointer',
+              fontWeight: 600,
+              fontSize: 14,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              opacity: loading || (productionRecords.length === 0 && balanceReport.length === 0) ? 0.6 : 1
+            }}
+          >
+            📄 Export CSV
+          </button>
+          
+          <button
+            onClick={handleExportExcel}
+            disabled={loading || (productionRecords.length === 0 && balanceReport.length === 0)}
+            style={{
+              padding: '10px 16px',
+              background: '#2563eb',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 6,
+              cursor: loading || (productionRecords.length === 0 && balanceReport.length === 0) ? 'not-allowed' : 'pointer',
+              fontWeight: 600,
+              fontSize: 14,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              opacity: loading || (productionRecords.length === 0 && balanceReport.length === 0) ? 0.6 : 1
+            }}
+          >
+            📊 Export Excel
+          </button>
+        </div>
+     
           </Card>
 
           {loading ? (
