@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRequireAuth } from '../../lib/useRequireAuth'
 import { useRestaurant } from '../../context/RestaurantContext'
 import { getSupabase } from '../../services/supabase'
+import { createClient } from '@supabase/supabase-js'
+
 
 export default function CounterSale() {
   const supabase = getSupabase()
@@ -246,12 +248,12 @@ const completeSale = async () => {
     // ✅ UPDATED: Pass payment method to invoice creation
     // In your completeSale function, update the invoice creation call:
 
+// ✅ UPDATED: Create invoice with payment method
 const invRes = await fetch('/api/invoices/generate', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({ 
     order_id: result.order_id,
-    // ✅ NEW: Pass payment method to invoice
     payment_method: isCreditSale ? 'credit' : paymentMethod,
     is_credit: isCreditSale,
     credit_customer_id: selectedCreditCustomerId || null

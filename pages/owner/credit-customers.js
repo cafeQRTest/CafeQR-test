@@ -130,16 +130,25 @@ export default function CreditCustomersPage() {
 // Add this function to load customer transactions:
 
 const loadCustomerTransactions = async (customerId) => {
-  const { data, error } = await supabase
-    .from('credit_transactions')
-    .select('*')
-    .eq('credit_customer_id', customerId)
-    .order('transaction_date', { ascending: false })
-    .limit(10)
+  if (!customerId) return []
   
-  if (!error && data) {
-    // Display recent transactions to customer
-    return data
+  try {
+    const { data, error } = await supabase
+      .from('credit_transactions')
+      .select('*')
+      .eq('credit_customer_id', customerId)
+      .order('transaction_date', { ascending: false })
+      .limit(10)
+
+    if (error) {
+      console.error('Failed to load transactions:', error)
+      return []
+    }
+
+    return data || []
+  } catch (err) {
+    console.error('Error loading transactions:', err)
+    return []
   }
 }
 
