@@ -1,0 +1,111 @@
+[33ma4c1394[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m HEAD@{0}: reset: moving to a4c1394
+[33m7dd25e7[m HEAD@{1}: checkout: moving from main to main
+[33m7dd25e7[m HEAD@{2}: commit: latest updates
+[33m5e69d4c[m HEAD@{3}: checkout: moving from main to main
+[33m5e69d4c[m HEAD@{4}: checkout: moving from main to main
+[33m5e69d4c[m HEAD@{5}: commit: latest updates
+[33ma4c1394[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m HEAD@{6}: commit: latest updates
+[33mcbc3fac[m HEAD@{7}: commit: latest updates
+[33mb6aa566[m HEAD@{8}: commit: latest updates
+[33md9efdfe[m HEAD@{9}: commit: latest updates
+[33m321890c[m HEAD@{10}: commit: latest updates
+[33m4c823b7[m HEAD@{11}: commit: latest updates
+[33m485831e[m HEAD@{12}: commit: latest updates
+[33maa9a9ce[m HEAD@{13}: commit: latest updates
+[33mf119135[m HEAD@{14}: commit: latest updates
+[33mf51f819[m HEAD@{15}: commit: latest updates
+[33me615d2d[m HEAD@{16}: commit (merge): latest updates
+[33mbd60d50[m HEAD@{17}: reset: moving to HEAD
+[33mbd60d50[m HEAD@{18}: commit: latest updates
+[33m68d6f83[m HEAD@{19}: commit: latest updates
+[33m7a3d63d[m HEAD@{20}: commit: latest updates
+[33m3ea70bc[m HEAD@{21}: commit: latest updates
+[33mf73be6f[m HEAD@{22}: commit: latest updates
+[33mb301e45[m HEAD@{23}: commit: latest updates
+[33m162d7fd[m HEAD@{24}: commit: latest updates
+[33m8b42029[m HEAD@{25}: commit: latest updates
+[33m105b40e[m HEAD@{26}: commit: latest updates
+[33m042f3d5[m HEAD@{27}: commit: latest updates
+[33m59bbe97[m HEAD@{28}: commit: latest updates
+[33maa8ec22[m HEAD@{29}: commit: latest updates
+[33mbcb7853[m HEAD@{30}: commit: latest updates
+[33m461c24a[m HEAD@{31}: commit: latest updates
+[33m7f9c0ff[m HEAD@{32}: commit: latest updates
+[33mb970661[m HEAD@{33}: commit: latest updates
+[33m13ebed0[m HEAD@{34}: commit: latest updates
+[33m0182c85[m HEAD@{35}: commit: latest updates
+[33mb449523[m HEAD@{36}: commit: latest updates
+[33m91c58b4[m HEAD@{37}: commit: latest updates
+[33m1e2fa30[m HEAD@{38}: commit: latest updates
+[33m5691774[m HEAD@{39}: commit: latest updates
+[33me856e18[m HEAD@{40}: pull origin main: Fast-forward
+[33mf4d2991[m HEAD@{41}: commit: latest updates
+[33me909b6e[m HEAD@{42}: commit: latest updates
+[33m820be05[m HEAD@{43}: commit: latest updates
+[33m09524b2[m HEAD@{44}: commit: latest updates
+[33m5878d23[m HEAD@{45}: commit: latest updates
+[33m4f54987[m HEAD@{46}: commit: latest updates
+[33mfa0a5a4[m HEAD@{47}: commit: latest updates
+[33me98ed35[m HEAD@{48}: commit: latest updates
+[33mec5073d[m HEAD@{49}: commit: latest updates
+[33meef2428[m HEAD@{50}: commit: latest updates
+[33m4b1aab8[m HEAD@{51}: commit: latest updates
+[33m88fb42e[m HEAD@{52}: commit: latest updates
+[33m49c6adf[m HEAD@{53}: commit: latest updates
+[33mc05071e[m HEAD@{54}: commit: latest updates
+[33mdc81003[m HEAD@{55}: commit: latest updates
+[33maa5de2e[m HEAD@{56}: reset: moving to aa5de2eb861a97aabadd3f3ce00f803b33c90f78
+[33m2328993[m[33m ([m[1;32mbackup-before-reset[m[33m)[m HEAD@{57}: checkout: moving from main to main
+[33m2328993[m[33m ([m[1;32mbackup-before-reset[m[33m)[m HEAD@{58}: commit: latest updates
+[33maa5de2e[m HEAD@{59}: reset: moving to aa5de2eb861a97aabadd3f3ce00f803b33c90f78
+[33m10a9796[m HEAD@{60}: checkout: moving from main to main
+[33m10a9796[m HEAD@{61}: commit: latest updates
+[33maa5de2e[m HEAD@{62}: commit: latest updates
+[33m0b3f926[m HEAD@{63}: commit: latest updates
+[33m6946f4e[m HEAD@{64}: commit: latest updates
+[33m6a0df6e[m HEAD@{65}: commit: latest updates
+[33md3a1597[m HEAD@{66}: commit: latest updates
+[33m05cb96e[m HEAD@{67}: commit: latest updates
+[33m1d61553[m HEAD@{68}: commit: latest updates
+[33m3a63272[m HEAD@{69}: commit: latest updates
+[33m00d39b6[m HEAD@{70}: commit: latest updates
+[33m42298c4[m HEAD@{71}: commit: latest updates
+[33m27d9e17[m HEAD@{72}: commit: latest updates
+[33m10956b6[m HEAD@{73}: commit: latest updates
+[33mc768163[m HEAD@{74}: commit: latest updates
+[33m772359c[m HEAD@{75}: reset: moving to 772359c
+[33m41baf5b[m HEAD@{76}: commit: latest updates
+[33m0c2e432[m HEAD@{77}: commit: latest updates
+[33mde050dd[m HEAD@{78}: commit: latest updates
+[33md485e58[m HEAD@{79}: commit: latest updates
+[33madecead[m HEAD@{80}: commit: latest updates
+[33m772359c[m HEAD@{81}: commit: latest updates
+[33mdcf55a2[m HEAD@{82}: commit: latest updates
+[33mac22953[m HEAD@{83}: commit: latest updates
+[33m9e6590f[m HEAD@{84}: pull origin main: Fast-forward
+[33m1df8b3d[m HEAD@{85}: commit: latest updates
+[33md63b9e1[m HEAD@{86}: pull origin main: Fast-forward
+[33m6e0966a[m HEAD@{87}: commit: latest updates
+[33mec6ccb9[m HEAD@{88}: commit: latest updates
+[33m497258b[m HEAD@{89}: reset: moving to origin/main
+[33m497258b[m HEAD@{90}: checkout: moving from main to main
+[33m497258b[m HEAD@{91}: reset: moving to 497258b1b97b16c98861b3be03c8bba067999441
+[33m105e8dc[m HEAD@{92}: checkout: moving from main to main
+[33m105e8dc[m HEAD@{93}: commit: latest updates
+[33m497258b[m HEAD@{94}: commit: latest updates
+[33m25b5175[m HEAD@{95}: commit: latest updates
+[33m09618df[m HEAD@{96}: commit: latest updates
+[33me9aadc8[m HEAD@{97}: commit: latest updates
+[33m22801f3[m HEAD@{98}: commit: latest updates
+[33m0bc93d7[m HEAD@{99}: commit: latest updates
+[33m1574d1b[m HEAD@{100}: commit: latest updates
+[33m15fdbd3[m HEAD@{101}: commit: latest updates
+[33m7b294e3[m HEAD@{102}: commit: latest updates
+[33m0cb63cb[m HEAD@{103}: pull --rebase origin main (finish): returning to refs/heads/main
+[33m0cb63cb[m HEAD@{104}: pull --rebase origin main (pick): latest updates
+[33mc84c071[m HEAD@{105}: pull --rebase origin main (start): checkout c84c071d1e97c0b8f0f0f45c81b60632952f8b7e
+[33m23e456b[m HEAD@{106}: commit: latest updates
+[33mb611bcb[m HEAD@{107}: commit (merge): changes to manu page
+[33m72e54a9[m[33m ([m[1;32mbackup-72e54a9d[m[33m)[m HEAD@{108}: checkout: moving from main to main
+[33m72e54a9[m[33m ([m[1;32mbackup-72e54a9d[m[33m)[m HEAD@{109}: checkout: moving from main to main
+[33m72e54a9[m[33m ([m[1;32mbackup-72e54a9d[m[33m)[m HEAD@{110}: clone: from https://github.com/Riyaspn/restaurant-qr-app-clean.git

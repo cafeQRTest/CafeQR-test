@@ -1,14 +1,40 @@
 //pages/api/invoices/generate.js
 
 import { InvoiceService } from '../../../services/invoiceService'
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+)
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
-  const { order_id } = req.body
+  
+  const { order_id, payment_method = 'cash', is_credit = false, credit_customer_id } = req.body
+  
   if (!order_id || typeof order_id !== 'string')
     return res.status(400).json({ error: 'Valid Order ID is required' })
+  
   try {
     const result = await InvoiceService.createInvoiceFromOrder(order_id, null)
-    return res.status(200).json({ pdf_url: result.pdfUrl })
+    
+    // ✅ NEW: Update invoice with payment method and credit info
+    if (result.invoiceId) {
+      await supabase
+        .from('invoices')
+        .update({
+          payment_method: payment_method,
+          status: is_credit ? 'open' : 'paid',
+          is_open: is_credit,
+          credit_customer_id: credit_customer_id || null
+        })
+        .eq('id', result.invoiceId)
+    }
+    
+    return res.status(200).json({ 
+      pdf_url: result.pdfUrl,
+      status: is_credit ? 'open' : 'paid'
+    })
   } catch (error) {
     // Fallback to return old PDF if duplicate (race)
     if ((error?.message || '').includes('unique')) {
