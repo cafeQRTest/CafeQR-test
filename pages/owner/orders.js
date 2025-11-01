@@ -493,7 +493,8 @@ const complete = async (orderId, actualPaymentMethod = null) => {
     const resp = await fetch('/api/invoices/generate', {
       method: 'POST', 
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ order_id: orderId }),
+      body: JSON.stringify({ order_id: orderId, restaurant_id: restaurantId,  // ADD THIS LINE
+    payment_method: actualPaymentMethod || 'cash' }),
     });
     
     if (!resp.ok) throw new Error('Invoice generation failed');

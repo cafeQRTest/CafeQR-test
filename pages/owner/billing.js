@@ -18,12 +18,15 @@ export default function BillingPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [stats, setStats] = useState({
-    total_invoices: 0,
-    total_taxable: 0,
-    total_tax: 0,
-    cash_sales: 0,
-    online_sales: 0,
-    credit_sales: 0,
+  total_invoices: 0,
+  total_taxable: 0,
+  total_tax: 0,
+  total_cgst: 0,
+  total_sgst: 0,
+  total_igst: 0,
+  cash_sales: 0,
+  online_sales: 0,
+  credit_sales: 0,
   });
 
   const loadInvoices = async () => {
@@ -55,19 +58,22 @@ export default function BillingPage() {
 
       // Calculate statistics
       const calculatedStats = {
-        total_invoices: filtered.length,
-        total_taxable: filtered.reduce((sum, inv) => sum + (parseFloat(inv.subtotal_ex_tax) || 0), 0),
-        total_tax: filtered.reduce((sum, inv) => sum + (parseFloat(inv.total_tax) || 0), 0),
-        cash_sales: filtered
-          .filter(inv => inv.payment_method === 'cash')
-          .reduce((sum, inv) => sum + (parseFloat(inv.total_inc_tax) || 0), 0),
-        online_sales: filtered
-          .filter(inv => ['online', 'upi', 'card'].includes(inv.payment_method))
-          .reduce((sum, inv) => sum + (parseFloat(inv.total_inc_tax) || 0), 0),
-        credit_sales: filtered
-          .filter(inv => inv.payment_method === 'credit')
-          .reduce((sum, inv) => sum + (parseFloat(inv.total_inc_tax) || 0), 0),
-      };
+  total_invoices: filtered.length,
+  total_taxable: filtered.reduce((sum, inv) => sum + (parseFloat(inv.subtotal_ex_tax) || 0), 0),
+  total_tax: filtered.reduce((sum, inv) => sum + (parseFloat(inv.total_tax) || 0), 0),
+  total_cgst: filtered.reduce((sum, inv) => sum + (parseFloat(inv.cgst) || 0), 0),
+  total_sgst: filtered.reduce((sum, inv) => sum + (parseFloat(inv.sgst) || 0), 0),
+  total_igst: filtered.reduce((sum, inv) => sum + (parseFloat(inv.igst) || 0), 0),
+  cash_sales: filtered
+    .filter(inv => inv.payment_method === 'cash')
+    .reduce((sum, inv) => sum + (parseFloat(inv.total_inc_tax) || 0), 0),
+  online_sales: filtered
+    .filter(inv => ['online', 'upi', 'card'].includes(inv.payment_method))
+    .reduce((sum, inv) => sum + (parseFloat(inv.total_inc_tax) || 0), 0),
+  credit_sales: filtered
+    .filter(inv => inv.payment_method === 'credit')
+    .reduce((sum, inv) => sum + (parseFloat(inv.total_inc_tax) || 0), 0),
+};
 
       setStats(calculatedStats);
     } catch (e) {
