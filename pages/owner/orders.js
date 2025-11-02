@@ -45,11 +45,58 @@ function toDisplayItems(order) {
 }
 
 // Enhanced PaymentConfirmDialog component
+// Enhanced PaymentConfirmDialog component
 function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
   const [paymentMethod, setPaymentMethod] = useState('cash');
-  
+  const [showMixedForm, setShowMixedForm] = useState(false);
+  const [cashAmount, setCashAmount] = useState('');
+  const [onlineAmount, setOnlineAmount] = useState('');
+  const [onlineMethod, setOnlineMethod] = useState('upi');
+
+  const total = computeOrderTotalDisplay(order);
+
+  const handleMethodSelect = (method) => {
+    setPaymentMethod(method);
+    if (method === 'mixed') {
+      setShowMixedForm(true);
+    } else {
+      setShowMixedForm(false);
+      setCashAmount('');
+      setOnlineAmount('');
+    }
+  };
+
+  const validateMixedPayment = () => {
+    const cash = Number(cashAmount || 0);
+    const online = Number(onlineAmount || 0);
+    const sum = cash + online;
+    
+    if (cash <= 0 || online <= 0) {
+      alert('Both cash and online amounts must be greater than 0');
+      return false;
+    }
+    
+    if (Math.abs(sum - total) > 0.01) {
+      alert(`Amounts must equal ₹${total.toFixed(2)}. Currently: ₹${sum.toFixed(2)}`);
+      return false;
+    }
+    
+    return true;
+  };
+
   const handleConfirm = () => {
-    onConfirm(paymentMethod); // Pass the payment method to parent
+    if (paymentMethod === 'mixed') {
+      if (!validateMixedPayment()) return;
+      
+      onConfirm(paymentMethod, {
+        cash_amount: Number(cashAmount).toFixed(2),
+        online_amount: Number(onlineAmount).toFixed(2),
+        online_method: onlineMethod,
+        is_mixed: true
+      });
+    } else {
+      onConfirm(paymentMethod, null);
+    }
   };
 
   return (
@@ -58,47 +105,181 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
       backgroundColor:'rgba(0,0,0,0.5)',display:'flex',
       alignItems:'center',justifyContent:'center',zIndex:1000
     }}>
-      <div style={{ backgroundColor:'white',padding:20,borderRadius:8,maxWidth:400,margin:16 }}>
+      <div style={{ 
+        backgroundColor:'white',padding:20,borderRadius:8,
+        maxWidth:450,margin:16,maxHeight:'90vh',overflowY:'auto'
+      }}>
         <h3 style={{ margin:'0 0 16px 0' }}>Payment Confirmation</h3>
-        <p>Order #{order.id.slice(0,8)} - {getOrderTypeLabel(order)}</p>
-        <p>Amount: {money(computeOrderTotalDisplay(order))}</p>
-        <p><strong>Has the customer completed the payment?</strong></p>
+        <p><strong>Order #{order.id.slice(0,8)}</strong> - {getOrderTypeLabel(order)}</p>
+        <p><strong>Amount: {money(total)}</strong></p>
+        <p style={{marginBottom: 16}}><strong>How did the customer pay?</strong></p>
         
         {/* Payment method selection */}
-        <div style={{ margin: '16px 0' }}>
-          <p style={{ margin: '8px 0', fontWeight: 'bold' }}>Payment Method:</p>
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <input 
-                type="radio" 
-                value="cash" 
-                checked={paymentMethod === 'cash'}
-                onChange={(e) => setPaymentMethod(e.target.value)}
-              />
-              Cash
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <input 
-                type="radio" 
-                value="online" 
-                checked={paymentMethod === 'online'}
-                onChange={(e) => setPaymentMethod(e.target.value)}
-              />
-              Online (UPI/Card)
-            </label>
-          </div>
+        <div style={{ margin: '16px 0', display:'flex', flexDirection:'column', gap:'10px' }}>
+          {/* Cash Option */}
+          <label style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '12px',
+            padding: '12px',
+            border: paymentMethod === 'cash' ? '2px solid #2563eb' : '1px solid #e5e7eb',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            backgroundColor: paymentMethod === 'cash' ? '#eff6ff' : 'white'
+          }}>
+            <input 
+              type="radio" 
+              value="cash" 
+              checked={paymentMethod === 'cash'}
+              onChange={(e) => handleMethodSelect(e.target.value)}
+            />
+            <span>💵 Full Cash Payment</span>
+          </label>
+
+          {/* Online Option */}
+          <label style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '12px',
+            padding: '12px',
+            border: paymentMethod === 'online' ? '2px solid #2563eb' : '1px solid #e5e7eb',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            backgroundColor: paymentMethod === 'online' ? '#eff6ff' : 'white'
+          }}>
+            <input 
+              type="radio" 
+              value="online" 
+              checked={paymentMethod === 'online'}
+              onChange={(e) => handleMethodSelect(e.target.value)}
+            />
+            <span>🔗 Full Online (UPI/Card)</span>
+          </label>
+
+          {/* Mixed Payment Option */}
+          <label style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '12px',
+            padding: '12px',
+            border: paymentMethod === 'mixed' ? '2px solid #2563eb' : '1px solid #e5e7eb',
+            borderRadius: '6px',
+            cursor: 'pointer',
+            backgroundColor: paymentMethod === 'mixed' ? '#eff6ff' : 'white'
+          }}>
+            <input 
+              type="radio" 
+              value="mixed" 
+              checked={paymentMethod === 'mixed'}
+              onChange={(e) => handleMethodSelect(e.target.value)}
+            />
+            <span>🔀 Mixed (Part Cash + Part Online)</span>
+          </label>
         </div>
 
-        <div style={{ display:'flex',gap:10,marginTop:16 }}>
-          <Button onClick={handleConfirm} variant="success">
-            Yes, Payment Received ({paymentMethod === 'cash' ? 'Cash' : 'Online'})
+        {/* Mixed Payment Details Form */}
+        {showMixedForm && (
+          <div style={{
+            marginTop: '16px',
+            padding: '16px',
+            backgroundColor: '#f9fafb',
+            borderRadius: '8px',
+            border: '1px solid #e5e7eb'
+          }}>
+            <div style={{ marginBottom: '12px' }}>
+              <label style={{ fontSize: '14px', fontWeight: '600', display: 'block', marginBottom: '6px' }}>
+                Cash Amount (₹)
+              </label>
+              <input
+                type="number"
+                value={cashAmount}
+                onChange={(e) => setCashAmount(e.target.value)}
+                placeholder="0.00"
+                min="0"
+                max={total}
+                step="0.01"
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: '12px' }}>
+              <label style={{ fontSize: '14px', fontWeight: '600', display: 'block', marginBottom: '6px' }}>
+                Online Amount (₹)
+              </label>
+              <input
+                type="number"
+                value={onlineAmount}
+                onChange={(e) => setOnlineAmount(e.target.value)}
+                placeholder="0.00"
+                min="0"
+                max={total}
+                step="0.01"
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: '12px' }}>
+              <label style={{ fontSize: '14px', fontWeight: '600', display: 'block', marginBottom: '6px' }}>
+                Online Payment Method
+              </label>
+              <select
+                value={onlineMethod}
+                onChange={(e) => setOnlineMethod(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  boxSizing: 'border-box'
+                }}
+              >
+                <option value="upi">UPI</option>
+                <option value="card">Credit/Debit Card</option>
+                <option value="netbanking">Net Banking</option>
+                <option value="wallet">Digital Wallet</option>
+              </select>
+            </div>
+
+            <div style={{
+              padding: '10px 12px',
+              backgroundColor: '#eff6ff',
+              borderLeft: '4px solid #2563eb',
+              borderRadius: '4px',
+              fontSize: '13px',
+              color: '#1e40af'
+            }}>
+              <strong>Total: ₹{total.toFixed(2)}</strong><br/>
+              <strong>Split:</strong> ₹{cashAmount || '0'} (Cash) + ₹{onlineAmount || '0'} ({onlineMethod.toUpperCase()})
+            </div>
+          </div>
+        )}
+
+        <div style={{ display:'flex', gap:10, marginTop:20 }}>
+          <Button onClick={handleConfirm} variant="success" style={{flex:1}}>
+            Yes, {paymentMethod === 'mixed' ? 'Mixed' : paymentMethod === 'cash' ? 'Cash' : 'Online'} Received
           </Button>
-          <Button onClick={onCancel} variant="outline">Cancel</Button>
+          <Button onClick={onCancel} variant="outline" style={{flex:1}}>Cancel</Button>
         </div>
       </div>
     </div>
   );
 }
+
 
 function CancelConfirmDialog({ order, onConfirm, onCancel }) {
   const [reason, setReason] = useState('');
@@ -466,40 +647,44 @@ const handleCancelDismiss = () => setCancelOrderDialog(null);
   setPaymentConfirmDialog(order);
 };
 
-// Updated handler - receives payment method
-const handlePaymentConfirmed = (actualPaymentMethod) => {
+// Updated handler - receives payment method AND mixed details
+const handlePaymentConfirmed = (actualPaymentMethod, mixedDetails = null) => {
   if (!paymentConfirmDialog) return;
-  complete(paymentConfirmDialog.id, actualPaymentMethod);
+  complete(paymentConfirmDialog.id, actualPaymentMethod, mixedDetails);
   setPaymentConfirmDialog(null);
 };
 
 // Updated complete function - no auto-open PDF + save payment method
-const complete = async (orderId, actualPaymentMethod = null) => {
+const complete = async (orderId, actualPaymentMethod = null, mixedDetails = null) => {
   if (!supabase) return;
   setGeneratingInvoice(orderId);
   try {
     // Update order status to completed
-    const updateData = { status: 'completed' };
+    const updateData = { 
+      status: 'completed',
+      ...(actualPaymentMethod && { payment_method: actualPaymentMethod, actual_payment_method: actualPaymentMethod }),
+      ...(mixedDetails && { mixed_payment_details: mixedDetails })
+    };
     
-    // If actualPaymentMethod is provided (from payment confirmation), update it
-    if (actualPaymentMethod) {
-      updateData.payment_method = actualPaymentMethod;
-      updateData.actual_payment_method = actualPaymentMethod;
-    }
+    await supabase
+      .from('orders')
+      .update(updateData)
+      .eq('id', orderId)
+      .eq('restaurant_id', restaurantId);
     
-    await supabase.from('orders').update(updateData).eq('id', orderId).eq('restaurant_id', restaurantId);
-    
-    // Generate invoice but don't auto-open
+    // Generate invoice
     const resp = await fetch('/api/invoices/generate', {
       method: 'POST', 
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ order_id: orderId, restaurant_id: restaurantId,  // ADD THIS LINE
-    payment_method: actualPaymentMethod || 'cash' }),
+      body: JSON.stringify({ 
+        order_id: orderId, 
+        restaurant_id: restaurantId,
+        payment_method: actualPaymentMethod || 'cash',
+        mixed_payment_details: mixedDetails
+      }),
     });
     
     if (!resp.ok) throw new Error('Invoice generation failed');
-    // Note: We're not opening the PDF automatically anymore
-    
     loadOrders();
   } catch (e) {
     setError(e.message);

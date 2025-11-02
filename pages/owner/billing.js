@@ -65,11 +65,23 @@ export default function BillingPage() {
   total_sgst: filtered.reduce((sum, inv) => sum + (parseFloat(inv.sgst) || 0), 0),
   total_igst: filtered.reduce((sum, inv) => sum + (parseFloat(inv.igst) || 0), 0),
   cash_sales: filtered
-    .filter(inv => inv.payment_method === 'cash')
-    .reduce((sum, inv) => sum + (parseFloat(inv.total_inc_tax) || 0), 0),
+    .reduce((sum, inv) => {
+      if (inv.payment_method === 'cash') {
+        return sum + (parseFloat(inv.total_inc_tax) || 0);
+      } else if (inv.payment_method === 'mixed' && inv.mixed_payment_details) {
+        return sum + (parseFloat(inv.mixed_payment_details.cash_amount) || 0);
+      }
+      return sum;
+    }, 0),
   online_sales: filtered
-    .filter(inv => ['online', 'upi', 'card'].includes(inv.payment_method))
-    .reduce((sum, inv) => sum + (parseFloat(inv.total_inc_tax) || 0), 0),
+    .reduce((sum, inv) => {
+      if (['online', 'upi', 'card'].includes(inv.payment_method)) {
+        return sum + (parseFloat(inv.total_inc_tax) || 0);
+      } else if (inv.payment_method === 'mixed' && inv.mixed_payment_details) {
+        return sum + (parseFloat(inv.mixed_payment_details.online_amount) || 0);
+      }
+      return sum;
+    }, 0),
   credit_sales: filtered
     .filter(inv => inv.payment_method === 'credit')
     .reduce((sum, inv) => sum + (parseFloat(inv.total_inc_tax) || 0), 0),

@@ -25,6 +25,7 @@ const supabaseUrl = process.env.SUPABASE_URL;
       payment_method = 'cash',
       payment_status = 'pending',
       special_instructions = null,
+      mixed_payment_details = null,
       restaurant_name = null
     } = req.body;
 
@@ -58,7 +59,7 @@ const supabaseUrl = process.env.SUPABASE_URL;
     const baseRate = Number(profile?.default_tax_rate ?? 5);
     const gstEnabled = !!profile?.gst_enabled
     const serviceRate = gstEnabled ? baseRate : 0
-    const serviceInclude = gstEnabled ? (profile?.prices_include_tax === true || profile?.prices_include_tax === 'true' || profile?.prices_include_tax === 1 || profile?.prices_include_tax === '1') : false
+    const serviceInclude = gstEnabled ? (profile?.prices_include_tax === true || profile?.prices_include_tax         === 'true' || profile?.prices_include_tax === 1 || profile?.prices_include_tax === '1') : false
 
     // Compute totals and normalized order_items
     let subtotalEx = 0;
@@ -125,29 +126,55 @@ const supabaseUrl = process.env.SUPABASE_URL;
       };
     });
 
+    let processedPaymentMethod = payment_method;
+  let processedMixedDetails = null;
+
+  if (payment_method === 'mixed' && mixed_payment_details) {
+    const { cash_amount, online_amount, online_method } = mixed_payment_details;
+    
+    // Validate amounts sum to total
+    const mixedTotal = Number(cash_amount || 0) + Number(online_amount || 0);
+    const orderTotal = Number(totalInc.toFixed(2));
+    
+    if (Math.abs(mixedTotal - orderTotal) > 0.01) {
+      return res.status(400).json({ 
+        error: 'Mixed payment amounts do not match order total' 
+      });
+    }
+
+    processedMixedDetails = {
+      cash_amount: Number(cash_amount).toFixed(2),
+      online_amount: Number(online_amount).toFixed(2),
+      online_method: online_method || 'upi',
+      is_mixed: true
+    };
+  }
+
     // Insert order
     const { data: order, error: orderError } = await supabase
       .from('orders')
       .insert([
         {
-          restaurant_id,
-          table_number: table_number || null,
-          order_type, // <-- ADD THIS
-          status: 'new',
-          payment_method,
-          payment_status,
-          special_instructions,
-          restaurant_name,
-          subtotal_ex_tax: Number(subtotalEx.toFixed(2)),
-          total_tax: Number(totalTax.toFixed(2)),
-          total_inc_tax: Number(totalInc.toFixed(2)),
-          total_amount: Number(totalInc.toFixed(2)),
-          prices_include_tax: serviceInclude,
-          gst_enabled: gstEnabled
-        }
+        restaurant_id,
+        table_number: table_number || null,
+        order_type,
+        status: 'new',
+        payment_method: processedPaymentMethod,
+        payment_status,
+        special_instructions,
+        restaurant_name,
+        subtotal_ex_tax: Number(subtotalEx.toFixed(2)),
+        total_tax: Number(totalTax.toFixed(2)),
+        total_inc_tax: Number(totalInc.toFixed(2)),
+        total_amount: Number(totalInc.toFixed(2)),
+        prices_include_tax: serviceInclude,
+        gst_enabled: gstEnabled,
+        mixed_payment_details: processedMixedDetails  // ← NEW
+      }
       ])
       .select('id')
       .single();
+
     if (orderError) {
       if (process.env.NODE_ENV !== 'production') console.error('Order creation error:', orderError);
       return res.status(500).json({ error: 'Failed to create order' });

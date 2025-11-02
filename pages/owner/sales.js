@@ -191,20 +191,42 @@ export default function SalesPage() {
       setAllSalesData(itemsArray)
       setSalesData(itemsArray)
 
-      const paymentMap = {}
-      orderData.forEach(o => {
-        const method = o.actual_payment_method || o.payment_method || 'unknown'
-        const amount = Number(o.total_inc_tax ?? o.total_amount ?? 0)
-        if (!paymentMap[method]) paymentMap[method] = { count: 0, amount: 0 }
-        paymentMap[method].count += 1
-        paymentMap[method].amount += amount
-      })
-      setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
-        payment_method: method,
-        order_count: data.count,
-        total_amount: data.amount,
-        percentage: totalRevenue > 0 ? ((data.amount / totalRevenue) * 100).toFixed(1) : '0.0'
-      })))
+      // In loadAllReportsData function, update payment breakdown logic:
+
+const paymentMap = {};
+orderData.forEach(o => {
+  let method = o.actual_payment_method || o.payment_method || 'unknown';
+  const amount = Number(o.total_inc_tax ?? o.total_amount ?? 0);
+  
+  // Handle mixed payments - show separately
+  if (method === 'mixed' && o.mixed_payment_details) {
+    const { cash_amount, online_amount, online_method } = o.mixed_payment_details;
+    
+    // Add cash portion
+    const cashKey = 'cash';
+    if (!paymentMap[cashKey]) paymentMap[cashKey] = { count: 0, amount: 0 };
+    paymentMap[cashKey].count += 1;
+    paymentMap[cashKey].amount += Number(cash_amount);
+    
+    // Add online portion
+    const onlineKey = online_method || 'online';
+    if (!paymentMap[onlineKey]) paymentMap[onlineKey] = { count: 0, amount: 0 };
+    paymentMap[onlineKey].count += 1;
+    paymentMap[onlineKey].amount += Number(online_amount);
+  } else {
+    if (!paymentMap[method]) paymentMap[method] = { count: 0, amount: 0 };
+    paymentMap[method].count += 1;
+    paymentMap[method].amount += amount;
+  }
+});
+
+setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
+  payment_method: method,
+  order_count: data.count,
+  total_amount: data.amount,
+  percentage: totalRevenue > 0 ? ((data.amount / totalRevenue) * 100).toFixed(1) : '0.0'
+})));
+
 
       const orderTypeMap = {}
       orderData.forEach(o => {

@@ -51,18 +51,30 @@ export default async function handler(req, res) {
 
     // Transform data for CSV with payment method details
     // In your GST export CSV
-const csvData = invoices.map(inv => ({
-  'Invoice No': inv.invoice_no,
-  'Date': new Date(inv.invoice_date).toLocaleDateString(),
-  'Customer': inv.customer_name || 'N/A',
-  'Taxable': parseFloat(inv.subtotal_ex_tax || 0).toFixed(2),
-  'CGST': parseFloat(inv.cgst || 0).toFixed(2),
-  'SGST': parseFloat(inv.sgst || 0).toFixed(2),
-  'Total Tax': parseFloat(inv.total_tax || 0).toFixed(2),
-  'Total': parseFloat(inv.total_inc_tax || 0).toFixed(2),
-  'Payment Method': inv.payment_method || 'cash', // ← ADD THIS
-  'Status': inv.status || 'paid'
-}));
+// Update csvData mapping to include mixed payment breakdown:
+
+const csvData = invoices.map(inv => {
+  let paymentMethodDisplay = inv.payment_method;
+  
+  // For mixed payments, show breakdown
+  if (inv.payment_method === 'mixed' && inv.mixed_payment_details) {
+    const { cash_amount, online_method } = inv.mixed_payment_details;
+    paymentMethodDisplay = `Mixed (Cash: ₹${Number(cash_amount).toFixed(2)}, ${online_method.toUpperCase()}: ₹${inv.mixed_payment_details.online_amount})`;
+  }
+  
+  return {
+    'Invoice No': inv.invoice_no,
+    'Date': new Date(inv.invoice_date).toLocaleDateString(),
+    'Customer': inv.customer_name || 'N/A',
+    'Taxable Value': parseFloat(inv.subtotal_ex_tax || 0).toFixed(2),
+    'CGST': parseFloat(inv.cgst || 0).toFixed(2),
+    'SGST': parseFloat(inv.sgst || 0).toFixed(2),
+    'Total Tax': parseFloat(inv.total_tax || 0).toFixed(2),
+    'Total Amount': parseFloat(inv.total_inc_tax || 0).toFixed(2),
+    'Payment Method': paymentMethodDisplay,
+    'Status': inv.status || 'paid'
+  };
+});
 
 
     // CSV Headers

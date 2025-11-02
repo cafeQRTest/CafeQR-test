@@ -90,32 +90,36 @@ export class InvoiceService {
         nextNum = await getNextInvoiceNumber(restaurant.id, fy, fyStartDateStr)
         invoiceNo = `${fy}/${String(nextNum).padStart(6, '0')}`
         // Try insert
-        const { data, error } = await supabase
-          .from('invoices')
-          .insert({
-            restaurant_id: restaurant.id,
-            order_id: order.id,
-            invoice_no: invoiceNo,
-            invoice_date: new Date().toISOString(),
-            customer_name: order.customer_name || null,
-            customer_gstin: order.customer_gstin || null,
-            billing_address: order.billing_address || null,
-            shipping_address: order.shipping_address || null,
-            gst_enabled: order.gst_enabled ?? profile?.gst_enabled ?? false,
-            prices_include_tax: profile?.prices_include_tax ?? true,
-            subtotal_ex_tax: order.subtotal_ex_tax ?? order.subtotal ?? 0,
-            total_tax: order.total_tax ?? order.tax_amount ?? 0,
-            total_inc_tax: order.total_inc_tax ?? order.total_amount ?? 0,
-            cgst: (order.gst_enabled ?? profile?.gst_enabled) ? ((order.total_tax ?? order.tax_amount ?? 0) / 2) : 0,
-            sgst: (order.gst_enabled ?? profile?.gst_enabled) ? ((order.total_tax ?? order.tax_amount ?? 0) / 2) : 0,
-            igst: 0,
-            payment_method: order.payment_method || 'cash',
-            generation_method: regenerationReason ? 'regenerated' : 'auto',
-            regenerated_from_invoice_id: null,
-            regeneration_reason: regenerationReason || null
-          })
-          .select()
-          .single()
+        // In the createInvoiceFromOrder method, update the insert:
+
+const { data, error } = await supabase
+  .from('invoices')
+  .insert({
+    restaurant_id: restaurant.id,
+    order_id: order.id,
+    invoice_no: invoiceNo,
+    invoice_date: new Date().toISOString(),
+    customer_name: order.customer_name || null,
+    customer_gstin: order.customer_gstin || null,
+    billing_address: order.billing_address || null,
+    shipping_address: order.shipping_address || null,
+    gst_enabled: order.gst_enabled ?? profile?.gst_enabled ?? false,
+    prices_include_tax: profile?.prices_include_tax ?? true,
+    subtotal_ex_tax: order.subtotal_ex_tax ?? order.subtotal ?? 0,
+    total_tax: order.total_tax ?? order.tax_amount ?? 0,
+    total_inc_tax: order.total_inc_tax ?? order.total_amount ?? 0,
+    cgst: (order.gst_enabled ?? profile?.gst_enabled) ? ((order.total_tax ?? order.tax_amount ?? 0) / 2) : 0,
+    sgst: (order.gst_enabled ?? profile?.gst_enabled) ? ((order.total_tax ?? order.tax_amount ?? 0) / 2) : 0,
+    igst: 0,
+    payment_method: order.payment_method || 'cash',
+    mixed_payment_details: order.mixed_payment_details || null,  // ← NEW
+    generation_method: regenerationReason ? 'regenerated' : 'auto',
+    regenerated_from_invoice_id: null,
+    regeneration_reason: regenerationReason || null
+  })
+  .select()
+  .single();
+
 
         if (!error && data) {
           ok = true
