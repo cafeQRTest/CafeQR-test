@@ -1,4 +1,4 @@
-//pages/_app.js
+// pages/_app.js - CORRECTED
 
 import '../styles/responsive.css'
 import '../styles/globals.css'
@@ -84,20 +84,28 @@ function GlobalSubscriptionGate({ children }) {
   useEffect(() => {
     let mounted = true
     async function checkAndRedirect() {
+      if (!router.isReady || loading) return
+      
       const supabase = getSupabase()
       const { data } = await supabase.auth.getSession()
       const session = data?.session
-      if (!router.isReady || loading) return
-      if (isOwner && !onSubPage && (!subscription?.is_active)) {
-        if (session) {
-          router.replace(`/owner/settings${window.location.search}`)
+
+      // ✅ CRITICAL FIX: Redirect to subscription for ANY non-subscription owner page if expired
+      if (isOwner && !onSubPage && session) {
+        if (!subscription?.is_active) {
+          // Redirect to subscription page to allow renewal
+          if (mounted) {
+            router.replace(`/owner/subscription${window.location.search}`)
+          }
         }
       }
     }
+
     checkAndRedirect()
     return () => { mounted = false }
   }, [router, loading, isOwner, onSubPage, subscription])
 
+  // Block customer/kitchen access if expired
   if (
     (path.startsWith('/order') || path.startsWith('/kitchen')) &&
     !exempt &&
@@ -111,6 +119,7 @@ function GlobalSubscriptionGate({ children }) {
       </div>
     )
   }
+
   return <>{children}</>
 }
 
