@@ -1,4 +1,4 @@
-//services/invoiceService.js
+// services/invoiceService.js - CORRECTED
 
 import { createClient } from '@supabase/supabase-js'
 import { generateBillPdf } from '../lib/generateBillPdf'
@@ -89,37 +89,37 @@ export class InvoiceService {
       for (let tries = 0; tries < 5 && !ok; tries++) {
         nextNum = await getNextInvoiceNumber(restaurant.id, fy, fyStartDateStr)
         invoiceNo = `${fy}/${String(nextNum).padStart(6, '0')}`
-        // Try insert
-        // In the createInvoiceFromOrder method, update the insert:
-
-const { data, error } = await supabase
-  .from('invoices')
-  .insert({
-    restaurant_id: restaurant.id,
-    order_id: order.id,
-    invoice_no: invoiceNo,
-    invoice_date: new Date().toISOString(),
-    customer_name: order.customer_name || null,
-    customer_gstin: order.customer_gstin || null,
-    billing_address: order.billing_address || null,
-    shipping_address: order.shipping_address || null,
-    gst_enabled: order.gst_enabled ?? profile?.gst_enabled ?? false,
-    prices_include_tax: profile?.prices_include_tax ?? true,
-    subtotal_ex_tax: order.subtotal_ex_tax ?? order.subtotal ?? 0,
-    total_tax: order.total_tax ?? order.tax_amount ?? 0,
-    total_inc_tax: order.total_inc_tax ?? order.total_amount ?? 0,
-    cgst: (order.gst_enabled ?? profile?.gst_enabled) ? ((order.total_tax ?? order.tax_amount ?? 0) / 2) : 0,
-    sgst: (order.gst_enabled ?? profile?.gst_enabled) ? ((order.total_tax ?? order.tax_amount ?? 0) / 2) : 0,
-    igst: 0,
-    payment_method: order.payment_method || 'cash',
-    mixed_payment_details: order.mixed_payment_details || null,  // ← NEW
-    generation_method: regenerationReason ? 'regenerated' : 'auto',
-    regenerated_from_invoice_id: null,
-    regeneration_reason: regenerationReason || null
-  })
-  .select()
-  .single();
-
+        
+        // ✅ FIXED: Declare payMethod BEFORE it's used in generateBillPdf
+        const payMethod = order.payment_method || order.actual_payment_method || 'cash'
+        
+        const { data, error } = await supabase
+          .from('invoices')
+          .insert({
+            restaurant_id: restaurant.id,
+            order_id: order.id,
+            invoice_no: invoiceNo,
+            invoice_date: new Date().toISOString(),
+            customer_name: order.customer_name || null,
+            customer_gstin: order.customer_gstin || null,
+            billing_address: order.billing_address || null,
+            shipping_address: order.shipping_address || null,
+            gst_enabled: order.gst_enabled ?? profile?.gst_enabled ?? false,
+            prices_include_tax: profile?.prices_include_tax ?? true,
+            subtotal_ex_tax: order.subtotal_ex_tax ?? order.subtotal ?? 0,
+            total_tax: order.total_tax ?? order.tax_amount ?? 0,
+            total_inc_tax: order.total_inc_tax ?? order.total_amount ?? 0,
+            cgst: (order.gst_enabled ?? profile?.gst_enabled) ? ((order.total_tax ?? order.tax_amount ?? 0) / 2) : 0,
+            sgst: (order.gst_enabled ?? profile?.gst_enabled) ? ((order.total_tax ?? order.tax_amount ?? 0) / 2) : 0,
+            igst: 0,
+            payment_method: payMethod,
+            mixed_payment_details: order.mixed_payment_details || null,
+            generation_method: regenerationReason ? 'regenerated' : 'auto',
+            regenerated_from_invoice_id: null,
+            regeneration_reason: regenerationReason || null
+          })
+          .select()
+          .single()
 
         if (!error && data) {
           ok = true
@@ -166,19 +166,20 @@ const { data, error } = await supabase
         })
       }
 
-      // PDF
+      // ✅ FIXED: Pass payment method to generateBillPdf
       const pdfPayload = {
         invoice: {
           invoice_no: inv.invoice_no,
           invoice_date: inv.invoice_date,
           customer_name: inv.customer_name,
           customer_gstin: inv.customer_gstin,
-          payment_method: inv.payment_method,
+          payment_method: inv.payment_method, // ✅ Include payment method
           subtotal_ex_tax: inv.subtotal_ex_tax,
           total_tax: inv.total_tax,
           total_inc_tax: inv.total_inc_tax,
           gst_enabled: inv.gst_enabled,
-          prices_include_tax: inv.prices_include_tax
+          prices_include_tax: inv.prices_include_tax,
+          mixed_payment_details: inv.mixed_payment_details // ✅ Include mixed payment details
         },
         items: items.map(it => ({
           item_name: it.item_name || it.name || 'Item',
