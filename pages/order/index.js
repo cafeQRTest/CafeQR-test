@@ -3,6 +3,7 @@ import { useRouter } from 'next/router'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { getSupabase } from '../../services/supabase'
+import AlertRestaurantButton from '../../components/AlertRestaurantButton'
 
 export default function OrderPage() {
   const router = useRouter()
@@ -220,6 +221,7 @@ const cacheMenuIntoMap = (list) => {
             <span style={{ marginLeft: 16, color: '#f59e0b' }}>⭐ 4.3 (500+ orders)</span>
           </div>
         </div>
+<AlertRestaurantButton restaurantId={restaurantId} tableNumber={tableNumber} />
       </header>
 
       <div style={{ padding: '1rem', background: '#fff' }}>

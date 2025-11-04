@@ -1,17 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
 import Link from 'next/link'
-// 1. IMPORT the singleton function
 import { getSupabase } from '../services/supabase'
 
-// 2. REMOVE the supabase prop
 export default function ResetPassword() {
   const router = useRouter()
-  // 3. GET the singleton instance
-  const supabase = getSupabase();
-
-  // 2. REMOVE the useRequireAuth hook
-  // const { checking } = useRequireAuth(supabase)
+  const supabase = getSupabase()
 
   const [newPw, setNewPw] = useState('')
   const [confirmPw, setConfirmPw] = useState('')
@@ -23,56 +17,122 @@ export default function ResetPassword() {
   useEffect(() => {
     if (!router.isReady) return
 
-    let token = router.query.access_token
-    let type = router.query.type
+    const initializeSession = async () => {
+      try {
+        let token = router.query.access_token
+        let type = router.query.type
 
-    if (typeof window !== 'undefined' && window.location.hash) {
-      const params = new URLSearchParams(window.location.hash.slice(1))
-      if (params.get('error')) {
-        setErrorInfo({ description: params.get('error_description') || 'Link invalid or expired.' })
-        return
+        // Parse URL hash parameters (Supabase sends them here)
+        if (typeof window !== 'undefined' && window.location.hash) {
+          const params = new URLSearchParams(window.location.hash.slice(1))
+          
+          if (params.get('error')) {
+            setErrorInfo({ 
+              description: params.get('error_description') || 'Link invalid or expired.' 
+            })
+            return
+          }
+          
+          if (!token) token = params.get('access_token')
+          if (!type) type = params.get('type')
+        }
+
+        // Validate token and type
+        if (!token || (type !== 'recovery' && type !== null)) {
+          setErrorInfo({ 
+            description: 'Invalid or missing reset token.' 
+          })
+          return
+        }
+
+        // IMPORTANT: Create a session from the reset token
+        // This exchanges the token for a valid Supabase session
+        const { data, error } = await supabase.auth.verifyOtp({
+          token_hash: token,
+          type: 'recovery'
+        })
+
+        if (error) {
+          console.error('Session verification error:', error)
+          setErrorInfo({ 
+            description: error.message || 'Failed to verify reset link.' 
+          })
+          return
+        }
+
+        if (!data.session) {
+          setErrorInfo({ 
+            description: 'Session could not be established. Please try again.' 
+          })
+          return
+        }
+
+        // Session successfully established
+        setReady(true)
+        setMsg('')
+        setErrorInfo(null)
+
+      } catch (err) {
+        console.error('Initialization error:', err)
+        setErrorInfo({ 
+          description: err.message || 'An unexpected error occurred.' 
+        })
       }
-      if (!token) token = params.get('access_token')
-      if (!type) type = params.get('type')
     }
 
-    if (token && (type === 'recovery' || !type)) {
-      setReady(true)
-      setMsg('')
-      setErrorInfo(null)
-    } else if (!errorInfo) {
-      setMsg('Invalid or missing reset token.')
-    }
-  }, [router.isReady, router.query, errorInfo])
+    initializeSession()
+  }, [router.isReady, router.query])
 
   const onSubmit = async (e) => {
     e.preventDefault()
-    if (newPw.length < 6) return setMsg('Password must be at least 6 characters.')
-    if (newPw !== confirmPw) return setMsg('Passwords do not match.')
-
-    setLoading(true)
-    // 3. USE the singleton instance
-    const { error } = await supabase.auth.updateUser({ password: newPw })
-    setLoading(false)
-
-    if (error) {
-      return setMsg(`Error: ${error.message}`)
+    
+    if (newPw.length < 6) {
+      return setMsg('Password must be at least 6 characters.')
+    }
+    
+    if (newPw !== confirmPw) {
+      return setMsg('Passwords do not match.')
     }
 
-    setMsg('Password updated successfully! Redirecting to login...')
-    setTimeout(() => router.push('/login'), 2000)
+    setLoading(true)
+    setMsg('')
+
+    try {
+      // Update password with the verified session
+      const { error } = await supabase.auth.updateUser({ 
+        password: newPw 
+      })
+
+      if (error) {
+        return setMsg(`Error: ${error.message}`)
+      }
+
+      setMsg('✅ Password updated successfully! Redirecting to login...')
+      
+      // Sign out and redirect to login after successful password update
+      await supabase.auth.signOut()
+      
+      setTimeout(() => {
+        router.push('/login')
+      }, 2000)
+      
+    } catch (err) {
+      console.error('Password update error:', err)
+      setMsg(`Error: ${err.message}`)
+    } finally {
+      setLoading(false)
+    }
   }
 
-  // 2. REMOVE the checking state
-  // if (checking) return <div style={{ padding: '2rem', maxWidth: 480, margin: 'auto' }}>Loading…</div>
-  
   if (errorInfo) {
     return (
       <div style={{ padding: '2rem', maxWidth: 480, margin: 'auto' }}>
         <h1>Reset Password</h1>
-        <p style={{ color: 'red' }}>{errorInfo.description}</p>
+        <p style={{ color: 'red' }}>❌ {errorInfo.description}</p>
         <p>
-          <Link href="/forgot-password">Request a new reset link</Link>
+          <Link href="/forgot-password">
+            Request a new reset link
+          </Link>
         </p>
       </div>
     )
@@ -82,7 +142,7 @@ export default function ResetPassword() {
     return (
       <div style={{ padding: '2rem', maxWidth: 480, margin: 'auto' }}>
         <h1>Reset Password</h1>
-        {msg && <p style={{ color: 'red' }}>{msg}</p>}
+        <p>Loading...</p>
       </div>
     )
   }
@@ -98,7 +158,13 @@ export default function ResetPassword() {
           onChange={(e) => setNewPw(e.target.value)}
           required
           minLength={6}
-          style={{ display: 'block', width: '100%', padding: 8, marginBottom: 12 }}
+          style={{ 
+            display: 'block', 
+            width: '100%', 
+            padding: 8, 
+            marginBottom: 12,
+            boxSizing: 'border-box'
+          }}
         />
         <input
           type="password"
@@ -107,13 +173,40 @@ export default function ResetPassword() {
           onChange={(e) => setConfirmPw(e.target.value)}
           required
           minLength={6}
-          style={{ display: 'block', width: '100%', padding: 8, marginBottom: 12 }}
+          style={{ 
+            display: 'block', 
+            width: '100%', 
+            padding: 8, 
+            marginBottom: 12,
+            boxSizing: 'border-box'
+          }}
         />
-        <button type="submit" disabled={loading} style={{ padding: '0.75rem 1.5rem' }}>
+        <button 
+          type="submit" 
+          disabled={loading}
+          style={{ 
+            padding: '0.75rem 1.5rem',
+            width: '100%',
+            backgroundColor: '#f97316',
+            color: 'white',
+            border: 'none',
+            borderRadius: 4,
+            cursor: loading ? 'not-allowed' : 'pointer',
+            opacity: loading ? 0.6 : 1
+          }}
+        >
           {loading ? 'Updating…' : 'Reset Password'}
         </button>
       </form>
-      {msg && <p style={{ marginTop: 12, color: msg.startsWith('Error') ? 'red' : 'green' }}>{msg}</p>}
+      {msg && (
+        <p style={{ 
+          marginTop: 12, 
+          color: msg.includes('✅') ? 'green' : msg.includes('Error') ? 'red' : 'blue',
+          fontWeight: msg.includes('✅') ? 'bold' : 'normal'
+        }}>
+          {msg}
+        </p>
+      )}
     </div>
   )
 }

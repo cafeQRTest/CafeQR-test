@@ -1,8 +1,11 @@
+//pages/order/cart
+
 import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 // 1. IMPORT the singleton function
 import { getSupabase } from "../../services/supabase";
+import AlertRestaurantButton from '../../components/AlertRestaurantButton'
 
 // 2. REMOVE the supabase prop
 export default function CartSummary() {
@@ -298,6 +301,7 @@ export default function CartSummary() {
         >
           Clear Cart
         </button>
+<AlertRestaurantButton restaurantId={restaurantId} tableNumber={tableNumber} />
       </header>
 
       <div
