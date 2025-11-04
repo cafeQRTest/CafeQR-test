@@ -313,11 +313,13 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
     })
 
     if (success) {
-      // Show success message (optional)
-      console.log('✅ CSV exported successfully')
+      alert('✅ CSV exported successfully!')
+    } else {
+      alert('❌ CSV export failed')
     }
   } catch (error) {
     console.error('CSV export error:', error)
+    alert(`Error exporting CSV: ${error.message}`)
   }
 }
 
@@ -336,13 +338,16 @@ const handleExportExcel = async () => {
     })
 
     if (success) {
-      // Show success message (optional)
-      console.log('✅ Excel exported successfully')
+      alert('✅ Excel exported successfully!')
+    } else {
+      alert('❌ Excel export failed')
     }
   } catch (error) {
     console.error('Excel export error:', error)
+    alert(`Error exporting Excel: ${error.message}`)
   }
 }
+
 
   if (checking || restLoading) return <div style={{ padding: 16 }}>Loading…</div>
   if (!restaurantId) return <div style={{ padding: 16 }}>No restaurant selected</div>

@@ -39,42 +39,12 @@ export const exportSalesReportToCSV = ({
     csvContent += '\n'
 
     // Payment Methods Breakdown (WITHOUT RUPEE SYMBOL)
-    // In exportSalesReportToCSV function
-csvContent += `PAYMENT METHODS\n`;
-csvContent += `Payment Method,Order Count,Total Amount,Percentage,Breakdown\n`;
-
-paymentBreakdown.forEach(payment => {
-  let breakdown = '';
-  
-  // Check if this row comes from mixed payments
-  const mixedOrders = salesData.filter(o => 
-    o.payment_method === 'mixed' && 
-    o.mixed_payment_details?.online_method === payment.payment_method
-  );
-  
-  if (mixedOrders.length > 0) {
-    breakdown = `(${mixedOrders.length} orders from mixed payments)`;
-  }
-  
-  csvContent += `"${payment.payment_method}",${payment.order_count},${payment.total_amount.toFixed(2)},${payment.percentage}%,"${breakdown}"\n`;
-});
-
-
-    // In exportSalesReportToCSV, add payment method breakdown:
-
-// After PAYMENT METHODS section:
-csvContent += `MIXED PAYMENT BREAKDOWN\n`
-csvContent += `Order ID,Cash Amount,Online Method,Online Amount,Total\n`
-
-// Add logic to iterate through orders with mixed payment details
-orderData.forEach(order => {
-  if (order.mixed_payment_details) {
-    const { cash_amount, online_amount, online_method } = order.mixed_payment_details;
-    csvContent += `${order.id},${cash_amount},${online_method},${online_amount},${Number(cash_amount) + Number(online_amount)}\n`;
-  }
-});
-csvContent += '\n'
-
+    csvContent += `PAYMENT METHODS\n`
+    csvContent += `Payment Method,Order Count,Total Amount,Percentage\n`
+    paymentBreakdown.forEach(payment => {
+      csvContent += `"${payment.payment_method}",${payment.order_count},${payment.total_amount.toFixed(2)},${payment.percentage}%\n`
+    })
+    csvContent += '\n'
 
     // Order Types Breakdown (WITHOUT RUPEE SYMBOL)
     csvContent += `ORDER TYPES\n`
@@ -251,35 +221,6 @@ export const exportSalesReportToExcel = ({
             `).join('')}
           </tbody>
         </table>
-
-// In exportSalesReportToExcel, add mixed payment table to HTML:
-
-<h2>Mixed Payment Orders</h2>
-<table>
-  <thead>
-    <tr>
-      <th>Order ID</th>
-      <th>Cash Amount</th>
-      <th>Online Method</th>
-      <th>Online Amount</th>
-      <th>Total</th>
-    </tr>
-  </thead>
-  <tbody>
-    ${orderData
-      .filter(o => o.mixed_payment_details)
-      .map(o => `
-        <tr>
-          <td>${o.id}</td>
-          <td class="currency">₹${Number(o.mixed_payment_details.cash_amount).toFixed(2)}</td>
-          <td>${o.mixed_payment_details.online_method.toUpperCase()}</td>
-          <td class="currency">₹${Number(o.mixed_payment_details.online_amount).toFixed(2)}</td>
-          <td class="currency">₹${(Number(o.mixed_payment_details.cash_amount) + Number(o.mixed_payment_details.online_amount)).toFixed(2)}</td>
-        </tr>
-      `).join('')}
-  </tbody>
-</table>
-
 
         <h2>Order Types</h2>
         <table>

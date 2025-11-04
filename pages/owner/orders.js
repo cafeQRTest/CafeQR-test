@@ -636,6 +636,13 @@ const handleCancelDismiss = () => setCancelOrderDialog(null);
   }
 
   const finalize = (order) => {
+  // ✅ Check PAYMENT_METHOD first for credit orders
+  if (order?.payment_method === 'credit') {
+    // Credit orders don't need payment confirmation - just complete
+    complete(order.id);
+    return;
+  }
+
   // If invoice already exists, customer paid online - skip dialog
   if (order?.invoice?.pdf_url) {
     complete(order.id);
@@ -643,7 +650,6 @@ const handleCancelDismiss = () => setCancelOrderDialog(null);
   }
 
   // No invoice = counter payment - show payment confirmation dialog
-  // Restaurant owner will confirm cash/online payment at counter
   setPaymentConfirmDialog(order);
 };
 
@@ -655,14 +661,40 @@ const handlePaymentConfirmed = (actualPaymentMethod, mixedDetails = null) => {
 };
 
 // Updated complete function - no auto-open PDF + save payment method
+// Updated complete function - extract payment_method from order first
 const complete = async (orderId, actualPaymentMethod = null, mixedDetails = null) => {
   if (!supabase) return;
   setGeneratingInvoice(orderId);
   try {
+    // ✅ FIX: Fetch order FIRST to get its payment_method
+    const { data: order, error: fetchErr } = await supabase
+      .from('orders')
+      .select('id, payment_method, actual_payment_method, is_credit, credit_customer_id')
+      .eq('id', orderId)
+      .single();
+
+    if (fetchErr) throw fetchErr;
+
+    // Determine the final payment method - USE ORDER'S PAYMENT_METHOD if available
+    let finalPaymentMethod = actualPaymentMethod;
+    
+    // If no explicit payment method provided, use what's stored in the order
+    if (!finalPaymentMethod) {
+      finalPaymentMethod = order?.payment_method || order?.actual_payment_method || 'cash';
+    }
+    
+    // If it's a credit order, ensure it stays as 'credit'
+    if (order?.is_credit && order?.credit_customer_id) {
+      finalPaymentMethod = 'credit';
+    }
+
     // Update order status to completed
     const updateData = { 
       status: 'completed',
-      ...(actualPaymentMethod && { payment_method: actualPaymentMethod, actual_payment_method: actualPaymentMethod }),
+      ...(finalPaymentMethod && { 
+        payment_method: finalPaymentMethod, 
+        actual_payment_method: finalPaymentMethod 
+      }),
       ...(mixedDetails && { mixed_payment_details: mixedDetails })
     };
     
@@ -672,14 +704,16 @@ const complete = async (orderId, actualPaymentMethod = null, mixedDetails = null
       .eq('id', orderId)
       .eq('restaurant_id', restaurantId);
     
-    // Generate invoice
+    // ✅ FIX: Pass the CORRECT payment_method from order to API
     const resp = await fetch('/api/invoices/generate', {
       method: 'POST', 
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
         order_id: orderId, 
         restaurant_id: restaurantId,
-        payment_method: actualPaymentMethod || 'cash',
+        payment_method: finalPaymentMethod,  // ✅ Pass final payment method
+        is_credit: order?.is_credit,
+        credit_customer_id: order?.credit_customer_id,
         mixed_payment_details: mixedDetails
       }),
     });
@@ -871,6 +905,9 @@ function OrderCard({ order, statusColor, onChangeStatus, onComplete, generatingI
   const hasInvoice = Boolean(order?.invoice?.pdf_url);
   const total = computeOrderTotalDisplay(order);
   
+  // Check if this is a credit order
+  const isCreditOrder = order?.is_credit && order?.credit_customer_id;
+  
   // Check if payment was completed online
   const pm = String(order.payment_method || '').toLowerCase();
   const isOnlinePaid = pm === 'upi' || pm === 'card' || pm === 'online';
@@ -892,7 +929,8 @@ function OrderCard({ order, statusColor, onChangeStatus, onComplete, generatingI
           }}>
             <strong>#{order.id.slice(0,8)}</strong>
             <span style={{ marginLeft:8 }}>
-            <small>{getOrderTypeLabel(order)}</small>
+              <small>{getOrderTypeLabel(order)}</small>
+              {isCreditOrder && <small style={{marginLeft: 8, color: '#f59e0b', fontWeight: 'bold'}}>💳 CREDIT</small>}
             </span>
             <span style={{ color:'#6b7280',fontSize:12 }}>
               {new Date(order.created_at).toLocaleTimeString()}
@@ -960,12 +998,15 @@ function OrderCard({ order, statusColor, onChangeStatus, onComplete, generatingI
            </>
               )}
 
-              {/* READY orders - show Done button for both online-paid and counter-payment orders */}
+              {/* READY orders - show Done button for all payment types */}
+              {/* For CREDIT orders: no payment dialog will show
+                  For other orders: payment dialog will show (cash/online/mixed) */}
               {order.status==='ready' && (
   	      <Button
    	      size="sm"
   	      onClick={() => onComplete(order)}
   	      disabled={generatingInvoice===order.id}
+	      title={isCreditOrder ? "Complete credit order (no payment dialog)" : "Complete order - payment dialog will appear"}
 	      >
    	      {generatingInvoice===order.id ? 'Processing…' : 'Done'}
   	      </Button>

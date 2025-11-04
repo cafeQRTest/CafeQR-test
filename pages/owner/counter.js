@@ -109,37 +109,75 @@ export default function CounterSale() {
 
   // ✅ CREATE NEW CREDIT CUSTOMER
   const handleCreateNewCreditCustomer = async () => {
-    if (!customerName.trim() || !customerPhone.trim()) {
-      setError('Please enter name and phone')
+  if (!customerName.trim() || !customerPhone.trim()) {
+    setError('❌ Please enter name and phone')
+    setTimeout(() => setError(''), 3000)
+    return
+  }
+
+  // Validate phone format
+  const phoneRegex = /^[\d\s\-\+\(\)]{10,}$/
+  if (!phoneRegex.test(customerPhone)) {
+    setError('❌ Please enter a valid phone number')
+    setTimeout(() => setError(''), 3000)
+    return
+  }
+
+  try {
+    // Check if customer with this phone already exists in THIS restaurant
+    const { data: existing, error: checkErr } = await supabase
+      .from('credit_customers')
+      .select('id, name')
+      .eq('restaurant_id', restaurantId)
+      .eq('phone', customerPhone.trim())
+      .single()
+
+    if (existing) {
+      setError(`❌ Customer "${existing.name}" already exists with this phone number`)
+      setTimeout(() => setError(''), 3000)
       return
     }
 
-    try {
-      const { data, error: err } = await supabase
-        .from('credit_customers')
-        .insert({
-          restaurant_id: restaurantId,
-          name: customerName.trim(),
-          phone: customerPhone.trim(),
-          current_balance: 0,
-          total_credit_extended: 0,
-          status: 'active'
-        })
-        .select()
-        .single()
+    // Create new customer
+    const { data, error: err } = await supabase
+      .from('credit_customers')
+      .insert({
+        restaurant_id: restaurantId,
+        name: customerName.trim(),
+        phone: customerPhone.trim(),
+        current_balance: 0,
+        total_credit_extended: 0,
+        status: 'active'
+      })
+      .select()
+      .single()
 
-      if (err) throw err
-
-      setCreditCustomers([...creditCustomers, data])
-      setSelectedCreditCustomerId(data.id)
-      setCreditCustomerBalance(0)
-      setShowNewCreditCustomer(false)
-      setSuccess('✅ Credit customer created')
-      setTimeout(() => setSuccess(''), 2000)
-    } catch (err) {
-      setError('Failed to create customer: ' + err.message)
+    if (err) {
+      // Handle specific error messages
+      if (err.message.includes('duplicate') || err.message.includes('unique')) {
+        setError('❌ This phone number is already registered')
+      } else {
+        setError(`❌ Failed to create customer: ${err.message}`)
+      }
+      setTimeout(() => setError(''), 3000)
+      return
     }
+
+    // Success!
+    setCreditCustomers([...creditCustomers, data])
+    setSelectedCreditCustomerId(data.id)
+    setCreditCustomerBalance(0)
+    setShowNewCreditCustomer(false)
+    setCustomerName('')
+    setCustomerPhone('')
+    setSuccess(`✅ Customer "${data.name}" created successfully`)
+    setTimeout(() => setSuccess(''), 2000)
+  } catch (err) {
+    console.error('Error creating customer:', err)
+    setError(`❌ Error: ${err.message || 'Failed to create customer'}`)
+    setTimeout(() => setError(''), 3000)
   }
+}
 
   const filteredItems = useMemo(() => {
     const q = searchQuery.toLowerCase()
