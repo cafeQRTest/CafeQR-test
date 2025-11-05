@@ -1,221 +1,221 @@
-import { useEffect, useState, useRef } from 'react'
+// pages/reset-password.js
+// FINAL WORKING VERSION - Uses setSession() to establish authenticated session
+
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
-import Link from 'next/link'
 import { getSupabase } from '../services/supabase'
+import Link from 'next/link'
 
 export default function ResetPassword() {
   const router = useRouter()
   const supabase = getSupabase()
-  const initRef = useRef(false)
-
+  
   const [newPw, setNewPw] = useState('')
   const [confirmPw, setConfirmPw] = useState('')
   const [loading, setLoading] = useState(false)
   const [msg, setMsg] = useState('')
-  const [pageState, setPageState] = useState('loading') // 'loading', 'ready', 'error'
-  const [errorDescription, setErrorDescription] = useState('')
+  const [ready, setReady] = useState(false)
+  const [errorInfo, setErrorInfo] = useState(null)
+  const [debugLog, setDebugLog] = useState([])
 
-  // Parse URL and validate token on mount
+  const addLog = (message, data = null) => {
+    const timestamp = new Date().toLocaleTimeString()
+    const logEntry = `[${timestamp}] ${message}${data ? ': ' + JSON.stringify(data, null, 2) : ''}`
+    console.log(logEntry)
+    setDebugLog(prev => [...prev, logEntry])
+  }
+
   useEffect(() => {
-    if (!router.isReady || initRef.current) return
-    initRef.current = true
-
-    const parseAndValidateToken = async () => {
-      console.log('[RESET_PASSWORD] Component mounted')
-      console.log('[RESET_PASSWORD] Router query:', router.query)
-
-      try {
-        // Get token from URL query string
-        const token = router.query.token
-        const type = router.query.type
-
-        console.log('[RESET_PASSWORD] Token found:', !!token)
-        console.log('[RESET_PASSWORD] Token type:', type)
-
-        // Log full URL for debugging
-        if (typeof window !== 'undefined') {
-          console.log('[RESET_PASSWORD] Full URL:', window.location.href)
-          console.log('[RESET_PASSWORD] Query string:', window.location.search)
-          console.log('[RESET_PASSWORD] Hash:', window.location.hash)
-        }
-
-        // Validate token exists
-        if (!token) {
-          console.warn('[RESET_PASSWORD] ERROR: Token is missing from URL')
-          setErrorDescription('Invalid or missing reset token. Please request a new password reset link.')
-          setPageState('error')
-          return
-        }
-
-        // Validate token type
-        if (type !== 'recovery') {
-          console.warn('[RESET_PASSWORD] ERROR: Invalid token type:', type)
-          setErrorDescription('Invalid token type. Expected "recovery" type.')
-          setPageState('error')
-          return
-        }
-
-        console.log('[RESET_PASSWORD] Token and type validated successfully')
-        console.log('[RESET_PASSWORD] Waiting for user to submit new password...')
-        
-        // Token is valid, we'll verify it when user submits the form
-        setPageState('ready')
-
-      } catch (err) {
-        console.error('[RESET_PASSWORD] ERROR during token parsing:', err)
-        setErrorDescription(err.message || 'An unexpected error occurred')
-        setPageState('error')
-      }
+    if (!router.isReady) {
+      addLog('Router not ready yet')
+      return
     }
 
-    parseAndValidateToken()
+    addLog('=== RESET PASSWORD INITIALIZATION ===')
+    addLog('Current URL', window.location.href)
+
+    let token = router.query.access_token
+    let type = router.query.type
+    let refreshToken = router.query.refresh_token
+
+    // Check URL hash for token (from email link)
+    if (typeof window !== 'undefined' && window.location.hash) {
+      addLog('Hash found in URL - extracting parameters')
+      const hashParams = new URLSearchParams(window.location.hash.slice(1))
+
+      if (hashParams.get('error')) {
+        const errorDescription = hashParams.get('error_description') || 'Link invalid or expired.'
+        addLog('❌ ERROR in URL hash:', errorDescription)
+        setErrorInfo({ description: errorDescription })
+        return
+      }
+
+      if (!token) token = hashParams.get('access_token')
+      if (!type) type = hashParams.get('type')
+      if (!refreshToken) refreshToken = hashParams.get('refresh_token')
+      
+      addLog('✅ Parameters extracted from hash')
+    }
+
+    addLog('Token found:', !!token)
+    addLog('Type:', type)
+    addLog('Refresh token found:', !!refreshToken)
+
+    if (token && (type === 'recovery' || !type)) {
+      addLog('✅ TOKEN VALIDATION PASSED')
+      setReady(true)
+      setMsg('')
+      setErrorInfo(null)
+    } else {
+      addLog('❌ TOKEN VALIDATION FAILED')
+      setErrorInfo({ description: 'Invalid or missing reset token.' })
+    }
   }, [router.isReady, router.query])
 
   const onSubmit = async (e) => {
     e.preventDefault()
     
-    console.log('[RESET_PASSWORD] Form submitted')
-    console.log('[RESET_PASSWORD] New password length:', newPw.length)
+    addLog('=== PASSWORD RESET SUBMISSION ===')
 
-    // Validation
     if (newPw.length < 6) {
-      console.warn('[RESET_PASSWORD] ERROR: Password too short')
-      setMsg('❌ Password must be at least 6 characters.')
-      return
-    }
-    
-    if (newPw !== confirmPw) {
-      console.warn('[RESET_PASSWORD] ERROR: Passwords do not match')
-      setMsg('❌ Passwords do not match.')
+      const msg = '❌ Password must be ≥6 characters.'
+      setMsg(msg)
+      addLog(msg)
       return
     }
 
+    if (newPw !== confirmPw) {
+      const msg = '❌ Passwords do not match.'
+      setMsg(msg)
+      addLog(msg)
+      return
+    }
+
+    addLog('✅ Password validation passed')
     setLoading(true)
     setMsg('')
 
     try {
-      const token = router.query.token
+      // Extract tokens from URL
+      let token = router.query.access_token
+      let refreshToken = router.query.refresh_token
 
-      console.log('[RESET_PASSWORD] Attempting to verify OTP with Supabase...')
-      console.log('[RESET_PASSWORD] Token:', token?.substring(0, 20) + '...')
+      if (!token && typeof window !== 'undefined' && window.location.hash) {
+        const params = new URLSearchParams(window.location.hash.slice(1))
+        token = params.get('access_token')
+        refreshToken = params.get('refresh_token')
+      }
 
-      // STEP 1: Verify the OTP token and create a session
-      const { data: otpData, error: otpError } = await supabase.auth.verifyOtp({
-        token_hash: token,
-        type: 'recovery'
-      })
-
-      console.log('[RESET_PASSWORD] verifyOtp response:', {
-        hasData: !!otpData,
-        hasError: !!otpError,
-        errorMessage: otpError?.message
-      })
-
-      if (otpError) {
-        console.error('[RESET_PASSWORD] OTP Verification failed:', otpError.message)
-        const errorMsg = otpError.message.toLowerCase()
-        
-        if (errorMsg.includes('expired')) {
-          console.warn('[RESET_PASSWORD] Token has expired')
-          setMsg('❌ Your reset link has expired. Please request a new one.')
-        } else if (errorMsg.includes('invalid')) {
-          console.warn('[RESET_PASSWORD] Token is invalid')
-          setMsg('❌ Invalid reset token. Please request a new one.')
-        } else {
-          setMsg(`❌ Error: ${otpError.message}`)
-        }
-        
+      if (!token) {
+        const errorMsg = '❌ Token not found. Please request a new reset link.'
+        setMsg(errorMsg)
+        addLog(errorMsg)
         setLoading(false)
         return
       }
 
-      if (!otpData?.session) {
-        console.error('[RESET_PASSWORD] ERROR: No session created after OTP verification')
-        setMsg('❌ Failed to create session. Please try again.')
+      addLog('🔐 STEP 1: Setting up session with token')
+      addLog('Access token length:', token.length)
+      addLog('Refresh token found:', !!refreshToken)
+
+      // CRITICAL: Establish session from the recovery token
+      const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
+        access_token: token,
+        refresh_token: refreshToken || undefined
+      })
+
+      if (sessionError) {
+        addLog('❌ setSession failed:', sessionError)
+        setMsg(`❌ Session Error: ${sessionError.message}`)
         setLoading(false)
         return
       }
 
-      console.log('[RESET_PASSWORD] ✓ OTP verified and session created')
-      console.log('[RESET_PASSWORD] Session user:', otpData.session.user?.email)
+      addLog('✅ Session established successfully')
+      addLog('Session user:', sessionData?.user?.email || 'No email')
 
-      // STEP 2: Update password with the session
-      console.log('[RESET_PASSWORD] Attempting to update password...')
-
+      addLog('🔐 STEP 2: Updating password')
+      
+      // Now we have a valid session, update the password
       const { error: updateError } = await supabase.auth.updateUser({ 
         password: newPw 
       })
 
-      console.log('[RESET_PASSWORD] updateUser response:', {
-        hasError: !!updateError,
-        errorMessage: updateError?.message
-      })
-
       if (updateError) {
-        console.error('[RESET_PASSWORD] Password update failed:', updateError.message)
-        setMsg(`❌ Error: ${updateError.message}`)
+        addLog('❌ Password update failed:', updateError)
+        setMsg(`❌ ${updateError.message}`)
         setLoading(false)
         return
       }
 
-      console.log('[RESET_PASSWORD] ✓ Password updated successfully!')
-      console.log('[RESET_PASSWORD] Signing out user...')
+      addLog('✅ Password updated successfully')
 
-      setMsg('✅ Password updated successfully! Redirecting to login...')
+      const successMsg = '✅ Password updated successfully! Redirecting to login...'
+      setMsg(successMsg)
+      addLog(successMsg)
       
-      // Sign out the user
-      await supabase.auth.signOut()
-      console.log('[RESET_PASSWORD] ✓ User signed out')
+      // Sign out
+      try {
+        await supabase.auth.signOut()
+        addLog('✅ User signed out')
+      } catch (signOutError) {
+        addLog('⚠️ Sign out error (non-critical):', signOutError.message)
+      }
 
-      // Redirect to login after 2 seconds
       setTimeout(() => {
-        console.log('[RESET_PASSWORD] Redirecting to login page...')
+        addLog('Redirecting to /login')
         router.push('/login')
       }, 2000)
       
     } catch (err) {
-      console.error('[RESET_PASSWORD] UNEXPECTED ERROR:', err)
-      setMsg(`❌ Error: ${err.message || 'An unexpected error occurred'}`)
+      addLog('❌ UNEXPECTED ERROR:', err)
+      const msg = `❌ ${err.message || 'An error occurred'}`
+      setMsg(msg)
+      setLoading(false)
     } finally {
       setLoading(false)
     }
   }
 
-  // Loading state
-  if (pageState === 'loading') {
+  if (errorInfo) {
     return (
-      <div style={{ padding: '2rem', maxWidth: 480, margin: 'auto', textAlign: 'center' }}>
+      <div style={{ padding: '2rem', maxWidth: 800, margin: 'auto' }}>
         <h1>Reset Password</h1>
-        <p>⏳ Verifying your reset link...</p>
-      </div>
-    )
-  }
-
-  // Error state
-  if (pageState === 'error') {
-    return (
-      <div style={{ padding: '2rem', maxWidth: 480, margin: 'auto' }}>
-        <h1>Reset Password</h1>
-        <div style={{ 
-          padding: '15px', 
-          backgroundColor: '#ffe6e6', 
-          border: '1px solid #ff0000',
-          borderRadius: '4px',
-          color: '#cc0000',
-          marginBottom: '20px'
-        }}>
-          ❌ {errorDescription}
+        <div style={{ padding: '15px', backgroundColor: '#ffe6e6', border: '1px solid #ff0000', borderRadius: '4px', color: '#cc0000', marginBottom: '20px' }}>
+          ❌ {errorInfo.description}
         </div>
         <Link href="/forgot-password" style={{ color: '#0070f3', textDecoration: 'underline' }}>
           ← Request a new reset link
         </Link>
+
+        <div style={{ marginTop: '40px', padding: '15px', backgroundColor: '#f0f0f0', borderRadius: '4px', maxHeight: '300px', overflowY: 'auto', border: '1px solid #ddd' }}>
+          <h3>Debug Log:</h3>
+          <pre style={{ fontSize: '12px', whiteSpace: 'pre-wrap', wordWrap: 'break-word' }}>
+            {debugLog.join('\n')}
+          </pre>
+        </div>
       </div>
     )
   }
 
-  // Ready state - show form
+  if (!ready) {
+    return (
+      <div style={{ padding: '2rem', maxWidth: 800, margin: 'auto', textAlign: 'center' }}>
+        <h1>Reset Password</h1>
+        <p>⏳ Verifying your reset link...</p>
+
+        <div style={{ marginTop: '40px', padding: '15px', backgroundColor: '#f0f0f0', borderRadius: '4px', maxHeight: '300px', overflowY: 'auto', border: '1px solid #ddd' }}>
+          <h3>Debug Log:</h3>
+          <pre style={{ fontSize: '12px', whiteSpace: 'pre-wrap', wordWrap: 'break-word' }}>
+            {debugLog.join('\n')}
+          </pre>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div style={{ padding: '2rem', maxWidth: 480, margin: 'auto' }}>
+    <div style={{ padding: '2rem', maxWidth: 800, margin: 'auto' }}>
       <h1>Reset Password</h1>
       <form onSubmit={onSubmit}>
         <input
@@ -225,17 +225,8 @@ export default function ResetPassword() {
           onChange={(e) => setNewPw(e.target.value)}
           required
           minLength={6}
+          style={{ display: 'block', width: '100%', padding: 8, marginBottom: 12, boxSizing: 'border-box' }}
           disabled={loading}
-          style={{ 
-            display: 'block', 
-            width: '100%', 
-            padding: 8, 
-            marginBottom: 12,
-            boxSizing: 'border-box',
-            fontSize: '14px',
-            opacity: loading ? 0.6 : 1,
-            cursor: loading ? 'not-allowed' : 'auto'
-          }}
         />
         <input
           type="password"
@@ -244,17 +235,8 @@ export default function ResetPassword() {
           onChange={(e) => setConfirmPw(e.target.value)}
           required
           minLength={6}
+          style={{ display: 'block', width: '100%', padding: 8, marginBottom: 12, boxSizing: 'border-box' }}
           disabled={loading}
-          style={{ 
-            display: 'block', 
-            width: '100%', 
-            padding: 8, 
-            marginBottom: 12,
-            boxSizing: 'border-box',
-            fontSize: '14px',
-            opacity: loading ? 0.6 : 1,
-            cursor: loading ? 'not-allowed' : 'auto'
-          }}
         />
         <button 
           type="submit" 
@@ -267,9 +249,7 @@ export default function ResetPassword() {
             border: 'none',
             borderRadius: 4,
             cursor: loading ? 'not-allowed' : 'pointer',
-            opacity: loading ? 0.6 : 1,
-            fontSize: '14px',
-            fontWeight: '500'
+            opacity: loading ? 0.6 : 1
           }}
         >
           {loading ? '⏳ Updating…' : 'Reset Password'}
@@ -282,12 +262,18 @@ export default function ResetPassword() {
           backgroundColor: msg.includes('✅') ? '#e6ffe6' : '#ffe6e6',
           border: `1px solid ${msg.includes('✅') ? '#00aa00' : '#ff0000'}`,
           borderRadius: '4px',
-          color: msg.includes('✅') ? '#006600' : '#cc0000',
-          fontSize: 14
+          color: msg.includes('✅') ? '#006600' : '#cc0000'
         }}>
           {msg}
         </div>
       )}
+
+      <div style={{ marginTop: '40px', padding: '15px', backgroundColor: '#f0f0f0', borderRadius: '4px', maxHeight: '400px', overflowY: 'auto', border: '1px solid #ddd' }}>
+        <h3>Debug Log (Scroll to see all entries):</h3>
+        <pre style={{ fontSize: '12px', whiteSpace: 'pre-wrap', wordWrap: 'break-word' }}>
+          {debugLog.join('\n') || 'No logs yet...'}
+        </pre>
+      </div>
     </div>
   )
 }
