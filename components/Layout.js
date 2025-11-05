@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/router'
 import { useRestaurant } from '../context/RestaurantContext'
+import OwnerNotificationsBell from './OwnerNotificationsBell.jsx'
 import {
   FaBars,
   FaHome,
@@ -182,6 +183,7 @@ function Header({ showSidebar, onHamburger, isCustomer }) {
           </Link>
         </nav>
       )}
+      <OwnerNotificationsBell />
     </header>
   )
 }

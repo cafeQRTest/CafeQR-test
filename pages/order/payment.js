@@ -4,6 +4,7 @@ import { useRouter } from 'next/router';
 import { useEffect, useMemo, useState } from 'react';
 // 1. IMPORT the singleton function
 import { getSupabase } from '../../services/supabase';
+import AlertRestaurantButton from '../../components/AlertRestaurantButton';
 
 // 2. REMOVE the supabase prop
 export default function PaymentPage() {
@@ -407,6 +408,7 @@ export default function PaymentPage() {
         <div style={{ fontSize: 14, fontWeight: 600, color: brandColor }}>
           ₹{Number(totalAmount || 0).toFixed(2)}
         </div>
+<AlertRestaurantButton restaurantId={restaurantId} tableNumber={tableNumber} />
       </header>
 
       <div style={{ background: '#fff', padding: 20, marginBottom: 8 }}>
