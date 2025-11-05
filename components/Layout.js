@@ -1,4 +1,4 @@
-//components/layout
+// components/layout.js
 
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
@@ -20,6 +20,9 @@ import {
   FaCreditCard,
   FaCashRegister,
   FaBoxes,
+  FaIndustry,
+  FaUsers,
+  FaFileAlt,
 } from 'react-icons/fa'
 import { signOutAndRedirect } from '../lib/authActions'
 import { getSupabase } from '../services/supabase'
@@ -204,11 +207,14 @@ function Sidebar({ collapsed }) {
     { href: '/owner/availability', label: 'Availability', icon: <FaClock /> },
     { href: '/owner/promotions', label: 'Promotions', icon: <FaTags /> },
     { href: '/owner/analytics', label: 'Analytics', icon: <FaChartBar /> },
-    { href: '/owner/production', label: 'Production', icon: <FaLeaf /> }, // Add this import: import { FaLeaf } from 'react-icons/fa'
+    { href: '/owner/production', label: 'Production', icon: <FaIndustry /> },
+    { href: '/owner/credit-customers', label: 'Credit Customers', icon: <FaUsers /> },
+    { href: '/owner/credit-sales-report', label: 'Credit Sales Report', icon: <FaFileAlt /> },
     { href: '/owner/sales', label: 'Sales', icon: <FaCreditCard /> },
     { href: '/owner/settings', label: 'Settings', icon: <FaCog /> },
     { href: '/owner/billing', label: 'Billing', icon: <FaFileInvoice /> },
   ]
+  
   if (hasAggregatorIntegration) {
     items.push({
       href: '/owner/aggregator-poller',
@@ -314,10 +320,14 @@ function MobileSidebar({ onNavigate }) {
     { href: '/owner/availability', label: 'Availability', icon: <FaClock /> },
     { href: '/owner/promotions', label: 'Promotions', icon: <FaTags /> },
     { href: '/owner/analytics', label: 'Analytics', icon: <FaChartBar /> },
+    { href: '/owner/production', label: 'Production', icon: <FaIndustry /> },
+    { href: '/owner/credit-customers', label: 'Credit Customers', icon: <FaUsers /> },
+    { href: '/owner/credit-sales-report', label: 'Credit Sales Report', icon: <FaFileAlt /> },
     { href: '/owner/sales', label: 'Sales', icon: <FaCreditCard /> },
     { href: '/owner/settings', label: 'Settings', icon: <FaCog /> },
     { href: '/owner/billing', label: 'Billing', icon: <FaFileInvoice /> },
   ]
+  
   if (hasAggregatorIntegration) {
     items.push({
       href: '/owner/aggregator-poller',
