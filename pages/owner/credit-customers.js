@@ -21,6 +21,8 @@ export default function CreditCustomersPage() {
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [paymentAmount, setPaymentAmount] = useState('')
   const [paymentMethod, setPaymentMethod] = useState('cash')
+  const [expandedCustomerId, setExpandedCustomerId] = useState(null)
+  const [customerOrders, setCustomerOrders] = useState({})
 
   useEffect(() => {
     if (checking || restLoading || !restaurantId) return
@@ -52,6 +54,40 @@ export default function CreditCustomersPage() {
       setError(err.message || 'Failed to load customers')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadCustomerOrders = async (customerId) => {
+    try {
+      const { data: orders, error: err } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('restaurant_id', restaurantId)
+        .eq('credit_customer_id', customerId)
+        .eq('is_credit', true)
+        .order('created_at', { ascending: false })
+        .limit(20)
+
+      if (err) throw err
+      
+      setCustomerOrders(prev => ({
+        ...prev,
+        [customerId]: orders || []
+      }))
+    } catch (err) {
+      console.error('Failed to load orders:', err)
+      setError('Failed to load orders for customer')
+    }
+  }
+
+  const toggleOrderExpand = (customerId) => {
+    if (expandedCustomerId === customerId) {
+      setExpandedCustomerId(null)
+    } else {
+      setExpandedCustomerId(customerId)
+      if (!customerOrders[customerId]) {
+        loadCustomerOrders(customerId)
+      }
     }
   }
 
@@ -127,32 +163,6 @@ export default function CreditCustomersPage() {
     c.phone.includes(searchQuery)
   )
 
-// Add this function to load customer transactions:
-
-const loadCustomerTransactions = async (customerId) => {
-  if (!customerId) return []
-  
-  try {
-    const { data, error } = await supabase
-      .from('credit_transactions')
-      .select('*')
-      .eq('credit_customer_id', customerId)
-      .order('transaction_date', { ascending: false })
-      .limit(10)
-
-    if (error) {
-      console.error('Failed to load transactions:', error)
-      return []
-    }
-
-    return data || []
-  } catch (err) {
-    console.error('Error loading transactions:', err)
-    return []
-  }
-}
-
-
   if (checking || restLoading) return <div style={{ padding: 24 }}>Loading…</div>
   if (!restaurantId) return <div style={{ padding: 24 }}>No restaurant</div>
 
@@ -199,64 +209,134 @@ const loadCustomerTransactions = async (customerId) => {
             </thead>
             <tbody>
               {filteredCustomers.map((customer, idx) => (
-                <tr key={customer.id} style={{ borderBottom: '1px solid #e5e7eb', background: idx % 2 === 0 ? '#fff' : '#f9fafb' }}>
-                  <td style={{ padding: 12 }}><strong>{customer.name}</strong></td>
-                  <td style={{ padding: 12 }}>{customer.phone}</td>
-                  <td style={{ padding: 12, textAlign: 'right' }}>
-                    <strong style={{ color: customer.current_balance > 0 ? '#dc2626' : '#059669' }}>
-                      ₹{customer.current_balance.toFixed(2)}
-                    </strong>
-                  </td>
-                  <td style={{ padding: 12, textAlign: 'right' }}>₹{customer.total_credit_extended.toFixed(2)}</td>
-                  <td style={{ padding: 12, textAlign: 'center' }}>
-                    <span style={{
-                      padding: '4px 8px',
-                      borderRadius: 4,
-                      fontSize: 12,
-                      fontWeight: 600,
-                      background: customer.status === 'active' ? '#ecfdf5' : '#fef2f2',
-                      color: customer.status === 'active' ? '#059669' : '#dc2626'
-                    }}>
-                      {customer.status}
-                    </span>
-                  </td>
-                  <td style={{ padding: 12, textAlign: 'center' }}>
-                    <button
-                      onClick={() => {
-                        setSelectedCustomer(customer)
-                        setShowPaymentModal(true)
-                      }}
-                      style={{
-                        padding: '6px 12px',
-                        background: '#3b82f6',
-                        color: '#fff',
-                        border: 'none',
+                <tbody key={customer.id}>
+                  <tr style={{ borderBottom: '1px solid #e5e7eb', background: idx % 2 === 0 ? '#fff' : '#f9fafb' }}>
+                    <td style={{ padding: 12 }}><strong>{customer.name}</strong></td>
+                    <td style={{ padding: 12 }}>{customer.phone}</td>
+                    <td style={{ padding: 12, textAlign: 'right' }}>
+                      <strong style={{ color: customer.current_balance > 0 ? '#dc2626' : '#059669' }}>
+                        ₹{customer.current_balance.toFixed(2)}
+                      </strong>
+                    </td>
+                    <td style={{ padding: 12, textAlign: 'right' }}>₹{customer.total_credit_extended.toFixed(2)}</td>
+                    <td style={{ padding: 12, textAlign: 'center' }}>
+                      <span style={{
+                        padding: '4px 8px',
                         borderRadius: 4,
-                        cursor: 'pointer',
                         fontSize: 12,
-                        marginRight: 8
-                      }}
-                    >
-                      Payment
-                    </button>
-                    {customer.status === 'active' && (
+                        fontWeight: 600,
+                        background: customer.status === 'active' ? '#ecfdf5' : '#fef2f2',
+                        color: customer.status === 'active' ? '#059669' : '#dc2626'
+                      }}>
+                        {customer.status}
+                      </span>
+                    </td>
+                    <td style={{ padding: 12, textAlign: 'center' }}>
                       <button
-                        onClick={() => handleSuspendCustomer(customer.id)}
+                        onClick={() => {
+                          setSelectedCustomer(customer)
+                          setShowPaymentModal(true)
+                        }}
                         style={{
                           padding: '6px 12px',
-                          background: '#ef4444',
+                          background: '#3b82f6',
                           color: '#fff',
                           border: 'none',
                           borderRadius: 4,
                           cursor: 'pointer',
-                          fontSize: 12
+                          fontSize: 12,
+                          marginRight: 8
                         }}
                       >
-                        Suspend
+                        Payment
                       </button>
-                    )}
-                  </td>
-                </tr>
+                      <button
+                        onClick={() => toggleOrderExpand(customer.id)}
+                        style={{
+                          padding: '6px 12px',
+                          background: '#6366f1',
+                          color: '#fff',
+                          border: 'none',
+                          borderRadius: 4,
+                          cursor: 'pointer',
+                          fontSize: 12,
+                          marginRight: 8
+                        }}
+                      >
+                        {expandedCustomerId === customer.id ? 'Hide' : 'View'} Orders
+                      </button>
+                      {customer.status === 'active' && (
+                        <button
+                          onClick={() => handleSuspendCustomer(customer.id)}
+                          style={{
+                            padding: '6px 12px',
+                            background: '#ef4444',
+                            color: '#fff',
+                            border: 'none',
+                            borderRadius: 4,
+                            cursor: 'pointer',
+                            fontSize: 12
+                          }}
+                        >
+                          Suspend
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+
+                  {expandedCustomerId === customer.id && (
+                    <tr style={{ background: '#f0fdf4', borderBottom: '1px solid #e5e7eb' }}>
+                      <td colSpan="6" style={{ padding: 12 }}>
+                        <div style={{ marginTop: 8 }}>
+                          <h4 style={{ marginBottom: 12, color: '#1f2937' }}>Credit Orders</h4>
+                          {customerOrders[customer.id]?.length === 0 ? (
+                            <p style={{ color: '#6b7280' }}>No credit orders</p>
+                          ) : customerOrders[customer.id] ? (
+                            <div style={{ overflowX: 'auto' }}>
+                              <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
+                                <thead>
+                                  <tr style={{ background: '#ecfdf5', borderBottom: '1px solid #d1fae5' }}>
+                                    <th style={{ padding: 8, textAlign: 'left' }}>Order #</th>
+                                    <th style={{ padding: 8, textAlign: 'left' }}>Date</th>
+                                    <th style={{ padding: 8, textAlign: 'right' }}>Amount</th>
+                                    <th style={{ padding: 8, textAlign: 'right' }}>Tax</th>
+                                    <th style={{ padding: 8, textAlign: 'right' }}>Total</th>
+                                    <th style={{ padding: 8, textAlign: 'left' }}>Status</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {customerOrders[customer.id].map(order => (
+                                    <tr key={order.id} style={{ borderBottom: '1px solid #d1fae5' }}>
+                                      <td style={{ padding: 8 }}>#{order.id.substring(0, 8)}</td>
+                                      <td style={{ padding: 8 }}>{new Date(order.created_at).toLocaleDateString()}</td>
+                                      <td style={{ padding: 8, textAlign: 'right' }}>₹{(order.total_amount || 0).toFixed(2)}</td>
+                                      <td style={{ padding: 8, textAlign: 'right' }}>₹{(order.total_tax || 0).toFixed(2)}</td>
+                                      <td style={{ padding: 8, textAlign: 'right', fontWeight: 600 }}>₹{(order.total_inc_tax || 0).toFixed(2)}</td>
+                                      <td style={{ padding: 8 }}>
+                                        <span style={{
+                                          padding: '2px 6px',
+                                          borderRadius: 3,
+                                          fontSize: 11,
+                                          fontWeight: 600,
+                                          background: order.status === 'completed' ? '#dcfce7' : '#fef3c7',
+                                          color: order.status === 'completed' ? '#166534' : '#92400e'
+                                        }}>
+                                          {order.status}
+                                        </span>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          ) : (
+                            <p style={{ color: '#6b7280' }}>Loading orders...</p>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
               ))}
             </tbody>
           </table>

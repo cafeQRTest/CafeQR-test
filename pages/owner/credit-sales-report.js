@@ -17,6 +17,7 @@ export default function CreditSalesReportPage() {
   const [error, setError] = useState('')
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0])
   const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0])
+  const [expandedOrderId, setExpandedOrderId] = useState(null)
 
   useEffect(() => {
     if (checking || restLoading || !restaurantId) return
@@ -26,15 +27,18 @@ export default function CreditSalesReportPage() {
   const loadReport = async () => {
     setLoading(true)
     try {
-      // Get credit orders
+      // Get credit orders with customer details
       const { data: orders, error: ordersErr } = await supabase
         .from('orders')
-        .select('*, credit_customer_id(name, phone, current_balance)')
+        .select(`
+          *,
+          credit_customer_id(name, phone, current_balance)
+        `)
         .eq('restaurant_id', restaurantId)
         .eq('is_credit', true)
-        .eq('payment_method', 'credit')
         .gte('created_at', `${startDate}T00:00:00`)
         .lte('created_at', `${endDate}T23:59:59`)
+        .order('created_at', { ascending: false })
 
       if (ordersErr) throw ordersErr
 
@@ -45,12 +49,13 @@ export default function CreditSalesReportPage() {
         .eq('restaurant_id', restaurantId)
         .gte('transaction_date', `${startDate}T00:00:00`)
         .lte('transaction_date', `${endDate}T23:59:59`)
+        .order('transaction_date', { ascending: false })
 
       if (txnErr) throw txnErr
 
       // Calculate summary
-      const totalCredit = orders.reduce((sum, o) => sum + (o.total_inc_tax || 0), 0)
-      const totalPayments = transactions
+      const totalCredit = (orders || []).reduce((sum, o) => sum + (o.total_inc_tax || o.total_amount || 0), 0)
+      const totalPayments = (transactions || [])
         .filter(t => t.transaction_type === 'payment')
         .reduce((sum, t) => sum + t.amount, 0)
       const outstanding = totalCredit - totalPayments
@@ -62,12 +67,13 @@ export default function CreditSalesReportPage() {
           totalCredit,
           totalPayments,
           outstanding,
-          ordersCount: orders?.length || 0,
-          uniqueCustomers: new Set(orders?.map(o => o.credit_customer_id?.phone)).size
+          ordersCount: (orders || []).length,
+          uniqueCustomers: new Set((orders || []).map(o => o.credit_customer_id?.phone)).size
         }
       })
     } catch (err) {
-      setError(err.message)
+      setError(err.message || 'Failed to load report')
+      console.error('Report load error:', err)
     } finally {
       setLoading(false)
     }
@@ -81,23 +87,28 @@ export default function CreditSalesReportPage() {
       <button onClick={() => router.back()} style={{ marginBottom: 16 }}>← Back</button>
       <h1>💳 Credit Sales Report</h1>
 
-      <div style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
-        <input
-          type="date"
-          value={startDate}
-          onChange={e => setStartDate(e.target.value)}
-          style={{ padding: '8px 12px', border: '1px solid #e5e7eb', borderRadius: 6 }}
-        />
-        <span>to</span>
-        <input
-          type="date"
-          value={endDate}
-          onChange={e => setEndDate(e.target.value)}
-          style={{ padding: '8px 12px', border: '1px solid #e5e7eb', borderRadius: 6 }}
-        />
+      <div style={{ display: 'flex', gap: 12, marginBottom: 24, alignItems: 'center' }}>
+        <div>
+          <label style={{ fontSize: 12, color: '#6b7280', marginBottom: 4, display: 'block' }}>From</label>
+          <input
+            type="date"
+            value={startDate}
+            onChange={e => setStartDate(e.target.value)}
+            style={{ padding: '8px 12px', border: '1px solid #e5e7eb', borderRadius: 6 }}
+          />
+        </div>
+        <div>
+          <label style={{ fontSize: 12, color: '#6b7280', marginBottom: 4, display: 'block' }}>To</label>
+          <input
+            type="date"
+            value={endDate}
+            onChange={e => setEndDate(e.target.value)}
+            style={{ padding: '8px 12px', border: '1px solid #e5e7eb', borderRadius: 6 }}
+          />
+        </div>
       </div>
 
-      {error && <div style={{ color: 'red', marginBottom: 12 }}>{error}</div>}
+      {error && <div style={{ color: 'red', marginBottom: 12, padding: 12, background: '#ffe5e5', borderRadius: 6 }}>{error}</div>}
 
       {loading ? (
         <div>Loading...</div>
@@ -128,25 +139,94 @@ export default function CreditSalesReportPage() {
           <div style={{ overflowX: 'auto', marginBottom: 24 }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ background: '#f3f4f6' }}>
-                  <th style={{ padding: 12, textAlign: 'left' }}>Order #</th>
-                  <th style={{ padding: 12, textAlign: 'left' }}>Customer</th>
-                  <th style={{ padding: 12, textAlign: 'right' }}>Amount</th>
-                  <th style={{ padding: 12, textAlign: 'left' }}>Date</th>
+                <tr style={{ background: '#f3f4f6', borderBottom: '2px solid #e5e7eb' }}>
+                  <th style={{ padding: 12, textAlign: 'left', fontWeight: 600 }}>Order #</th>
+                  <th style={{ padding: 12, textAlign: 'left', fontWeight: 600 }}>Customer</th>
+                  <th style={{ padding: 12, textAlign: 'left', fontWeight: 600 }}>Phone</th>
+                  <th style={{ padding: 12, textAlign: 'right', fontWeight: 600 }}>Amount</th>
+                  <th style={{ padding: 12, textAlign: 'right', fontWeight: 600 }}>Tax</th>
+                  <th style={{ padding: 12, textAlign: 'right', fontWeight: 600 }}>Total</th>
+                  <th style={{ padding: 12, textAlign: 'left', fontWeight: 600 }}>Date</th>
+                  <th style={{ padding: 12, textAlign: 'center', fontWeight: 600 }}>Status</th>
                 </tr>
               </thead>
               <tbody>
-                {reportData.orders.map(order => (
-                  <tr key={order.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                    <td style={{ padding: 12 }}>#{ order.id.substring(0, 8)}</td>
-                    <td style={{ padding: 12 }}>{order.customer_name || 'N/A'}</td>
-                    <td style={{ padding: 12, textAlign: 'right', fontWeight: 600 }}>₹{(order.total_inc_tax || 0).toFixed(2)}</td>
-                    <td style={{ padding: 12 }}>{new Date(order.created_at).toLocaleDateString()}</td>
+                {reportData.orders.length === 0 ? (
+                  <tr>
+                    <td colSpan="8" style={{ padding: 12, textAlign: 'center', color: '#6b7280' }}>
+                      No credit orders in this period
+                    </td>
                   </tr>
-                ))}
+                ) : (
+                  reportData.orders.map((order, idx) => (
+                    <tr key={order.id} style={{ borderBottom: '1px solid #e5e7eb', background: idx % 2 === 0 ? '#fff' : '#f9fafb' }}>
+                      <td style={{ padding: 12 }}>#{order.id.substring(0, 8)}</td>
+                      <td style={{ padding: 12 }}>{order.credit_customer_id?.name || order.customer_name || 'N/A'}</td>
+                      <td style={{ padding: 12 }}>{order.credit_customer_id?.phone || order.customer_phone || 'N/A'}</td>
+                      <td style={{ padding: 12, textAlign: 'right' }}>₹{(order.total_amount || 0).toFixed(2)}</td>
+                      <td style={{ padding: 12, textAlign: 'right' }}>₹{(order.total_tax || 0).toFixed(2)}</td>
+                      <td style={{ padding: 12, textAlign: 'right', fontWeight: 600 }}>₹{(order.total_inc_tax || 0).toFixed(2)}</td>
+                      <td style={{ padding: 12 }}>{new Date(order.created_at).toLocaleDateString()}</td>
+                      <td style={{ padding: 12, textAlign: 'center' }}>
+                        <span style={{
+                          padding: '4px 8px',
+                          borderRadius: 4,
+                          fontSize: 12,
+                          fontWeight: 600,
+                          background: order.status === 'completed' ? '#dcfce7' : '#fef3c7',
+                          color: order.status === 'completed' ? '#166534' : '#92400e'
+                        }}>
+                          {order.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
+
+          {/* Payment Transactions */}
+          {reportData.transactions.length > 0 && (
+            <>
+              <h2 style={{ marginTop: 32, marginBottom: 16 }}>Payment Transactions</h2>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ background: '#f3f4f6', borderBottom: '2px solid #e5e7eb' }}>
+                      <th style={{ padding: 12, textAlign: 'left', fontWeight: 600 }}>Transaction Date</th>
+                      <th style={{ padding: 12, textAlign: 'left', fontWeight: 600 }}>Type</th>
+                      <th style={{ padding: 12, textAlign: 'left', fontWeight: 600 }}>Payment Method</th>
+                      <th style={{ padding: 12, textAlign: 'right', fontWeight: 600 }}>Amount</th>
+                      <th style={{ padding: 12, textAlign: 'left', fontWeight: 600 }}>Description</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reportData.transactions.map((txn, idx) => (
+                      <tr key={txn.id} style={{ borderBottom: '1px solid #e5e7eb', background: idx % 2 === 0 ? '#fff' : '#f9fafb' }}>
+                        <td style={{ padding: 12 }}>{new Date(txn.transaction_date).toLocaleDateString()}</td>
+                        <td style={{ padding: 12 }}>
+                          <span style={{
+                            padding: '4px 8px',
+                            borderRadius: 4,
+                            fontSize: 12,
+                            fontWeight: 600,
+                            background: txn.transaction_type === 'payment' ? '#dcfce7' : '#fee2e2',
+                            color: txn.transaction_type === 'payment' ? '#166534' : '#991b1b'
+                          }}>
+                            {txn.transaction_type}
+                          </span>
+                        </td>
+                        <td style={{ padding: 12 }}>{txn.payment_method || 'N/A'}</td>
+                        <td style={{ padding: 12, textAlign: 'right', fontWeight: 600 }}>₹{(txn.amount || 0).toFixed(2)}</td>
+                        <td style={{ padding: 12, fontSize: 12, color: '#6b7280' }}>{txn.description}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </>
       ) : null}
     </div>

@@ -67,8 +67,8 @@ export default function CounterSale() {
           .from('restaurant_profiles')
           .select('tables_count')
           .eq('restaurant_id', restaurantId)
-          .single()
-        if (profErr) throw profErr
+          .limit(1)
+          .maybeSingle();        if (profErr) throw profErr
         const count = profile?.tables_count || 0
         setTables(Array.from({ length: count }, (_, i) => String(i + 1)))
 
@@ -244,7 +244,7 @@ const completeSale = async () => {
     if (orderSelect === 'parcel') order_type = 'parcel'
     else if (orderSelect.startsWith('table:')) {
       order_type = 'counter'
-      table_number = orderSelect.split(':') || null
+      table_number = orderSelect.split(':')[1] || null;  // ← use the second token
     }
 
     const items = cart.map(i => ({

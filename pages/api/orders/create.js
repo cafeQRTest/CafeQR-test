@@ -1,4 +1,4 @@
-// pages/api/orders/create.js
+// pages/api/orders/create.js - FIXED VERSION
 import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(req, res) {
@@ -6,11 +6,11 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !supabaseKey) {
     if (process.env.NODE_ENV !== 'production') {
-      console.error('Missing env: NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
+      console.error('Missing env: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
     }
     return res.status(500).json({ error: 'Server configuration error' });
   }
@@ -20,13 +20,18 @@ const supabaseUrl = process.env.SUPABASE_URL;
     const {
       restaurant_id,
       table_number,
-      order_type = 'counter', // <-- ADD THIS
+      order_type = 'counter',
       items,
       payment_method = 'cash',
       payment_status = 'pending',
       special_instructions = null,
       mixed_payment_details = null,
-      restaurant_name = null
+      restaurant_name = null,
+      customer_name = null,
+      customer_phone = null,
+      is_credit = false,
+      credit_customer_id = null,
+      original_payment_method = null
     } = req.body;
 
     if (!restaurant_id || !Array.isArray(items) || items.length === 0) {
@@ -55,11 +60,10 @@ const supabaseUrl = process.env.SUPABASE_URL;
       return res.status(500).json({ error: 'Failed to load settings' });
     }
 
-
     const baseRate = Number(profile?.default_tax_rate ?? 5);
-    const gstEnabled = !!profile?.gst_enabled
-    const serviceRate = gstEnabled ? baseRate : 0
-    const serviceInclude = gstEnabled ? (profile?.prices_include_tax === true || profile?.prices_include_tax         === 'true' || profile?.prices_include_tax === 1 || profile?.prices_include_tax === '1') : false
+    const gstEnabled = !!profile?.gst_enabled;
+    const serviceRate = gstEnabled ? baseRate : 0;
+    const serviceInclude = gstEnabled ? (profile?.prices_include_tax === true || profile?.prices_include_tax === 'true' || profile?.prices_include_tax === 1 || profile?.prices_include_tax === '1') : false;
 
     // Compute totals and normalized order_items
     let subtotalEx = 0;
@@ -74,24 +78,20 @@ const supabaseUrl = process.env.SUPABASE_URL;
       const isPackaged = !!(menuItem?.is_packaged_good || it.is_packaged_good);
       const itemTaxRate = Number(menuItem?.tax_rate ?? it.tax_rate ?? 0);
 
-      // Choose effective tax rate: packaged uses its own rate; service items use restaurant base
       let effectiveRate = isPackaged && gstEnabled ? itemTaxRate : serviceRate;
-      // Fallback: if GST is enabled but no rate resolved, use restaurant base
       if ((effectiveRate == null || effectiveRate <= 0) && gstEnabled) {
         effectiveRate = baseRate;
       }
 
       let unitEx, unitInc, lineEx, tax, lineInc;
 
-      if (isPackaged  || serviceInclude) {
-        // Prices are tax-inclusive for service items
+      if (isPackaged || serviceInclude) {
         unitInc = unit;
         unitEx = effectiveRate > 0 ? unitInc / (1 + effectiveRate / 100) : unitInc;
         lineInc = unitInc * qty;
         lineEx = unitEx * qty;
         tax = lineInc - lineEx;
       } else {
-        // Prices are tax-exclusive for service items
         unitEx = unit;
         lineEx = unitEx * qty;
         tax = (effectiveRate / 100) * lineEx;
@@ -99,14 +99,12 @@ const supabaseUrl = process.env.SUPABASE_URL;
         unitInc = effectiveRate > 0 ? unitEx * (1 + effectiveRate / 100) : unitEx;
       }
 
-      // Round once at line level to avoid drift
       const unitExR = Number(unitEx.toFixed(2));
       const unitIncR = Number(unitInc.toFixed(2));
       const lineExR = Number(lineEx.toFixed(2));
       const taxR = Number(tax.toFixed(2));
       const lineIncR = Number(lineInc.toFixed(2));
 
-      // Accumulate totals once
       subtotalEx += lineExR;
       totalTax += taxR;
       totalInc += lineIncR;
@@ -127,66 +125,118 @@ const supabaseUrl = process.env.SUPABASE_URL;
     });
 
     let processedPaymentMethod = payment_method;
-  let processedMixedDetails = null;
+    let processedMixedDetails = null;
 
-  if (payment_method === 'mixed' && mixed_payment_details) {
-    const { cash_amount, online_amount, online_method } = mixed_payment_details;
-    
-    // Validate amounts sum to total
-    const mixedTotal = Number(cash_amount || 0) + Number(online_amount || 0);
-    const orderTotal = Number(totalInc.toFixed(2));
-    
-    if (Math.abs(mixedTotal - orderTotal) > 0.01) {
-      return res.status(400).json({ 
-        error: 'Mixed payment amounts do not match order total' 
-      });
+    if (payment_method === 'mixed' && mixed_payment_details) {
+      const { cash_amount, online_amount, online_method } = mixed_payment_details;
+      const mixedTotal = Number(cash_amount || 0) + Number(online_amount || 0);
+      const orderTotal = Number(totalInc.toFixed(2));
+      
+      if (Math.abs(mixedTotal - orderTotal) > 0.01) {
+        return res.status(400).json({ 
+          error: 'Mixed payment amounts do not match order total' 
+        });
+      }
+
+      processedMixedDetails = {
+        cash_amount: Number(cash_amount).toFixed(2),
+        online_amount: Number(online_amount).toFixed(2),
+        online_method: online_method || 'upi',
+        is_mixed: true
+      };
     }
 
-    processedMixedDetails = {
-      cash_amount: Number(cash_amount).toFixed(2),
-      online_amount: Number(online_amount).toFixed(2),
-      online_method: online_method || 'upi',
-      is_mixed: true
-    };
-  }
-
-    // Insert order
-    const { data: order, error: orderError } = await supabase
+    // ✅ FIX: Don't use .single() here - just use .select()
+    const { data: orderData, error: orderError } = await supabase
       .from('orders')
       .insert([
         {
-        restaurant_id,
-        table_number: table_number || null,
-        order_type,
-        status: 'new',
-        payment_method: processedPaymentMethod,
-        payment_status,
-        special_instructions,
-        restaurant_name,
-        subtotal_ex_tax: Number(subtotalEx.toFixed(2)),
-        total_tax: Number(totalTax.toFixed(2)),
-        total_inc_tax: Number(totalInc.toFixed(2)),
-        total_amount: Number(totalInc.toFixed(2)),
-        prices_include_tax: serviceInclude,
-        gst_enabled: gstEnabled,
-        mixed_payment_details: processedMixedDetails  // ← NEW
-      }
+          restaurant_id,
+          table_number: table_number || null,
+          order_type,
+          status: 'new',
+          payment_method: processedPaymentMethod,
+          payment_status,
+          special_instructions,
+          restaurant_name,
+          customer_name: customer_name || null,
+          customer_phone: customer_phone || null,
+          subtotal_ex_tax: Number(subtotalEx.toFixed(2)),
+          total_tax: Number(totalTax.toFixed(2)),
+          total_inc_tax: Number(totalInc.toFixed(2)),
+          total_amount: Number(totalInc.toFixed(2)),
+          prices_include_tax: serviceInclude,
+          gst_enabled: gstEnabled,
+          mixed_payment_details: processedMixedDetails,
+          // ✅ CREDIT FIELDS
+          is_credit: req.body.is_credit ?? false,
+          credit_customer_id: req.body.credit_customer_id ?? null,
+          original_payment_method: original_payment_method || null
+        }
       ])
-      .select('id')
-      .single();
+      .select('id');
 
     if (orderError) {
-      if (process.env.NODE_ENV !== 'production') console.error('Order creation error:', orderError);
-      return res.status(500).json({ error: 'Failed to create order' });
+      console.error('Order creation error:', orderError);
+      return res.status(500).json({ error: 'Failed to create order: ' + orderError.message });
     }
+
+    // ✅ Get the first order from array (since we're not using .single())
+    if (!orderData || orderData.length === 0) {
+      return res.status(500).json({ error: 'Order created but could not retrieve ID' });
+    }
+
+    const order = orderData[0];
 
     // Insert order items
     const orderItems = preparedItems.map((oi) => ({ ...oi, order_id: order.id }));
     const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
     if (itemsError) {
-      if (process.env.NODE_ENV !== 'production') console.error('Order items error:', itemsError);
+      console.error('Order items error:', itemsError);
       await supabase.from('orders').delete().eq('id', order.id);
       return res.status(500).json({ error: 'Failed to create order items' });
+    }
+
+    // ✅ Update credit customer balance if credit sale
+    if (is_credit && credit_customer_id) {
+      try {
+        // Get current balance
+        const { data: creditCust, error: custErr } = await supabase
+          .from('credit_customers')
+          .select('current_balance, total_credit_extended')
+          .eq('id', credit_customer_id)
+          .single();
+
+        if (!custErr && creditCust) {
+          const newBalance = (creditCust.current_balance || 0) + totalInc;
+          const newExtended = (creditCust.total_credit_extended || 0) + totalInc;
+
+          await supabase
+            .from('credit_customers')
+            .update({
+              current_balance: newBalance,
+              total_credit_extended: newExtended,
+              last_transaction: new Date().toISOString()
+            })
+            .eq('id', credit_customer_id);
+
+          // Create credit transaction record
+          await supabase
+            .from('credit_transactions')
+            .insert({
+              restaurant_id,
+              credit_customer_id,
+              order_id: order.id,
+              transaction_type: 'credit',
+              amount: totalInc,
+              payment_method: 'credit',
+              description: `Credit sale order #${order.id.substring(0, 8)}`,
+              transaction_date: new Date().toISOString()
+            });
+        }
+      } catch (creditErr) {
+        console.warn('Credit update failed (non-blocking):', creditErr.message);
+      }
     }
 
     // Send push to owner devices (non-blocking)
@@ -212,7 +262,7 @@ const supabaseUrl = process.env.SUPABASE_URL;
       order_number: order.id.slice(0, 8).toUpperCase()
     });
   } catch (e) {
-    if (process.env.NODE_ENV !== 'production') console.error('API error:', e);
-    return res.status(500).json({ error: 'Internal server error' });
+    console.error('API error:', e);
+    return res.status(500).json({ error: 'Internal server error: ' + e.message });
   }
 }
