@@ -5,6 +5,8 @@ import { useRequireAuth } from '../../lib/useRequireAuth'
 import { useRestaurant } from '../../context/RestaurantContext'
 import { getSupabase } from '../../services/supabase'
 import { createClient } from '@supabase/supabase-js'
+import KotPrint from '../../components/KotPrint'
+
 
 
 export default function CounterSale() {
@@ -40,6 +42,17 @@ export default function CounterSale() {
 
   const menuMapRef = useRef(new Map())
   const brandColor = '#f59e0b'
+
+  const [printOrder, setPrintOrder] = useState(null);
+
+  async function fetchFullOrder(orderId) {
+  const { data, error } = await getSupabase()
+    .from('orders')
+    .select('*, order_items(*, menu_items(name))')
+    .eq('id', orderId)
+    .single();
+  return error ? null : data;
+}
 
   const cacheMenuIntoMap = list => {
     const m = new Map()
@@ -314,6 +327,34 @@ const invRes = await fetch('/api/invoices/generate', {
       const ok = confirm(message + '\n\nOK to view receipt')
       if (ok && inv.pdfUrl) window.open(inv.pdfUrl, '_blank')
     }
+
+
+    // After invoice generation success block
+try {
+  const fullOrder = await fetchFullOrder(result.order_id);
+  // Fallback if nested items are not yet available
+  const minimalOrder = {
+    id: result.order_id,
+    restaurant_id: restaurantId,
+    order_type,
+    table_number,
+    items,                // current cart snapshot
+    total_inc_tax: cartTotal,
+    created_at: new Date().toISOString()
+  };
+  setPrintOrder(fullOrder || minimalOrder);
+} catch (e) {
+  // still try to print with minimal data
+  setPrintOrder({
+    id: result.order_id,
+    restaurant_id: restaurantId,
+    order_type,
+    table_number,
+    items,
+    total_inc_tax: cartTotal,
+    created_at: new Date().toISOString()
+  });
+}
 
     setCart([])
     setCustomerName('')
@@ -618,6 +659,16 @@ const invRes = await fetch('/api/invoices/generate', {
           </div>
         </div>
       )}
+{/* at the end of the return JSX, just before closing the root div */}
+{printOrder && (
+  <KotPrint
+    order={printOrder}
+    onClose={() => setPrintOrder(null)}
+    onPrint={() => setPrintOrder(null)}
+    autoPrint   // new prop added below
+  />
+)}
+
     </div>
   )
 }
