@@ -3,6 +3,7 @@ import { FaBell } from 'react-icons/fa';
 import { useRestaurant } from '../context/RestaurantContext';
 import { getSupabase } from '../services/supabase';
 
+
 export default function OwnerNotificationsBell() {
   const { restaurant } = useRestaurant();
   const restaurantId = restaurant?.id;
