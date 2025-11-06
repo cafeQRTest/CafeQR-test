@@ -567,3 +567,14 @@ body.kitchen-dashboard .main-content {
     font-size: 20px;
   }
 }
+
+/* styles/globals.css (append) */
+html { -webkit-text-size-adjust: 100%; } /* honor user zoom while preventing odd scaling */  /* iOS friendly */  /* */
+body {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+input, select, textarea { font-size: 16px; } /* prevent iOS auto‑zoom */  /* */
+

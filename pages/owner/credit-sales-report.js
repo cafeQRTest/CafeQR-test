@@ -36,6 +36,7 @@ export default function CreditSalesReportPage() {
         `)
         .eq('restaurant_id', restaurantId)
         .eq('is_credit', true)
+        .neq('status', 'cancelled')  
         .gte('created_at', `${startDate}T00:00:00`)
         .lte('created_at', `${endDate}T23:59:59`)
         .order('created_at', { ascending: false })
@@ -54,12 +55,14 @@ export default function CreditSalesReportPage() {
       if (txnErr) throw txnErr
 
       // Calculate summary
-      const totalCredit = (orders || []).reduce((sum, o) => sum + (o.total_inc_tax || o.total_amount || 0), 0)
-      const totalPayments = (transactions || [])
-        .filter(t => t.transaction_type === 'payment')
-        .reduce((sum, t) => sum + t.amount, 0)
-      const outstanding = totalCredit - totalPayments
-
+const totalCredit = (orders || []).reduce((sum, o) => sum + (o.total_inc_tax || o.total_amount || 0), 0)
+  const totalPayments = (transactions || [])
+    .filter(t => t.transaction_type === 'payment')
+    .reduce((sum, t) => sum + Number(t.amount || 0), 0)
+  const totalAdjustments = (transactions || [])
+    .filter(t => t.transaction_type === 'adjustment')
+    .reduce((sum, t) => sum + Number(t.amount || 0), 0)  // negative for voids
+  const outstanding = totalCredit - totalPayments + totalAdjustments      
       setReportData({
         orders: orders || [],
         transactions: transactions || [],
