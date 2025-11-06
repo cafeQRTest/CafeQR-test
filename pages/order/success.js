@@ -2,6 +2,7 @@ import { useRouter } from 'next/router'
 import { useEffect, useRef, useState } from 'react'
 // 1. IMPORT the singleton function
 import { getSupabase } from '../../services/supabase'
+import AlertRestaurantButton from '../../components/AlertRestaurantButton'
 
 // 2. REMOVE the supabase prop
 export default function OrderSuccess() {
@@ -19,6 +20,7 @@ export default function OrderSuccess() {
   const [checkingInvoice, setCheckingInvoice] = useState(false)
   const [timer, setTimer] = useState(120)
   const [invoiceArrived, setInvoiceArrived] = useState(false)
+  const [brandColor, setBrandColor] = useState('var(--brand)')
   const subscriptionRef = useRef(null)
 
   // 1. Fetch order & invoice
@@ -42,9 +44,17 @@ export default function OrderSuccess() {
           .select('*')
           .eq('order_id', orderId)
           .single()
+        
+        // Load restaurant profile for brand color
+        const { data: profile } = await supabase
+          .from('restaurant_profiles')
+          .select('brand_color')
+          .eq('restaurant_id', o.restaurant_id)
+          .single()
           
         if (!cancelled) {
           setOrder({ ...o, invoice: inv || null })
+          if (profile?.brand_color) setBrandColor(profile.brand_color)
           if (inv?.pdf_url) setInvoiceArrived(true)
         }
       } catch {
@@ -174,11 +184,19 @@ export default function OrderSuccess() {
   const amount = candidates.length ? Math.min(...candidates) : 0
 
   return (
-    <div style={{ maxWidth: 600, margin: '3rem auto', padding: '0 1rem', textAlign: 'center' }}>
-      <h1>Thank you for your order!</h1>
-      <p>Your order #{order.id.slice(0, 8).toUpperCase()} has been placed.</p>
-      <p>Payment Method: <strong>{method || order.payment_method}</strong></p>
-      <p>Total Amount: <strong>₹{amount.toFixed(2)}</strong></p>
+    <div>
+      <div style={{ position: 'absolute', top: 20, right: 20 }}>
+        <AlertRestaurantButton
+          restaurantId={order?.restaurant_id}
+          tableNumber={order?.table_number}
+          brandColor={brandColor}
+        />
+      </div>
+      <div style={{ maxWidth: 600, margin: '3rem auto', padding: '0 1rem', textAlign: 'center' }}>
+        <h1>Thank you for your order!</h1>
+        <p>Your order #{order.id.slice(0, 8).toUpperCase()} has been placed.</p>
+        <p>Payment Method: <strong>{method || order.payment_method}</strong></p>
+        <p>Total Amount: <strong>₹{amount.toFixed(2)}</strong></p>
 
       <div style={{ margin: '20px 0', padding: 16, background: '#f3f4f6', borderRadius: 8 }}>
         <p><strong>Order Status:</strong> {order.status.replace('_', ' ').toUpperCase()}</p>
@@ -240,19 +258,20 @@ export default function OrderSuccess() {
         )}
       </div>
 
-      <button
-        onClick={handleMore}
-        style={{
-          padding: '12px 24px',
-          background: '#3b82f6',
-          color: '#fff',
-          border: 'none',
-          borderRadius: 8,
-          cursor: 'pointer'
-        }}
-      >
-        Order More Items
-      </button>
+        <button
+          onClick={handleMore}
+          style={{
+            padding: '12px 24px',
+            background: '#3b82f6',
+            color: '#fff',
+            border: 'none',
+            borderRadius: 8,
+            cursor: 'pointer'
+          }}
+        >
+          Order More Items
+        </button>
+      </div>
     </div>
   )
 }
