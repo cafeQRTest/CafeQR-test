@@ -19,17 +19,24 @@ export default function OwnerNotificationsBell() {
   const playSound = () => {
     try {
       const beep = new Audio('/notification-sound.mp3');
-      beep.play();
+      beep.play().catch(() => {
+        // Autoplay blocked by browser - user needs to interact first
+      });
     } catch (e) {}
   };
 
   // Get latest alerts from backend REST API
   const loadAlerts = async () => {
     if (!restaurantId) return;
-    const res = await fetch(`/api/customeralert/get-notifications?restaurant_id=${restaurantId}`);
-    const data = await res.json();
-    setPendingCount(data.filter(a => a.status === 'pending').length);
-    setAlerts(data || []);
+    try {
+      const res = await fetch(`/api/customeralert/get-notifications?restaurant_id=${restaurantId}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setPendingCount(data.filter(a => a.status === 'pending').length);
+      setAlerts(data || []);
+    } catch (e) {
+      console.error('Error loading alerts:', e);
+    }
   };
 
   // Supabase Realtime Subscription for owner dashboard
@@ -94,7 +101,7 @@ export default function OwnerNotificationsBell() {
                 });
               }
             } catch (error) {
-              console.error('❌ Error processing alert realtime event:', error);
+              console.error('Error processing alert realtime event:', error);
             }
           }
         )
@@ -143,13 +150,19 @@ export default function OwnerNotificationsBell() {
   const handleAck = async (alertId) => {
     setAckLoading(alertId);
     try {
-      await fetch('/api/customeralert/update-alert', {
+      // Send update to database
+      const response = await fetch('/api/customeralert/update-alert', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: alertId, status: 'acknowledged' }),
       });
+
+      if (!response.ok) throw new Error('Failed to update alert');
+      
+      // Reload to get fresh top 10 (prioritizes pending over acknowledged)
       await loadAlerts();
     } catch (e) {
+      console.error('Error acknowledging alert:', e);
       alert('Error acknowledging: ' + e.message);
     } finally {
       setAckLoading(null);
