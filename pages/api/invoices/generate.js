@@ -41,6 +41,21 @@ export default async function handler(req, res) {
       }
     }
 
+// After loading ord (the order row), add:
+const { data: existing } = await supabase
+  .from('invoices')
+  .select('id, invoice_no, pdf_url')
+  .eq('order_id', order_id)
+  .maybeSingle();
+if (existing) {
+  return res.status(200).json({
+    invoice_id: existing.id,
+    invoice_no: existing.invoice_no,
+    pdfUrl: existing.pdf_url,
+    existing: true
+  });
+}
+
     // Create invoice
     const { invoiceId, invoiceNo, pdfUrl } = await InvoiceService.createInvoiceFromOrder(order_id);
     return res.status(200).json({ invoice_id: invoiceId, invoice_no: invoiceNo, pdfUrl });

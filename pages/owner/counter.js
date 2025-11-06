@@ -408,7 +408,7 @@ export default function CounterSale() {
   };
 
   // Create + finalize (settle now)
-  async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails) {
+  async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finalizeNow = false) {
     let order_type = 'counter';
     let table_number = null;
     if (orderSelect === 'parcel') order_type = 'parcel';
@@ -442,7 +442,7 @@ export default function CounterSale() {
     if (!res.ok) throw new Error('Failed to create order');
     const result = await res.json();
 
-    if (!isCredit) {
+    if (!isCredit || finalizeNow) {
       await supabase
         .from('orders')
         .update({
@@ -541,7 +541,7 @@ export default function CounterSale() {
         await doCreateKitchenOrder();
       } else {
         if (isCreditSale) {
-          await doCreateAndFinalizeOrder('credit', null);
+          await doCreateAndFinalizeOrder('credit', null, true);
         } else {
           setShowPaymentDialog(true);
         }
