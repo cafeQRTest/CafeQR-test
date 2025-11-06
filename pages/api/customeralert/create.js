@@ -1,6 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
 
-
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -34,21 +33,8 @@ export default async function handler(req, res) {
 
   const row = data && data[0];
 
-  // Broadcast to connected SSE clients for this restaurant (if any)
-  try {
-    const g = globalThis;
-    const rooms = g.__ownerAlertSSE?.rooms;
-    if (rooms && row?.restaurant_id) {
-      const set = rooms.get(String(row.restaurant_id));
-      if (set && set.size) {
-        const payload = { new: row };
-        const msg = `event: alert\ndata: ${JSON.stringify(payload)}\n\n`;
-        for (const clientRes of set) {
-          try { clientRes.write(msg); } catch (_) {}
-        }
-      }
-    }
-  } catch (_) {}
+  // Realtime will automatically broadcast this insert to subscribed clients
+  // No need for manual SSE broadcasting
 
   return res.status(201).json(row);
 }

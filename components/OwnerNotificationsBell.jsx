@@ -11,7 +11,9 @@ export default function OwnerNotificationsBell() {
   const [isOpen, setIsOpen] = useState(false);
   const [ackLoading, setAckLoading] = useState(null);
   const dropdownRef = useRef(null);
-  const eventSourceRef = useRef(null);
+  const channelRef = useRef(null);
+  const reconnectTimeoutRef = useRef(null);
+  const supabase = getSupabase();
 
   // Notification sound
   const playSound = () => {
@@ -30,49 +32,100 @@ export default function OwnerNotificationsBell() {
     setAlerts(data || []);
   };
 
-  // SSE Subscription for owner dashboard
+  // Supabase Realtime Subscription for owner dashboard
   useEffect(() => {
-    if (!restaurantId) return;
+    if (!restaurantId || !supabase) return;
     loadAlerts();
 
-    let eventSource;
-    const connectSSE = async () => {
-      const supabase = getSupabase();
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token || '';
-      const url = `/api/customeralert/stream?restaurant_id=${restaurantId}&access_token=${encodeURIComponent(token)}`;
-      eventSource = new window.EventSource(url);
-      eventSourceRef.current = eventSource;
+    const setupRealTimeSubscription = () => {
+      // Clean up existing channel if any
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
 
-      eventSource.addEventListener('connected', () => {
-        // Initial handshake - optional
-      });
+      // Create realtime channel for alert notifications
+      const channelName = `alert-notifications-${restaurantId}-${Date.now()}`;
+      const channel = supabase
+        .channel(channelName)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'alert_notification',
+            filter: `restaurant_id=eq.${restaurantId}`,
+          },
+          async (payload) => {
+            try {
+              const row = payload.new || payload.old;
+              if (!row || row.restaurant_id !== restaurantId) return;
+              
+              // Handle INSERT events - new alert created
+              if (payload.eventType === 'INSERT') {
+                playSound();
+                setAlerts(prev => {
+                  if (prev.find(a => a.id === row.id)) return prev;
+                  const updated = [row, ...prev].slice(0, 10);
+                  setPendingCount(updated.filter(a => a.status === 'pending').length);
+                  return updated;
+                });
+              }
+              
+              // Handle UPDATE events - alert status changed
+              if (payload.eventType === 'UPDATE') {
+                setAlerts(prev => {
+                  const updated = prev.map(a => a.id === row.id ? row : a);
+                  setPendingCount(updated.filter(a => a.status === 'pending').length);
+                  return updated;
+                });
+              }
 
-      eventSource.addEventListener('alert', (e) => {
-        const payload = JSON.parse(e.data);
-        const row = payload.new || payload.old;
-        if (!row || row.restaurant_id !== restaurantId) return;
-        playSound();
-        setAlerts(prev => {
-          if (prev.find(a => a.id === row.id)) return prev;
-          const updated = [row, ...prev].slice(0, 10);
-          setPendingCount(updated.filter(a => a.status === 'pending').length);
-          return updated;
+              // Handle DELETE events
+              if (payload.eventType === 'DELETE') {
+                setAlerts(prev => {
+                  const updated = prev.filter(a => a.id !== row.id);
+                  setPendingCount(updated.filter(a => a.status === 'pending').length);
+                  return updated;
+                });
+              }
+            } catch (error) {
+              console.error('❌ Error processing alert realtime event:', error);
+            }
+          }
+        )
+        .subscribe((status) => {
+          if (status === 'CHANNEL_ERROR') {
+            reconnectTimeoutRef.current = setTimeout(() => {
+              setupRealTimeSubscription();
+            }, 5000);
+          } else if (status === 'TIMED_OUT') {
+            reconnectTimeoutRef.current = setTimeout(() => {
+              setupRealTimeSubscription();
+            }, 3000);
+          }
         });
-      });
 
-      eventSource.onerror = () => {
-        eventSource.close();
-        setTimeout(connectSSE, 1500); // Auto-reconnect on error
-      };
+      channelRef.current = channel;
     };
 
-    connectSSE();
+    setupRealTimeSubscription();
 
     return () => {
-      if (eventSourceRef.current) eventSourceRef.current.close();
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
     };
-  }, [restaurantId]);
+  }, [restaurantId, supabase]);
 
   // Dropdown outside click handler
   useEffect(() => {
