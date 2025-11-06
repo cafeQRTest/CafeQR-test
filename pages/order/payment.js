@@ -408,7 +408,7 @@ export default function PaymentPage() {
         <div style={{ fontSize: 14, fontWeight: 600, color: brandColor }}>
           ₹{Number(totalAmount || 0).toFixed(2)}
         </div>
-<AlertRestaurantButton restaurantId={restaurantId} tableNumber={tableNumber} />
+<AlertRestaurantButton restaurantId={restaurantId} tableNumber={tableNumber} brandColor={brandColor} />
       </header>
 
       <div style={{ background: '#fff', padding: 20, marginBottom: 8 }}>

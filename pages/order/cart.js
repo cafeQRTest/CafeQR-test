@@ -299,7 +299,7 @@ export default function CartSummary() {
         >
           Clear Cart
         </button>
-<AlertRestaurantButton restaurantId={restaurantId} tableNumber={tableNumber} />
+<AlertRestaurantButton restaurantId={restaurantId} tableNumber={tableNumber} brandColor={brandColor} />
       </header>
 
       <div

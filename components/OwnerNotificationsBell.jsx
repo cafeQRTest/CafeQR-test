@@ -1,9 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { FaBell } from 'react-icons/fa';
 import { useRestaurant } from '../context/RestaurantContext';
-import io from 'socket.io-client';
-
-const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_SERVER_URL;
+import { getSupabase } from '../services/supabase';
 
 export default function OwnerNotificationsBell() {
   const { restaurant } = useRestaurant();
@@ -13,12 +11,11 @@ export default function OwnerNotificationsBell() {
   const [isOpen, setIsOpen] = useState(false);
   const [ackLoading, setAckLoading] = useState(null);
   const dropdownRef = useRef(null);
-  const socketRef = useRef(null);
+  const eventSourceRef = useRef(null);
 
   // Notification sound
   const playSound = () => {
     try {
-      // Use an existing file in /public
       const beep = new Audio('/notification-sound.mp3');
       beep.play();
     } catch (e) {}
@@ -27,70 +24,54 @@ export default function OwnerNotificationsBell() {
   // Get latest alerts from backend REST API
   const loadAlerts = async () => {
     if (!restaurantId) return;
-    // API route must exist and return recent alerts for given restaurant
     const res = await fetch(`/api/customeralert/get-notifications?restaurant_id=${restaurantId}`);
     const data = await res.json();
     setPendingCount(data.filter(a => a.status === 'pending').length);
     setAlerts(data || []);
   };
 
-  // Setup socket only once (warm server first to avoid race)
+  // SSE Subscription for owner dashboard
   useEffect(() => {
-    let disposed = false;
-    (async () => {
-      try {
-        // Initialize Socket.IO server route in Next.js
-        await fetch('/api/socket').catch(() => {});
-      } catch {}
-      if (disposed) return;
-      const url = SOCKET_URL || undefined; // default to same-origin in dev
-      socketRef.current = io(url, {
-        transports: ['websocket', 'polling'],
-        reconnection: true,
-        reconnectionAttempts: 10,
-        reconnectionDelay: 500,
-      });
-      socketRef.current.on('connect', () => {
-        console.log('Socket.IO client connected');
-      });
-      socketRef.current.on('connect_error', (err) => {
-        console.warn('[socket] connect_error', err?.message || err);
-      });
-    })();
-    return () => {
-      disposed = true;
-      if (socketRef.current) socketRef.current.disconnect();
-    };
-  }, []);
-
-  // Subscribe to notifications for restaurant
-  useEffect(() => {
-    if (!restaurantId || !socketRef.current) return;
-    // Ensure server-side Supabase -> Socket bridge is active
-    fetch('/api/customeralert/subscribe').catch(() => {});
-    // Initial load
+    if (!restaurantId) return;
     loadAlerts();
 
-    socketRef.current.emit('subscribeToNotifications', { restaurantId });
+    let eventSource;
+    const connectSSE = async () => {
+      const supabase = getSupabase();
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token || '';
+      const url = `/api/customeralert/stream?restaurant_id=${restaurantId}&access_token=${encodeURIComponent(token)}`;
+      eventSource = new window.EventSource(url);
+      eventSourceRef.current = eventSource;
 
-    const handler = (payload) => {
-      if (!payload.new || payload.new.restaurant_id !== restaurantId) return;
-      playSound();
-      setAlerts(prev => {
-        // Avoid duplicate alerts
-        if (prev.find(a => a.id === payload.new.id)) return prev;
-        const updated = [payload.new, ...prev].slice(0, 10); // keep only latest 10
-        setPendingCount(updated.filter(a => a.status === 'pending').length);
-        return updated;
+      eventSource.addEventListener('connected', () => {
+        // Initial handshake - optional
       });
-    };
-    socketRef.current.on('notifications', handler);
 
-    // Clean up on restaurant change/unmount
-    return () => {
-      if (socketRef.current) socketRef.current.off('notifications', handler);
+      eventSource.addEventListener('alert', (e) => {
+        const payload = JSON.parse(e.data);
+        const row = payload.new || payload.old;
+        if (!row || row.restaurant_id !== restaurantId) return;
+        playSound();
+        setAlerts(prev => {
+          if (prev.find(a => a.id === row.id)) return prev;
+          const updated = [row, ...prev].slice(0, 10);
+          setPendingCount(updated.filter(a => a.status === 'pending').length);
+          return updated;
+        });
+      });
+
+      eventSource.onerror = () => {
+        eventSource.close();
+        setTimeout(connectSSE, 1500); // Auto-reconnect on error
+      };
     };
-    // eslint-disable-next-line
+
+    connectSSE();
+
+    return () => {
+      if (eventSourceRef.current) eventSourceRef.current.close();
+    };
   }, [restaurantId]);
 
   // Dropdown outside click handler
@@ -122,7 +103,7 @@ export default function OwnerNotificationsBell() {
     }
   };
 
-  // UI
+  // Complete UI: bell, badge, dropdown, alert actions
   return (
     <div style={{ position: 'relative', marginLeft: 20 }} ref={dropdownRef}>
       <button

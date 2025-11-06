@@ -221,7 +221,7 @@ const cacheMenuIntoMap = (list) => {
             <span style={{ marginLeft: 16, color: '#f59e0b' }}>⭐ 4.3 (500+ orders)</span>
           </div>
         </div>
-<AlertRestaurantButton restaurantId={restaurantId} tableNumber={tableNumber} />
+<AlertRestaurantButton restaurantId={restaurantId} tableNumber={tableNumber} brandColor={brandColor} />
       </header>
 
       <div style={{ padding: '1rem', background: '#fff' }}>

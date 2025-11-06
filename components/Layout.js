@@ -136,6 +136,27 @@ export default function Layout({
 }
 
 function Header({ showSidebar, onHamburger, isCustomer }) {
+  const router = useRouter()
+  const supabase = getSupabase()
+  const [hasSession, setHasSession] = React.useState(false)
+
+  React.useEffect(() => {
+    let unsub
+    async function init() {
+      try {
+        const { data } = await supabase.auth.getSession()
+        setHasSession(!!data?.session)
+      } catch {}
+      const { data: listener } = supabase.auth.onAuthStateChange((_e, session) => {
+        setHasSession(!!session)
+      })
+      unsub = () => listener?.subscription?.unsubscribe()
+    }
+    init()
+    return () => { try { unsub?.() } catch {} }
+  }, [supabase])
+
+  const isOwnerRoute = router.pathname?.startsWith('/owner')
   return (
     <header
       className="shell-header"
@@ -186,7 +207,7 @@ function Header({ showSidebar, onHamburger, isCustomer }) {
           </Link>
         </nav>
       )}
-      <OwnerNotificationsBell />
+       {isOwnerRoute && hasSession ? <OwnerNotificationsBell /> : null}
     </header>
   )
 }

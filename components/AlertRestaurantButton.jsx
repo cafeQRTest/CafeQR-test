@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 
-export default function AlertRestaurantButton({ restaurantId, tableNumber }) {
+export default function AlertRestaurantButton({ restaurantId, tableNumber, brandColor = 'var(--brand)' }) {
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -53,17 +53,17 @@ const handleAlert = async () => {
           border: sent
             ? '2.5px solid #22c55e'
             : hovered
-            ? '2.5px solid #2563eb'
+            ? `2.5px solid ${brandColor}`
             : '2.5px solid #ced4da',
           background: '#fff',
           display: 'inline-flex',
           alignItems: 'center',
           justifyContent: 'center',
           cursor: sending || sent ? 'not-allowed' : 'pointer',
-          outline: hovered ? '2px solid #2563eb44' : 'none',
+          outline: hovered ? `2px solid ${brandColor}44` : 'none',
           transition: 'border-color 0.16s, outline 0.16s',
           boxShadow: hovered
-            ? '0 2px 10px -2px #2563eb15'
+            ? `0 2px 10px -2px ${brandColor}22`
             : '0 0px 6px -2px #919eab09',
           padding: 0,
         }}
@@ -79,7 +79,7 @@ const handleAlert = async () => {
           height="26"
           viewBox="0 0 32 32"
           fill="none"
-          stroke={sent ? "#22c55e" : "#2563eb"}
+          stroke={sent ? "#22c55e" : brandColor}
           strokeWidth="2.1"
           strokeLinecap="round"
           strokeLinejoin="round"

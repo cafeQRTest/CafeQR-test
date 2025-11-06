@@ -31,5 +31,23 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: error.message });
   }
 
-  return res.status(201).json(data[0]);
+  const row = data && data[0];
+
+  // Broadcast to connected SSE clients for this restaurant (if any)
+  try {
+    const g = globalThis;
+    const rooms = g.__ownerAlertSSE?.rooms;
+    if (rooms && row?.restaurant_id) {
+      const set = rooms.get(String(row.restaurant_id));
+      if (set && set.size) {
+        const payload = { new: row };
+        const msg = `event: alert\ndata: ${JSON.stringify(payload)}\n\n`;
+        for (const clientRes of set) {
+          try { clientRes.write(msg); } catch (_) {}
+        }
+      }
+    }
+  } catch (_) {}
+
+  return res.status(201).json(row);
 }
