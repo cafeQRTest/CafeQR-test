@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { buildReceiptText, downloadTextAndShare } from '../utils/printUtils';
 import { getSupabase } from '../services/supabase';
 import { printUniversal } from '../utils/printGateway';
-import { openThermerWithText } from '../utils/thermer';
+import { openThermerWithText, openRawBTWithText } from '../utils/thermer';
 
 export default function KotPrint({ order, onClose, onPrint, autoPrint = true }) {
   const [status, setStatus] = useState('');
@@ -28,38 +28,35 @@ export default function KotPrint({ order, onClose, onPrint, autoPrint = true }) 
   }, [order]);
 
   const doSilentPrint = useCallback(async () => {
-    if (lockRef.current) return;
-    lockRef.current = true;
-    const text = buildReceiptText(order, bill, restaurantProfile);
+  if (lockRef.current) return;
+  lockRef.current = true;
+  const text = buildReceiptText(order, bill, restaurantProfile);
 
-    try {
-      // Silent: do NOT prompt (allowPrompt: false)
-      const relayUrl = localStorage.getItem('PRINT_RELAY_URL') || undefined;
-      const ip = localStorage.getItem('PRINTER_IP') || undefined;
-      const port = Number(localStorage.getItem('PRINTER_PORT') || 9100);
-      await printUniversal({ text, relayUrl, ip, port, codepage: 0, allowPrompt: false });
-      onPrint?.();
-      onClose?.();
-      return;
-    } catch {
-      // Android browser fallback: Thermer deep‑link
-      try {
-        openThermerWithText(text);
-        setTimeout(() => {}, 300);
-        return;
-      } catch {
-        // Last resort: share/download
-        try {
-          await downloadTextAndShare(order, bill, restaurantProfile);
-          onPrint?.();
-        } catch {
-          setStatus('✗ Printing failed');
-        }
-      }
-    } finally {
-      setTimeout(() => { lockRef.current = false; }, 800);
-    }
-  }, [order, bill, restaurantProfile, onPrint, onClose]);
+  try {
+    const relayUrl = localStorage.getItem('PRINT_RELAY_URL') || undefined;
+    const ip = localStorage.getItem('PRINTER_IP') || undefined;
+    const port = Number(localStorage.getItem('PRINTER_PORT') || 9100);
+
+    // For Android PWA, forbid system dialog so we fall back to app‑link
+    const onAndroidPWA = /Android/i.test(navigator.userAgent) && !window.Capacitor;
+    await printUniversal({
+      text, relayUrl, ip, port, codepage: 0, allowPrompt: false,
+      allowSystemDialog: onAndroidPWA ? false : true
+    });
+
+    onPrint?.(); onClose?.(); return;
+  } catch {
+    // Try Thermer first, RawBT second
+    try { openThermerWithText(text); return; } catch { /* next */ }
+    try { openRawBTWithText(text); return; } catch { /* next */ }
+
+    // Last resort
+    try { await downloadTextAndShare(order, bill, restaurantProfile); onPrint?.(); }
+    catch { setStatus('✗ Printing failed'); }
+  } finally {
+    setTimeout(() => { lockRef.current = false; }, 800);
+  }
+}, [order, bill, restaurantProfile, onPrint, onClose]);
 
   useEffect(() => {
     if (!autoPrint || loadingData || ranRef.current) return;

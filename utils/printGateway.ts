@@ -10,7 +10,8 @@ type Options = {
   ip?: string;
   port?: number;
   codepage?: number;
-  allowPrompt?: boolean;   // NEW: default false – never show chooser during print
+  allowPrompt?: boolean;        // chooser for first‑time USB/Serial [default false]
+  allowSystemDialog?: boolean;  // Android Print preview [default true]
 };
 
 // simple re‑entrancy guard to avoid double prints
@@ -116,6 +117,21 @@ export async function printUniversal(opts: Options) {
       });
       return { via: 'relay' };
     }
+
+    if (opts.allowSystemDialog !== false) {
+  const w = window.open('', '_blank', 'width=480,height=640');
+  if (w) {
+    w.document.write(`<pre style="font:14px/1.4 monospace; white-space:pre-wrap">${opts.text.replace(/</g,'&lt;')}</pre>`);
+    w.document.close(); w.focus(); w.print(); w.close();
+    return { via: 'system' };
+  }
+}
+
+// 6) Web Share (text) last resort (only if allowed)
+if (opts.allowSystemDialog !== false && navigator.canShare && navigator.canShare({ text: opts.text })) {
+  await navigator.share({ title: 'Receipt', text: opts.text });
+  return { via: 'share' };
+}
 
     // 5) System print dialog
     const w = window.open('', '_blank', 'width=480,height=640');
