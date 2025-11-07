@@ -1,5 +1,6 @@
 // services/invoiceService.js - CORRECTED
 
+
 import { createClient } from '@supabase/supabase-js'
 import { generateBillPdf } from '../lib/generateBillPdf'
 
