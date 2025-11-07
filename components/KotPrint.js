@@ -6,18 +6,12 @@ import { printUniversal } from '../utils/printGateway';
 import { openThermerWithText, openRawBTWithText } from '../utils/thermer';
 
 function isAndroidPWA() {
-  const uaAndroid = /Android/i.test(navigator.userAgent); // Android UA check
+  const uaAndroid = /Android/i.test(navigator.userAgent);
   const inStandalone =
     typeof window !== 'undefined' &&
     typeof window.matchMedia === 'function' &&
-    window.matchMedia('(display-mode: standalone)').matches; // PWA standalone
-  // Optional iOS-only flag; keep guarded and without TypeScript 'as'
-  const iosStandalone =
-    typeof navigator !== 'undefined' &&
-    'standalone' in navigator &&
-    navigator.standalone === true; // iOS Safari only
-
-  return uaAndroid && (inStandalone || iosStandalone);
+    window.matchMedia('(display-mode: standalone)').matches;
+  return uaAndroid && inStandalone;
 }
 
 export default function KotPrint({ order, onClose, onPrint, autoPrint = true }) {
@@ -47,9 +41,17 @@ export default function KotPrint({ order, onClose, onPrint, autoPrint = true }) 
     lockRef.current = true;
 
     const text = buildReceiptText(order, bill, restaurantProfile);
-    const onAndroid = /Android/i.test(navigator.userAgent) && !window.Capacitor;
+    const onAndroidPWA = isAndroidPWA();
+
     try {
-      // block Android system preview so we can deep link to apps instead
+      // 1) Android PWA: deep‑link immediately under user gesture, then return
+      if (onAndroidPWA) {
+        try { openThermerWithText(text); onPrint?.(); } 
+        catch { try { openRawBTWithText(text); onPrint?.(); } catch { /* fall through */ } }
+        return; // do not await anything before this to preserve user activation
+      }
+
+      // 2) Other platforms: try silent transports
       await printUniversal({
         text,
         relayUrl: localStorage.getItem('PRINT_RELAY_URL') || undefined,
@@ -57,12 +59,11 @@ export default function KotPrint({ order, onClose, onPrint, autoPrint = true }) 
         port: Number(localStorage.getItem('PRINTER_PORT') || 9100),
         codepage: 0,
         allowPrompt: false,
-        allowSystemDialog: onAndroid ? false : true
+        allowSystemDialog: true
       });
       onPrint?.(); onClose?.(); return;
     } catch {
-      try { openThermerWithText(text); return; } catch { /* next */ }
-      try { openRawBTWithText(text); return; } catch { /* next */ }
+      // 3) Last resort share/download anywhere
       try { await downloadTextAndShare(order, bill, restaurantProfile); onPrint?.(); }
       catch { setStatus('✗ Printing failed'); }
     } finally {
@@ -70,14 +71,14 @@ export default function KotPrint({ order, onClose, onPrint, autoPrint = true }) 
     }
   }, [order, bill, restaurantProfile, onPrint, onClose]);
 
-  // Auto-run everywhere except Android PWA (needs user gesture for app-link)
+  // Auto‑run everywhere except Android PWA (needs user gesture for app‑link)
   useEffect(() => {
     if (!autoPrint || loadingData || ranRef.current || isAndroidPWA()) return;
     ranRef.current = true;
     doPrint();
   }, [autoPrint, loadingData, doPrint]);
 
-  // For Android PWA show a single action button so click counts as a gesture
+  // Android PWA modal with a real tap target
   if (isAndroidPWA()) {
     return (
       <div className="kot-overlay">
@@ -87,13 +88,12 @@ export default function KotPrint({ order, onClose, onPrint, autoPrint = true }) 
             <button className="close-btn" onClick={onClose}>×</button>
           </div>
           {status && <div className={`status ${status.includes('✗') ? 'error' : 'success'}`}>{status}</div>}
-          <button className="print-btn" onClick={doPrint}>Open printer app</button>
+          <button className="print-btn" type="button" onClick={doPrint}>Open printer app</button>
         </div>
       </div>
     );
   }
 
-  // Non-Android/POS path stays silent
   if (autoPrint && !status) return null;
   return (
     <div className="kot-overlay">
