@@ -147,7 +147,7 @@ export class InvoiceService {
       let lineNo = 1
       for (const it of items) {
         const qty = Number(it.quantity ?? 1)
-        const price = Number(it.price ?? 0)
+        const price = Number(it.is_packaged_good && !inv.prices_include_tax ? it.unit_price_ex_tax : (it.price ?? 0))
         const taxRate = Number(it.tax_rate ?? profile?.default_tax_rate ?? 0)
         const ex = price * qty
         const tax = (taxRate / 100) * ex
@@ -184,7 +184,7 @@ export class InvoiceService {
         items: items.map(it => ({
           item_name: it.item_name || it.name || 'Item',
           quantity: it.quantity ?? 1,
-          price: it.price ?? 0,
+           price: it.is_packaged_good && !inv.prices_include_tax ? it.unit_price_ex_tax : (it.price ?? 0),
           hsn: it.hsn ?? '',
           tax_rate: it.tax_rate ?? 0
         })),
