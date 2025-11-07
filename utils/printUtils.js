@@ -255,6 +255,103 @@ export async function downloadTextAndShare(order, bill, restaurantProfile) {
   }
 }
 
+
+
+export function buildReceiptText(order, bill, restaurantProfile) {
+  try {
+    const items = toDisplayItems(order);
+
+    const restaurantName = (order?.restaurant_name || 'RESTAURANT').toUpperCase();
+    const addressParts = [
+      restaurantProfile?.shipping_address_line1,
+      restaurantProfile?.shipping_city,
+      restaurantProfile?.shipping_state,
+      restaurantProfile?.shipping_pincode
+    ].filter(Boolean);
+    const address = addressParts.length > 0 ? addressParts.join(', ') : (order?.restaurant_address || '');
+    const phone = restaurantProfile?.phone || order?.restaurant_phone || '';
+
+    const orderId = order?.id?.slice(0, 8)?.toUpperCase() || 'N/A';
+    const orderType = getOrderTypeLabel(order);
+
+    const orderDate = new Date(order.created_at);
+    const dateStr = orderDate.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const timeStr = orderDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+    const grandTotal = Number(
+      bill?.grand_total ||
+      bill?.total_inc_tax ||
+      order?.total_inc_tax ||
+      order?.total_amount ||
+      order?.total ||
+      0
+    );
+    const taxAmount = Number(
+      bill?.tax_total ||
+      bill?.total_tax ||
+      order?.tax_amount ||
+      order?.total_tax ||
+      0
+    );
+
+    const W = 32;
+    const dashes = () => '-'.repeat(W);
+    const lines = [];
+
+    lines.push(center(restaurantName, W));
+    wrapText(address, W).forEach(line => lines.push(center(line, W)));
+    if (phone) lines.push(center(`Contact No.: ${phone}`, W));
+    lines.push('');
+    lines.push(dashes());
+    lines.push('');
+
+    lines.push(`${dateStr} ${timeStr}`);
+    lines.push(`Order: #${orderId}`);
+    lines.push(`Order Type: ${orderType}`);
+    lines.push(dashes());
+    lines.push('');
+
+    lines.push('ITEM         QTY  RATE  TOTAL');
+    items.forEach(item => {
+      const itemName = item.name || 'Item';
+      const nameLines = wrapText(itemName, 14);
+      if (nameLines.length === 0) return;
+
+      const rateNum = Number(item.price || 0);
+      const totalNum = rateNum * Number(item.quantity || 1);
+      const rate = rateNum % 1 === 0 ? rateNum.toFixed(0).padStart(4) : rateNum.toFixed(2).padStart(4);
+      const total = totalNum % 1 === 0 ? totalNum.toFixed(0).padStart(5) : totalNum.toFixed(2).padStart(5);
+      const qty = `${item.quantity}`.padStart(2);
+
+      lines.push(nameLines[0].padEnd(14) + qty + '  ' + rate + '  ' + total);
+      for (let i = 1; i < nameLines.length; i++) lines.push(nameLines[i].padEnd(14));
+    });
+
+    lines.push('');
+    lines.push(dashes());
+    lines.push('');
+
+    if (taxAmount > 0) {
+      const netAmt = grandTotal - taxAmount;
+      lines.push(`Net Amt: ${netAmt.toFixed(2)}`);
+      lines.push(`Tax: ${taxAmount.toFixed(2)}`);
+      lines.push(`Grand Total: ${grandTotal.toFixed(2)}`);
+    } else {
+      lines.push(`Total: ${grandTotal.toFixed(2)}`);
+    }
+
+    lines.push(dashes());
+    lines.push('');
+    lines.push(center('** THANK YOU! VISIT AGAIN !! **', W));
+    lines.push('');
+
+    return lines.join('\n');
+  } catch (e) {
+    console.error(e);
+    return 'PRINT ERROR';
+  }
+}
+
 export async function downloadPdfAndShare(order, bill, restaurantProfile) {
   return downloadTextAndShare(order, bill, restaurantProfile);
 }

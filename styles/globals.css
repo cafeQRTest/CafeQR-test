@@ -568,13 +568,44 @@ body.kitchen-dashboard .main-content {
   }
 }
 
-/* styles/globals.css (append) */
-html { -webkit-text-size-adjust: 100%; } /* honor user zoom while preventing odd scaling */  /* iOS friendly */  /* */
-body {
-  padding-top: env(safe-area-inset-top);
-  padding-bottom: env(safe-area-inset-bottom);
-  padding-left: env(safe-area-inset-left);
-  padding-right: env(safe-area-inset-right);
+/* styles/globals.css (add near the top) */
+html { font-size: clamp(14px, 1.6vw, 16px); } /* fluid base */
+:root {
+  --container-pad: clamp(12px, 2vw, 24px);
+  --content-max: 1200px;
 }
-input, select, textarea { font-size: 16px; } /* prevent iOS auto‑zoom */  /* */
+
+/* Safe areas for devices with notches/home indicators */
+.shell-header { padding-top: env(safe-area-inset-top, 0); }
+.main-content { padding-bottom: calc(24px + env(safe-area-inset-bottom, 0)); }
+
+/* Mobile-first container */
+.container {
+  width: 100%;
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding-inline: var(--container-pad);
+}
+
+/* Utility grids for filters/KPIs */
+.grid { display: grid; gap: 12px; }
+.grid-2 { grid-template-columns: repeat(2, 1fr); }
+.grid-3 { grid-template-columns: repeat(3, 1fr); }
+.grid-4 { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 900px) { .grid-4, .grid-3 { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 600px) { .grid-4, .grid-3, .grid-2 { grid-template-columns: 1fr; } }
+
+/* Responsive page shell spacing */
+.page { padding-block: 16px; }
+.page h1 { margin: 0 0 12px; }
+
+/* Forms: keep 16px to prevent iOS zoom on focus */
+input, select, textarea { font-size: 16px; } /* keep ≥16px */
+
+
+/* Already present but ensure consistent spacing for tiny screens */
+.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+@media (max-width: 480px) {
+  .table th, .table td { padding: 8px 6px; font-size: 14px; }
+}
 
