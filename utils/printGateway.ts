@@ -10,11 +10,10 @@ type Options = {
   ip?: string;
   port?: number;
   codepage?: number;
-  allowPrompt?: boolean;        // chooser for first‑time USB/Serial [default false]
-  allowSystemDialog?: boolean;  // Android Print preview [default true]
+  allowPrompt?: boolean;        // default: false
+  allowSystemDialog?: boolean;  // default: true
 };
 
-// simple re‑entrancy guard to avoid double prints
 let inFlight = false;
 
 export async function printUniversal(opts: Options) {
@@ -25,7 +24,7 @@ export async function printUniversal(opts: Options) {
   const payload = textToEscPos(opts.text, { codepage: opts.codepage, feed: 4, cut: 'full' });
 
   try {
-    // 1) Native Android POS (Capacitor APK)
+    // 1) Native Android POS (APK with vendor SDK)
     if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android') {
       try {
         // @ts-ignore
@@ -35,7 +34,7 @@ export async function printUniversal(opts: Options) {
       } catch { /* continue */ }
     }
 
-    // 2) WebUSB – reopen remembered device only (no chooser unless allowPrompt)
+    // 2) WebUSB (reopen previously granted device only)
     const n: any = navigator as any;
     if (n.usb) {
       try {
@@ -44,11 +43,9 @@ export async function printUniversal(opts: Options) {
           const device = list[0];
           await device.open();
           if (device.configuration == null) await device.selectConfiguration(1);
-          const iface = device.configuration!.interfaces.find((i) =>
-            i.alternates.some((a) => a.endpoints.some((e) => e.direction === 'out'))
-          );
+          const iface = device.configuration!.interfaces.find(i => i.alternates.some(a => a.endpoints.some(e => e.direction === 'out')));
           await device.claimInterface(iface!.interfaceNumber);
-          const outEp = iface!.alternates[0].endpoints.find((e) => e.direction === 'out')!;
+          const outEp = iface!.alternates[0].endpoints.find(e => e.direction === 'out')!;
           await device.transferOut(outEp.endpointNumber, payload);
           await device.close();
           return { via: 'webusb' };
@@ -57,18 +54,15 @@ export async function printUniversal(opts: Options) {
 
       if (opts.allowPrompt) {
         try {
-          const filters =
-            opts.vendorId && opts.productId ? [{ vendorId: opts.vendorId, productId: opts.productId }] : [{}];
-          const device: USBDevice = await n.usb.requestDevice({ filters }); // requires user gesture
+          const filters = (opts.vendorId && opts.productId) ? [{ vendorId: opts.vendorId, productId: opts.productId }] : [{}];
+          const device: USBDevice = await n.usb.requestDevice({ filters }); // user gesture required
           await device.open();
           if (device.configuration == null) await device.selectConfiguration(1);
-          const iface = device.configuration!.interfaces.find((i) =>
-            i.alternates.some((a) => a.endpoints.some((e) => e.direction === 'out'))
-          );
+          const iface = device.configuration!.interfaces.find(i => i.alternates.some(a => a.endpoints.some(e => e.direction === 'out')));
           if (!iface) throw new Error('No USB OUT endpoint');
           await device.claimInterface(iface.interfaceNumber);
           const alt = iface.alternates[0];
-          const outEp = alt.endpoints.find((e) => e.direction === 'out')!;
+          const outEp = alt.endpoints.find(e => e.direction === 'out')!;
           await device.transferOut(outEp.endpointNumber, payload);
           await device.close();
           return { via: 'webusb' };
@@ -76,7 +70,7 @@ export async function printUniversal(opts: Options) {
       }
     }
 
-    // 3) Web Serial – reopen remembered port only; chooser only if allowPrompt
+    // 3) Web Serial (reopen previously granted port only)
     if ((navigator as any).serial) {
       try {
         const ports: SerialPort[] = await (navigator as any).serial.getPorts();
@@ -118,41 +112,22 @@ export async function printUniversal(opts: Options) {
       return { via: 'relay' };
     }
 
+    // 5) Browser UI fallbacks (only if allowed)
     if (opts.allowSystemDialog !== false) {
-  const w = window.open('', '_blank', 'width=480,height=640');
-  if (w) {
-    w.document.write(`<pre style="font:14px/1.4 monospace; white-space:pre-wrap">${opts.text.replace(/</g,'&lt;')}</pre>`);
-    w.document.close(); w.focus(); w.print(); w.close();
-    return { via: 'system' };
-  }
-}
-
-// 6) Web Share (text) last resort (only if allowed)
-if (opts.allowSystemDialog !== false && navigator.canShare && navigator.canShare({ text: opts.text })) {
-  await navigator.share({ title: 'Receipt', text: opts.text });
-  return { via: 'share' };
-}
-
-    // 5) System print dialog
-    const w = window.open('', '_blank', 'width=480,height=640');
-    if (w) {
-      w.document.write(
-        `<pre style="font:14px/1.4 monospace; white-space:pre-wrap">${opts.text.replace(/</g, '&lt;')}</pre>`
-      );
-      w.document.close();
-      w.focus();
-      w.print();
-      w.close();
-      return { via: 'system' };
+      const w = window.open('', '_blank', 'width=480,height=640');
+      if (w) {
+        w.document.write(`<pre style="font:14px/1.4 monospace; white-space:pre-wrap">${opts.text.replace(/</g,'&lt;')}</pre>`);
+        w.document.close(); w.focus(); w.print(); w.close();
+        return { via: 'system' };
+      }
+      if (navigator.canShare && navigator.canShare({ text: opts.text })) {
+        await navigator.share({ title: 'Receipt', text: opts.text });
+        return { via: 'share' };
+      }
     }
 
-    // 6) Web Share (text) last resort
-    if (navigator.canShare && navigator.canShare({ text: opts.text })) {
-      await navigator.share({ title: 'Receipt', text: opts.text });
-      return { via: 'share' };
-    }
-
-    throw new Error('No printing path available');
+    // Force caller to handle app‑link fallback
+    throw new Error('NO_SILENT_PATH');
   } finally {
     release();
   }
