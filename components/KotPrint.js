@@ -79,20 +79,44 @@ export default function KotPrint({ order, onClose, onPrint, autoPrint = true }) 
   }, [autoPrint, loadingData, doPrint]);
 
   // Android PWA modal with a real tap target
-  if (isAndroidPWA()) {
-    return (
-      <div className="kot-overlay">
-        <div className="kot-modal">
-          <div className="kot-header">
-            <h2>Print Bill / KOT</h2>
-            <button className="close-btn" onClick={onClose}>×</button>
-          </div>
-          {status && <div className={`status ${status.includes('✗') ? 'error' : 'success'}`}>{status}</div>}
-          <button className="print-btn" type="button" onClick={doPrint}>Open printer app</button>
+  // components/KotPrint.js (replace the isAndroidPWA() render block)
+if (isAndroidPWA()) {
+  const amount = Number(
+    (bill?.grand_total ?? bill?.total_inc_tax ?? order?.total_inc_tax ?? order?.total ?? 0)
+  );
+  return (
+    <div className="pwa-print-backdrop">
+      <div className="pwa-print-card" role="dialog" aria-modal="true">
+        <div className="pwa-print-head">
+          <h3>Print Bill / KOT</h3>
+          <button className="x" onClick={onClose} aria-label="Close">×</button>
         </div>
+        <div className="pwa-preview">
+          <pre>{`Order: #${(order?.id || '').slice(0,8).toUpperCase()}
+Type: ${getOrderTypeLabel(order)}
+Amount: ₹${amount.toFixed(2)}`}</pre>
+        </div>
+        {status ? (<div className={`note ${status.includes('✗') ? 'err' : 'ok'}`}>{status}</div>) : null}
+        <button className="primary" type="button" onClick={doPrint}>🖨️ Print via Thermer</button>
       </div>
-    );
-  }
+      <style jsx>{`
+        .pwa-print-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:10000}
+        .pwa-print-card{background:#fff;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.25);width:92%;max-width:420px;padding:16px}
+        .pwa-print-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+        h3{margin:0;font-size:18px}
+        .x{border:none;background:transparent;font-size:22px;line-height:1;cursor:pointer}
+        .pwa-preview{border:2px dashed #bbb;border-radius:8px;padding:10px;margin:8px 0 12px 0;background:#fafafa}
+        .pwa-preview pre{margin:0;font:14px/1.3 Menlo,Consolas,monospace;white-space:pre-wrap}
+        .note{margin:8px 0;padding:8px;border-radius:6px;text-align:center;font-size:13px}
+        .note.ok{background:#e7f7ee;color:#0f6f44}
+        .note.err{background:#fde8ea;color:#9f1c2b}
+        .primary{width:100%;padding:12px 14px;border:0;border-radius:8px;background:#10b981;color:#fff;font-weight:600;font-size:15px}
+        .primary:active{transform:translateY(1px)}
+      `}</style>
+    </div>
+  );
+}
+
 
   if (autoPrint && !status) return null;
   return (
