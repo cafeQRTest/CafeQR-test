@@ -26,17 +26,32 @@ export async function printUniversal(opts: Options) {
 
   try {
     // 1) Native Android → single fast attempt, no web fallbacks
-    if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android') {
-      // @ts-ignore
-      const { DevicePrinter } = (window as any).Capacitor.Plugins;
-      await DevicePrinter.ensurePermissions();
-      await DevicePrinter.pairDevice({ address: 'AA:BB:CC:DD:EE:FF' });
-      const addr = localStorage.getItem('BT_PRINTER_ADDR') || undefined;
-      const nameHint = localStorage.getItem('BT_PRINTER_NAME_HINT') || 'pos';
-      await DevicePrinter.ensurePermissions();
-      const res = await DevicePrinter.printRaw({ base64, address: addr, nameContains: nameHint });
-      return { via: res?.via || 'android-pos' };
-    }
+    // utils/printGateway.ts (inside the native Android branch)
+if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android') {
+  // @ts-ignore
+  const { DevicePrinter } = (window as any).Capacitor.Plugins;
+  await DevicePrinter.ensurePermissions();
+
+  let addr = localStorage.getItem('BT_PRINTER_ADDR') || undefined;
+  if (!addr) {
+    // 1) Let the user pick a device (short scan + dialog)
+    const pick = await DevicePrinter.pickPrinter();
+    addr = pick?.address;
+    if (!addr) throw new Error('No printer selected');
+
+    // 2) Try to start pairing once (some printers work without pairing via insecure RFCOMM)
+    try { await DevicePrinter.pairDevice({ address: addr }); } catch {}
+
+    // 3) Persist for next time (instant connects)
+    localStorage.setItem('BT_PRINTER_ADDR', addr);
+    if (pick?.name) localStorage.setItem('BT_PRINTER_NAME_HINT', pick.name);
+  }
+
+  const nameHint = localStorage.getItem('BT_PRINTER_NAME_HINT') || 'pos';
+  const res = await DevicePrinter.printRaw({ base64, address: addr, nameContains: nameHint });
+  return { via: res?.via || 'android-pos' };
+}
+
 
 
     // 2) WebUSB (reopen previously granted device only)

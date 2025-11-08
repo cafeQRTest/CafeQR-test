@@ -8,20 +8,27 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
 import android.Manifest;
+import android.app.AlertDialog;
 import android.app.PendingIntent;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.hardware.usb.*;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
 import java.io.OutputStream;
+import java.util.ArrayList;
 import java.util.Set;
 import java.util.UUID;
 
@@ -31,40 +38,7 @@ public class DevicePrinterPlugin extends Plugin {
   private static final int REQ_BT = 901;
   private String pendingPermCallbackId = null;
 
-  @PluginMethod()
-  public void pairDevice(PluginCall call) {
-    String addr = call.getString("address");
-    if (addr == null || addr.length() == 0) { call.reject("address required"); return; }
-    BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
-    if (adapter == null || !adapter.isEnabled()) { call.reject("bluetooth disabled"); return; }
-    try {
-      BluetoothDevice d = adapter.getRemoteDevice(addr);
-      boolean started = d.createBond();
-      JSObject out = new JSObject();
-      out.put("started", started);
-      call.resolve(out);
-    } catch (Exception e) { call.reject(e.getMessage()); }
-  }
-
-  @PluginMethod()
-  public void listBonded(PluginCall call) {
-    BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
-    JSObject out = new JSObject();
-    try {
-      if (adapter != null && adapter.isEnabled()) {
-        Set<BluetoothDevice> bonded = adapter.getBondedDevices();
-        int i = 0;
-        for (BluetoothDevice d : bonded) {
-          JSObject o = new JSObject();
-          o.put("name", d.getName());
-          o.put("address", d.getAddress());
-          out.put(String.valueOf(i++), o);
-        }
-      }
-      call.resolve(out);
-    } catch (Exception e) { call.reject(e.getMessage()); }
-  }
-
+  // Ask runtime permissions (Android 12+ uses BLUETOOTH_CONNECT/SCAN)
   @PluginMethod()
   public void ensurePermissions(PluginCall call) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -101,6 +75,117 @@ public class DevicePrinterPlugin extends Plugin {
     if (granted) saved.resolve(); else saved.reject("Bluetooth permission denied");
   }
 
+  // One‑time picker dialog: short discovery, list bonded + found, return {name,address}
+  @PluginMethod()
+  public void pickPrinter(PluginCall call) {
+    BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
+    if (adapter == null || !adapter.isEnabled()) { call.reject("Bluetooth disabled"); return; }
+
+    ArrayList<BluetoothDevice> devices = new ArrayList<>();
+    ArrayList<String> labels = new ArrayList<>();
+
+    try {
+      Set<BluetoothDevice> bonded = adapter.getBondedDevices();
+      if (bonded != null) {
+        for (BluetoothDevice d : bonded) {
+          devices.add(d);
+          String n = (d.getName() == null ? "Unknown" : d.getName());
+          labels.add("Paired • " + n + " (" + d.getAddress() + ")");
+        }
+      }
+    } catch (Exception ignored) {}
+
+    BroadcastReceiver receiver = new BroadcastReceiver() {
+      @Override public void onReceive(Context ctx, Intent intent) {
+        String action = intent.getAction();
+        if (BluetoothDevice.ACTION_FOUND.equals(action)) {
+          BluetoothDevice d = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+          if (d == null) return;
+          for (BluetoothDevice e : devices) { if (e.getAddress().equals(d.getAddress())) return; }
+          devices.add(d);
+          String n = (d.getName() == null ? "Unknown" : d.getName());
+          labels.add(n + " (" + d.getAddress() + ")");
+        } else if (BluetoothAdapter.ACTION_DISCOVERY_FINISHED.equals(action)) {
+          try { getContext().unregisterReceiver(this); } catch (Exception ignored) {}
+        }
+      }
+    };
+
+    try {
+      IntentFilter f = new IntentFilter();
+      f.addAction(BluetoothDevice.ACTION_FOUND);
+      f.addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED);
+      getContext().registerReceiver(receiver, f);
+      try { adapter.cancelDiscovery(); } catch (Exception ignored) {}
+      adapter.startDiscovery();
+    } catch (Exception e) {
+      call.reject("Discovery error: " + e.getMessage());
+      return;
+    }
+
+    new Handler(Looper.getMainLooper()).postDelayed(() -> {
+      try { adapter.cancelDiscovery(); } catch (Exception ignored) {}
+      try {
+        AlertDialog.Builder b = new AlertDialog.Builder(getActivity());
+        b.setTitle("Select printer");
+        if (labels.isEmpty()) labels.add("No devices found");
+        CharSequence[] items = labels.toArray(new CharSequence[0]);
+        b.setItems(items, (DialogInterface dialog, int which) -> {
+          if (devices.isEmpty()) { call.reject("No devices"); return; }
+          int idx = Math.max(0, Math.min(which, devices.size()-1));
+          BluetoothDevice chosen = devices.get(idx);
+          JSObject out = new JSObject();
+          out.put("name", chosen.getName());
+          out.put("address", chosen.getAddress());
+          call.resolve(out);
+        });
+        b.setOnCancelListener(d -> call.reject("Picker cancelled"));
+        b.show();
+      } catch (Exception ex) {
+        call.reject("Dialog error: " + ex.getMessage());
+      } finally {
+        try { getContext().unregisterReceiver(receiver); } catch (Exception ignored) {}
+      }
+    }, 3500);
+  }
+
+  // Optional: trigger system pairing (PIN often 0000/1234 on POS printers)
+  @PluginMethod()
+  public void pairDevice(PluginCall call) {
+    String addr = call.getString("address");
+    if (addr == null || addr.isEmpty()) { call.reject("address required"); return; }
+    BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
+    if (adapter == null || !adapter.isEnabled()) { call.reject("bluetooth disabled"); return; }
+    try {
+      BluetoothDevice d = adapter.getRemoteDevice(addr);
+      boolean started = d.createBond();
+      JSObject out = new JSObject();
+      out.put("started", started);
+      call.resolve(out);
+    } catch (Exception e) { call.reject(e.getMessage()); }
+  }
+
+  // List currently bonded devices (debug/diagnostics)
+  @PluginMethod()
+  public void listBonded(PluginCall call) {
+    BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
+    JSObject out = new JSObject();
+    try {
+      if (adapter != null && adapter.isEnabled()) {
+        Set<BluetoothDevice> bonded = adapter.getBondedDevices();
+        int i = 0;
+        for (BluetoothDevice d : bonded) {
+          JSObject o = new JSObject();
+          o.put("name", d.getName());
+          o.put("address", d.getAddress());
+          out.put(String.valueOf(i++), o);
+        }
+      }
+      call.resolve(out);
+    } catch (Exception e) { call.reject(e.getMessage()); }
+  }
+
+  // Print raw ESC/POS (runs on a worker thread)
   @PluginMethod()
   public void printRaw(PluginCall call) {
     String base64 = call.getString("base64");
@@ -163,7 +248,7 @@ public class DevicePrinterPlugin extends Plugin {
     BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
     if (adapter == null || !adapter.isEnabled()) return false;
 
-    try { adapter.cancelDiscovery(); } catch (Exception ignored) {}  // recommended before connect [docs]
+    try { adapter.cancelDiscovery(); } catch (Exception ignored) {} // recommended before connect [docs]
 
     Set<BluetoothDevice> bonded = adapter.getBondedDevices();
     if (bonded == null || bonded.isEmpty()) return false;
@@ -202,6 +287,7 @@ public class DevicePrinterPlugin extends Plugin {
         sock = dev.createRfcommSocketToServiceRecord(
           UUID.fromString("00001101-0000-1000-8000-00805F9B34FB"));
       }
+      // Blocking call (~12s timeout if peer doesn’t respond)
       sock.connect();
       OutputStream os = sock.getOutputStream();
       os.write(data);
@@ -220,4 +306,4 @@ public class DevicePrinterPlugin extends Plugin {
       return false;
     }
   }
-}  // ← final class-closing brace
+}
