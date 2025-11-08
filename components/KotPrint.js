@@ -4,6 +4,8 @@ import { buildReceiptText, downloadTextAndShare } from '../utils/printUtils';
 import { getSupabase } from '../services/supabase';
 import { printUniversal } from '../utils/printGateway';
 import { openThermerWithText, openRawBTWithText } from '../utils/thermer';
+import { Capacitor } from '@capacitor/core'; // +++
+
 
 function getOrderTypeLabelLocal(order) {
   if (!order) return '';
@@ -15,7 +17,12 @@ function getOrderTypeLabelLocal(order) {
   return '';
 }
 
+function isNativeAndroid() {
+  try { return Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android'; } catch { return false; }
+}
+
 function isAndroidPWA() {
+  if (isNativeAndroid()) return false;
   const uaAndroid = /Android/i.test(navigator.userAgent);
   const inStandalone =
     typeof window !== 'undefined' &&
@@ -33,18 +40,22 @@ export default function KotPrint({ order, onClose, onPrint, autoPrint = true }) 
   const lockRef = useRef(false);
 
   useEffect(() => {
+    let alive = true;
     (async () => {
       try {
         const supabase = getSupabase();
-        const { data: billData } = await supabase.from('bills').select('*').eq('order_id', order.id).maybeSingle();
-        if (billData) setBill(billData);
-        const { data: profileData } = await supabase.from('restaurant_profiles').select('*').eq('restaurant_id', order.restaurant_id).maybeSingle();
-        if (profileData) setRestaurantProfile(profileData);
-        const { data: restaurantData } = await supabase.from('restaurants').select('name').eq('id', order.restaurant_id).maybeSingle();
-        if (restaurantData?.name) order.restaurant_name = restaurantData.name;
-      } finally { setLoadingData(false); }
+        const [b, rp] = await Promise.all([
+          supabase.from('bills').select('*').eq('order_id', order.id).maybeSingle(),
+          supabase.from('restaurant_profiles').select('*').eq('restaurant_id', order.restaurant_id).maybeSingle(),
+        ]);
+        if (!alive) return;
+        if (b?.data) setBill(b.data);
+        if (rp?.data) setRestaurantProfile(rp.data);
+      } catch {}
     })();
+    return () => { alive = false; };
   }, [order]);
+
 
   const doPrint = useCallback(async () => {
     if (lockRef.current) return;
@@ -52,6 +63,8 @@ export default function KotPrint({ order, onClose, onPrint, autoPrint = true }) 
 
     const text = buildReceiptText(order, bill, restaurantProfile);
     const onAndroidPWA = isAndroidPWA();
+    const onNativeAndroid = isNativeAndroid();
+    
 
     try {
       // 1) Android PWA: deep‑link immediately under user gesture, then return
@@ -69,7 +82,7 @@ export default function KotPrint({ order, onClose, onPrint, autoPrint = true }) 
         port: Number(localStorage.getItem('PRINTER_PORT') || 9100),
         codepage: 0,
         allowPrompt: false,
-        allowSystemDialog: true
+        allowSystemDialog: onNativeAndroid ? false : true
       });
       onPrint?.(); onClose?.(); return;
     } catch {
@@ -77,16 +90,16 @@ export default function KotPrint({ order, onClose, onPrint, autoPrint = true }) 
       try { await downloadTextAndShare(order, bill, restaurantProfile); onPrint?.(); }
       catch { setStatus('✗ Printing failed'); }
     } finally {
-      setTimeout(() => { lockRef.current = false; }, 800);
+      setTimeout(() => { lockRef.current = false; }, 600);
     }
   }, [order, bill, restaurantProfile, onPrint, onClose]);
 
   // Auto‑run everywhere except Android PWA (needs user gesture for app‑link)
   useEffect(() => {
-    if (!autoPrint || loadingData || ranRef.current || isAndroidPWA()) return;
+    if (!autoPrint || ranRef.current) return;
     ranRef.current = true;
     doPrint();
-  }, [autoPrint, loadingData, doPrint]);
+  }, [autoPrint, doPrint]);
 
   // Android PWA modal with a real tap target
   // components/KotPrint.js (replace the isAndroidPWA() render block)

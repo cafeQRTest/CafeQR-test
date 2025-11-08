@@ -10,8 +10,8 @@ type Options = {
   ip?: string;
   port?: number;
   codepage?: number;
-  allowPrompt?: boolean;        // default: false
-  allowSystemDialog?: boolean;  // default: true
+  allowPrompt?: boolean;
+  allowSystemDialog?: boolean;
 };
 
 let inFlight = false;
@@ -22,17 +22,20 @@ export async function printUniversal(opts: Options) {
   const release = () => setTimeout(() => { inFlight = false; }, 800);
 
   const payload = textToEscPos(opts.text, { codepage: opts.codepage, feed: 4, cut: 'full' });
+  const base64 = btoa(String.fromCharCode(...payload));
 
   try {
-    // 1) Native Android POS (APK with vendor SDK)
+    // 1) Native Android → single fast attempt, no web fallbacks
     if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android') {
-      try {
-        // @ts-ignore
-        const { DevicePrinter } = (window as any).Capacitor.Plugins;
-        await DevicePrinter.printRaw({ base64: btoa(String.fromCharCode(...payload)) });
-        return { via: 'android-pos' };
-      } catch { /* continue */ }
+      // @ts-ignore
+      const { DevicePrinter } = (window as any).Capacitor.Plugins;
+      const addr = localStorage.getItem('BT_PRINTER_ADDR') || undefined;
+      const nameHint = localStorage.getItem('BT_PRINTER_NAME_HINT') || 'pos';
+      await DevicePrinter.ensurePermissions();
+      const res = await DevicePrinter.printRaw({ base64, address: addr, nameContains: nameHint });
+      return { via: res?.via || 'android-pos' };
     }
+
 
     // 2) WebUSB (reopen previously granted device only)
     const n: any = navigator as any;
