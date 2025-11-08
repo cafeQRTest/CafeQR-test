@@ -5,6 +5,16 @@ import { getSupabase } from '../services/supabase';
 import { printUniversal } from '../utils/printGateway';
 import { openThermerWithText, openRawBTWithText } from '../utils/thermer';
 
+function getOrderTypeLabelLocal(order) {
+  if (!order) return '';
+  if (order.order_type === 'parcel') return 'Parcel';
+  if (order.order_type === 'dine-in') return 'Dine-in';
+  if (order.order_type === 'counter') {
+    return order.table_number ? `Table ${order.table_number}` : 'Counter';
+  }
+  return '';
+}
+
 function isAndroidPWA() {
   const uaAndroid = /Android/i.test(navigator.userAgent);
   const inStandalone =
@@ -93,7 +103,7 @@ if (isAndroidPWA()) {
         </div>
         <div className="pwa-preview">
           <pre>{`Order: #${(order?.id || '').slice(0,8).toUpperCase()}
-Type: ${getOrderTypeLabel(order)}
+Type: ${getOrderTypeLabelLocal(order)}
 Amount: ₹${amount.toFixed(2)}`}</pre>
         </div>
         {status ? (<div className={`note ${status.includes('✗') ? 'err' : 'ok'}`}>{status}</div>) : null}
