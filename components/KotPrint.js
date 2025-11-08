@@ -94,6 +94,13 @@ if (isAndroidPWA()) {
   const amount = Number(
     (bill?.grand_total ?? bill?.total_inc_tax ?? order?.total_inc_tax ?? order?.total ?? 0)
   );
+  const onBackdrop = (e) => { if (e.target === e.currentTarget) onClose?.(); };
+  useEffect(() => {
+    const onKey = (ev) => { if (ev.key === 'Escape') onClose?.(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   return (
     <div className="pwa-print-backdrop">
       <div className="pwa-print-card" role="dialog" aria-modal="true">
