@@ -32,39 +32,38 @@ public class DevicePrinterPlugin extends Plugin {
   private String pendingPermCallbackId = null;
 
   @PluginMethod()
-public void pairDevice(PluginCall call) { // optional helper
-  String addr = call.getString("address");
-  if (addr == null || addr.length() == 0) { call.reject("address required"); return; }
-  BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
-  if (adapter == null || !adapter.isEnabled()) { call.reject("bluetooth disabled"); return; }
-  try {
-    BluetoothDevice d = adapter.getRemoteDevice(addr);
-    boolean started = d.createBond();          // triggers system pairing dialog
+  public void pairDevice(PluginCall call) {
+    String addr = call.getString("address");
+    if (addr == null || addr.length() == 0) { call.reject("address required"); return; }
+    BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
+    if (adapter == null || !adapter.isEnabled()) { call.reject("bluetooth disabled"); return; }
+    try {
+      BluetoothDevice d = adapter.getRemoteDevice(addr);
+      boolean started = d.createBond();
+      JSObject out = new JSObject();
+      out.put("started", started);
+      call.resolve(out);
+    } catch (Exception e) { call.reject(e.getMessage()); }
+  }
+
+  @PluginMethod()
+  public void listBonded(PluginCall call) {
+    BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
     JSObject out = new JSObject();
-    out.put("started", started);
-    call.resolve(out);
-  } catch (Exception e) { call.reject(e.getMessage()); }
-}
-
-
-   @PluginMethod()
-public void listBonded(PluginCall call) {     // for debugging/selecting MAC
-  BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
-  JSObject out = new JSObject();
-  try {
-    if (adapter != null && adapter.isEnabled()) {
-      Set<BluetoothDevice> bonded = adapter.getBondedDevices();
-      int i = 0;
-      for (BluetoothDevice d : bonded) {
-        JSObject o = new JSObject();
-        o.put("name", d.getName());
-        o.put("address", d.getAddress());
-        out.put(String.valueOf(i++), o);
+    try {
+      if (adapter != null && adapter.isEnabled()) {
+        Set<BluetoothDevice> bonded = adapter.getBondedDevices();
+        int i = 0;
+        for (BluetoothDevice d : bonded) {
+          JSObject o = new JSObject();
+          o.put("name", d.getName());
+          o.put("address", d.getAddress());
+          out.put(String.valueOf(i++), o);
+        }
       }
-    }
-    call.resolve(out);
-  } catch (Exception e) { call.reject(e.getMessage()); }
-}
+      call.resolve(out);
+    } catch (Exception e) { call.reject(e.getMessage()); }
+  }
 
   @PluginMethod()
   public void ensurePermissions(PluginCall call) {
@@ -102,24 +101,23 @@ public void listBonded(PluginCall call) {     // for debugging/selecting MAC
     if (granted) saved.resolve(); else saved.reject("Bluetooth permission denied");
   }
 
- @PluginMethod()
-public void printRaw(PluginCall call) {
-  String base64 = call.getString("base64");
-  String btAddress = call.getString("address");          // optional
-  String nameContains = call.getString("nameContains");  // optional
-  byte[] data = android.util.Base64.decode(base64, android.util.Base64.DEFAULT);
+  @PluginMethod()
+  public void printRaw(PluginCall call) {
+    String base64 = call.getString("base64");
+    String btAddress = call.getString("address");
+    String nameContains = call.getString("nameContains");
+    byte[] data = android.util.Base64.decode(base64, android.util.Base64.DEFAULT);
 
-  // Run off the UI thread to avoid any WebView stalls
-  new Thread(() -> {
-    try {
-      if (tryUsb(getContext(), data)) { call.resolve(new JSObject().put("via", "usb")); return; }
-      if (tryBluetooth(getContext(), data, btAddress, nameContains)) { call.resolve(new JSObject().put("via", "bt")); return; }
-      call.reject("No USB/Bluetooth path");
-    } catch (Exception e) {
-      call.reject(e.getMessage());
-    }
-  }).start();
-}
+    new Thread(() -> {
+      try {
+        if (tryUsb(getContext(), data)) { call.resolve(new JSObject().put("via", "usb")); return; }
+        if (tryBluetooth(getContext(), data, btAddress, nameContains)) { call.resolve(new JSObject().put("via", "bt")); return; }
+        call.reject("No USB/Bluetooth path");
+      } catch (Exception e) {
+        call.reject(e.getMessage());
+      }
+    }).start();
+  }
 
   private boolean tryUsb(Context ctx, byte[] data) throws Exception {
     UsbManager mgr = (UsbManager) ctx.getSystemService(Context.USB_SERVICE);
@@ -165,8 +163,7 @@ public void printRaw(PluginCall call) {
     BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
     if (adapter == null || !adapter.isEnabled()) return false;
 
-    // Cancel discovery for faster connect as per docs
-    try { adapter.cancelDiscovery(); } catch (Exception ignored) {} // speeds up RFCOMM connect [docs]
+    try { adapter.cancelDiscovery(); } catch (Exception ignored) {}  // recommended before connect [docs]
 
     Set<BluetoothDevice> bonded = adapter.getBondedDevices();
     if (bonded == null || bonded.isEmpty()) return false;
@@ -180,54 +177,47 @@ public void printRaw(PluginCall call) {
       return connectAndWrite(chosen, data);
     }
 
-    // Fallback: pick first device matching friendly name to avoid looping all devices
     if (nameContains != null && !nameContains.isEmpty()) {
       for (BluetoothDevice d : bonded) {
         String n = d.getName() == null ? "" : d.getName();
-        if (n.toLowerCase().contains(nameContains.toLowerCase())) {
-          chosen = d; break;
-        }
+        if (n.toLowerCase().contains(nameContains.toLowerCase())) { chosen = d; break; }
       }
       if (chosen != null) return connectAndWrite(chosen, data);
       return false;
     }
 
-    // Last resort: only try the first bonded device to avoid long blocking loops
     BluetoothDevice[] arr = bonded.toArray(new BluetoothDevice[0]);
     if (arr.length == 0) return false;
     return connectAndWrite(arr[0], data);
   }
 
   private boolean connectAndWrite(BluetoothDevice dev, byte[] data) {
-  try {
-    // Cancel discovery for faster RFCOMM connect
-    try { BluetoothAdapter.getDefaultAdapter().cancelDiscovery(); } catch (Exception ignored) {}
-    // Try insecure first: many POS printers accept it without pairing
-    BluetoothSocket sock;
     try {
-      sock = dev.createInsecureRfcommSocketToServiceRecord(
-        UUID.fromString("00001101-0000-1000-8000-00805F9B34FB"));
-    } catch (Exception e) {
-      sock = dev.createRfcommSocketToServiceRecord(
-        UUID.fromString("00001101-0000-1000-8000-00805F9B34FB"));
-    }
-    sock.connect(); // blocking; typically ~12s timeout per device
-    OutputStream os = sock.getOutputStream();
-    os.write(data);
-    os.flush();
-    sock.close();
-    return true;
-  } catch (Exception ex) {
-    // Reflection fallback seen in community fixes
-    try {
-      BluetoothSocket alt = (BluetoothSocket) dev.getClass()
-        .getMethod("createRfcommSocket", int.class).invoke(dev, 1);
-      alt.connect();
-      OutputStream os = alt.getOutputStream();
-      os.write(data); os.flush(); alt.close();
+      try { BluetoothAdapter.getDefaultAdapter().cancelDiscovery(); } catch (Exception ignored) {}
+      BluetoothSocket sock;
+      try {
+        sock = dev.createInsecureRfcommSocketToServiceRecord(
+          UUID.fromString("00001101-0000-1000-8000-00805F9B34FB"));
+      } catch (Exception e) {
+        sock = dev.createRfcommSocketToServiceRecord(
+          UUID.fromString("00001101-0000-1000-8000-00805F9B34FB"));
+      }
+      sock.connect();
+      OutputStream os = sock.getOutputStream();
+      os.write(data);
+      os.flush();
+      sock.close();
       return true;
-    } catch (Exception ignored) {}
-    return false;
+    } catch (Exception ex) {
+      try {
+        BluetoothSocket alt = (BluetoothSocket) dev.getClass()
+          .getMethod("createRfcommSocket", int.class).invoke(dev, 1);
+        alt.connect();
+        OutputStream os = alt.getOutputStream();
+        os.write(data); os.flush(); alt.close();
+        return true;
+      } catch (Exception ignored) {}
+      return false;
+    }
   }
-}
-
+}  // ← final class-closing brace
