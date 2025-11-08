@@ -18,6 +18,8 @@ export default function OrderPage() {
   const [error, setError] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [filterMode, setFilterMode] = useState('all')
+  const [isOutsideHours, setIsOutsideHours] = useState(false)
+  const [hoursMessage, setHoursMessage] = useState('')
 const menuMapRef = useRef(new Map())
 const cacheMenuIntoMap = (list) => {
   const m = new Map()
@@ -67,7 +69,56 @@ const cacheMenuIntoMap = (list) => {
           .single()
         if (restErr) throw restErr
         if (!rest) throw new Error('Restaurant not found')
-        if (rest.online_paused) throw new Error('Restaurant is currently closed')
+        
+        // Check if restaurant is paused
+        if (rest.online_paused) {
+          if (!cancelled) {
+            setIsOutsideHours(true)
+            setHoursMessage('Restaurant is currently closed')
+            setRestaurant(rest)
+            setLoading(false)
+          }
+          return
+        }
+
+        // Check working hours from availability
+        const { data: hours, error: hoursErr } = await supabase
+          .from('restaurant_hours')
+          .select('dow, open_time, close_time, enabled')
+          .eq('restaurant_id', restaurantId)
+
+        if (!hoursErr && hours && hours.length > 0) {
+          const now = new Date()
+          const currentDOW = now.getDay() === 0 ? 7 : now.getDay() // 1=Mon, 7=Sun
+          const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+          const todayHours = hours.find(h => h.dow === currentDOW)
+
+          // Check if today is disabled
+          if (!todayHours || !todayHours.enabled) {
+            if (!cancelled) {
+              setIsOutsideHours(true)
+              setHoursMessage('Restaurant is closed today')
+              setRestaurant(rest)
+              setLoading(false)
+            }
+            return
+          }
+
+          // Check if current time is outside working hours
+          if (todayHours.open_time && todayHours.close_time) {
+            const openTime = todayHours.open_time.substring(0, 5)
+            const closeTime = todayHours.close_time.substring(0, 5)
+            if (currentTime < openTime || currentTime > closeTime) {
+              if (!cancelled) {
+                setIsOutsideHours(true)
+                setHoursMessage(`Restaurant is closed. Opens at ${openTime}, closes at ${closeTime}`)
+                setRestaurant(rest)
+                setLoading(false)
+              }
+              return
+            }
+          }
+        }
 
         const { data: menu, error: menuErr } = await supabase
           .from('menu_items')
@@ -87,6 +138,8 @@ const cacheMenuIntoMap = (list) => {
           setRestaurant(rest)
           setMenuItems(cleaned)
           cacheMenuIntoMap(cleaned)
+          setIsOutsideHours(false)
+          setHoursMessage('')
         }
       } catch (e) {
         if (!cancelled) setError(e.message || 'Failed to load menu')
@@ -186,6 +239,17 @@ const cacheMenuIntoMap = (list) => {
 
 
   const brandColor = restaurant?.restaurant_profiles?.brand_color || '#f59e0b'
+
+  // Show blocked message if outside working hours or paused
+  if (isOutsideHours) {
+    return (
+      <div style={{ padding: '2rem', textAlign: 'center', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8f9fa' }}>
+        <div>
+          <h1 style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>🕐 {hoursMessage}</h1>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div
