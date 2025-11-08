@@ -29,6 +29,8 @@ export async function printUniversal(opts: Options) {
     if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android') {
       // @ts-ignore
       const { DevicePrinter } = (window as any).Capacitor.Plugins;
+      await DevicePrinter.ensurePermissions();
+      await DevicePrinter.pairDevice({ address: 'AA:BB:CC:DD:EE:FF' });
       const addr = localStorage.getItem('BT_PRINTER_ADDR') || undefined;
       const nameHint = localStorage.getItem('BT_PRINTER_NAME_HINT') || 'pos';
       await DevicePrinter.ensurePermissions();

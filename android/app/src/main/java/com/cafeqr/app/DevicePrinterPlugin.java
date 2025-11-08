@@ -32,6 +32,41 @@ public class DevicePrinterPlugin extends Plugin {
   private String pendingPermCallbackId = null;
 
   @PluginMethod()
+public void pairDevice(PluginCall call) { // optional helper
+  String addr = call.getString("address");
+  if (addr == null || addr.length() == 0) { call.reject("address required"); return; }
+  BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
+  if (adapter == null || !adapter.isEnabled()) { call.reject("bluetooth disabled"); return; }
+  try {
+    BluetoothDevice d = adapter.getRemoteDevice(addr);
+    boolean started = d.createBond();          // triggers system pairing dialog
+    JSObject out = new JSObject();
+    out.put("started", started);
+    call.resolve(out);
+  } catch (Exception e) { call.reject(e.getMessage()); }
+}
+
+
+   @PluginMethod()
+public void listBonded(PluginCall call) {     // for debugging/selecting MAC
+  BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
+  JSObject out = new JSObject();
+  try {
+    if (adapter != null && adapter.isEnabled()) {
+      Set<BluetoothDevice> bonded = adapter.getBondedDevices();
+      int i = 0;
+      for (BluetoothDevice d : bonded) {
+        JSObject o = new JSObject();
+        o.put("name", d.getName());
+        o.put("address", d.getAddress());
+        out.put(String.valueOf(i++), o);
+      }
+    }
+    call.resolve(out);
+  } catch (Exception e) { call.reject(e.getMessage()); }
+}
+
+  @PluginMethod()
   public void ensurePermissions(PluginCall call) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
       boolean connectOk = ContextCompat.checkSelfPermission(getContext(), Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED;
@@ -67,15 +102,15 @@ public class DevicePrinterPlugin extends Plugin {
     if (granted) saved.resolve(); else saved.reject("Bluetooth permission denied");
   }
 
-  @PluginMethod()
-  public void printRaw(PluginCall call) {
-    String base64 = call.getString("base64");
-    String btAddress = call.getString("address");          // optional
-    String nameContains = call.getString("nameContains");  // optional
-    byte[] data = android.util.Base64.decode(base64, android.util.Base64.DEFAULT);
+ @PluginMethod()
+public void printRaw(PluginCall call) {
+  String base64 = call.getString("base64");
+  String btAddress = call.getString("address");          // optional
+  String nameContains = call.getString("nameContains");  // optional
+  byte[] data = android.util.Base64.decode(base64, android.util.Base64.DEFAULT);
 
-    bridge.executeOnMainThread(() -> {}); // no UI work; keep method lightweight [runs on plugin thread]
-
+  // Run off the UI thread to avoid any WebView stalls
+  new Thread(() -> {
     try {
       if (tryUsb(getContext(), data)) { call.resolve(new JSObject().put("via", "usb")); return; }
       if (tryBluetooth(getContext(), data, btAddress, nameContains)) { call.resolve(new JSObject().put("via", "bt")); return; }
@@ -83,7 +118,8 @@ public class DevicePrinterPlugin extends Plugin {
     } catch (Exception e) {
       call.reject(e.getMessage());
     }
-  }
+  }).start();
+}
 
   private boolean tryUsb(Context ctx, byte[] data) throws Exception {
     UsbManager mgr = (UsbManager) ctx.getSystemService(Context.USB_SERVICE);
@@ -163,19 +199,35 @@ public class DevicePrinterPlugin extends Plugin {
   }
 
   private boolean connectAndWrite(BluetoothDevice dev, byte[] data) {
-    // RFCOMM connect is blocking (~12s timeout), so try a single target only as per docs
+  try {
+    // Cancel discovery for faster RFCOMM connect
+    try { BluetoothAdapter.getDefaultAdapter().cancelDiscovery(); } catch (Exception ignored) {}
+    // Try insecure first: many POS printers accept it without pairing
+    BluetoothSocket sock;
     try {
-      BluetoothSocket sock = dev.createRfcommSocketToServiceRecord(UUID.fromString("00001101-0000-1000-8000-00805F9B34FB"));
-      sock.connect();
-      OutputStream os = sock.getOutputStream();
-      os.write(data);
-      os.flush();
-      sock.close();
-      return true;
-    } catch (Exception ex) {
-      try { Thread.sleep(50); } catch (InterruptedException ignored) {}
-      try { dev.getClass().getMethod("createRfcommSocket", int.class).invoke(dev, 1); } catch (Exception ignored) {}
-      return false;
+      sock = dev.createInsecureRfcommSocketToServiceRecord(
+        UUID.fromString("00001101-0000-1000-8000-00805F9B34FB"));
+    } catch (Exception e) {
+      sock = dev.createRfcommSocketToServiceRecord(
+        UUID.fromString("00001101-0000-1000-8000-00805F9B34FB"));
     }
+    sock.connect(); // blocking; typically ~12s timeout per device
+    OutputStream os = sock.getOutputStream();
+    os.write(data);
+    os.flush();
+    sock.close();
+    return true;
+  } catch (Exception ex) {
+    // Reflection fallback seen in community fixes
+    try {
+      BluetoothSocket alt = (BluetoothSocket) dev.getClass()
+        .getMethod("createRfcommSocket", int.class).invoke(dev, 1);
+      alt.connect();
+      OutputStream os = alt.getOutputStream();
+      os.write(data); os.flush(); alt.close();
+      return true;
+    } catch (Exception ignored) {}
+    return false;
   }
 }
+
