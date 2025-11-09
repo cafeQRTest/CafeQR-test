@@ -47,6 +47,15 @@ setupIonicReact();
 
 const App: React.FC = () => {
   const [appReady, setAppReady] = useState(false);
+ 
+  // inside const App: React.FC = () => { ... }
+useEffect(() => {
+  const sub = CapacitorApp.addListener('appStateChange', async ({ isActive }) => {
+    if (isActive) { await supabase.auth.startAutoRefresh(); }
+    else { await supabase.auth.stopAutoRefresh(); }
+  });                                           // native lifecycle in component [web:616][web:609][web:611]
+  return () => { sub.remove(); };
+}, []);
 
   useEffect(() => {
     let mounted = true;
