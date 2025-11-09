@@ -21,6 +21,7 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false }) {
   const total = Number(amount || 0);
   const disabled = busy || submitting;
 
+
   const choiceBox = (active) => ({
     display: 'flex', gap: 10, alignItems: 'center', padding: 12, borderRadius: 8, cursor: disabled ? 'not-allowed' : 'pointer',
     border: `2px solid ${active ? BRAND.orange : BRAND.border}`, background: active ? BRAND.bgSoft : '#fff', color: BRAND.text
@@ -58,6 +59,10 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false }) {
       }
     } finally { setSubmitting(false); }
   };
+
+
+
+
 
   return (
     <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000}}>
@@ -135,6 +140,10 @@ export default function CounterSale() {
   const { restaurant, loading: loadingRestaurant } = useRestaurant();
   const router = useRouter();
   const restaurantId = restaurant?.id;
+  const [popularIds, setPopularIds] = useState(new Set());
+  const [popCounts, setPopCounts] = useState(new Map());   // id -> total qty
+  const nameIndexRef = useRef(new Map());                  // normalized name -> id
+
 
   const [tables, setTables] = useState([]);
   const [menuItems, setMenuItems] = useState([]);
@@ -162,6 +171,7 @@ export default function CounterSale() {
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
 
   const [printOrder, setPrintOrder] = useState(null);
+  
 
   // NEW: Order mode toggle
   const [orderMode, setOrderMode] = useState('kitchen');
@@ -177,10 +187,16 @@ export default function CounterSale() {
 
   // Helpers
   const cacheMenuIntoMap = (list) => {
-    const m = new Map();
-    list.forEach((r) => m.set(r.id, r));
-    menuMapRef.current = m;
-  };
+  const byId = new Map();
+  const byName = new Map();
+  list.forEach((r) => {
+    byId.set(r.id, r);
+    if (r.name) byName.set(r.name.trim().toLowerCase(), r.id);
+  });
+  menuMapRef.current = byId;
+  nameIndexRef.current = byName;
+};
+
 
   // Compute client-side totals mirroring server rules
   function computeCartTotals(cartItems, profile) {
@@ -241,6 +257,8 @@ export default function CounterSale() {
 
   const cartTotals = useMemo(() => computeCartTotals(cart, profileTax), [cart, profileTax]);
 
+
+
   async function fetchFullOrder(orderId) {
     const { data, error } = await supabase
       .from('orders')
@@ -293,6 +311,62 @@ export default function CounterSale() {
       }
     })();
   }, [checking, loadingRestaurant, restaurantId, supabase]);
+
+useEffect(() => {
+  if (!restaurantId) return;
+  (async () => {
+    const since = new Date(); since.setDate(since.getDate() - 30);
+    const { data, error } = await supabase
+      .from('orders')
+      .select('items, status, created_at')
+      .eq('restaurant_id', restaurantId)
+      .gte('created_at', since.toISOString())
+      .neq('status', 'cancelled');
+    if (error) return;
+
+    const counts = new Map(); // id -> qty
+    (data || []).forEach(o => {
+      const lines = Array.isArray(o.items) ? o.items : [];
+      lines.forEach(it => {
+        let id = it?.id || it?.menu_item_id || null;
+        if (!id) {
+          const byName = (it?.name || '').trim().toLowerCase();
+          id = nameIndexRef.current.get(byName) || null;
+        }
+        if (!id) return;
+        counts.set(id, (counts.get(id) || 0) + Number(it.quantity || 1));
+      });
+    });
+
+    // If nothing in 30 days, try a longer lookback (90 days) so Popular never looks empty
+    if (counts.size === 0) {
+      const since90 = new Date(); since90.setDate(since90.getDate() - 90);
+      const { data: data90 } = await supabase
+        .from('orders')
+        .select('items, status, created_at')
+        .eq('restaurant_id', restaurantId)
+        .gte('created_at', since90.toISOString())
+        .neq('status', 'cancelled');
+      (data90 || []).forEach(o => {
+        const lines = Array.isArray(o.items) ? o.items : [];
+        lines.forEach(it => {
+          let id = it?.id || it?.menu_item_id || null;
+          if (!id) {
+            const byName = (it?.name || '').trim().toLowerCase();
+            id = nameIndexRef.current.get(byName) || null;
+          }
+          if (!id) return;
+          counts.set(id, (counts.get(id) || 0) + Number(it.quantity || 1));
+        });
+      });
+    }
+
+    setPopCounts(counts);
+  })();
+}, [restaurantId, supabase, menuItems]);
+
+
+
 
   const loadCreditCustomers = async () => {
     const { data, error: err } = await supabase
@@ -379,13 +453,31 @@ export default function CounterSale() {
   };
 
   const filteredItems = useMemo(() => {
-    const q = searchQuery.toLowerCase();
-    return menuItems.filter((item) => {
-      if (filterMode === 'veg' && !item.veg) return false;
-      if (filterMode === 'popular' && !item.popular) return false;
-      return !q || item.name.toLowerCase().includes(q) || (item.code_number || '').toLowerCase().includes(q);
+  const q = searchQuery.toLowerCase();
+  // Base filter: search + veg
+  let base = menuItems.filter((item) => {
+    if (filterMode === 'veg' && !item.veg) return false;
+    const hit = !q || item.name.toLowerCase().includes(q) || (item.code_number || '').toLowerCase().includes(q);
+    return hit;
+  });
+
+  if (filterMode === 'popular') {
+    // Sort desc by sold qty, then by name to stabilize
+    base = [...base].sort((a, b) => {
+      const sb = popCounts.get(b.id) || 0;
+      const sa = popCounts.get(a.id) || 0;
+      if (sb !== sa) return sb - sa;
+      return a.name.localeCompare(b.name);
     });
-  }, [menuItems, filterMode, searchQuery]);
+  } else {
+    // Keep your existing category/name ordering when not Popular
+    base = [...base];
+  }
+  return base;
+}, [menuItems, filterMode, searchQuery, popCounts]);
+
+
+
 
   const groupedItems = useMemo(
     () =>
@@ -670,10 +762,34 @@ export default function CounterSale() {
       <div className="counter-search-bar">
         <input type="text" placeholder="Search by name, code, or description..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="input" />
         <div className="counter-filters actions-bar">
-          {[{ id: 'all', label: 'All Items' }, { id: 'veg', label: '🟢 Veg' }, { id: 'popular', label: '🔥 Popular' }].map((m) => (
-            <button key={m.id} onClick={() => setFilterMode(m.id)} className={`btn chip ${filterMode === m.id ? 'chip--active' : ''}`}>{m.label}</button>
-          ))}
-        </div>
+  {[
+    { id: 'all', label: 'All', icon: '🍽️' },
+    { id: 'veg', label: 'Veg', icon: '🥬' },
+    { id: 'popular', label: 'Popular', icon: '🔥' },
+  ].map((m) => {
+    const active = filterMode === m.id;
+    return (
+      <button
+        key={m.id}
+        onClick={() => setFilterMode(m.id)}
+        style={{
+          padding:'8px 14px',
+          borderRadius:999,
+          border: active ? 'none' : '1px solid #e5e7eb',
+          background: active ? '#f97316' : '#fff',
+          color: active ? '#fff' : '#111827',
+          fontWeight:600,
+          display:'inline-flex',
+          alignItems:'center',
+          gap:8
+        }}
+      >
+        <span aria-hidden>{m.icon}</span>{m.label}
+      </button>
+    );
+  })}
+</div>
+
       </div>
 
       <main className="counter-main-mobile-like">
