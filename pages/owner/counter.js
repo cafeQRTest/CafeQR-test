@@ -10,45 +10,49 @@ import KotPrint from '../../components/KotPrint';
 // -------------------------------
 // Inline Payment Confirm Dialog
 // -------------------------------
-function PaymentConfirmDialog({ amount, onConfirm, onCancel }) {
+function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false }) {
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [showMixedForm, setShowMixedForm] = useState(false);
   const [cashAmount, setCashAmount] = useState('');
   const [onlineAmount, setOnlineAmount] = useState('');
   const [onlineMethod, setOnlineMethod] = useState('upi');
+  const [submitting, setSubmitting] = useState(false);
 
   const total = Number(amount || 0);
+  const disabled = busy || submitting;
 
   const handleMethodSelect = (method) => {
+    if (disabled) return;
     setPaymentMethod(method);
     setShowMixedForm(method === 'mixed');
-    if (method !== 'mixed') {
-      setCashAmount('');
-      setOnlineAmount('');
-    }
+    if (method !== 'mixed') { setCashAmount(''); setOnlineAmount(''); }
   };
 
   const validateMixed = () => {
     const cash = Number(cashAmount || 0);
     const online = Number(onlineAmount || 0);
     if (cash <= 0 || online <= 0) { alert('Both cash and online must be > 0'); return false; }
-    if (Math.abs((cash + online) - total) > 0.01) {
-      alert(`Split must equal ₹${total.toFixed(2)}`); return false;
-    }
+    if (Math.abs((cash + online) - total) > 0.01) { alert(`Split must equal ₹${total.toFixed(2)}`); return false; }
     return true;
   };
 
-  const handleConfirm = () => {
-    if (paymentMethod === 'mixed') {
-      if (!validateMixed()) return;
-      onConfirm('mixed', {
-        cash_amount: Number(cashAmount).toFixed(2),
-        online_amount: Number(onlineAmount).toFixed(2),
-        online_method: onlineMethod,
-        is_mixed: true
-      });
-    } else {
-      onConfirm(paymentMethod, null);
+  const handleConfirm = async () => {
+    if (disabled) return;
+    try {
+      setSubmitting(true);
+      if (paymentMethod === 'mixed') {
+        if (!validateMixed()) { setSubmitting(false); return; }
+        await onConfirm('mixed', {
+          cash_amount: Number(cashAmount).toFixed(2),
+          online_amount: Number(onlineAmount).toFixed(2),
+          online_method: onlineMethod,
+          is_mixed: true
+        });
+      } else {
+        await onConfirm(paymentMethod, null);
+      }
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -57,7 +61,6 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel }) {
       <div style={{background:'#fff',padding:20,borderRadius:8,maxWidth:460,width:'92%',maxHeight:'90vh',overflowY:'auto'}}>
         <h3 style={{margin:'0 0 10px'}}>Payment Confirmation</h3>
         <p><strong>Amount: ₹{total.toFixed(2)}</strong></p>
-
         <div style={{display:'flex',flexDirection:'column',gap:10,margin:'12px 0'}}>
           <label style={{display:'flex',gap:10,alignItems:'center',padding:10,border:paymentMethod==='cash'?'2px solid #2563eb':'1px solid #e5e7eb',borderRadius:6,cursor:'pointer',background:paymentMethod==='cash'?'#eff6ff':'#fff'}}>
             <input type="radio" value="cash" checked={paymentMethod==='cash'} onChange={(e)=>handleMethodSelect(e.target.value)} />
@@ -103,8 +106,20 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel }) {
         )}
 
         <div style={{display:'flex',gap:10,marginTop:10}}>
-          <button onClick={handleConfirm} style={{flex:1,background:'#10b981',color:'#fff',border:'none',padding:10,borderRadius:6,cursor:'pointer'}}>Confirm</button>
-          <button onClick={onCancel} style={{flex:1,background:'#fff',border:'1px solid #d1d5db',padding:10,borderRadius:6,cursor:'pointer'}}>Cancel</button>
+          <button
+            onClick={handleConfirm}
+            disabled={disabled}
+            style={{flex:1,background: disabled ? '#6ee7b7' : '#10b981',opacity: disabled ? 0.7 : 1,color:'#fff',border:'none',padding:10,borderRadius:6,cursor: disabled ? 'not-allowed' : 'pointer'}}
+          >
+            {disabled ? 'Processing…' : 'Confirm'}
+          </button>
+          <button
+            onClick={onCancel}
+            disabled={disabled}
+            style={{flex:1,background:'#fff',border:'1px solid #d1d5db',padding:10,borderRadius:6,cursor: disabled ? 'not-allowed' : 'pointer',opacity: disabled ? 0.7 : 1}}
+          >
+            Cancel
+          </button>
         </div>
       </div>
     </div>
@@ -767,17 +782,20 @@ export default function CounterSale() {
 
       {/* Payment dialog (non-credit, settle now) */}
       {showPaymentDialog && orderMode === 'settle' && !isCreditSale && (
-        <PaymentConfirmDialog
-          amount={cartTotals.totalInc}
-          onConfirm={async (method, details) => {
-            setProcessing(true);
-            try { await doCreateAndFinalizeOrder(method, details); }
-            catch (e) { setError('Error completing sale: ' + e.message); setTimeout(() => setError(''), 3000); }
-            finally { setProcessing(false); }
-          }}
-          onCancel={() => setShowPaymentDialog(false)}
-        />
-      )}
+  <PaymentConfirmDialog
+    amount={cartTotals.totalInc}
+    busy={processing}
+    onConfirm={async (method, details) => {
+      if (processing) return; // extra guard
+      setProcessing(true);
+      try { await doCreateAndFinalizeOrder(method, details); }
+      catch (e) { setError('Error completing sale: ' + e.message); setTimeout(() => setError(''), 3000); }
+      finally { setProcessing(false); }
+    }}
+    onCancel={() => setShowPaymentDialog(false)}
+  />
+)}
+
 
       {/* KOT print modal */}
       {printOrder && (
