@@ -5,7 +5,9 @@ import { useRequireAuth } from '../../lib/useRequireAuth'
 import { useRestaurant } from '../../context/RestaurantContext'
 import Alert from '../../components/Alert'
 import Button from '../../components/ui/Button'
-import { getSupabase } from '../../services/supabase'; // 1. IMPORT ADDED
+import { getSupabase } from '../../services/supabase'
+import IngredientsDisplay from '../../components/IngredientsDisplay'
+import styled from 'styled-components'
 
 export default function InventoryPage() {
   // 2. & 3. APPLY SINGLETON PATTERN
@@ -24,6 +26,9 @@ export default function InventoryPage() {
   const [ingredientForm, setIngredientForm] = useState({ name: '', unit: '', current_stock: 0, reorder_threshold: 0 })
   const [recipeForm, setRecipeForm] = useState({ menuItemId: '', items: [] })
   const [showRecipeEditor, setShowRecipeEditor] = useState(false)
+  const [showIngredientsFor, setShowIngredientsFor] = useState(null)
+  const [activeTab, setActiveTab] = useState('ingredients') // 'ingredients' or 'recipes'
+  const [ingredientDialog, setIngredientDialog] = useState(null) // null, 'add', or ingredient id for edit
 
   useEffect(() => {
     if (checking || restLoading || !restaurantId || !supabase) return
@@ -31,7 +36,7 @@ export default function InventoryPage() {
     Promise.all([
       supabase.from('ingredients').select('*').eq('restaurant_id', restaurantId),
       supabase.from('recipes').select('id,menu_item_id,recipe_items(*,ingredients(name))').eq('restaurant_id', restaurantId),
-      supabase.from('menu_items').select('id,name').eq('restaurant_id', restaurantId)
+      supabase.from('menu_items').select('id,name,is_packaged_good').eq('restaurant_id', restaurantId).eq('is_packaged_good', false)
     ]).then(([ingRes, recRes, menuRes]) => {
       if (ingRes.error || recRes.error || menuRes.error) {
         setError(ingRes.error?.message || recRes.error?.message || menuRes.error?.message)
@@ -175,106 +180,223 @@ export default function InventoryPage() {
     }
   }
 
-  if (checking || restLoading) return <div style={{ padding: 16 }}>Loading…</div>
-  if (!restaurantId) return <div style={{ padding: 16 }}>No restaurant found.</div>
+  if (checking || restLoading) return <LoadingContainer>Loading…</LoadingContainer>
+  if (!restaurantId) return <LoadingContainer>No restaurant found.</LoadingContainer>
 
   return (
-    <div className="inventory-page">
-      <h1>Inventory Management</h1>
-      {error && <Alert type="error">{error}</Alert>}
+    <Container>
+      <Header>
+        <Title>📦 Inventory Management</Title>
+        <Subtitle>Manage ingredients and recipes for your menu items</Subtitle>
+      </Header>
 
-      <section>
-        <h2>Ingredients</h2>
-        <div className="form-row">
-          <input
-            placeholder="Name"
-            value={ingredientForm.name}
-            onChange={(e) => setIngredientForm({ ...ingredientForm, name: e.target.value })}
-            style={{ fontSize: 16 }}
-          />
-          <input
-            placeholder="Unit"
-            value={ingredientForm.unit}
-            onChange={(e) => setIngredientForm({ ...ingredientForm, unit: e.target.value })}
-            style={{ fontSize: 16 }}
-          />
-          <input
-            type="number"
-            placeholder="Stock"
-            value={ingredientForm.current_stock}
-            onChange={(e) => setIngredientForm({ ...ingredientForm, current_stock: e.target.value })}
-            style={{ fontSize: 16 }}
-          />
-          <input
-            type="number"
-            placeholder="Reorder @"
-            value={ingredientForm.reorder_threshold}
-            onChange={(e) => setIngredientForm({ ...ingredientForm, reorder_threshold: e.target.value })}
-            style={{ fontSize: 16 }}
-          />
-          <Button onClick={saveIngredient}>{editingIngredient ? 'Update' : 'Add'} Ingredient</Button>
-          {editingIngredient && <Button onClick={() => resetForm()}>Cancel</Button>}
-        </div>
-        {loading ? (
-          <div>Loading ingredients…</div>
-        ) : (
-          <div className="table-wrap">
-            <table className="inventory-table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Unit</th>
-                  <th>Stock</th>
-                  <th>Reorder Threshold</th>
-                  <th>Low Stock</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ingredients.map((ing) => (
-                  <tr key={ing.id} className={ing.low_stock ? 'low-stock' : ''}>
-                    <td>{ing.name}</td>
-                    <td>{ing.unit}</td>
-                    <td>{ing.current_stock}</td>
-                    <td>{ing.reorder_threshold}</td>
-                    <td>{ing.low_stock ? '⚠️' : ''}</td>
-                    <td className="actions">
-                      <button onClick={() => startEdit(ing)}>Edit</button>
-                      <button onClick={() => deleteIngredient(ing.id)}>Delete</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+      {error && <ErrorAlert>{error}</ErrorAlert>}
 
-      <section>
-        <h2>Recipes</h2>
-        <div className="recipes-list">
-          {menuItems.map((menuItem) => {
-            const recipe = recipes.find((r) => r.menu_item_id === menuItem.id)
-            return (
-              <div key={menuItem.id} className="recipe-card">
-                <strong style={{ overflowWrap: 'anywhere' }}>{menuItem.name}</strong>
-                <div className="muted" style={{ margin: '6px 0' }}>
-                  {recipe?.recipe_items?.length ? (
-                    recipe.recipe_items.map((ri) => (
-                      <div key={`${ri.ingredient_id}-${ri.quantity}`}>
-                        {ri.quantity} × {ri.ingredients?.name || '–'}
-                      </div>
-                    ))
-                  ) : (
-                    <em>No recipe</em>
-                  )}
-                </div>
-                <Button onClick={() => openRecipe(recipe)}>Edit Recipe</Button>
-              </div>
-            )
-          })}
-        </div>
-      </section>
+      <TabContainer>
+        <Tab 
+          active={activeTab === 'ingredients'} 
+          onClick={() => setActiveTab('ingredients')}
+        >
+          🧂 Ingredients
+        </Tab>
+        <Tab 
+          active={activeTab === 'recipes'} 
+          onClick={() => setActiveTab('recipes')}
+        >
+          🍳 Recipes
+        </Tab>
+      </TabContainer>
+
+      {activeTab === 'ingredients' && (
+        <Section>
+          <SectionHeader>
+            <SectionTitle>Ingredients Inventory</SectionTitle>
+            <AddButton onClick={() => setIngredientDialog('add')}>
+              + Add Ingredient
+            </AddButton>
+          </SectionHeader>
+
+          {loading ? (
+            <LoadingContainer>Loading ingredients…</LoadingContainer>
+          ) : ingredients.length === 0 ? (
+            <EmptyState>No ingredients yet. Add your first ingredient!</EmptyState>
+          ) : (
+            <IngredientGrid>
+              {ingredients.map((ing) => (
+                <IngredientCard key={ing.id} lowStock={ing.low_stock}>
+                  <CardHeader>
+                    <CardTitle>{ing.name}</CardTitle>
+                    {ing.low_stock && <LowStockBadge>⚠️ Low Stock</LowStockBadge>}
+                  </CardHeader>
+                  
+                  <CardInfo>
+                    <InfoRow>
+                      <Label>Unit:</Label>
+                      <Value>{ing.unit}</Value>
+                    </InfoRow>
+                    <InfoRow>
+                      <Label>Current Stock:</Label>
+                      <StockValue>{ing.current_stock}</StockValue>
+                    </InfoRow>
+                    <InfoRow>
+                      <Label>Reorder Threshold:</Label>
+                      <Value>{ing.reorder_threshold}</Value>
+                    </InfoRow>
+                  </CardInfo>
+
+                  <CardActions>
+                    <ActionButton edit onClick={() => {
+                      startEdit(ing)
+                      setIngredientDialog(ing.id)
+                    }}>
+                      ✎ Edit
+                    </ActionButton>
+                    <ActionButton delete onClick={() => deleteIngredient(ing.id)}>
+                      🗑️ Delete
+                    </ActionButton>
+                  </CardActions>
+                </IngredientCard>
+              ))}
+            </IngredientGrid>
+          )}
+        </Section>
+      )}
+
+      {activeTab === 'recipes' && (
+        <Section>
+          <SectionHeader>
+            <SectionTitle>Menu Item Recipes</SectionTitle>
+          </SectionHeader>
+
+          {loading ? (
+            <LoadingContainer>Loading recipes…</LoadingContainer>
+          ) : menuItems.length === 0 ? (
+            <EmptyState>No menu items found.</EmptyState>
+          ) : (
+            <RecipesGrid>
+              {menuItems.filter(mi => !mi.is_packaged_good).map((menuItem) => {
+                const recipe = recipes.find((r) => r.menu_item_id === menuItem.id)
+                return (
+                  <RecipeCard key={menuItem.id}>
+                    <RecipeCardHeader>
+                      <RecipeTitle>{menuItem.name}</RecipeTitle>
+                    </RecipeCardHeader>
+                    
+                    <RecipeContent>
+                      {recipe?.recipe_items?.length ? (
+                        <IngredientsList>
+                          {recipe.recipe_items.map((ri) => (
+                            <IngredientItem key={`${ri.ingredient_id}-${ri.quantity}`}>
+                              <span>{ri.quantity}×</span>
+                              <span>{ri.ingredients?.name || '–'}</span>
+                              <span className="unit">({ri.ingredients?.unit})</span>
+                            </IngredientItem>
+                          ))}
+                        </IngredientsList>
+                      ) : (
+                        <NoRecipe>No ingredients assigned yet</NoRecipe>
+                      )}
+                    </RecipeContent>
+
+                    <RecipeActions>
+                      <RecipeButton onClick={() => openRecipe(recipe)}>
+                        ✎ Edit Recipe
+                      </RecipeButton>
+                      <IngredientsShowButton 
+                        onClick={() => setShowIngredientsFor(
+                          showIngredientsFor === menuItem.id ? null : menuItem.id
+                        )}
+                      >
+                        {showIngredientsFor === menuItem.id ? '👁️ Hide' : '👁️ View'} Stock
+                      </IngredientsShowButton>
+                    </RecipeActions>
+
+                    {showIngredientsFor === menuItem.id && (
+                      <IngredientsDisplayWrapper>
+                        <IngredientsDisplay
+                          menuItemId={menuItem.id}
+                          restaurantId={restaurantId}
+                          onClose={() => setShowIngredientsFor(null)}
+                        />
+                      </IngredientsDisplayWrapper>
+                    )}
+                  </RecipeCard>
+                )
+              })}
+            </RecipesGrid>
+          )}
+        </Section>
+      )}
+
+
+      {ingredientDialog && (
+        <IngredientModalOverlay onClick={() => setIngredientDialog(null)}>
+          <IngredientModal onClick={(e) => e.stopPropagation()}>
+            <ModalHeader>
+              <ModalTitle>{editingIngredient ? 'Edit Ingredient' : 'Add New Ingredient'}</ModalTitle>
+              <CloseButton onClick={() => {
+                setIngredientDialog(null)
+                resetForm()
+              }}>✕</CloseButton>
+            </ModalHeader>
+            
+            <ModalBody>
+              <FormGroup>
+                <FormLabel>Ingredient Name *</FormLabel>
+                <FormInput
+                  placeholder="e.g., Tomato, Cheese, Oil..."
+                  value={ingredientForm.name}
+                  onChange={(e) => setIngredientForm({ ...ingredientForm, name: e.target.value })}
+                />
+              </FormGroup>
+
+              <FormGroup>
+                <FormLabel>Unit of Measurement *</FormLabel>
+                <FormInput
+                  placeholder="e.g., kg, L, pcs, g..."
+                  value={ingredientForm.unit}
+                  onChange={(e) => setIngredientForm({ ...ingredientForm, unit: e.target.value })}
+                />
+              </FormGroup>
+
+              <FormGroup>
+                <FormLabel>Current Stock *</FormLabel>
+                <FormInput
+                  type="number"
+                  placeholder="0"
+                  value={ingredientForm.current_stock}
+                  onChange={(e) => setIngredientForm({ ...ingredientForm, current_stock: e.target.value })}
+                />
+              </FormGroup>
+
+              <FormGroup>
+                <FormLabel>Reorder Threshold *</FormLabel>
+                <FormInput
+                  type="number"
+                  placeholder="Alert when stock drops below this"
+                  value={ingredientForm.reorder_threshold}
+                  onChange={(e) => setIngredientForm({ ...ingredientForm, reorder_threshold: e.target.value })}
+                />
+              </FormGroup>
+            </ModalBody>
+
+            <ModalFooter>
+              <CancelButton onClick={() => {
+                setIngredientDialog(null)
+                resetForm()
+              }}>
+                Cancel
+              </CancelButton>
+              <SaveButton onClick={() => {
+                saveIngredient()
+                setIngredientDialog(null)
+              }}>
+                {editingIngredient ? 'Update' : 'Add'} Ingredient
+              </SaveButton>
+            </ModalFooter>
+          </IngredientModal>
+        </IngredientModalOverlay>
+      )}
 
       {showRecipeEditor && (
         <div
@@ -325,85 +447,460 @@ export default function InventoryPage() {
         </div>
       )}
 
-      <style jsx>{`
-        .inventory-page {
-          max-width: 1200px;
-          margin: 0 auto;
-          padding: 16px;
-        }
-        section {
-          margin-bottom: 24px;
-        }
-        .form-row {
-          display: flex;
-          gap: 8px;
-          flex-wrap: wrap;
-          margin-bottom: 12px;
-        }
-        input,
-        select {
-          padding: 8px;
-          border: 1px solid #ccc;
-          border-radius: 6px;
-          font-size: 16px;
-        }
-        .table-wrap {
-          overflow-x: auto;
-          -webkit-overflow-scrolling: touch;
-        }
-        .inventory-table {
-          width: 100%;
-          border-collapse: collapse;
-          background: #fff;
-        }
-        .inventory-table th,
-        .inventory-table td {
-          border: 1px solid #ddd;
-          padding: 8px;
-        }
-        .low-stock {
-          background-color: #fffbe6;
-        }
-        .actions button {
-          margin-right: 8px;
-        }
-        .recipes-list {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-          gap: 16px;
-        }
-        .recipe-card {
-          border: 1px solid #ddd;
-          border-radius: 8px;
-          padding: 12px;
-          background: #fff;
-        }
-        .modal {
-          position: fixed;
-          inset: 0;
-          background: rgba(0, 0, 0, 0.5);
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          padding: 1rem;
-        }
-        .modal-content {
-          background: #fff;
-          padding: 1rem;
-          max-width: 500px;
-          width: 100%;
-          border-radius: 8px;
-          max-height: 90vh;
-          overflow-y: auto;
-        }
-        .modal-actions {
-          display: flex;
-          justify-content: flex-end;
-          gap: 0.5rem;
-          margin-top: 1rem;
-        }
-        .muted { color: #6b7280; font-size: 14px; }
-      `}</style>
-    </div>
+    </Container>
   )
 }
+
+/* ============ STYLED COMPONENTS ============ */
+
+const Container = styled.div`
+  background: #f9fafb;
+  min-height: 100vh;
+  padding: 2rem;
+  max-width: 1400px;
+  margin: 0 auto;
+`
+
+const Header = styled.div`
+  margin-bottom: 2rem;
+`
+
+const Title = styled.h1`
+  font-size: 2rem;
+  font-weight: 700;
+  color: #111827;
+  margin: 0 0 0.5rem 0;
+`
+
+const Subtitle = styled.p`
+  color: #6b7280;
+  font-size: 1rem;
+  margin: 0;
+`
+
+const ErrorAlert = styled.div`
+  background: #fee2e2;
+  color: #991b1b;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+  border-left: 4px solid #dc2626;
+`
+
+const TabContainer = styled.div`
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  border-bottom: 2px solid #e5e7eb;
+`
+
+const Tab = styled.button`
+  padding: 1rem 1.5rem;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 600;
+  color: ${props => props.active ? '#3b82f6' : '#6b7280'};
+  border-bottom: 3px solid ${props => props.active ? '#3b82f6' : 'transparent'};
+  transition: all 0.2s;
+  margin-bottom: -2px;
+
+  &:hover {
+    color: #3b82f6;
+  }
+`
+
+const Section = styled.div`
+  background: #fff;
+  border-radius: 12px;
+  padding: 2rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+`
+
+const SectionHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+
+  @media (max-width: 768px) {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+`
+
+const SectionTitle = styled.h2`
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #111827;
+  margin: 0;
+`
+
+const AddButton = styled.button`
+  background: #10b981;
+  color: #fff;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+
+  &:hover {
+    background: #059669;
+  }
+`
+
+const LoadingContainer = styled.div`
+  text-align: center;
+  padding: 3rem 2rem;
+  color: #6b7280;
+  font-size: 1rem;
+`
+
+const EmptyState = styled.div`
+  text-align: center;
+  padding: 3rem 2rem;
+  color: #9ca3af;
+  font-size: 1.1rem;
+`
+
+const IngredientGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1.5rem;
+`
+
+const IngredientCard = styled.div`
+  background: ${props => props.lowStock ? '#fef3c7' : '#f3f4f6'};
+  border: 2px solid ${props => props.lowStock ? '#fcd34d' : '#e5e7eb'};
+  border-radius: 10px;
+  padding: 1.5rem;
+  transition: all 0.2s;
+
+  &:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    border-color: #3b82f6;
+  }
+`
+
+const CardHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+`
+
+const CardTitle = styled.h3`
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #111827;
+  margin: 0;
+`
+
+const LowStockBadge = styled.span`
+  background: #fcd34d;
+  color: #78350f;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  font-weight: 600;
+`
+
+const CardInfo = styled.div`
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+`
+
+const InfoRow = styled.div`
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+  font-size: 0.95rem;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+`
+
+const Label = styled.span`
+  color: #6b7280;
+  font-weight: 500;
+`
+
+const Value = styled.span`
+  color: #111827;
+  font-weight: 600;
+`
+
+const StockValue = styled.span`
+  color: #059669;
+  font-weight: 700;
+`
+
+const CardActions = styled.div`
+  display: flex;
+  gap: 0.5rem;
+`
+
+const ActionButton = styled.button`
+  flex: 1;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  background: ${props => props.edit ? '#3b82f6' : '#ef4444'};
+  color: #fff;
+
+  &:hover {
+    background: ${props => props.edit ? '#2563eb' : '#dc2626'};
+    transform: translateY(-1px);
+  }
+`
+
+const RecipesGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 1.5rem;
+`
+
+const RecipeCard = styled.div`
+  background: #f3f4f6;
+  border: 2px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 1.5rem;
+  transition: all 0.2s;
+
+  &:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    border-color: #8b5cf6;
+  }
+`
+
+const RecipeCardHeader = styled.div`
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid #e5e7eb;
+`
+
+const RecipeTitle = styled.h3`
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #111827;
+  margin: 0;
+  word-break: break-word;
+`
+
+const RecipeContent = styled.div`
+  background: #fff;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  min-height: 80px;
+  display: flex;
+  align-items: center;
+`
+
+const IngredientsList = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+`
+
+const IngredientItem = styled.div`
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  font-size: 0.95rem;
+  color: #374151;
+
+  span:first-child {
+    font-weight: 700;
+    color: #3b82f6;
+  }
+
+  .unit {
+    color: #9ca3af;
+    font-size: 0.85rem;
+  }
+`
+
+const NoRecipe = styled.div`
+  color: #9ca3af;
+  text-align: center;
+  font-style: italic;
+`
+
+const RecipeActions = styled.div`
+  display: flex;
+  gap: 0.5rem;
+`
+
+const RecipeButton = styled.button`
+  flex: 1;
+  padding: 0.75rem;
+  background: #8b5cf6;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+
+  &:hover {
+    background: #7c3aed;
+  }
+`
+
+const IngredientsShowButton = styled.button`
+  flex: 1;
+  padding: 0.75rem;
+  background: #06b6d4;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+
+  &:hover {
+    background: #0891b2;
+  }
+`
+
+const IngredientsDisplayWrapper = styled.div`
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 2px solid #e5e7eb;
+`
+
+/* ============ INGREDIENT MODAL ============ */
+
+const IngredientModalOverlay = styled.div`
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 1rem;
+  z-index: 1000;
+`
+
+const IngredientModal = styled.div`
+  background: #fff;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+`
+
+const ModalHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem;
+  border-bottom: 2px solid #f3f4f6;
+`
+
+const ModalTitle = styled.h3`
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #111827;
+  margin: 0;
+`
+
+const CloseButton = styled.button`
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: #6b7280;
+  padding: 0;
+  transition: color 0.2s;
+
+  &:hover {
+    color: #111827;
+  }
+`
+
+const ModalBody = styled.div`
+  padding: 1.5rem;
+`
+
+const FormGroup = styled.div`
+  margin-bottom: 1.5rem;
+`
+
+const FormLabel = styled.label`
+  display: block;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 0.5rem;
+`
+
+const FormInput = styled.input`
+  width: 100%;
+  padding: 0.75rem;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 1rem;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+
+  &:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  }
+`
+
+const ModalFooter = styled.div`
+  display: flex;
+  gap: 1rem;
+  padding: 1.5rem;
+  border-top: 2px solid #f3f4f6;
+  justify-content: flex-end;
+`
+
+const CancelButton = styled.button`
+  padding: 0.75rem 1.5rem;
+  background: #e5e7eb;
+  color: #374151;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+
+  &:hover {
+    background: #d1d5db;
+  }
+`
+
+const SaveButton = styled.button`
+  padding: 0.75rem 1.5rem;
+  background: #10b981;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+
+  &:hover {
+    background: #059669;
+  }
+`
