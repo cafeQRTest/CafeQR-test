@@ -11,15 +11,20 @@ import KotPrint from '../../components/KotPrint';
 // Inline Payment Confirm Dialog
 // -------------------------------
 function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false }) {
+  const BRAND = { orange: '#f97316', orangeDark: '#ea580c', bgSoft: '#fff7ed', border: '#e5e7eb', text: '#111827' };
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [showMixedForm, setShowMixedForm] = useState(false);
   const [cashAmount, setCashAmount] = useState('');
   const [onlineAmount, setOnlineAmount] = useState('');
   const [onlineMethod, setOnlineMethod] = useState('upi');
   const [submitting, setSubmitting] = useState(false);
-
   const total = Number(amount || 0);
   const disabled = busy || submitting;
+
+  const choiceBox = (active) => ({
+    display: 'flex', gap: 10, alignItems: 'center', padding: 12, borderRadius: 8, cursor: disabled ? 'not-allowed' : 'pointer',
+    border: `2px solid ${active ? BRAND.orange : BRAND.border}`, background: active ? BRAND.bgSoft : '#fff', color: BRAND.text
+  });
 
   const handleMethodSelect = (method) => {
     if (disabled) return;
@@ -51,54 +56,45 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false }) {
       } else {
         await onConfirm(paymentMethod, null);
       }
-    } finally {
-      setSubmitting(false);
-    }
+    } finally { setSubmitting(false); }
   };
 
   return (
-    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000}}>
-      <div style={{background:'#fff',padding:20,borderRadius:8,maxWidth:460,width:'92%',maxHeight:'90vh',overflowY:'auto'}}>
-        <h3 style={{margin:'0 0 10px'}}>Payment Confirmation</h3>
-        <p><strong>Amount: ₹{total.toFixed(2)}</strong></p>
-        <div style={{display:'flex',flexDirection:'column',gap:10,margin:'12px 0'}}>
-          <label style={{display:'flex',gap:10,alignItems:'center',padding:10,border:paymentMethod==='cash'?'2px solid #2563eb':'1px solid #e5e7eb',borderRadius:6,cursor:'pointer',background:paymentMethod==='cash'?'#eff6ff':'#fff'}}>
-            <input type="radio" value="cash" checked={paymentMethod==='cash'} onChange={(e)=>handleMethodSelect(e.target.value)} />
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000}}>
+      <div style={{background:'#fff',padding:20,borderRadius:12,maxWidth:480,width:'92%',maxHeight:'90vh',overflowY:'auto',boxShadow:'0 20px 50px rgba(0,0,0,.25)'}}>
+        <h3 style={{margin:'0 0 6px',color:'#111827'}}>Payment Confirmation</h3>
+        <p style={{margin:'0 0 12px',color:'#111827'}}>Amount: ₹{total.toFixed(2)}</p>
+
+        <div style={{display:'grid',gap:10,margin:'12px 0'}}>
+          <label style={choiceBox(paymentMethod==='cash')}>
+            <input type="radio" value="cash" checked={paymentMethod==='cash'} onChange={(e)=>handleMethodSelect(e.target.value)} disabled={disabled}/>
             <span>💵 Cash</span>
           </label>
-
-          <label style={{display:'flex',gap:10,alignItems:'center',padding:10,border:paymentMethod==='online'?'2px solid #2563eb':'1px solid #e5e7eb',borderRadius:6,cursor:'pointer',background:paymentMethod==='online'?'#eff6ff':'#fff'}}>
-            <input type="radio" value="online" checked={paymentMethod==='online'} onChange={(e)=>handleMethodSelect(e.target.value)} />
+          <label style={choiceBox(paymentMethod==='online')}>
+            <input type="radio" value="online" checked={paymentMethod==='online'} onChange={(e)=>handleMethodSelect(e.target.value)} disabled={disabled}/>
             <span>🔗 Online (UPI/Card)</span>
           </label>
-
-          <label style={{display:'flex',gap:10,alignItems:'center',padding:10,border:paymentMethod==='mixed'?'2px solid #2563eb':'1px solid #e5e7eb',borderRadius:6,cursor:'pointer',background:paymentMethod==='mixed'?'#eff6ff':'#fff'}}>
-            <input type="radio" value="mixed" checked={paymentMethod==='mixed'} onChange={(e)=>handleMethodSelect(e.target.value)} />
+          <label style={choiceBox(paymentMethod==='mixed')}>
+            <input type="radio" value="mixed" checked={paymentMethod==='mixed'} onChange={(e)=>handleMethodSelect(e.target.value)} disabled={disabled}/>
             <span>🔀 Mixed (Cash + Online)</span>
           </label>
         </div>
 
         {showMixedForm && (
-          <div style={{background:'#f9fafb',border:'1px solid #e5e7eb',borderRadius:8,padding:12,marginBottom:10}}>
+          <div style={{background:'#fff',border:`1px solid ${BRAND.border}`,borderRadius:10,padding:12,marginBottom:10}}>
             <div style={{display:'grid',gap:10}}>
-              <div>
-                <label>Cash Amount (₹)</label>
-                <input type="number" min="0" step="0.01" value={cashAmount} onChange={(e)=>setCashAmount(e.target.value)} style={{width:'100%'}} />
+              <div><label>Cash Amount (₹)</label>
+                <input type="number" min="0" step="0.01" value={cashAmount} onChange={(e)=>setCashAmount(e.target.value)} style={{width:'100%'}} disabled={disabled}/>
               </div>
-              <div>
-                <label>Online Amount (₹)</label>
-                <input type="number" min="0" step="0.01" value={onlineAmount} onChange={(e)=>setOnlineAmount(e.target.value)} style={{width:'100%'}} />
+              <div><label>Online Amount (₹)</label>
+                <input type="number" min="0" step="0.01" value={onlineAmount} onChange={(e)=>setOnlineAmount(e.target.value)} style={{width:'100%'}} disabled={disabled}/>
               </div>
-              <div>
-                <label>Online Method</label>
-                <select value={onlineMethod} onChange={(e)=>setOnlineMethod(e.target.value)} style={{width:'100%'}}>
-                  <option value="upi">UPI</option>
-                  <option value="card">Card</option>
-                  <option value="netbanking">Net Banking</option>
-                  <option value="wallet">Wallet</option>
+              <div><label>Online Method</label>
+                <select value={onlineMethod} onChange={(e)=>setOnlineMethod(e.target.value)} style={{width:'100%'}} disabled={disabled}>
+                  <option value="upi">UPI</option><option value="card">Card</option><option value="netbanking">Net Banking</option><option value="wallet">Wallet</option>
                 </select>
               </div>
-              <div style={{background:'#eff6ff',padding:8,borderLeft:'4px solid #2563eb',borderRadius:4}}>
+              <div style={{background:BRAND.bgSoft,padding:8,borderLeft:`4px solid ${BRAND.orange}`,borderRadius:6,color:BRAND.text}}>
                 Total ₹{total.toFixed(2)} → ₹{cashAmount||0} + ₹{onlineAmount||0} ({onlineMethod.toUpperCase()})
               </div>
             </div>
@@ -109,14 +105,18 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false }) {
           <button
             onClick={handleConfirm}
             disabled={disabled}
-            style={{flex:1,background: disabled ? '#6ee7b7' : '#10b981',opacity: disabled ? 0.7 : 1,color:'#fff',border:'none',padding:10,borderRadius:6,cursor: disabled ? 'not-allowed' : 'pointer'}}
+            style={{
+              flex:1, background: disabled ? '#fdba74' : BRAND.orange, color:'#fff', border:'none', padding:12, borderRadius:10,
+              cursor: disabled ? 'not-allowed' : 'pointer', fontWeight:700
+            }}
           >
             {disabled ? 'Processing…' : 'Confirm'}
           </button>
           <button
             onClick={onCancel}
             disabled={disabled}
-            style={{flex:1,background:'#fff',border:'1px solid #d1d5db',padding:10,borderRadius:6,cursor: disabled ? 'not-allowed' : 'pointer',opacity: disabled ? 0.7 : 1}}
+            style={{ flex:1, background:'#fff', color:BRAND.text, border:`1px solid ${BRAND.border}`, padding:12, borderRadius:10,
+              cursor: disabled ? 'not-allowed' : 'pointer' }}
           >
             Cancel
           </button>
@@ -654,19 +654,15 @@ export default function CounterSale() {
             </>
           ) : (
             <>
-              <input type="text" placeholder="Customer name (optional)" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="input" />
-              <input type="tel" placeholder="Phone (optional)" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} className="input" />
-              <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className="select">
-                <option value="cash">Cash</option>
-                <option value="upi">UPI</option>
-                <option value="card">Card</option>
-              </select>
-              <select value={orderSelect} onChange={(e) => setOrderSelect(e.target.value)} className="select">
-                <option value="">Select Type...</option>
-                <option value="parcel">Parcel</option>
-                {tables.map((n) => (<option key={n} value={`table:${n}`}>{`Table ${n}`}</option>))}
-              </select>
-            </>
+  <input type="text" placeholder="Customer name (optional)" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="input" />
+  <input type="tel" placeholder="Phone (optional)" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} className="input" />
+  <select value={orderSelect} onChange={(e) => setOrderSelect(e.target.value)} className="select">
+    <option value="">Select Type...</option>
+    <option value="parcel">Parcel</option>
+    {tables.map((n) => (<option key={n} value={`table:${n}`}>{`Table ${n}`}</option>))}
+  </select>
+</>
+
           )}
         </div>
       </header>
