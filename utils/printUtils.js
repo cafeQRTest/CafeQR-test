@@ -261,15 +261,20 @@ export function buildReceiptText(order, bill, restaurantProfile) {
   try {
     const items = toDisplayItems(order);
 
-    const restaurantName = (order?.restaurant_name || 'RESTAURANT').toUpperCase();
+    // Header fields (single definition)
+    const restaurantName =
+      ((restaurantProfile?.restaurant_name || order?.restaurant_name) || 'RESTAURANT').toUpperCase();
+
     const addressParts = [
       restaurantProfile?.shipping_address_line1,
+      restaurantProfile?.shipping_address_line2,
       restaurantProfile?.shipping_city,
       restaurantProfile?.shipping_state,
       restaurantProfile?.shipping_pincode
     ].filter(Boolean);
-    const address = addressParts.length > 0 ? addressParts.join(', ') : (order?.restaurant_address || '');
-    const phone = restaurantProfile?.phone || order?.restaurant_phone || '';
+    const address = addressParts.length ? addressParts.join(', ') : (order?.restaurant_address || '');
+
+    const phone = restaurantProfile?.shipping_phone || restaurantProfile?.phone || order?.restaurant_phone || '';
 
     const orderId = order?.id?.slice(0, 8)?.toUpperCase() || 'N/A';
     const orderType = getOrderTypeLabel(order);
@@ -294,74 +299,49 @@ export function buildReceiptText(order, bill, restaurantProfile) {
       0
     );
 
-    // utils/printUtils (within buildReceiptText)
-const W = 32;
-const dashes = () => '-'.repeat(W);
-const lines = [];
+    const W = 32;
+    const dashes = () => '-'.repeat(W);
+    const lines = [];
 
-const restaurantName =
-  ((restaurantProfile?.restaurant_name || order?.restaurant_name) || 'RESTAURANT').toUpperCase();
+    // Header
+    lines.push(center(restaurantName, W));
+    wrapText(address, W).forEach(l => lines.push(center(l, W)));
+    if (phone) lines.push(center(`Contact No.: ${phone}`, W));
+    lines.push(dashes());
 
-// Address lines (include line2 when present)
-const addressParts = [
-  restaurantProfile?.shipping_address_line1,
-  restaurantProfile?.shipping_address_line2,
-  restaurantProfile?.shipping_city,
-  restaurantProfile?.shipping_state,
-  restaurantProfile?.shipping_pincode
-].filter(Boolean);
-const address = addressParts.length ? addressParts.join(', ') : (order?.restaurant_address || '');
+    // Meta
+    lines.push(`${dateStr} ${timeStr}`);
+    lines.push(`Order: #${orderId}`);
+    lines.push(`Order Type: ${orderType}`);
 
-// Phone: shipping_phone > phone > order.restaurant_phone
-const phone = restaurantProfile?.shipping_phone || restaurantProfile?.phone || order?.restaurant_phone || '';
+    // Items
+    lines.push(dashes());
+    lines.push('ITEM         QTY  RATE  TOTAL');
+    items.forEach(item => {
+      const nameLines = wrapText(item.name || 'Item', 14);
+      if (!nameLines.length) return;
+      const rateNum = Number(item.price || 0);
+      const totalNum = rateNum * Number(item.quantity || 1);
+      const rate = (rateNum % 1 === 0 ? rateNum.toFixed(0) : rateNum.toFixed(2)).padStart(4);
+      const total = (totalNum % 1 === 0 ? totalNum.toFixed(0) : totalNum.toFixed(2)).padStart(5);
+      const qty = String(item.quantity).padStart(2);
+      lines.push(nameLines[0].padEnd(14) + qty + '  ' + rate + '  ' + total);
+      for (let i = 1; i < nameLines.length; i++) lines.push(nameLines[i].padEnd(14));
+    });
 
-// Header (no extra blank line at top)
-lines.push(center(restaurantName, W));
-wrapText(address, W).forEach(l => lines.push(center(l, W)));
-if (phone) lines.push(center(`Contact No.: ${phone}`, W));
-
-// Divider (remove surrounding blank lines)
-lines.push(dashes());
-
-// Meta (no trailing blank line)
-lines.push(`${dateStr} ${timeStr}`);
-lines.push(`Order: #${orderId}`);
-lines.push(`Order Type: ${orderType}`);
-
-// Items header and divider (no blank lines)
-lines.push(dashes());
-lines.push('ITEM         QTY  RATE  TOTAL');
-
-// Items
-items.forEach(item => {
-  const nameLines = wrapText(item.name || 'Item', 14);
-  if (!nameLines.length) return;
-  const rateNum = Number(item.price || 0);
-  const totalNum = rateNum * Number(item.quantity || 1);
-  const rate = (rateNum % 1 === 0 ? rateNum.toFixed(0) : rateNum.toFixed(2)).padStart(4);
-  const total = (totalNum % 1 === 0 ? totalNum.toFixed(0) : totalNum.toFixed(2)).padStart(5);
-  const qty = String(item.quantity).padStart(2);
-  lines.push(nameLines[0].padEnd(14) + qty + '  ' + rate + '  ' + total);
-  for (let i = 1; i < nameLines.length; i++) lines.push(nameLines[i].padEnd(14));
-});
-
-// Divider (no blank lines around)
-lines.push(dashes());
-
-// Totals (no leading/trailing empty lines)
-if (taxAmount > 0) {
-  const netAmt = grandTotal - taxAmount;
-  lines.push(`Net Amt: ${netAmt.toFixed(2)}`);
-  lines.push(`Tax: ${taxAmount.toFixed(2)}`);
-  lines.push(`Grand Total: ${grandTotal.toFixed(2)}`);
-} else {
-  lines.push(`Total: ${grandTotal.toFixed(2)}`);
-}
-
-lines.push(dashes());
-lines.push(center('** THANK YOU! VISIT AGAIN !! **', W));
-lines.push(''); // single trailing feed
-
+    // Totals
+    lines.push(dashes());
+    if (taxAmount > 0) {
+      const netAmt = grandTotal - taxAmount;
+      lines.push(`Net Amt: ${netAmt.toFixed(2)}`);
+      lines.push(`Tax: ${taxAmount.toFixed(2)}`);
+      lines.push(`Grand Total: ${grandTotal.toFixed(2)}`);
+    } else {
+      lines.push(`Total: ${grandTotal.toFixed(2)}`);
+    }
+    lines.push(dashes());
+    lines.push(center('** THANK YOU! VISIT AGAIN !! **', W));
+    lines.push('');
 
     return lines.join('\n');
   } catch (e) {
@@ -369,6 +349,7 @@ lines.push(''); // single trailing feed
     return 'PRINT ERROR';
   }
 }
+
 
 export async function downloadPdfAndShare(order, bill, restaurantProfile) {
   return downloadTextAndShare(order, bill, restaurantProfile);
