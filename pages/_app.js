@@ -11,6 +11,56 @@ import { useEffect, useState } from 'react'
 import { Capacitor } from '@capacitor/core'
 import { getFCMToken } from '../lib/firebase/messaging'
 import { getSupabase, forceSupabaseSessionRestore } from '../services/supabase'
+// pages/_app.js
+import { App as CapApp } from '@capacitor/app';          // present at build time [web:616]
+import { ensureSessionValid } from '../lib/authActions';
+
+// pages/_app.js (inside a client-side useEffect)
+useEffect(() => {
+  if (!router.isReady) return;
+  let remove = () => {};
+  (async () => {
+    // dynamic import so web builds without the plugin still succeed
+    let CapApp;
+    try { ({ App: CapApp } = await import('@capacitor/app')); } catch {}
+    const supabase = getSupabase();
+
+    const onForeground = async () => {
+      await forceSupabaseSessionRestore();            // restore saved session [web:626]
+      await supabase.auth.startAutoRefresh();         // start timers in foreground [web:609]
+      await ensureSessionValid();                     // refresh if expiring/expired [web:614]
+    };
+    const onBackground = async () => {
+      await supabase.auth.stopAutoRefresh();          // pause timers in background [web:611]
+    };
+
+    // Wire Capacitor appStateChange if plugin resolved
+    if (CapApp?.addListener) {
+      const sub = await CapApp.addListener('appStateChange', ({ isActive }) => {
+        isActive ? onForeground() : onBackground();
+      });
+      remove = () => sub.remove();
+    }
+
+    // Also cover pure web/PWA
+    const onFocus = () => onForeground();
+    const onVis = () => { if (!document.hidden) onForeground(); };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVis);
+
+    // cold start
+    onForeground();
+
+    // cleanup
+    remove = ((prev) => () => {
+      prev?.();
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVis);
+    })(remove);
+  })();
+  return () => remove();
+}, [router.isReady]);
+
 
 const OWNER_PREFIX = '/owner'
 const CUSTOMER_PREFIX = '/order'

@@ -22,6 +22,14 @@ import { home, restaurant, receipt, settings } from 'ionicons/icons';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { restoreSession, saveSession, clearSession } from './lib/session';
 import { supabase } from './services/supabase';
+import { App } from '@capacitor/app';
+useEffect(() => {
+  const sub = App.addListener('appStateChange', async ({ isActive }) => {
+    if (isActive) { await supabase.auth.startAutoRefresh(); }
+    else { await supabase.auth.stopAutoRefresh(); }
+  });
+  return () => { sub.remove(); };
+}, []);
 
 import '@ionic/react/css/core.css';
 import '@ionic/react/css/normalize.css';
