@@ -299,6 +299,22 @@ const W = 32;
 const dashes = () => '-'.repeat(W);
 const lines = [];
 
+const restaurantName =
+  ((restaurantProfile?.restaurant_name || order?.restaurant_name) || 'RESTAURANT').toUpperCase();
+
+// Address lines (include line2 when present)
+const addressParts = [
+  restaurantProfile?.shipping_address_line1,
+  restaurantProfile?.shipping_address_line2,
+  restaurantProfile?.shipping_city,
+  restaurantProfile?.shipping_state,
+  restaurantProfile?.shipping_pincode
+].filter(Boolean);
+const address = addressParts.length ? addressParts.join(', ') : (order?.restaurant_address || '');
+
+// Phone: shipping_phone > phone > order.restaurant_phone
+const phone = restaurantProfile?.shipping_phone || restaurantProfile?.phone || order?.restaurant_phone || '';
+
 // Header (no extra blank line at top)
 lines.push(center(restaurantName, W));
 wrapText(address, W).forEach(l => lines.push(center(l, W)));

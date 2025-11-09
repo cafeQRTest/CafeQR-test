@@ -43,18 +43,22 @@ export default function KotPrint({ order, onClose, onPrint, autoPrint = true }) 
     let alive = true;
     (async () => {
       try {
-        const supabase = getSupabase();
-        const [b, rp] = await Promise.all([
-          supabase.from('bills').select('*').eq('order_id', order.id).maybeSingle(),
-          supabase.from('restaurant_profiles').select('*').eq('restaurant_id', order.restaurant_id).maybeSingle(),
-        ]);
-        if (!alive) return;
-        if (b?.data) setBill(b.data);
-        if (rp?.data) setRestaurantProfile(rp.data);
-      } catch {}
-    })();
-    return () => { alive = false; };
-  }, [order]);
+      const supabase = getSupabase();
+      const [b, rp, rn] = await Promise.all([
+        supabase.from('bills').select('*').eq('order_id', order.id).maybeSingle(),
+        supabase.from('restaurant_profiles').select('shipping_address_line1,shipping_address_line2,shipping_city,shipping_state,shipping_pincode,phone,restaurant_name,shipping_phone').eq('restaurant_id', order.restaurant_id).maybeSingle(),
+        supabase.from('restaurants').select('name').eq('id', order.restaurant_id).maybeSingle(),
+      ]);
+      if (!alive) return;
+      if (b?.data) setBill(b.data);
+      if (rp?.data) setRestaurantProfile(rp.data);
+      if (rn?.data?.name) order.restaurant_name = rn.data.name;
+    } finally {
+      setLoadingData(false);
+    }
+  })();
+  return () => { alive = false; };
+}, [order]);
 
 
   const doPrint = useCallback(async () => {
@@ -96,10 +100,10 @@ export default function KotPrint({ order, onClose, onPrint, autoPrint = true }) 
 
   // Auto‑run everywhere except Android PWA (needs user gesture for app‑link)
   useEffect(() => {
-    if (!autoPrint || ranRef.current) return;
-    ranRef.current = true;
-    doPrint();
-  }, [autoPrint, doPrint]);
+  if (!autoPrint || ranRef.current || loadingData) return;
+  ranRef.current = true;
+  doPrint();
+}, [autoPrint, loadingData, doPrint]);
 
   // Android PWA modal with a real tap target
   // components/KotPrint.js (replace the isAndroidPWA() render block)
