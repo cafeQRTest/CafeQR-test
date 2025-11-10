@@ -166,12 +166,33 @@ useEffect(() => {
       await supabase.auth.stopAutoRefresh();   // pause timers in background [web:611]
     };
 
-    if (NativeApp?.addListener) {
-      const sub = await NativeApp.addListener('appStateChange', ({ isActive }) =>
-        isActive ? onForeground() : onBackground()
-      );                                       // native lifecycle wiring [web:616]
-      cleanup = () => sub.remove();
+    // pages/_app.js (inside the useEffect that loads NativeApp)
+if (NativeApp?.addListener) {
+  const backSub = await NativeApp.addListener('backButton', async ({ canGoBack }) => {
+    const path = router.pathname;
+    // If user is on auth routes and already signed in, bounce to owner
+    try {
+      const { data } = await getSupabase().auth.getSession(); // [web:626]
+      if ((path === '/login' || path === '/signup') && data?.session) {
+        router.replace('/owner');
+        return;
+      }
+    } catch {}
+
+    // If we can go back in history, do that; otherwise exit app from owner root
+    if (canGoBack) {
+      window.history.back();
+    } else if (path.startsWith('/owner')) {
+      NativeApp.exitApp?.();
+    } else {
+      // Default fallback: prevent falling back to login loop
+      router.replace('/owner');
     }
+  });
+  const prev = cleanup;
+  cleanup = () => { backSub?.remove(); prev?.(); };
+}
+
 
     const onFocus = () => onForeground();
     const onVis = () => { if (!document.hidden) onForeground(); };
