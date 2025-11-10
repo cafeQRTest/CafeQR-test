@@ -22,14 +22,7 @@ import { home, restaurant, receipt, settings } from 'ionicons/icons';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { restoreSession, saveSession, clearSession } from './lib/session';
 import { supabase } from './services/supabase';
-import { App } from '@capacitor/app';
-useEffect(() => {
-  const sub = App.addListener('appStateChange', async ({ isActive }) => {
-    if (isActive) { await supabase.auth.startAutoRefresh(); }
-    else { await supabase.auth.stopAutoRefresh(); }
-  });
-  return () => { sub.remove(); };
-}, []);
+import { saveSessionSnapshot, clearSessionSnapshot, bootstrapSupabaseSession } from './services/supabase';
 
 import '@ionic/react/css/core.css';
 import '@ionic/react/css/normalize.css';
@@ -47,6 +40,24 @@ setupIonicReact();
 
 const App: React.FC = () => {
   const [appReady, setAppReady] = useState(false);
+ 
+useEffect(() => {
+  const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+    if (event === 'SIGNED_OUT') clearSessionSnapshot();
+    else if (session && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION')) {
+      saveSessionSnapshot(session);
+    }
+  });
+  return () => listener?.subscription?.unsubscribe();
+}, []);
+
+useEffect(() => {
+  const sub = CapacitorApp.addListener('appStateChange', async ({ isActive }) => {
+    if (isActive) { await supabase.auth.startAutoRefresh(); }
+    else { await supabase.auth.stopAutoRefresh(); }
+  });                                           // native lifecycle in component [web:616][web:609][web:611]
+  return () => { sub.remove(); };
+}, []);
 
   useEffect(() => {
     let mounted = true;
@@ -55,6 +66,7 @@ const App: React.FC = () => {
       try {
         // 1. First restore any saved session from Preferences
         const restored = await restoreSession();
+        await bootstrapSupabaseSession(); 
         console.log('[App] Session restoration:', restored ? 'success' : 'none');
 
         // 2. Set up auth state listener to save/clear sessions

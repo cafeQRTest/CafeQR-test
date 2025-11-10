@@ -11,55 +11,10 @@ import { useEffect, useState } from 'react'
 import { Capacitor } from '@capacitor/core'
 import { getFCMToken } from '../lib/firebase/messaging'
 import { getSupabase, forceSupabaseSessionRestore } from '../services/supabase'
-// pages/_app.js
-import { App as CapApp } from '@capacitor/app';          // present at build time [web:616]
 import { ensureSessionValid } from '../lib/authActions';
+import { saveSessionSnapshot, clearSessionSnapshot, bootstrapSupabaseSession } from '../services/supabase';
 
-// pages/_app.js (inside a client-side useEffect)
-useEffect(() => {
-  if (!router.isReady) return;
-  let remove = () => {};
-  (async () => {
-    // dynamic import so web builds without the plugin still succeed
-    let CapApp;
-    try { ({ App: CapApp } = await import('@capacitor/app')); } catch {}
-    const supabase = getSupabase();
 
-    const onForeground = async () => {
-      await forceSupabaseSessionRestore();            // restore saved session [web:626]
-      await supabase.auth.startAutoRefresh();         // start timers in foreground [web:609]
-      await ensureSessionValid();                     // refresh if expiring/expired [web:614]
-    };
-    const onBackground = async () => {
-      await supabase.auth.stopAutoRefresh();          // pause timers in background [web:611]
-    };
-
-    // Wire Capacitor appStateChange if plugin resolved
-    if (CapApp?.addListener) {
-      const sub = await CapApp.addListener('appStateChange', ({ isActive }) => {
-        isActive ? onForeground() : onBackground();
-      });
-      remove = () => sub.remove();
-    }
-
-    // Also cover pure web/PWA
-    const onFocus = () => onForeground();
-    const onVis = () => { if (!document.hidden) onForeground(); };
-    window.addEventListener('focus', onFocus);
-    document.addEventListener('visibilitychange', onVis);
-
-    // cold start
-    onForeground();
-
-    // cleanup
-    remove = ((prev) => () => {
-      prev?.();
-      window.removeEventListener('focus', onFocus);
-      document.removeEventListener('visibilitychange', onVis);
-    })(remove);
-  })();
-  return () => remove();
-}, [router.isReady]);
 
 
 const OWNER_PREFIX = '/owner'
@@ -177,6 +132,65 @@ function MyApp({ Component, pageProps }) {
   const router = useRouter()
   const [ready, setReady] = useState(false)
   const [mounted, setMounted] = useState(false)
+
+useEffect(() => {
+  const supabase = getSupabase();
+  const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    if (event === 'SIGNED_OUT') {
+      clearSessionSnapshot();
+    } else if (session && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION')) {
+      saveSessionSnapshot(session);
+    }
+  });
+  return () => subscription?.unsubscribe();
+}, []);
+
+useEffect(() => {
+  if (!router.isReady) return;
+  let cleanup = () => {};
+
+  (async () => {
+    // dynamic import so web builds without the plugin still succeed
+    let NativeApp;
+    try { ({ App: NativeApp } = await import('@capacitor/app')); } catch {}
+
+    const supabase = getSupabase();
+
+    const onForeground = async () => {
+      await bootstrapSupabaseSession();        // restore from snapshot if process was killed [web:626]
+      await forceSupabaseSessionRestore();     // read stored session [web:626]
+      await supabase.auth.startAutoRefresh();  // restart timers in foreground [web:609]
+      await ensureSessionValid();              // proactively refresh if near/after expiry [web:614]
+    };
+    const onBackground = async () => {
+      await supabase.auth.stopAutoRefresh();   // pause timers in background [web:611]
+    };
+
+    if (NativeApp?.addListener) {
+      const sub = await NativeApp.addListener('appStateChange', ({ isActive }) =>
+        isActive ? onForeground() : onBackground()
+      );                                       // native lifecycle wiring [web:616]
+      cleanup = () => sub.remove();
+    }
+
+    const onFocus = () => onForeground();
+    const onVis = () => { if (!document.hidden) onForeground(); };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVis);
+
+    onForeground(); // cold start [web:626]
+
+    const prev = cleanup;
+    cleanup = () => {
+      prev?.();
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  })();
+
+  return () => cleanup();
+}, [router.isReady]);
+
 
   // Track client mount
   useEffect(() => {
