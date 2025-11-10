@@ -11,8 +11,9 @@ import { useEffect, useState } from 'react'
 import { Capacitor } from '@capacitor/core'
 import { getFCMToken } from '../lib/firebase/messaging'
 import { getSupabase, forceSupabaseSessionRestore } from '../services/supabase'
-// pages/_app.js
 import { ensureSessionValid } from '../lib/authActions';
+import { saveSessionSnapshot, clearSessionSnapshot, bootstrapSupabaseSession } from '../services/supabase';
+
 
 
 
@@ -132,7 +133,18 @@ function MyApp({ Component, pageProps }) {
   const [ready, setReady] = useState(false)
   const [mounted, setMounted] = useState(false)
 
-// pages/_app.js (inside MyApp component)
+useEffect(() => {
+  const supabase = getSupabase();
+  const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    if (event === 'SIGNED_OUT') {
+      clearSessionSnapshot();
+    } else if (session && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION')) {
+      saveSessionSnapshot(session);
+    }
+  });
+  return () => subscription?.unsubscribe();
+}, []);
+
 useEffect(() => {
   if (!router.isReady) return;
   let cleanup = () => {};
@@ -145,6 +157,7 @@ useEffect(() => {
     const supabase = getSupabase();
 
     const onForeground = async () => {
+      await bootstrapSupabaseSession();        // restore from snapshot if process was killed [web:626]
       await forceSupabaseSessionRestore();     // read stored session [web:626]
       await supabase.auth.startAutoRefresh();  // restart timers in foreground [web:609]
       await ensureSessionValid();              // proactively refresh if near/after expiry [web:614]
