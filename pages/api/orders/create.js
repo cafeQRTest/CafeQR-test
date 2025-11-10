@@ -197,6 +197,72 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Failed to create order items' });
     }
 
+    // ✅ Deduct stock for each menu item based on recipes
+    for (const item of items) {
+      if (!item.id || !item.quantity) continue;
+      
+      try {
+        // Get recipe for this menu item
+        const { data: recipe, error: recipeErr } = await supabase
+          .from('recipes')
+          .select('id, recipe_items(ingredient_id, quantity)')
+          .eq('menu_item_id', item.id)
+          .eq('restaurant_id', restaurant_id)
+          .maybeSingle();
+
+        if (recipeErr || !recipe || !recipe.recipe_items || recipe.recipe_items.length === 0) {
+          // No recipe found - skip stock deduction for this item
+          continue;
+        }
+
+        // Check if menu item is packaged good - skip if true
+        const menuItem = menuItems?.find((mi) => mi.id === item.id);
+        if (menuItem?.is_packaged_good) {
+          continue;
+        }
+
+        // Deduct stock for each ingredient in the recipe
+        for (const recipeItem of recipe.recipe_items) {
+          const deductAmount = Number(recipeItem.quantity) * Number(item.quantity);
+
+          // Get current stock
+          const { data: ingredient, error: ingErr } = await supabase
+            .from('ingredients')
+            .select('id, current_stock, name')
+            .eq('id', recipeItem.ingredient_id)
+            .eq('restaurant_id', restaurant_id)
+            .single();
+
+          if (ingErr || !ingredient) {
+            console.warn(`Ingredient not found: ${recipeItem.ingredient_id}`);
+            continue;
+          }
+
+          const newStock = Number(ingredient.current_stock) - deductAmount;
+
+          // Update stock (allow negative stock - just log warning)
+          if (newStock < 0) {
+            console.warn(`Low stock warning: ${ingredient.name} will be negative (${newStock})`);
+          }
+
+          const { error: updateErr } = await supabase
+            .from('ingredients')
+            .update({ 
+              current_stock: newStock,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', ingredient.id);
+
+          if (updateErr) {
+            console.error(`Failed to update stock for ingredient ${ingredient.id}:`, updateErr);
+          }
+        }
+      } catch (stockErr) {
+        // Non-blocking - log error but don't fail the order
+        console.error(`Stock deduction failed for item ${item.id}:`, stockErr.message);
+      }
+    }
+
     // ✅ Update credit customer balance if credit sale
     if (is_credit && credit_customer_id) {
       try {

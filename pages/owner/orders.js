@@ -17,6 +17,79 @@ const LABELS = { new: 'New', in_progress: 'Cooking', ready: 'Ready', completed: 
 const COLORS = { new: '#3b82f6', in_progress: '#f59e0b', ready: '#10b981', completed: '#6b7280' };
 const PAGE_SIZE = 20;
 
+// Restore stock for a set of order_items
+async function restoreStockForOrder(supabase, restaurantId, orderItems) {
+  console.log('[STOCK RESTORE] Starting restoration for', orderItems?.length, 'items');
+  if (!Array.isArray(orderItems) || !orderItems.length) {
+    console.log('[STOCK RESTORE] No order items to restore');
+    return;
+  }
+
+  for (const oi of orderItems) {
+    console.log('[STOCK RESTORE] Processing item:', { menu_item_id: oi.menu_item_id, quantity: oi.quantity, is_packaged: oi.is_packaged_good });
+    
+    if (!oi.menu_item_id || !oi.quantity) {
+      console.log('[STOCK RESTORE] Skipping - no menu_item_id or quantity');
+      continue;
+    }
+
+    // Skip packaged goods (no ingredient impact)
+    if (oi.is_packaged_good) {
+      console.log('[STOCK RESTORE] Skipping packaged good');
+      continue;
+    }
+
+    // Fetch recipe for this menu item
+    const { data: recipe, error: recipeErr } = await supabase
+      .from('recipes')
+      .select('id, recipe_items(ingredient_id, quantity)')
+      .eq('menu_item_id', oi.menu_item_id)
+      .eq('restaurant_id', restaurantId)
+      .maybeSingle();
+    
+    console.log('[STOCK RESTORE] Recipe fetch result:', { recipe, error: recipeErr });
+    
+    if (recipeErr || !recipe?.recipe_items?.length) {
+      console.log('[STOCK RESTORE] No recipe found or error');
+      continue;
+    }
+
+    for (const ri of recipe.recipe_items) {
+      const addBack = Number(ri.quantity) * Number(oi.quantity);
+      console.log('[STOCK RESTORE] Restoring ingredient:', { ingredient_id: ri.ingredient_id, addBack });
+      
+      // Get current stock
+      const { data: ing, error: ingErr } = await supabase
+        .from('ingredients')
+        .select('id, current_stock, name')
+        .eq('id', ri.ingredient_id)
+        .eq('restaurant_id', restaurantId)
+        .single();
+      
+      if (ingErr || !ing) {
+        console.error('[STOCK RESTORE] Ingredient fetch failed:', ingErr);
+        continue;
+      }
+
+      const oldStock = Number(ing.current_stock || 0);
+      const newStock = oldStock + addBack;
+      console.log('[STOCK RESTORE] Updating stock for', ing.name, ':', oldStock, '→', newStock);
+      
+      const { error: updateErr } = await supabase
+        .from('ingredients')
+        .update({ current_stock: newStock, updated_at: new Date().toISOString() })
+        .eq('id', ing.id);
+      
+      if (updateErr) {
+        console.error('[STOCK RESTORE] Update failed:', updateErr);
+      } else {
+        console.log('[STOCK RESTORE] ✓ Stock restored successfully');
+      }
+    }
+  }
+  console.log('[STOCK RESTORE] Restoration complete');
+}
+
 // Helpers
 const money = (v) => `₹${Number(v ?? 0).toFixed(2)}`;
 const prefix = (s) => (s ? s.slice(0,24) : '');
@@ -460,15 +533,79 @@ export default function OrdersPage() {
 const onCancelOrderOpen = (order) => setCancelOrderDialog(order);
 const handleCancelConfirm = async (reason) => {
   if (!cancelOrderDialog) return;
+  console.log('[CANCEL ORDER] Starting cancellation for order:', cancelOrderDialog.id);
   try {
+       // Get full order with items before cancelling
+       const fullOrder = await fetchFullOrder(supabase, cancelOrderDialog.id);
+       console.log('[CANCEL ORDER] Full order fetched:', fullOrder);
+       console.log('[CANCEL ORDER] order_items:', fullOrder?.order_items);
+       console.log('[CANCEL ORDER] order_items length:', fullOrder?.order_items?.length);
+       console.log('[CANCEL ORDER] order_items is array?', Array.isArray(fullOrder?.order_items));
+       
+       // Cancel the order
        await supabase
        .from('orders')
        .update({ status: 'cancelled', description: reason })
        .eq('id', cancelOrderDialog.id)
        .eq('restaurant_id', restaurantId);
+       console.log('[CANCEL ORDER] Order status updated to cancelled');
+
+       // Restore stock for cancelled order
+       let itemsToRestore = fullOrder?.order_items;
+       
+       // Fallback: if order_items is empty, try to use items JSONB column
+       if ((!itemsToRestore || itemsToRestore.length === 0) && fullOrder?.items && Array.isArray(fullOrder.items)) {
+         console.log('[CANCEL ORDER] order_items empty, using items JSONB column');
+         console.log('[CANCEL ORDER] Raw items JSONB:', fullOrder.items);
+         
+         // Convert items JSONB to order_items format
+         // Need to look up menu_item_id by name if not present
+         const itemsToConvert = [];
+         for (const item of fullOrder.items) {
+           console.log('[CANCEL ORDER] Processing item from JSONB:', item);
+           let menuItemId = item.id || item.menu_item_id || null;
+           
+           // If no ID, try to look up by name
+           if (!menuItemId && item.name) {
+             console.log('[CANCEL ORDER] Looking up menu item by name:', item.name);
+             const { data: menuItem, error: lookupErr } = await supabase
+               .from('menu_items')
+               .select('id, is_packaged_good')
+               .eq('restaurant_id', restaurantId)
+               .ilike('name', item.name)
+               .maybeSingle();
+             
+             if (!lookupErr && menuItem) {
+               menuItemId = menuItem.id;
+               console.log('[CANCEL ORDER] Found menu item ID:', menuItemId);
+               item.is_packaged_good = menuItem.is_packaged_good;
+             } else {
+               console.warn('[CANCEL ORDER] Could not find menu item for name:', item.name);
+             }
+           }
+           
+           itemsToConvert.push({
+             menu_item_id: menuItemId,
+             quantity: item.quantity || item.qty || 1,
+             is_packaged_good: item.is_packaged_good || false
+           });
+         }
+         
+         itemsToRestore = itemsToConvert;
+         console.log('[CANCEL ORDER] Converted items:', itemsToRestore);
+       }
+       
+       if (itemsToRestore && itemsToRestore.length > 0) {
+         console.log('[CANCEL ORDER] Calling restoreStockForOrder with', itemsToRestore.length, 'items');
+         await restoreStockForOrder(supabase, restaurantId, itemsToRestore);
+       } else {
+         console.warn('[CANCEL ORDER] No order items found to restore stock. Full order:', JSON.stringify(fullOrder, null, 2));
+       }
+
        loadOrders();
        setCancelOrderDialog(null);
       } catch (error) {
+          console.error('[CANCEL ORDER] Error:', error);
           setError(error.message);
      }
 };
