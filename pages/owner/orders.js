@@ -1017,7 +1017,7 @@ function OrderCard({ order, statusColor, onChangeStatus, onComplete, generatingI
                 <>
                   {hasInvoice && (
                     <Button size="sm" onClick={()=>window.open(order.invoice.pdf_url,'_blank')}>
-                      Bill
+                      Invoice
                     </Button>
                   )}
                   <button
@@ -1032,7 +1032,7 @@ function OrderCard({ order, statusColor, onChangeStatus, onComplete, generatingI
                       fontSize: '12px',
                     }}
                   >
-                    Print KOT
+                    Print Bill
                   </button>
                 </>
               )}

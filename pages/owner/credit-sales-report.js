@@ -29,17 +29,12 @@ export default function CreditSalesReportPage() {
     try {
       // Get credit orders with customer details
       const { data: orders, error: ordersErr } = await supabase
-        .from('orders')
-        .select(`
-          *,
-          credit_customer_id(name, phone, current_balance)
-        `)
-        .eq('restaurant_id', restaurantId)
-        .eq('is_credit', true)
-        .neq('status', 'cancelled')  
-        .gte('created_at', `${startDate}T00:00:00`)
-        .lte('created_at', `${endDate}T23:59:59`)
-        .order('created_at', { ascending: false })
+  .from('v_credit_orders_effective')
+  .select('*')
+  .eq('restaurant_id', restaurantId)
+  .gte('created_at', `${startDate}T00:00:00`)
+  .lte('created_at', `${endDate}T23:59:59`)
+  .order('created_at', { ascending: false });
 
       if (ordersErr) throw ordersErr
 
