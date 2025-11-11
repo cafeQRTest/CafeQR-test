@@ -546,8 +546,11 @@ useEffect(() => {
     const res = await fetch('/api/orders/create', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(orderData)
     });
-    if (!res.ok) throw new Error('Failed to create order');
-    const result = await res.json();
+    if (!res.ok) {
+    let msg = 'Failed to create order';
+    try { const j = await res.json(); if (j?.error) msg += ': ' + j.error; } catch {}
+    throw new Error(msg);
+    }
 
     if (!isCredit || finalizeNow) {
       await supabase
@@ -621,8 +624,11 @@ useEffect(() => {
     const res = await fetch('/api/orders/create', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(orderData)
     });
-    if (!res.ok) throw new Error('Failed to create order');
-    const result = await res.json();
+    if (!res.ok) {
+    let msg = 'Failed to create order';
+    try { const j = await res.json(); if (j?.error) msg += ': ' + j.error; } catch {}
+    throw new Error(msg);
+    }
 
     const fullOrder = await fetchFullOrder(result.order_id);
     const fallback = {
