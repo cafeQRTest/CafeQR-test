@@ -623,3 +623,102 @@ input, select, textarea { font-size: 16px; } /* keep ≥16px */
 .btn-orange { background: var(--brand); color: #fff; }
 .btn-orange:hover { background: var(--brand-600); }
 .btn-dark { background: #111827; color: #fff; }
+
+/* Mobile-first cards; hide on md+ where table shows */
+.hours-cards { display: grid; gap: 10px; }
+@media (min-width: 768px) { .hours-cards { display: none; } }
+
+.hours-card { overflow: hidden; }
+
+.hours-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 32px;              /* keep enough height for the switch */
+}
+
+.hours-head > strong { flex: 1 1 auto; min-width: 0; }  /* text truncates if ever needed */
+
+.hours-grid {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.hours-grid .quick-row {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+/* Desktop table; hide on small */
+.hours-table { display: none; }
+@media (min-width: 768px) { .hours-table { display: block; } }
+
+/* Accessible switch */
+.switch {
+  position: relative;            /* containing block for the slider */
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  max-width: 140px;              /* guardrail on tiny screens */
+  white-space: nowrap;           /* keep "Open" on one line */
+}
+.switch input {
+  appearance: none;
+  width: 42px;
+  height: 24px;
+  background: #e5e7eb;
+  border-radius: 9999px;
+  outline: none;
+  transition: background .2s;
+  flex: 0 0 42px;                /* fixed basis avoids layout jitter */
+  position: relative;            /* for robustness when zoomed */
+}
+
+.switch .slider {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  background: #fff;
+  border-radius: 50%;
+  transform: translateX(0);
+  transition: transform .2s;
+  pointer-events: none;          /* clicks go to the input */
+}
+
+.switch input:checked { background: #10b981; }
+.switch input:checked + .slider { transform: translateX(18px); }
+
+.switch-text {
+  flex: 0 0 auto;
+  font-size: 12px;
+  line-height: 1;
+  color: #6b7280;
+}
+.switch-text.on { color: #065f46; font-weight: 700; }
+
+@media (max-width: 380px) {
+  .switch { transform: scale(.92); transform-origin: right center; }
+  .switch-text { font-size: 11px; }
+}
+
+
+/* Sticky pause row for tiny screens */
+@media (max-width: 480px) {
+  .pause-sticky {
+    position: sticky; top: 0; z-index: 5;
+    background: #fff; padding: 8px 0; border-bottom: 1px solid #f1f5f9;
+  }
+}
+
+/* Tighten time input on phones */
+@media (max-width: 480px) {
+  input[type="time"] { height: 36px; font-size: 16px; }
+}
+
