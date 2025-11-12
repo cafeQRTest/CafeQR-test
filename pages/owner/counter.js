@@ -546,7 +546,11 @@ useEffect(() => {
     const res = await fetch('/api/orders/create', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(orderData)
     });
-    if (!res.ok) throw new Error('Failed to create order');
+    if (!res.ok) {
+      let msg = 'Failed to create order';
+      try { const j = await res.json(); if (j?.error) msg += ': ' + j.error; } catch {}
+      throw new Error(msg);
+    }
     const result = await res.json();
 
     if (!isCredit || finalizeNow) {
@@ -573,7 +577,11 @@ useEffect(() => {
         mixed_payment_details: finalPaymentMethod === 'mixed' ? mixedDetails : null
       })
     });
-    if (!invRes.ok) throw new Error('Invoice generation failed');
+    // Non-blocking: invoice might fail but order can still be completed
+    if (!invRes.ok) {
+      try { const j = await invRes.json(); console.warn('Invoice generation failed (non-blocking):', j?.error || invRes.statusText); }
+      catch { console.warn('Invoice generation failed (non-blocking):', invRes.statusText); }
+    }
 
     const fullOrder = await fetchFullOrder(result.order_id);
     const fallback = {
@@ -621,7 +629,11 @@ useEffect(() => {
     const res = await fetch('/api/orders/create', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(orderData)
     });
-    if (!res.ok) throw new Error('Failed to create order');
+    if (!res.ok) {
+      let msg = 'Failed to create order';
+      try { const j = await res.json(); if (j?.error) msg += ': ' + j.error; } catch {}
+      throw new Error(msg);
+    }
     const result = await res.json();
 
     const fullOrder = await fetchFullOrder(result.order_id);

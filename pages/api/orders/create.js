@@ -1,4 +1,4 @@
-// pages/api/orders/create.js - FIXED VERSION
+// pages/api/orders/create.js
 import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(req, res) {
@@ -14,8 +14,8 @@ export default async function handler(req, res) {
     }
     return res.status(500).json({ error: 'Server configuration error' });
   }
-  const supabase = createClient(supabaseUrl, supabaseKey);
 
+  const supabase = createClient(supabaseUrl, supabaseKey);
   try {
     const {
       restaurant_id,
@@ -38,7 +38,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    // Load menu item attributes needed for tax/packaged rules
+    // Load menu item attributes
     const itemIds = items.map((it) => it.id).filter(Boolean);
     const { data: menuItems, error: menuError } = await supabase
       .from('menu_items')
@@ -49,7 +49,7 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Failed to load menu items' });
     }
 
-    // Load restaurant profile for service lines
+    // Load restaurant profile
     const { data: profile, error: profileErr } = await supabase
       .from('restaurant_profiles')
       .select('gst_enabled, default_tax_rate, prices_include_tax')
@@ -63,9 +63,11 @@ export default async function handler(req, res) {
     const baseRate = Number(profile?.default_tax_rate ?? 5);
     const gstEnabled = !!profile?.gst_enabled;
     const serviceRate = gstEnabled ? baseRate : 0;
-    const serviceInclude = gstEnabled ? (profile?.prices_include_tax === true || profile?.prices_include_tax === 'true' || profile?.prices_include_tax === 1 || profile?.prices_include_tax === '1') : false;
+    const serviceInclude = gstEnabled
+      ? (profile?.prices_include_tax === true || profile?.prices_include_tax === 'true' || profile?.prices_include_tax === 1 || profile?.prices_include_tax === '1')
+      : false;
 
-    // Compute totals and normalized order_items
+    // Compute totals
     let subtotalEx = 0;
     let totalTax = 0;
     let totalInc = 0;
@@ -73,18 +75,15 @@ export default async function handler(req, res) {
     const preparedItems = items.map((it) => {
       const qty = Number(it.quantity ?? 1);
       const unit = Number(it.price ?? 0);
-
       const menuItem = menuItems?.find((mi) => mi.id === it.id);
       const isPackaged = !!(menuItem?.is_packaged_good || it.is_packaged_good);
       const itemTaxRate = Number(menuItem?.tax_rate ?? it.tax_rate ?? 0);
-
       let effectiveRate = isPackaged && gstEnabled ? itemTaxRate : serviceRate;
       if ((effectiveRate == null || effectiveRate <= 0) && gstEnabled) {
         effectiveRate = baseRate;
       }
 
       let unitEx, unitInc, lineEx, tax, lineInc;
-
       if (isPackaged || serviceInclude) {
         unitInc = unit;
         unitEx = effectiveRate > 0 ? unitInc / (1 + effectiveRate / 100) : unitInc;
@@ -126,18 +125,15 @@ export default async function handler(req, res) {
 
     let processedPaymentMethod = payment_method;
     let processedMixedDetails = null;
-
     if (payment_method === 'mixed' && mixed_payment_details) {
       const { cash_amount, online_amount, online_method } = mixed_payment_details;
       const mixedTotal = Number(cash_amount || 0) + Number(online_amount || 0);
       const orderTotal = Number(totalInc.toFixed(2));
-      
       if (Math.abs(mixedTotal - orderTotal) > 0.01) {
-        return res.status(400).json({ 
-          error: 'Mixed payment amounts do not match order total' 
+        return res.status(400).json({
+          error: 'Mixed payment amounts do not match order total'
         });
       }
-
       processedMixedDetails = {
         cash_amount: Number(cash_amount).toFixed(2),
         online_amount: Number(online_amount).toFixed(2),
@@ -146,7 +142,7 @@ export default async function handler(req, res) {
       };
     }
 
-    // ✅ FIX: Don't use .single() here - just use .select()
+    // Insert order
     const { data: orderData, error: orderError } = await supabase
       .from('orders')
       .insert([
@@ -168,9 +164,8 @@ export default async function handler(req, res) {
           prices_include_tax: serviceInclude,
           gst_enabled: gstEnabled,
           mixed_payment_details: processedMixedDetails,
-          // ✅ CREDIT FIELDS
-          is_credit: req.body.is_credit ?? false,
-          credit_customer_id: req.body.credit_customer_id ?? null,
+          is_credit: is_credit ?? false,
+          credit_customer_id: credit_customer_id ?? null,
           original_payment_method: original_payment_method || null
         }
       ])
@@ -181,7 +176,6 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Failed to create order: ' + orderError.message });
     }
 
-    // ✅ Get the first order from array (since we're not using .single())
     if (!orderData || orderData.length === 0) {
       return res.status(500).json({ error: 'Order created but could not retrieve ID' });
     }
@@ -263,49 +257,10 @@ export default async function handler(req, res) {
       }
     }
 
-    // ✅ Update credit customer balance if credit sale
-    if (is_credit && credit_customer_id) {
-      try {
-        // Get current balance
-        const { data: creditCust, error: custErr } = await supabase
-          .from('credit_customers')
-          .select('current_balance, total_credit_extended')
-          .eq('id', credit_customer_id)
-          .single();
+    // ✅ REMOVED: Manual credit customer balance update block
+    // The database trigger `trg_update_credit_balance` handles credit postings automatically
 
-        if (!custErr && creditCust) {
-          const newBalance = (creditCust.current_balance || 0) + totalInc;
-          const newExtended = (creditCust.total_credit_extended || 0) + totalInc;
-
-          await supabase
-            .from('credit_customers')
-            .update({
-              current_balance: newBalance,
-              total_credit_extended: newExtended,
-              last_transaction: new Date().toISOString()
-            })
-            .eq('id', credit_customer_id);
-
-          // Create credit transaction record
-          await supabase
-            .from('credit_transactions')
-            .insert({
-              restaurant_id,
-              credit_customer_id,
-              order_id: order.id,
-              transaction_type: 'credit',
-              amount: totalInc,
-              payment_method: 'credit',
-              description: `Credit sale order #${order.id.substring(0, 8)}`,
-              transaction_date: new Date().toISOString()
-            });
-        }
-      } catch (creditErr) {
-        console.warn('Credit update failed (non-blocking):', creditErr.message);
-      }
-    }
-
-    // Send push to owner devices (non-blocking)
+    // Send push notification (non-blocking)
     try {
       const base = process.env.NEXT_PUBLIC_BASE_URL || '';
       await fetch(`${base}/api/notify-owner`, {
@@ -329,6 +284,6 @@ export default async function handler(req, res) {
     });
   } catch (e) {
     console.error('API error:', e);
-    return res.status(500).json({ error: 'Internal server error: ' + e.message });
+    return res.status(500).json({ error: e?.message || 'Internal server error' });
   }
 }

@@ -609,3 +609,17 @@ input, select, textarea { font-size: 16px; } /* keep ≥16px */
   .table th, .table td { padding: 8px 6px; font-size: 14px; }
 }
 
+:root {
+  --brand: #f97316;      /* orange */
+  --brand-600: #ea580c;  /* deeper orange */
+  --text: #111827;       /* black-ish */
+  --bg: #ffffff;         /* white */
+  --border: #e5e7eb;
+  --focus: 0 0 0 3px rgba(249, 115, 22, 0.25);
+  --surface: #ffffff;
+}
+
+/* Optional button helpers if you prefer classes */
+.btn-orange { background: var(--brand); color: #fff; }
+.btn-orange:hover { background: var(--brand-600); }
+.btn-dark { background: #111827; color: #fff; }
