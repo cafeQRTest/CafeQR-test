@@ -143,19 +143,22 @@ export default function AvailabilityPage() {
     setSaving(true);
     setErr("");
     try {
-      const rows = hours.map((h) => ({
-        restaurant_id: restaurantId,
-        dow: h.dow,
-        open_time: h.open,
-        close_time: h.close,
-        enabled: h.enabled,
-      }));
-      for (const r of rows) {
-        const { error } = await supabase
-          .from("restaurant_hours")
-          .upsert(r, { onConflict: "restaurant_id,dow" });
-        if (error) throw error;
-      }
+      // replace saveHours() body
+const rows = hours.map((h) => ({
+  restaurant_id: restaurantId,
+  dow: h.dow,
+  open_time: h.open,
+  close_time: h.close,
+  enabled: h.enabled,
+}));
+
+const { error } = await supabase
+  .from("restaurant_hours")
+  .upsert(rows, { onConflict: "restaurant_id,dow" });
+
+if (error) throw error;
+
+      
     } catch (e) {
       setErr(e.message || "Failed to save hours");
       setSaving(false);
@@ -187,137 +190,138 @@ export default function AvailabilityPage() {
       </Row>
 
       <Card padding={16}>
-        <PauseSection>
-          <label>
-            <input
-              type="checkbox"
-              checked={paused}
-              onChange={togglePause}
-              disabled={saving}
+  <div className="pause-sticky">
+    <PauseSection>
+      <label>
+        <input
+          type="checkbox"
+          checked={paused}
+          onChange={togglePause}
+          disabled={saving}
+        />
+        <span><strong>Pause online ordering</strong> {saving && "…"}</span>
+      </label>
+      <Muted>When paused, customers can view the menu but cannot place new orders.</Muted>
+    </PauseSection>
+  </div>
+
+<Row gap="8px" wrap>
+  <Button variant="outline" onClick={() => setAll({ open: "10:00", close: "22:00", enabled: true })}>
+    Set All to 10:00–22:00
+  </Button>
+  <Button variant="outline" onClick={() => setAll({ open: "09:00", close: "21:00", enabled: true })}>
+    Set All to 09:00–21:00
+  </Button>
+</Row>
+
+{/* Mobile-first cards */}
+<div className="hours-cards">
+  {hours.map((h) => (
+    <div key={h.dow} className="hours-card">
+      <div className="hours-head">
+  <strong>{h.label}</strong>
+  <label className="switch" title={h.enabled ? 'Open' : 'Closed'}>
+    <input
+      aria-label={`Enable ${h.label}`}
+      type="checkbox"
+      checked={h.enabled}
+      onChange={(e) => setRow(h.dow, { enabled: e.target.checked })}
+    />
+    <span className="slider" />
+    <span className={`switch-text ${h.enabled ? 'on' : 'off'}`}>
+      {h.enabled ? 'Open' : 'Closed'}
+    </span>
+  </label>
+</div>
+
+
+
+      <div className="hours-grid">
+        <div>
+          <div className="field-label">Opens</div>
+          <TimeInput
+            type="time"
+            inputMode="numeric"
+            value={h.open}
+            onChange={(e) => setRow(h.dow, { open: e.target.value })}
+            disabled={!h.enabled}
+          />
+        </div>
+        <div>
+          <div className="field-label">Closes</div>
+          <TimeInput
+            type="time"
+            inputMode="numeric"
+            value={h.close}
+            onChange={(e) => setRow(h.dow, { close: e.target.value })}
+            disabled={!h.enabled}
+          />
+        </div>
+        <div className="quick-row">
+          <Button size="sm" variant="outline" onClick={() => copyRowDown(h.dow)}>Copy ↓</Button>
+          <Button size="sm" variant="outline" onClick={() => setRow(h.dow, { open: "09:00", close: "21:00", enabled: true })}>9–21</Button>
+          <Button size="sm" variant="outline" onClick={() => setRow(h.dow, { open: "10:00", close: "22:00", enabled: true })}>10–22</Button>
+        </div>
+      </div>
+    </div>
+  ))}
+</div>
+
+{/* Desktop table (hidden on small screens) */}
+<TableWrapper className="hours-table">
+  <table>
+    <thead>
+      <tr>
+        <th>Day</th>
+        <th>Enabled</th>
+        <th>Opens</th>
+        <th>Closes</th>
+        <th className="hide-sm">Quick</th>
+      </tr>
+    </thead>
+    <tbody>
+      {hours.map((h) => (
+        <tr key={h.dow}>
+          <td><strong>{h.label}</strong></td>
+          <td>
+            <label>
+              <input
+                type="checkbox"
+                checked={h.enabled}
+                onChange={(e) => setRow(h.dow, { enabled: e.target.checked })}
+              />
+              <span className="muted">Open</span>
+            </label>
+          </td>
+          <td>
+            <TimeInput
+              type="time"
+              value={h.open}
+              onChange={(e) => setRow(h.dow, { open: e.target.value })}
+              disabled={!h.enabled}
             />
-            <span>
-              <strong>Pause online ordering</strong> {saving && "…"}
-            </span>
-          </label>
-          <Muted>
-            When paused, customers can view the menu but cannot place new
-            orders.
-          </Muted>
-        </PauseSection>
+          </td>
+          <td>
+            <TimeInput
+              type="time"
+              value={h.close}
+              onChange={(e) => setRow(h.dow, { close: e.target.value })}
+              disabled={!h.enabled}
+            />
+          </td>
+          <td className="hide-sm">
+            <Row gap="6px" wrap>
+              <Button size="sm" variant="outline" onClick={() => copyRowDown(h.dow)}>Copy ↓</Button>
+              <Button size="sm" variant="outline" onClick={() => setRow(h.dow, { open: "09:00", close: "21:00", enabled: true })}>9–21</Button>
+              <Button size="sm" variant="outline" onClick={() => setRow(h.dow, { open: "10:00", close: "22:00", enabled: true })}>10–22</Button>
+            </Row>
+          </td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+</TableWrapper>
 
-        <Row gap="8px" wrap>
-          <Button
-            variant="outline"
-            onClick={() =>
-              setAll({ open: "10:00", close: "22:00", enabled: true })
-            }
-          >
-            Set All to 10:00–22:00
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() =>
-              setAll({ open: "09:00", close: "21:00", enabled: true })
-            }
-          >
-            Set All to 09:00–21:00
-          </Button>
-        </Row>
-
-        <TableWrapper>
-          <table>
-            <thead>
-              <tr>
-                <th>Day</th>
-                <th>Enabled</th>
-                <th>Opens</th>
-                <th>Closes</th>
-                <th className="hide-sm">Quick</th>
-              </tr>
-            </thead>
-            <tbody>
-              {hours.map((h) => (
-                <tr key={h.dow}>
-                  <td>
-                    <strong>{h.label}</strong>
-                  </td>
-                  <td>
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={h.enabled}
-                        onChange={(e) =>
-                          setRow(h.dow, { enabled: e.target.checked })
-                        }
-                      />
-                      <span className="muted">Open</span>
-                    </label>
-                  </td>
-                  <td>
-                    <TimeInput
-                      type="time"
-                      value={h.open}
-                      onChange={(e) => setRow(h.dow, { open: e.target.value })}
-                      disabled={!h.enabled}
-                    />
-                  </td>
-                  <td>
-                    <TimeInput
-                      type="time"
-                      value={h.close}
-                      onChange={(e) => setRow(h.dow, { close: e.target.value })}
-                      disabled={!h.enabled}
-                    />
-                  </td>
-                  <td className="hide-sm">
-                    <Row gap="6px" wrap>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => copyRowDown(h.dow)}
-                      >
-                        Copy ↓
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() =>
-                          setRow(h.dow, {
-                            open: "09:00",
-                            close: "21:00",
-                            enabled: true,
-                          })
-                        }
-                      >
-                        9–21
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() =>
-                          setRow(h.dow, {
-                            open: "10:00",
-                            close: "22:00",
-                            enabled: true,
-                          })
-                        }
-                      >
-                        10–22
-                      </Button>
-                    </Row>
-                  </td>
-                </tr>
-              ))}
-              {hours.length === 0 && (
-                <tr>
-                  <td colSpan={6}>
-                    No rows. Use Set All to quickly initialize hours.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </TableWrapper>
 
         <Row justify="flex-end" gap="8px" wrap style={{ marginTop: 12 }}>
           <Button variant="outline" onClick={() => setHours(defaultHours())}>
