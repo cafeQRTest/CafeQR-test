@@ -368,15 +368,27 @@ useEffect(() => {
 
 
 
-  const loadCreditCustomers = async () => {
-    const { data, error: err } = await supabase
-      .from('credit_customers')
-      .select('id, name, phone, current_balance, status')
-      .eq('restaurant_id', restaurantId)
-      .eq('status', 'active')
-      .order('name');
-    if (!err && data) setCreditCustomers(data);
-  };
+  // pages/owner/counter.js
+const loadCreditCustomers = async () => {
+  const { data, error } = await supabase
+    .from('v_credit_customer_ledger')
+    .select('id, name, phone, status, current_balance_calc')
+    .eq('restaurant_id', restaurantId)
+    .eq('status', 'active')
+    .order('name');
+  if (!error) {
+    setCreditCustomers(
+      (data || []).map(r => ({
+        id: r.id,
+        name: r.name,
+        phone: r.phone,
+        status: r.status,
+        current_balance: Number(r.current_balance_calc || 0), // use ledger
+      }))
+    );
+  }
+};
+
 
   const handleSelectCreditCustomer = (customerId) => {
     const customer = creditCustomers.find((c) => c.id === customerId);
@@ -681,7 +693,6 @@ useEffect(() => {
     <div className="counter-shell">
       <header className="counter-header">
         <div className="counter-header-row">
-          <button onClick={() => router.push('/owner/orders')} className="counter-back-btn">←</button>
           <h1 className="counter-title">Counter Sale</h1>
           {cartItemsCount > 0 && <div className="counter-cart-info">{cartItemsCount}•₹{cartTotals.totalInc.toFixed(2)}</div>}
         </div>
