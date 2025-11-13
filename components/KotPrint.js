@@ -60,6 +60,27 @@ export default function KotPrint({ order, onClose, onPrint, autoPrint = true }) 
   return () => { alive = false; };
 }, [order]);
 
+async function ensurePrinterConfigured() {
+  const n = navigator;
+  const hasUsb = n?.usb && (await n.usb.getDevices()).length > 0;
+  const hasSerial = n?.serial && (await n.serial.getPorts()).length > 0;
+  const hasRelay = !!localStorage.getItem('PRINT_RELAY_URL') && !!localStorage.getItem('PRINTER_IP');
+  if (hasUsb || hasSerial || hasRelay) return true;
+  // Prompt once under user gesture
+  try {
+    await printUniversal({ text: 'TEST', allowPrompt: true, allowSystemDialog: false, codepage: 0 });
+    localStorage.setItem('PRINTER_READY', '1');
+    return true;
+  } catch { return false; }
+}
+
+
+function isDesktopPWA() {
+  try {
+    const standalone = window.matchMedia && window.matchMedia('(display-mode: standalone)').matches;
+    return standalone && !/Android/i.test(navigator.userAgent);
+  } catch { return false; }
+}
 
   const doPrint = useCallback(async () => {
     if (lockRef.current) return;
@@ -68,6 +89,8 @@ export default function KotPrint({ order, onClose, onPrint, autoPrint = true }) 
     const text = buildReceiptText(order, bill, restaurantProfile);
     const onAndroidPWA = isAndroidPWA();
     const onNativeAndroid = isNativeAndroid();
+    const onDesktopStandalone = isDesktopPWA();
+
     
 
     try {
@@ -79,14 +102,15 @@ export default function KotPrint({ order, onClose, onPrint, autoPrint = true }) 
       }
 
       // 2) Other platforms: try silent transports
+      const allowSystemDialog = onNativeAndroid ? false : (onDesktopStandalone ? false : true);
       await printUniversal({
-        text,
-        relayUrl: localStorage.getItem('PRINT_RELAY_URL') || undefined,
-        ip: localStorage.getItem('PRINTER_IP') || undefined,
-        port: Number(localStorage.getItem('PRINTER_PORT') || 9100),
-        codepage: 0,
-        allowPrompt: false,
-        allowSystemDialog: onNativeAndroid ? false : true
+         text,
+         relayUrl: localStorage.getItem('PRINT_RELAY_URL') || undefined,
+         ip: localStorage.getItem('PRINTER_IP') || undefined,
+         port: Number(localStorage.getItem('PRINTER_PORT') || 9100),
+         codepage: 0,
+         allowPrompt: false,
+        allowSystemDialog
       });
       onPrint?.(); onClose?.(); return;
     } catch {
@@ -152,7 +176,27 @@ Amount: ₹${amount.toFixed(2)}`}</pre>
 }
 
 
-  if (autoPrint && !status) return null;
+if (autoPrint && !status) return null;
+
+// When desktop PWA and no saved printer, show a tiny setup nudge
+if (isDesktopPWA() && !localStorage.getItem('PRINTER_READY')) {
+  return (
+    <div className="kot-overlay">
+      <div className="kot-modal">
+        <div className="kot-header"><h2>Printer setup</h2></div>
+       <p>Select your USB/Serial/Network printer once to enable silent printing.</p>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="primary" onClick={async () => { 
+            const ok = await ensurePrinterConfigured(); 
+            setStatus(ok ? '✓ Printer saved' : '✗ Setup cancelled');
+            if (ok) { await doPrint(); }
+          }}>Select printer</button>
+          <button onClick={onClose}>Skip</button>
+        </div>
+      </div>
+    </div>
+  );
+}
   return (
     <div className="kot-overlay">
       <div className="kot-modal">

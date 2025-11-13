@@ -7,6 +7,8 @@ import { useSubscription } from '../../context/SubscriptionContext'; // ADD THIS
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import { getSupabase } from '../../services/supabase'; // 1. IMPORT
+import PrinterSetupCard from '../../components/PrinterSetupCard';
+
 
 
 function Section({ title, icon, children }) {
@@ -1052,6 +1054,10 @@ if (form.tables_count && form.tables_count > originalTables) {
 
         </div>
       </form>
+
+<Section title="Printing">
+  <PrinterSetupCard />
+</Section>
 
       {/* Kitchen Dashboard Link */}
       <Section title="Kitchen Dashboard Link" icon="👨‍🍳">

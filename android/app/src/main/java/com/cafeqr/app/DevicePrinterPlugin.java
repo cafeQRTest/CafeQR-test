@@ -75,6 +75,45 @@ public class DevicePrinterPlugin extends Plugin {
     if (granted) saved.resolve(); else saved.reject("Bluetooth permission denied");
   }
 
+@PluginMethod()
+public void printUsbRaw(PluginCall call) {
+  try {
+    String b64 = call.getString("base64");
+    if (b64 == null) { call.reject("base64 required"); return; }
+    byte[] data = android.util.Base64.decode(b64, android.util.Base64.DEFAULT);
+    UsbManager mgr = (UsbManager) getContext().getSystemService(Context.USB_SERVICE);
+    for (UsbDevice dev : mgr.getDeviceList().values()) {
+      for (int i=0;i<dev.getInterfaceCount();i++) {
+        UsbInterface intf = dev.getInterface(i);
+        for (int j=0;j<intf.getEndpointCount();j++) {
+          UsbEndpoint ep = intf.getEndpoint(j);
+          if (ep.getDirection() == UsbConstants.USB_DIR_OUT) {
+            PendingIntent pi = PendingIntent.getBroadcast(getContext(), 0, new Intent("USB_PERMISSION"), PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_MUTABLE);
+            if (!mgr.hasPermission(dev)) { mgr.requestPermission(dev, pi); /* return and ask user once */ }
+            UsbDeviceConnection conn = mgr.openDevice(dev);
+            conn.claimInterface(intf, true);
+            conn.bulkTransfer(ep, data, data.length, 5000);
+            conn.close();
+            call.resolve();
+            return;
+          }
+        }
+      }
+    }
+    call.reject("No USB OUT endpoint");
+  } catch (Exception e) { call.reject(e.getMessage()); }
+}
+
+@PluginMethod()
+public void printSunmiText(PluginCall call) {
+  try {
+    String text = call.getString("text", "");
+    // SunmiPrinterService via AIDL; bind and print
+    // ... bind service and send text with line feeds + cut
+    call.resolve();
+  } catch (Exception e) { call.reject(e.getMessage()); }
+}
+
   // One‑time picker dialog: short discovery, list bonded + found, return {name,address}
   @PluginMethod()
   public void pickPrinter(PluginCall call) {
