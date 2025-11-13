@@ -22,6 +22,7 @@ export default function InventoryPage() {
   const [ingredientDialog, setIngredientDialog] = useState(null) // null, 'add', or ingredient id for edit
   const [selectedMenuItem, setSelectedMenuItem] = useState(null) // menu item currently being edited in recipe modal
   const [confirmDialog, setConfirmDialog] = useState(null) // { message, onConfirm, onCancel }
+  const [ingredientFormError, setIngredientFormError] = useState('')
 
   useEffect(() => {
     if (checking || restLoading || !restaurantId || !supabase) return
@@ -44,6 +45,7 @@ export default function InventoryPage() {
 
   const startEdit = (ing) => {
     setEditingIngredient(ing.id)
+    setIngredientFormError('')
     setIngredientForm({
       name: ing.name,
       unit: ing.unit,
@@ -53,6 +55,7 @@ export default function InventoryPage() {
   }
   const resetForm = () => {
     setEditingIngredient(null)
+    setIngredientFormError('')
     setIngredientForm({ name: '', unit: '', current_stock: 0, reorder_threshold: 0 })
   }
 
@@ -60,28 +63,49 @@ export default function InventoryPage() {
     if (!supabase) return
     try {
       setError('')
-      const payload = {
-        restaurant_id: restaurantId,
-        name: ingredientForm.name,
-        unit: ingredientForm.unit,
-        current_stock: Number(ingredientForm.current_stock),
-        reorder_threshold: Number(ingredientForm.reorder_threshold)
+      setIngredientFormError('')
+      const name = (ingredientForm.name || '').trim()
+      const unit = (ingredientForm.unit || '').trim()
+      const current_stock_num = Number(ingredientForm.current_stock)
+      const reorder_threshold_num = ingredientForm.reorder_threshold === '' || ingredientForm.reorder_threshold === null || typeof ingredientForm.reorder_threshold === 'undefined'
+        ? 0
+        : Number(ingredientForm.reorder_threshold)
+
+      // Validate required fields (threshold excluded)
+      if (!name) throw new Error('Ingredient name is required')
+      if (!editingIngredient && !unit) throw new Error('Unit is required')
+      if (Number.isNaN(current_stock_num)) throw new Error('Current stock is required')
+
+      // Uniqueness check (case-insensitive) within this restaurant
+      const { data: dup, error: dupErr } = await supabase
+        .from('ingredients')
+        .select('id')
+        .eq('restaurant_id', restaurantId)
+        .ilike('name', name)
+        .limit(1)
+      if (dupErr) throw dupErr
+      if (dup && dup.length > 0 && (!editingIngredient || dup[0].id !== editingIngredient)) {
+        throw new Error('Ingredient name must be unique')
       }
+
       let res
       if (editingIngredient) {
+        // Do NOT allow unit change once created
         res = await supabase
           .from('ingredients')
           .update({
-            name: payload.name,
-            unit: payload.unit,
-            current_stock: payload.current_stock,
-            reorder_threshold: payload.reorder_threshold
+            name,
+            current_stock: current_stock_num,
+            reorder_threshold: Number.isNaN(reorder_threshold_num) ? 0 : reorder_threshold_num
           })
           .eq('id', editingIngredient)
       } else {
-        res = await supabase.from('ingredients').insert([payload])
+        res = await supabase
+          .from('ingredients')
+          .insert([{ restaurant_id: restaurantId, name, unit, current_stock: current_stock_num, reorder_threshold: Number.isNaN(reorder_threshold_num) ? 0 : reorder_threshold_num }])
       }
       if (res.error) throw res.error
+
       const { data, error } = await supabase
         .from('ingredients')
         .select('*')
@@ -89,8 +113,10 @@ export default function InventoryPage() {
       if (error) throw error
       setIngredients(data || [])
       resetForm()
+      setIngredientDialog(null)
     } catch (e) {
-      setError(e.message)
+      // Show error inside the modal and keep it open
+      setIngredientFormError(e.message)
     }
   }
 
@@ -101,7 +127,27 @@ export default function InventoryPage() {
     else setIngredients((prev) => prev.filter((i) => i.id !== id))
   }
 
-  const askDeleteIngredient = (id) => {
+  const askDeleteIngredient = async (id) => {
+    // Check if ingredient is referenced in any recipe items
+    try {
+      const { data: refs, error: refsErr } = await supabase
+        .from('recipe_items')
+        .select('id')
+        .eq('ingredient_id', id)
+        .limit(1)
+      if (refsErr) throw refsErr
+      if (refs && refs.length > 0) {
+        setConfirmDialog({
+          message: 'This ingredient is used in one or more recipes and cannot be deleted.',
+          onCancel: () => setConfirmDialog(null),
+        })
+        return
+      }
+    } catch (e) {
+      setError(e.message)
+      return
+    }
+
     setConfirmDialog({
       message: 'Delete this ingredient?',
       onConfirm: async () => {
@@ -267,7 +313,7 @@ export default function InventoryPage() {
         <Section>
           <SectionHeader>
             <SectionTitle>Ingredients Inventory</SectionTitle>
-            <AddButton onClick={() => setIngredientDialog('add')}>
+            <AddButton onClick={() => { setIngredientFormError(''); setIngredientDialog('add') }}>
               + Add Ingredient
             </AddButton>
           </SectionHeader>
@@ -374,6 +420,9 @@ export default function InventoryPage() {
               }}>✕</CloseButton>
             </ModalHeader>
             <ModalBody>
+              {ingredientFormError && (
+                <InlineError>{ingredientFormError}</InlineError>
+              )}
               <FormGroup>
                 <FormLabel>Ingredient Name *</FormLabel>
                 <FormInput
@@ -388,6 +437,8 @@ export default function InventoryPage() {
                   placeholder="e.g., kg, L, pcs, g..."
                   value={ingredientForm.unit}
                   onChange={(e) => setIngredientForm({ ...ingredientForm, unit: e.target.value })}
+                  disabled={!!editingIngredient}
+                  title={editingIngredient ? 'Unit cannot be changed after creation' : undefined}
                 />
               </FormGroup>
               <FormGroup>
@@ -400,7 +451,7 @@ export default function InventoryPage() {
                 />
               </FormGroup>
               <FormGroup>
-                <FormLabel>Reorder Threshold *</FormLabel>
+                <FormLabel>Reorder Threshold</FormLabel>
                 <FormInput
                   type="number"
                   placeholder="Alert when stock drops below this"
@@ -418,7 +469,6 @@ export default function InventoryPage() {
               </CancelButton>
               <SaveButton onClick={() => {
                 saveIngredient()
-                setIngredientDialog(null)
               }}>
                 {editingIngredient ? 'Update' : 'Add'} Ingredient
               </SaveButton>
@@ -439,7 +489,9 @@ export default function InventoryPage() {
             </ModalBody>
             <ModalFooter>
               <CancelButton onClick={() => confirmDialog?.onCancel?.()}>Cancel</CancelButton>
-              <SaveButton onClick={() => confirmDialog?.onConfirm?.()}>Confirm</SaveButton>
+              {confirmDialog?.onConfirm && (
+                <SaveButton onClick={() => confirmDialog?.onConfirm?.()}>Confirm</SaveButton>
+              )}
             </ModalFooter>
           </IngredientModal>
         </IngredientModalOverlay>
@@ -849,6 +901,14 @@ const ModalFooter = styled.div`
   padding: 1.5rem;
   border-top: 2px solid #f3f4f6;
   justify-content: flex-end;
+`
+const InlineError = styled.div`
+  background: #fee2e2;
+  color: #991b1b;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  border-left: 4px solid #dc2626;
+  margin-bottom: 1rem;
 `
 const CancelButton = styled.button`
   padding: 0.75rem 1.5rem;
