@@ -219,30 +219,35 @@ function Sidebar({ collapsed }) {
   const hasAggregatorIntegration = Boolean(restaurant?.swiggy_api_key || restaurant?.zomato_api_key)
   const [signingOut, setSigningOut] = useState(false)
 
+  const feature = restaurant?.features || {};
   const items = [
-    { href: '/owner', label: 'Overview', icon: <FaHome /> },
-    { href: '/owner/menu', label: 'Menu', icon: <FaBars /> },
-    { href: '/owner/orders', label: 'Orders', icon: <FaUtensils /> },
-    { href: '/owner/counter', label: 'Counter Sale', icon: <FaCashRegister /> },
-    { href: '/owner/inventory', label: 'Inventory', icon: <FaBoxes /> },
-    { href: '/owner/availability', label: 'Availability', icon: <FaClock /> },
-    { href: '/owner/promotions', label: 'Promotions', icon: <FaTags /> },
-    { href: '/owner/analytics', label: 'Analytics', icon: <FaChartBar /> },
-    { href: '/owner/production', label: 'Production', icon: <FaIndustry /> },
+  // defaults (always shown)
+  { href: '/owner', label: 'Overview', icon: <FaHome /> },
+  { href: '/owner/menu', label: 'Menu', icon: <FaBars /> },
+  { href: '/owner/orders', label: 'Orders', icon: <FaUtensils /> },
+  { href: '/owner/counter', label: 'Counter Sale', icon: <FaCashRegister /> },
+
+  // optional modules
+  ...(feature.inventory_enabled ? [{ href: '/owner/inventory', label: 'Inventory', icon: <FaBoxes /> }] : []),
+  ...(feature.table_ordering_enabled ? [{ href: '/owner/availability', label: 'Availability', icon: <FaClock /> }] : []),
+  ...(feature.production_enabled ? [{ href: '/owner/production', label: 'Production', icon: <FaIndustry /> }] : []),
+  ...(feature.credit_enabled ? [
     { href: '/owner/credit-customers', label: 'Credit Customers', icon: <FaUsers /> },
     { href: '/owner/credit-sales-report', label: 'Credit Sales Report', icon: <FaFileAlt /> },
-    { href: '/owner/sales', label: 'Sales', icon: <FaCreditCard /> },
-    { href: '/owner/settings', label: 'Settings', icon: <FaCog /> },
-    { href: '/owner/billing', label: 'Billing', icon: <FaFileInvoice /> },
-  ]
-  
-  if (hasAggregatorIntegration) {
-    items.push({
-      href: '/owner/aggregator-poller',
-      label: 'Aggregator Orders',
-      icon: <FaUtensils />,
-    })
-  }
+  ] : []),
+
+  // analytics/sales/settings/billing (always shown)
+  { href: '/owner/analytics', label: 'Analytics', icon: <FaChartBar /> },
+  { href: '/owner/sales', label: 'Sales', icon: <FaCreditCard /> },
+  { href: '/owner/settings', label: 'Settings', icon: <FaCog /> },
+  { href: '/owner/billing', label: 'Billing', icon: <FaFileInvoice /> },
+];
+
+// Keep existing aggregator push-on condition
+if (hasAggregatorIntegration) {
+  items.push({ href: '/owner/aggregator-poller', label: 'Aggregator Orders', icon: <FaUtensils /> });
+}
+
 
   const itemStyle = (active) => ({
     display: 'flex',
@@ -332,30 +337,35 @@ function MobileSidebar({ onNavigate }) {
   const hasAggregatorIntegration = Boolean(restaurant?.swiggy_api_key || restaurant?.zomato_api_key)
   const [signingOut, setSigningOut] = useState(false)
 
+  const feature = restaurant?.features || {};
   const items = [
-    { href: '/owner', label: 'Overview', icon: <FaHome /> },
-    { href: '/owner/menu', label: 'Menu', icon: <FaBars /> },
-    { href: '/owner/orders', label: 'Orders', icon: <FaUtensils /> },
-    { href: '/owner/counter', label: 'Counter Sale', icon: <FaCashRegister /> },
-    { href: '/owner/inventory', label: 'Inventory', icon: <FaBoxes /> },
-    { href: '/owner/availability', label: 'Availability', icon: <FaClock /> },
-    { href: '/owner/promotions', label: 'Promotions', icon: <FaTags /> },
-    { href: '/owner/analytics', label: 'Analytics', icon: <FaChartBar /> },
-    { href: '/owner/production', label: 'Production', icon: <FaIndustry /> },
+  // defaults (always shown)
+  { href: '/owner', label: 'Overview', icon: <FaHome /> },
+  { href: '/owner/menu', label: 'Menu', icon: <FaBars /> },
+  { href: '/owner/orders', label: 'Orders', icon: <FaUtensils /> },
+  { href: '/owner/counter', label: 'Counter Sale', icon: <FaCashRegister /> },
+
+  // optional modules
+  ...(feature.inventory_enabled ? [{ href: '/owner/inventory', label: 'Inventory', icon: <FaBoxes /> }] : []),
+  ...(feature.table_ordering_enabled ? [{ href: '/owner/availability', label: 'Availability', icon: <FaClock /> }] : []),
+  ...(feature.production_enabled ? [{ href: '/owner/production', label: 'Production', icon: <FaIndustry /> }] : []),
+  ...(feature.credit_enabled ? [
     { href: '/owner/credit-customers', label: 'Credit Customers', icon: <FaUsers /> },
     { href: '/owner/credit-sales-report', label: 'Credit Sales Report', icon: <FaFileAlt /> },
-    { href: '/owner/sales', label: 'Sales', icon: <FaCreditCard /> },
-    { href: '/owner/settings', label: 'Settings', icon: <FaCog /> },
-    { href: '/owner/billing', label: 'Billing', icon: <FaFileInvoice /> },
-  ]
-  
-  if (hasAggregatorIntegration) {
-    items.push({
-      href: '/owner/aggregator-poller',
-      label: 'Aggregator Orders',
-      icon: <FaUtensils />,
-    })
-  }
+  ] : []),
+
+  // analytics/sales/settings/billing (always shown)
+  { href: '/owner/analytics', label: 'Analytics', icon: <FaChartBar /> },
+  { href: '/owner/sales', label: 'Sales', icon: <FaCreditCard /> },
+  { href: '/owner/settings', label: 'Settings', icon: <FaCog /> },
+  { href: '/owner/billing', label: 'Billing', icon: <FaFileInvoice /> },
+];
+
+// Keep existing aggregator push-on condition
+if (hasAggregatorIntegration) {
+  items.push({ href: '/owner/aggregator-poller', label: 'Aggregator Orders', icon: <FaUtensils /> });
+}
+
 
   const handleSignOut = async () => {
     setSigningOut(true)

@@ -99,6 +99,10 @@ export default function SettingsPage() {
     zomato_webhook_secret: '',
     useswiggy: false,
     usezomato: false,
+    features_credit_enabled: false,
+    features_production_enabled: false,
+    features_inventory_enabled: false,
+    features_table_ordering_enabled: false,
   });
 
   const [originalTables, setOriginalTables] = useState(0);
@@ -146,6 +150,11 @@ export default function SettingsPage() {
             zomato_enabled: !!(profile.zomato_api_key && profile.zomato_api_secret && profile.zomato_webhook_secret),
             useswiggy: !!(profile.swiggy_api_key && profile.swiggy_api_secret && profile.swiggy_webhook_secret),
             usezomato: !!(profile.zomato_api_key && profile.zomato_api_secret && profile.zomato_webhook_secret),
+            features_credit_enabled: !!sanitizedProfile.features_credit_enabled,
+            features_production_enabled: !!sanitizedProfile.features_production_enabled,
+            features_inventory_enabled: !!sanitizedProfile.features_inventory_enabled,
+            features_table_ordering_enabled: !!sanitizedProfile.features_table_ordering_enabled,
+
           }));
           setOriginalTables(profile.tables_count || 0);
           setIsFirstTime(false);
@@ -343,6 +352,11 @@ async function save(e) {
       zomato_api_key: rest.zomato_api_key,
       zomato_api_secret: rest.zomato_api_secret,
       zomato_webhook_secret: rest.zomato_webhook_secret,
+      features_credit_enabled: !!rest.features_credit_enabled,
+      features_production_enabled: !!rest.features_production_enabled,
+      features_inventory_enabled: !!rest.features_inventory_enabled,
+      features_table_ordering_enabled: !!rest.features_table_ordering_enabled,
+
     };
 
     // STEP 3: Show immediate success & disable saving
@@ -909,9 +923,7 @@ if (form.tables_count && form.tables_count > originalTables) {
             </Field>
           </div>
 
-          <div style={{ background: '#eff6ff', padding: 12, border: '1px solid #bfdbfe', borderRadius: 8 }}>
-            <span>Business hours in Availability tab</span>
-          </div>
+
         </Section>
 
         {/* Brand & Web */}
@@ -988,6 +1000,49 @@ if (form.tables_count && form.tables_count > originalTables) {
             </>
           )}
         </Section>
+
+{/* Modules visible in sidebar */}
+<Section title="Modules & Sidepanel" icon="🧩">
+  <div style={{ display: 'grid', gap: 14 }}>
+    <label style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <input
+        type="checkbox"
+        checked={!!form.features_credit_enabled}
+        onChange={onChange('features_credit_enabled')}
+      />
+      <span>Credit (Credit Customers + Credit Sales Report)</span>
+    </label>
+
+    <label style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <input
+        type="checkbox"
+        checked={!!form.features_production_enabled}
+        onChange={onChange('features_production_enabled')}
+      />
+      <span>Production (Production page)</span>
+    </label>
+
+    <label style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <input
+        type="checkbox"
+        checked={!!form.features_table_ordering_enabled}
+        onChange={onChange('features_table_ordering_enabled')}
+      />
+      <span>Table‑wise Ordering (Availability page)</span>
+    </label>
+
+    <label style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <input
+        type="checkbox"
+        checked={!!form.features_inventory_enabled}
+        onChange={onChange('features_inventory_enabled')}
+      />
+      <span>Inventory (Inventory page)</span>
+    </label>
+  </div>
+
+</Section>
+
 
         {/* Save Button */}
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
