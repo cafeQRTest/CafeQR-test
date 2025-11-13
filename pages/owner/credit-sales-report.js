@@ -1,6 +1,6 @@
 // pages/owner/credit-sales-report.js
 import { useRouter } from 'next/router'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRequireAuth } from '../../lib/useRequireAuth'
 import { useRestaurant } from '../../context/RestaurantContext'
 import { getSupabase } from '../../services/supabase'
@@ -18,6 +18,57 @@ export default function CreditSalesReportPage() {
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0])
   const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0])
   const [expandedOrderId, setExpandedOrderId] = useState(null)
+  const [viewMode, setViewMode] = useState('orders'); // 'orders' | 'customers'
+  const [expandedCustomerId, setExpandedCustomerId] = useState(null)
+  const customersIndex = useMemo(() => {
+  const m = new Map();
+  (reportData?.customersNow || []).forEach(c => m.set(c.id, c));
+  return m;
+}, [reportData?.customersNow]);
+
+// Build per-customer rollups for the selected period
+const customerTiles = useMemo(() => {
+  if (!reportData) return [];
+  const map = new Map();
+
+  // Orders contribute to "extended"
+  (reportData.orders || []).forEach(o => {
+    if (!o.credit_customer_id) return;
+    const acc = map.get(o.credit_customer_id) || {
+      id: o.credit_customer_id,
+      name: o.customer_name,
+      phone: o.customer_phone,
+      orders: 0,
+      extended: 0,
+      payments: 0,
+    };
+    acc.orders += 1;
+    acc.extended += Number(o.total_inc_tax || o.total_amount || 0);
+    map.set(o.credit_customer_id, acc);
+  });
+
+  // Transactions contribute payments and adjustments/credits
+  (reportData.transactions || []).forEach(t => {
+    if (!t.credit_customer_id) return;
+    const snap = customersIndex.get(t.credit_customer_id);
+    const acc = map.get(t.credit_customer_id) || {
+      id: t.credit_customer_id,
+      name: snap?.name,
+      phone: snap?.phone,
+      orders: 0,
+      extended: 0,
+      payments: 0,
+    };
+    if (t.transaction_type === 'payment') acc.payments += Number(t.amount || 0);
+    if (t.transaction_type === 'adjustment' || t.transaction_type === 'credit') {
+      acc.extended += Number(t.amount || 0);
+    }
+    map.set(t.credit_customer_id, acc);
+  });
+
+  return Array.from(map.values()).map(x => ({ ...x, outstanding: x.extended - x.payments }));
+}, [reportData, customersIndex]);
+
 
   useEffect(() => {
     if (checking || restLoading || !restaurantId) return
@@ -92,162 +143,272 @@ export default function CreditSalesReportPage() {
   if (!restaurantId) return <div style={{ padding: 24 }}>No restaurant</div>
 
   return (
-    <div style={{ padding: 24, maxWidth: 1200, margin: '0 auto' }}>
-      <h1>💳 Credit Sales Report</h1>
+  <div className="container page cr-page">
+    <h1 className="cr-title">💳 Credit Sales Report</h1>
 
-      <div style={{ display: 'flex', gap: 12, marginBottom: 24, alignItems: 'center' }}>
-        <div>
-          <label style={{ fontSize: 12, color: '#6b7280', marginBottom: 4, display: 'block' }}>From</label>
-          <input
-            type="date"
-            value={startDate}
-            onChange={e => setStartDate(e.target.value)}
-            style={{ padding: '8px 12px', border: '1px solid #e5e7eb', borderRadius: 6 }}
-          />
-        </div>
-        <div>
-          <label style={{ fontSize: 12, color: '#6b7280', marginBottom: 4, display: 'block' }}>To</label>
-          <input
-            type="date"
-            value={endDate}
-            onChange={e => setEndDate(e.target.value)}
-            style={{ padding: '8px 12px', border: '1px solid #e5e7eb', borderRadius: 6 }}
-          />
-        </div>
+    <div className="cr-filters">
+      <div className="cr-filter">
+        <label className="cr-filter-label">From</label>
+        <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
       </div>
+      <div className="cr-filter">
+        <label className="cr-filter-label">To</label>
+        <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+      </div>
+    </div>
 
-      {error && <div style={{ color: 'red', marginBottom: 12, padding: 12, background: '#ffe5e5', borderRadius: 6 }}>{error}</div>}
+    {error && <div className="cr-error">{error}</div>}
 
-      {loading ? (
-        <div>Loading...</div>
-      ) : reportData ? (
-        <>
-          {/* Summary */}
-          {/* Summary */}
-<div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 24 }}>
-  <div style={{ padding: 16, background: '#f3f4f6', borderRadius: 8 }}>
-    <div style={{ fontSize: 12, color: '#6b7280' }}>Total Credit Sales</div>
-    <div style={{ fontSize: 20, fontWeight: 700, marginTop: 8 }}>
-      ₹{Number(reportData?.summary?.totalExtended ?? 0).toFixed(2)}
-    </div>
-  </div>
-  <div style={{ padding: 16, background: '#f3f4f6', borderRadius: 8 }}>
-    <div style={{ fontSize: 12, color: '#6b7280' }}>Payments Received</div>
-    <div style={{ fontSize: 20, fontWeight: 700, marginTop: 8 }}>
-      ₹{Number(reportData?.summary?.totalPayments ?? 0).toFixed(2)}
-    </div>
-  </div>
-  <div style={{ padding: 16, background: '#f3f4f6', borderRadius: 8 }}>
-    <div style={{ fontSize: 12, color: '#6b7280' }}>Outstanding</div>
-    <div style={{ fontSize: 20, fontWeight: 700, color: '#dc2626', marginTop: 8 }}>
-      ₹{Number(reportData?.summary?.outstanding ?? 0).toFixed(2)}
-    </div>
-  </div>
-  <div style={{ padding: 16, background: '#f3f4f6', borderRadius: 8 }}>
-    <div style={{ fontSize: 12, color: '#6b7280' }}>Orders/Customers</div>
-    <div style={{ fontSize: 20, fontWeight: 700, marginTop: 8 }}>
-      {reportData?.summary?.ordersCount ?? 0}/{reportData?.summary?.uniqueCustomers ?? 0}
-    </div>
-  </div>
+    {loading ? (
+      <div className="cr-loading">Loading...</div>
+    ) : reportData ? (
+      <>
+        {/* Summary */}
+        <div className="cr-summary-grid">
+          <div className="cr-kpi">
+            <div className="cr-kpi-label">Total Credit Sales</div>
+            <div className="cr-kpi-value">₹{Number(reportData?.summary?.totalExtended ?? 0).toFixed(2)}</div>
+          </div>
+          <div className="cr-kpi">
+            <div className="cr-kpi-label">Payments Received</div>
+            <div className="cr-kpi-value">₹{Number(reportData?.summary?.totalPayments ?? 0).toFixed(2)}</div>
+          </div>
+          <div className="cr-kpi">
+            <div className="cr-kpi-label">Outstanding</div>
+            <div className="cr-kpi-value cr-kpi-danger">₹{Number(reportData?.summary?.outstanding ?? 0).toFixed(2)}</div>
+          </div>
+          <div className="cr-kpi">
+            <div className="cr-kpi-label">Orders/Customers</div>
+            <div className="cr-kpi-value">{reportData?.summary?.ordersCount ?? 0}/{reportData?.summary?.uniqueCustomers ?? 0}</div>
+          </div>
+        </div>
+{/* Mobile segmented control (render once) */}
+<div className="cr-seg only-mobile">
+  <button
+    className={viewMode === 'orders' ? 'active' : ''}
+    onClick={() => setViewMode('orders')}
+  >
+    Orders
+  </button>
+  <button
+    className={viewMode === 'customers' ? 'active' : ''}
+    onClick={() => setViewMode('customers')}
+  >
+    Customers
+  </button>
 </div>
 
 
-
-          {/* Credit Orders */}
-          <h2 style={{ marginTop: 32, marginBottom: 16 }}>Credit Orders</h2>
-          <div style={{ overflowX: 'auto', marginBottom: 24 }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ background: '#f3f4f6', borderBottom: '2px solid #e5e7eb' }}>
-                  <th style={{ padding: 12, textAlign: 'left', fontWeight: 600 }}>Order #</th>
-                  <th style={{ padding: 12, textAlign: 'left', fontWeight: 600 }}>Customer</th>
-                  <th style={{ padding: 12, textAlign: 'left', fontWeight: 600 }}>Phone</th>
-                  <th style={{ padding: 12, textAlign: 'right', fontWeight: 600 }}>Amount</th>
-                  <th style={{ padding: 12, textAlign: 'right', fontWeight: 600 }}>Tax</th>
-                  <th style={{ padding: 12, textAlign: 'right', fontWeight: 600 }}>Total</th>
-                  <th style={{ padding: 12, textAlign: 'left', fontWeight: 600 }}>Date</th>
-                  <th style={{ padding: 12, textAlign: 'center', fontWeight: 600 }}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {reportData.orders.length === 0 ? (
-                  <tr>
-                    <td colSpan="8" style={{ padding: 12, textAlign: 'center', color: '#6b7280' }}>
-                      No credit orders in this period
-                    </td>
-                  </tr>
-                ) : (
-                  reportData.orders.map((order, idx) => (
-                    <tr key={order.id} style={{ borderBottom: '1px solid #e5e7eb', background: idx % 2 === 0 ? '#fff' : '#f9fafb' }}>
-                      <td style={{ padding: 12 }}>#{order.id.substring(0, 8)}</td>
-                      <td style={{ padding: 12 }}>{order.customer_name || 'N/A'}</td>
-<td style={{ padding: 12 }}>{order.customer_phone || 'N/A'}</td>
-                      <td style={{ padding: 12, textAlign: 'right' }}>₹{(order.total_amount || 0).toFixed(2)}</td>
-                      <td style={{ padding: 12, textAlign: 'right' }}>₹{(order.total_tax || 0).toFixed(2)}</td>
-                      <td style={{ padding: 12, textAlign: 'right', fontWeight: 600 }}>₹{(order.total_inc_tax || 0).toFixed(2)}</td>
-                      <td style={{ padding: 12 }}>{new Date(order.created_at).toLocaleDateString()}</td>
-                      <td style={{ padding: 12, textAlign: 'center' }}>
-                        <span style={{
-                          padding: '4px 8px',
-                          borderRadius: 4,
-                          fontSize: 12,
-                          fontWeight: 600,
-                          background: order.status === 'completed' ? '#dcfce7' : '#fef3c7',
-                          color: order.status === 'completed' ? '#166534' : '#92400e'
-                        }}>
-                          {order.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+{/* Mobile tiles (single conditional, wrapped by one parent) */}
+{viewMode === 'orders' ? (
+  <div className="cr-tiles only-mobile">
+    {reportData.orders.length === 0 ? (
+      <div className="cr-empty">No credit orders in this period</div>
+    ) : (
+      reportData.orders.map((o) => (
+        <div
+          key={o.id}
+          className="cr-tile"
+          onClick={() => setExpandedOrderId(expandedOrderId === o.id ? null : o.id)}
+        >
+          <div className="cr-tile-head">
+            <div>
+              <div className="cr-tile-title">#{o.id.substring(0, 8)}</div>
+              <div className="cr-tile-sub">{new Date(o.created_at).toLocaleDateString()}</div>
+            </div>
+            <span className={`cr-badge ${o.status === 'completed' ? 'cr-badge-success' : 'cr-badge-warn'}`}>
+              {o.status}
+            </span>
           </div>
 
-          {/* Payment Transactions */}
-          {reportData.transactions.length > 0 && (
-            <>
-              <h2 style={{ marginTop: 32, marginBottom: 16 }}>Payment Transactions</h2>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ background: '#f3f4f6', borderBottom: '2px solid #e5e7eb' }}>
-                      <th style={{ padding: 12, textAlign: 'left', fontWeight: 600 }}>Transaction Date</th>
-                      <th style={{ padding: 12, textAlign: 'left', fontWeight: 600 }}>Type</th>
-                      <th style={{ padding: 12, textAlign: 'left', fontWeight: 600 }}>Payment Method</th>
-                      <th style={{ padding: 12, textAlign: 'right', fontWeight: 600 }}>Amount</th>
-                      <th style={{ padding: 12, textAlign: 'left', fontWeight: 600 }}>Description</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {reportData.transactions.map((txn, idx) => (
-                      <tr key={txn.id} style={{ borderBottom: '1px solid #e5e7eb', background: idx % 2 === 0 ? '#fff' : '#f9fafb' }}>
-                        <td style={{ padding: 12 }}>{new Date(txn.transaction_date).toLocaleDateString()}</td>
-                        <td style={{ padding: 12 }}>
-                          <span style={{
-                            padding: '4px 8px',
-                            borderRadius: 4,
-                            fontSize: 12,
-                            fontWeight: 600,
-                            background: txn.transaction_type === 'payment' ? '#dcfce7' : '#fee2e2',
-                            color: txn.transaction_type === 'payment' ? '#166534' : '#991b1b'
-                          }}>
-                            {txn.transaction_type}
-                          </span>
-                        </td>
-                        <td style={{ padding: 12 }}>{txn.payment_method || 'N/A'}</td>
-                        <td style={{ padding: 12, textAlign: 'right', fontWeight: 600 }}>₹{(txn.amount || 0).toFixed(2)}</td>
-                        <td style={{ padding: 12, fontSize: 12, color: '#6b7280' }}>{txn.description}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
+          <div className="cr-tile-row">
+            <div>
+              <div className="cr-label">Customer</div>
+              <div className="cr-strong">{o.customer_name || 'N/A'}</div>
+            </div>
+            <div>
+              <div className="cr-label">Phone</div>
+              <div className="cr-strong">{o.customer_phone || 'N/A'}</div>
+            </div>
+          </div>
+
+          <div className="cr-tile-row">
+            <div><div className="cr-label">Amount</div><div className="cr-num">₹{Number(o.total_amount || 0).toFixed(2)}</div></div>
+            <div><div className="cr-label">Tax</div><div className="cr-num">₹{Number(o.total_tax || 0).toFixed(2)}</div></div>
+            <div><div className="cr-label">Total</div><div className="cr-num cr-strong">₹{Number(o.total_inc_tax || 0).toFixed(2)}</div></div>
+          </div>
+
+          {expandedOrderId === o.id && (
+            <div className="cr-tile-details">
+              <div className="cr-detail"><span className="cr-dl">Order ID</span><span className="cr-dv">{o.id}</span></div>
+              <div className="cr-detail"><span className="cr-dl">Status</span><span className="cr-dv">{o.status}</span></div>
+            </div>
           )}
-        </>
-      ) : null}
-    </div>
-  )
+        </div>
+      ))
+    )}
+  </div>
+) : (
+  <div className="cr-tiles only-mobile">
+    {customerTiles.length === 0 ? (
+      <div className="cr-empty">No customers in this period</div>
+    ) : (
+      customerTiles.map((c) => (
+        <div
+          key={c.id}
+          className="cr-tile"
+          onClick={() => setExpandedCustomerId(expandedCustomerId === c.id ? null : c.id)}
+        >
+          <div className="cr-tile-head">
+            <div>
+              <div className="cr-tile-title">{c.name || 'Unknown'}</div>
+              <div className="cr-tile-sub">{c.phone || 'N/A'}</div>
+            </div>
+            <div className="cr-tile-kpi">
+              <div className="cr-label">Outstanding</div>
+              <div className="cr-num cr-strong" style={{ color: '#dc2626' }}>
+                ₹{Number(c.outstanding || 0).toFixed(2)}
+              </div>
+            </div>
+          </div>
+
+          <div className="cr-tile-row">
+            <div><div className="cr-label">Extended</div><div className="cr-num">₹{Number(c.extended || 0).toFixed(2)}</div></div>
+            <div><div className="cr-label">Payments</div><div className="cr-num">₹{Number(c.payments || 0).toFixed(2)}</div></div>
+            <div><div className="cr-label">Orders</div><div className="cr-num">{c.orders}</div></div>
+          </div>
+
+          {expandedCustomerId === c.id && (
+            <div className="cr-tile-details">
+              <div className="cr-detail"><span className="cr-dl">Customer ID</span><span className="cr-dv">{c.id}</span></div>
+              <div className="cr-detail"><span className="cr-dl">Snapshot</span><span className="cr-dv">{(customersIndex.get(c.id)?.status) || 'active'}</span></div>
+            </div>
+          )}
+        </div>
+      ))
+    )}
+  </div>
+)}
+
+
+
+        {/* Credit Orders */}
+        
+        {/* Tablet/desktop table */}
+        <div className="cr-table-wrap hide-mobile">
+          <table className="cr-table">
+            <thead>
+              <tr>
+                <th>Order #</th>
+                <th>Customer</th>
+                <th>Phone</th>
+                <th className="cr-right">Amount</th>
+                <th className="cr-right">Tax</th>
+                <th className="cr-right">Total</th>
+                <th>Date</th>
+                <th className="cr-center">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {reportData.orders.length === 0 ? (
+                <tr><td colSpan={8} className="cr-empty">No credit orders in this period</td></tr>
+              ) : (
+                reportData.orders.map((order, idx) => (
+                  <tr key={order.id} className={idx % 2 ? 'cr-row-alt' : ''}>
+                    <td>#{order.id.substring(0, 8)}</td>
+                    <td>{order.customer_name || 'N/A'}</td>
+                    <td>{order.customer_phone || 'N/A'}</td>
+                    <td className="cr-right">₹{Number(order.total_amount || 0).toFixed(2)}</td>
+                    <td className="cr-right">₹{Number(order.total_tax || 0).toFixed(2)}</td>
+                    <td className="cr-right cr-strong">₹{Number(order.total_inc_tax || 0).toFixed(2)}</td>
+                    <td>{new Date(order.created_at).toLocaleDateString()}</td>
+                    <td className="cr-center">
+                      <span className={`cr-badge ${order.status === 'completed' ? 'cr-badge-success' : 'cr-badge-warn'}`}>
+                        {order.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Payment Transactions */}
+        {reportData.transactions.length > 0 && (
+          <>
+            <h2 className="cr-section-title">Payment Transactions</h2>
+
+            {/* Mobile tiles for transactions */}
+<div className="only-mobile cr-tiles">
+  {reportData.transactions.length === 0 ? (
+    <div className="cr-empty">No transactions in this period</div>
+  ) : (
+    reportData.transactions.map((t) => (
+      <div key={t.id} className="cr-tile">
+        <div className="cr-tile-head">
+          <div>
+            <div className="cr-tile-title">{new Date(t.transaction_date).toLocaleDateString()}</div>
+            <div className="cr-tile-sub">{t.payment_method || 'N/A'}</div>
+          </div>
+          <span
+            className={`cr-badge ${t.transaction_type === 'payment' ? 'cr-badge-success' : 'cr-badge-danger'}`}
+          >
+            {t.transaction_type}
+          </span>
+        </div>
+
+        <div className="cr-tile-row">
+          <div>
+            <div className="cr-label">Amount</div>
+            <div className="cr-num cr-strong">₹{Number(t.amount || 0).toFixed(2)}</div>
+          </div>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <div className="cr-label">Description</div>
+            <div className="cr-strong">{t.description}</div>
+          </div>
+        </div>
+      </div>
+    ))
+  )}
+</div>
+
+
+            
+            {/* Tablet/desktop table */}
+            <div className="cr-table-wrap hide-mobile">
+              <table className="cr-table">
+                <thead>
+                  <tr>
+                    <th>Transaction Date</th>
+                    <th>Type</th>
+                    <th>Payment Method</th>
+                    <th className="cr-right">Amount</th>
+                    <th>Description</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reportData.transactions.map((txn, idx) => (
+                    <tr key={txn.id} className={idx % 2 ? 'cr-row-alt' : ''}>
+                      <td>{new Date(txn.transaction_date).toLocaleDateString()}</td>
+                      <td>
+                        <span className={`cr-badge ${txn.transaction_type === 'payment' ? 'cr-badge-success' : 'cr-badge-danger'}`}>
+                          {txn.transaction_type}
+                        </span>
+                      </td>
+                      <td>{txn.payment_method || 'N/A'}</td>
+                      <td className="cr-right cr-strong">₹{Number(txn.amount || 0).toFixed(2)}</td>
+                      <td className="cr-wrap">{txn.description}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </>
+    ) : null}
+  </div>
+);
+
 }

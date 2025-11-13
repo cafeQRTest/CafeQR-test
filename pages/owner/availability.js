@@ -205,6 +205,7 @@ if (error) throw error;
     </PauseSection>
   </div>
 
+
 <Row gap="8px" wrap>
   <Button variant="outline" onClick={() => setAll({ open: "10:00", close: "22:00", enabled: true })}>
     Set All to 10:00–22:00
@@ -435,3 +436,5 @@ function toHHMM(value) {
   const [hh, mm] = str.split(":");
   return `${hh.padStart(2, "0")}:${(mm || "00").padStart(2, "0")}`;
 }
+
+
