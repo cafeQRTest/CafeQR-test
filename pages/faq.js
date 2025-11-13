@@ -6,13 +6,13 @@ export default function FAQPage() {
   const faqs = [
     { question: "How quickly can I set up my restaurant?", answer: "Less than 5 minutes! Just sign up, add your menu items, and generate your QR code. You'll be ready to serve customers immediately." },
     { question: "Do customers need to download an app?", answer: "No! Customers just scan your QR code and order directly from their web browser. No downloads required." },
-    { question: "What payment methods do you support?", answer: "All major UPI apps (PhonePe, Google Pay, Paytm, BHIM) and credit/debit cards via our secure Cashfree integration." },
+    { question: "What payment methods do you support?", answer: "All major UPI apps (PhonePe, Google Pay, Paytm, BHIM) and credit/debit cards via our secure Razorpay integration." },
     { question: "Is there a setup fee?", answer: "Absolutely no setup fees! We only charge a small 2% transaction fee on successful payments." },
     { question: "Can I update my menu anytime?", answer: "Yes! Update your menu, prices, and availability in real-time from your dashboard. Changes reflect instantly on customer devices." },
-    { question: "How do I know when I receive orders?", answer: "You'll get instant notifications on your dashboard and via email/SMS for every new order. Track everything in real-time." },
+    { question: "How do I know when I receive orders?", answer: "You'll get instant notifications on your dashboard  for every new order. Track everything in real-time." },
     { question: "What if customers have payment issues?", answer: "Our support team is available 24/7 to help with any payment or technical issues. We also provide phone support for urgent matters." },
     { question: "Can I use this for takeaway orders?", answer: "Absolutely! Generate QR codes for tables, counters, or even print them on flyers for takeaway orders." },
-    { question: "Is my data secure?", answer: "Yes! We use enterprise-grade security with SSL encryption. All payments are processed securely through Cashfree, a PCI DSS compliant payment gateway." },
+    { question: "Is my data secure?", answer: "Yes! We use enterprise-grade security with SSL encryption. All payments are processed securely through Razorpay, a PCI DSS compliant payment gateway." },
     { question: "Do you provide training?", answer: "Yes! We provide free onboarding support and training to help you get the most out of Cafe QR." }
   ]
 

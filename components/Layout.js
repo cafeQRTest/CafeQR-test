@@ -22,6 +22,7 @@ import {
   FaBoxes,
   FaIndustry,
   FaUsers,
+  FaCrown,
   FaFileAlt,
 } from 'react-icons/fa'
 import { signOutAndRedirect } from '../lib/authActions'
@@ -248,6 +249,51 @@ if (hasAggregatorIntegration) {
   items.push({ href: '/owner/aggregator-poller', label: 'Aggregator Orders', icon: <FaUtensils /> });
 }
 
+const sectionStyle = { margin: '10px 6px 4px', fontSize: 11, fontWeight: 800, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '.03em' };
+
+const renderItem = (it) => {
+  const active = router.pathname === it.href || router.pathname.startsWith(it.href + '/');
+  return (
+    <Link key={it.href} href={it.href} style={itemStyle(active)}>
+      <span style={{ width: 18, textAlign: 'center' }}>{it.icon}</span>
+      {!collapsed && <span>{it.label}</span>}
+    </Link>
+  );
+};
+
+// Arrange links into sections
+const ops = [
+  { href: '/owner', label: 'Overview', icon: <FaHome /> },
+  { href: '/owner/menu', label: 'Menu', icon: <FaBars /> },
+  { href: '/owner/orders', label: 'Orders', icon: <FaUtensils /> },
+  { href: '/owner/counter', label: 'Counter Sale', icon: <FaCashRegister /> },
+];
+
+const addons = [
+  ...(feature.inventory_enabled ? [{ href: '/owner/inventory', label: 'Inventory', icon: <FaBoxes /> }] : []),
+  ...(feature.table_ordering_enabled ? [{ href: '/owner/availability', label: 'Availability', icon: <FaClock /> }] : []),
+  ...(feature.production_enabled ? [{ href: '/owner/production', label: 'Production', icon: <FaIndustry /> }] : []),
+];
+
+const credit = feature.credit_enabled ? [
+  { href: '/owner/credit-customers', label: 'Credit Customers', icon: <FaUsers /> },
+  { href: '/owner/credit-sales-report', label: 'Credit Sales Report', icon: <FaFileAlt /> },
+] : [];
+
+const insights = [
+  { href: '/owner/analytics', label: 'Analytics', icon: <FaChartBar /> },
+  { href: '/owner/sales', label: 'Sales', icon: <FaCreditCard /> },
+];
+
+const account = [
+  { href: '/owner/subscription', label: 'Subscription', icon: <FaCrown /> },
+  { href: '/owner/settings', label: 'Settings', icon: <FaCog /> },
+  { href: '/owner/billing', label: 'Billing', icon: <FaFileInvoice /> },
+];
+
+const integrations = hasAggregatorIntegration ? [
+  { href: '/owner/aggregator-poller', label: 'Aggregator Orders', icon: <FaUtensils /> },
+] : [];
 
   const itemStyle = (active) => ({
     display: 'flex',
@@ -273,41 +319,66 @@ if (hasAggregatorIntegration) {
     }
   }
 
-  return (
-    <aside
-      className="sidebar"
+return (
+  <aside
+    className="sidebar"
+    style={{
+      background: '#f9fafb',
+      borderRight: '1px solid #e5e7eb',
+      padding: 12,
+      position: 'sticky',
+      top: 64,
+      height: 'calc(100vh - 64px)',
+      display: 'flex',
+      flexDirection: 'column',
+    }}
+  >
+    {!collapsed && (
+      <div style={{ fontWeight: 700, margin: '6px 6px 12px', color: '#111827' }}>
+        Owner Panel
+      </div>
+    )}
+
+    <nav
       style={{
-        background: '#f9fafb',
-        borderRight: '1px solid #e5e7eb',
-        padding: 12,
-        position: 'sticky',
-        top: 64,
-        height: 'calc(100vh - 64px)',
-        overflowY: 'auto',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
+        flex: 1,                 // fills available space
+        overflowY: 'auto',       // scrolls if long
+        paddingBottom: 8,        // breathing room above footer
       }}
     >
-      {!collapsed && (
-        <div style={{ fontWeight: 700, margin: '6px 6px 12px', color: '#111827' }}>
-          Owner Panel
-        </div>
+      {/* Sections */}
+      {!collapsed && <div style={sectionStyle}>Operations</div>}
+      {ops.map(renderItem)}
+
+      {(feature.inventory_enabled || feature.table_ordering_enabled || feature.production_enabled || feature.credit_enabled) && !collapsed && (
+        <div style={sectionStyle}>Add‑ons</div>
       )}
-      <nav style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {items.map((it) => {
-          const active = router.pathname === it.href || router.pathname.startsWith(it.href + '/')
-          return (
-            <Link key={it.href} href={it.href} style={itemStyle(active)}>
-              <span style={{ width: 18, textAlign: 'center' }}>{it.icon}</span>
-              {!collapsed && <span>{it.label}</span>}
-            </Link>
-          )
-        })}
-      </nav>
+      {addons.map(renderItem)}
+      {credit.map(renderItem)}
+
+      {!collapsed && <div style={sectionStyle}>Insights</div>}
+      {insights.map(renderItem)}
+
+      {!collapsed && <div style={sectionStyle}>Account</div>}
+      {account.map(renderItem)}
+
+      {hasAggregatorIntegration && (
+        <>
+          {!collapsed && <div style={sectionStyle}>Integrations</div>}
+          {integrations.map(renderItem)}
+        </>
+      )}
+    </nav>
+
+    <div style={{ marginTop: 'auto' }}>
       <button
         onClick={handleSignOut}
         disabled={signingOut}
         title="Sign Out"
         style={{
-          marginTop: 16,
           display: 'flex',
           alignItems: 'center',
           gap: collapsed ? 0 : 8,
@@ -318,7 +389,6 @@ if (hasAggregatorIntegration) {
           borderRadius: 8,
           color: signingOut ? '#d1d5db' : '#6b7280',
           cursor: signingOut ? 'not-allowed' : 'pointer',
-          justifyContent: collapsed ? 'center' : 'flex-start',
           transition: 'all 0.2s ease',
           opacity: signingOut ? 0.6 : 1,
         }}
@@ -326,83 +396,110 @@ if (hasAggregatorIntegration) {
         <FaSignOutAlt />
         {!collapsed && <span>{signingOut ? 'Signing Out...' : 'Sign Out'}</span>}
       </button>
-    </aside>
-  )
+    </div>
+  </aside>
+)
 }
 
 function MobileSidebar({ onNavigate }) {
-  const router = useRouter()
-  const supabase = getSupabase()
-  const { restaurant } = useRestaurant()
-  const hasAggregatorIntegration = Boolean(restaurant?.swiggy_api_key || restaurant?.zomato_api_key)
-  const [signingOut, setSigningOut] = useState(false)
+  const router = useRouter();
+  const supabase = getSupabase();
+  const { restaurant } = useRestaurant();
+  const hasAggregatorIntegration = Boolean(restaurant?.swiggy_api_key || restaurant?.zomato_api_key);
+  const [signingOut, setSigningOut] = useState(false);
 
   const feature = restaurant?.features || {};
-  const items = [
-  // defaults (always shown)
-  { href: '/owner', label: 'Overview', icon: <FaHome /> },
-  { href: '/owner/menu', label: 'Menu', icon: <FaBars /> },
-  { href: '/owner/orders', label: 'Orders', icon: <FaUtensils /> },
-  { href: '/owner/counter', label: 'Counter Sale', icon: <FaCashRegister /> },
 
-  // optional modules
-  ...(feature.inventory_enabled ? [{ href: '/owner/inventory', label: 'Inventory', icon: <FaBoxes /> }] : []),
-  ...(feature.table_ordering_enabled ? [{ href: '/owner/availability', label: 'Availability', icon: <FaClock /> }] : []),
-  ...(feature.production_enabled ? [{ href: '/owner/production', label: 'Production', icon: <FaIndustry /> }] : []),
-  ...(feature.credit_enabled ? [
-    { href: '/owner/credit-customers', label: 'Credit Customers', icon: <FaUsers /> },
-    { href: '/owner/credit-sales-report', label: 'Credit Sales Report', icon: <FaFileAlt /> },
-  ] : []),
+  // Sectioned lists (same grouping as desktop)
+  const ops = [
+    { href: '/owner', label: 'Overview', icon: <FaHome /> },
+    { href: '/owner/menu', label: 'Menu', icon: <FaBars /> },
+    { href: '/owner/orders', label: 'Orders', icon: <FaUtensils /> },
+    { href: '/owner/counter', label: 'Counter Sale', icon: <FaCashRegister /> },
+  ];
 
-  // analytics/sales/settings/billing (always shown)
-  { href: '/owner/analytics', label: 'Analytics', icon: <FaChartBar /> },
-  { href: '/owner/sales', label: 'Sales', icon: <FaCreditCard /> },
-  { href: '/owner/settings', label: 'Settings', icon: <FaCog /> },
-  { href: '/owner/billing', label: 'Billing', icon: <FaFileInvoice /> },
-];
+  const addons = [
+    ...(feature.inventory_enabled ? [{ href: '/owner/inventory', label: 'Inventory', icon: <FaBoxes /> }] : []),
+    ...(feature.table_ordering_enabled ? [{ href: '/owner/availability', label: 'Availability', icon: <FaClock /> }] : []),
+    ...(feature.production_enabled ? [{ href: '/owner/production', label: 'Production', icon: <FaIndustry /> }] : []),
+  ];
 
-// Keep existing aggregator push-on condition
-if (hasAggregatorIntegration) {
-  items.push({ href: '/owner/aggregator-poller', label: 'Aggregator Orders', icon: <FaUtensils /> });
-}
+  const credit = feature.credit_enabled
+    ? [
+        { href: '/owner/credit-customers', label: 'Credit Customers', icon: <FaUsers /> },
+        { href: '/owner/credit-sales-report', label: 'Credit Sales Report', icon: <FaFileAlt /> },
+      ]
+    : [];
 
+  const insights = [
+    { href: '/owner/analytics', label: 'Analytics', icon: <FaChartBar /> },
+    { href: '/owner/sales', label: 'Sales', icon: <FaCreditCard /> },
+  ];
+
+  const account = [
+    { href: '/owner/subscription', label: 'Subscription', icon: <FaCrown /> },
+    { href: '/owner/settings', label: 'Settings', icon: <FaCog /> },
+    { href: '/owner/billing', label: 'Billing', icon: <FaFileInvoice /> },
+  ];
+
+  const integrations = hasAggregatorIntegration
+    ? [{ href: '/owner/aggregator-poller', label: 'Aggregator Orders', icon: <FaUtensils /> }]
+    : [];
 
   const handleSignOut = async () => {
-    setSigningOut(true)
+    setSigningOut(true);
     try {
-      await signOutAndRedirect(supabase, router.replace)
-      onNavigate() // Close drawer after successful sign out
+      await signOutAndRedirect(supabase, router.replace);
+      onNavigate();
     } catch (err) {
-      console.error('Sign out error:', err)
-      alert(`Sign out failed: ${err.message}`)
-      setSigningOut(false)
+      alert(`Sign out failed: ${err.message}`);
+      setSigningOut(false);
     }
-  }
+  };
+
+  const groups = [
+    { title: 'Operations', items: ops },
+    { title: (addons.length || credit.length) ? 'Add-ons' : null, items: [...addons, ...credit] },
+    { title: 'Insights', items: insights },
+    { title: 'Account', items: account },
+    { title: integrations.length ? 'Integrations' : null, items: integrations },
+  ];
 
   return (
-    <nav style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ fontWeight: 700, margin: '6px 6px 12px', color: '#111827' }}>
-        Owner Panel
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
+      <div style={{ fontWeight: 700, margin: '6px 6px 12px', color: '#111827' }}>Owner Panel</div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, flex: 1, overflowY: 'auto' }}>
+        {groups.map((g, idx) => (
+          <React.Fragment key={idx}>
+            {g.title && (
+              <div style={{ margin: '6px 6px 2px', fontSize: 11, fontWeight: 800, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '.03em' }}>
+                {g.title}
+              </div>
+            )}
+            {g.items.map((it) => (
+              <Link
+                key={it.href}
+                href={it.href}
+                onClick={onNavigate}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  padding: '12px',
+                  borderRadius: 8,
+                  color: '#374151',
+                  textDecoration: 'none',
+                }}
+              >
+                <span style={{ width: 18, textAlign: 'center' }}>{it.icon}</span>
+                <span>{it.label}</span>
+              </Link>
+            ))}
+          </React.Fragment>
+        ))}
       </div>
-      {items.map((it) => (
-        <Link
-          key={it.href}
-          href={it.href}
-          onClick={onNavigate}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 12,
-            padding: '12px',
-            borderRadius: 8,
-            color: '#374151',
-            textDecoration: 'none',
-          }}
-        >
-          <span style={{ width: 18, textAlign: 'center' }}>{it.icon}</span>
-          <span>{it.label}</span>
-        </Link>
-      ))}
+
       <div style={{ borderTop: '1px solid #e5e7eb', margin: '12px 0' }} />
       <button
         onClick={handleSignOut}
@@ -417,19 +514,16 @@ if (hasAggregatorIntegration) {
           background: 'transparent',
           border: 'none',
           cursor: signingOut ? 'not-allowed' : 'pointer',
-          textDecoration: 'none',
-          fontSize: 'inherit',
-          fontFamily: 'inherit',
-          opacity: signingOut ? 0.6 : 1,
-          transition: 'all 0.2s ease',
         }}
       >
         <FaSignOutAlt />
         <span>{signingOut ? 'Signing Out...' : 'Sign Out'}</span>
       </button>
-    </nav>
-  )
+    </div>
+  );
 }
+
+
 
 function Footer() {
   return (

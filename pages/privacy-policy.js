@@ -6,14 +6,14 @@ export default function PrivacyPolicy() {
     <>
       <Head>
         <title>Privacy Policy | Cafe QR</title>
-        <meta name="description" content="Privacy Policy for Cafe QR by The Online Wala" />
+        <meta name="description" content="Privacy Policy for Cafe QR by Sharp INtell" />
       </Head>
       <div style={{ maxWidth: 860, margin: '40px auto', padding: '0 16px', lineHeight: 1.75 }}>
         <h1 style={{ marginBottom: 24 }}>Privacy Policy</h1>
-        <p>Last updated: [Aug 18, 2025]</p>
+        <p>Last updated: [Nov 14, 2025]</p>
 
         <p>
-          Cafe QR (“we”, “our”, “us”) is operated by The Online Wala. We are committed to
+          Cafe QR (“we”, “our”, “us”) is operated by Sharp INtell. We are committed to
           protecting your privacy and handling your personal information responsibly. This policy
           explains what data we collect, how we use it, and the choices you have.
         </p>
@@ -36,7 +36,7 @@ export default function PrivacyPolicy() {
           </li>
           <li>
             Payment Data: We do not store your full payment details. Payments are processed by
-            Cashfree. We may receive limited payment status information (e.g., success, failure,
+            Razorpay. We may receive limited payment status information (e.g., success, failure,
             transaction ID) for reconciliation.
           </li>
           <li>
@@ -68,7 +68,7 @@ export default function PrivacyPolicy() {
         <h2>Sharing and Disclosures</h2>
         <ul>
           <li>
-            Payment Processor: Cashfree to process payments and confirm payment status.
+            Payment Processor: Razorpay to process payments and confirm payment status.
           </li>
           <li>
             Authentication & Database: Supabase to provide secure authentication and data storage.
@@ -99,7 +99,7 @@ export default function PrivacyPolicy() {
         <p>
           Depending on your location, you may have rights to access, correct, delete, or restrict
           processing of your personal data. To exercise these rights, contact us at
-          <a href="mailto:pnriyas50@gmail.com"> support@theonlinewala.com</a>.
+          <a href="mailto:pnriyas50@gmail.com"> support@cafeqr.com</a>.
         </p>
 
         <h2>Children’s Privacy</h2>
@@ -131,9 +131,9 @@ export default function PrivacyPolicy() {
         <h2>Contact Us</h2>
         <p>
           If you have questions or requests regarding this policy, contact us at
-          <a href="mailto:pnriyas50@gmail.com"> support@theonlinewala.com</a> or at:
+          <a href="mailto:pnriyas50@gmail.com"> support@cafeqr.com</a> or at :
           <br />
-          The Online Wala<br />
+          Cafe QR<br />
           +917012120844
         </p>
 
