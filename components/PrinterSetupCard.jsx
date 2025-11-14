@@ -84,11 +84,33 @@ const saveRelay = async () => {
       <div style={{ marginTop:12 }}>
         <div style={{ fontWeight:600, marginBottom:6 }}>Or use local network relay</div>
         <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-          <input value={relayUrl} onChange={e=>setRelayUrl(e.target.value)} placeholder="http://127.0.0.1:3333/print" style={{ padding:8, border:'1px solid #ddd', borderRadius:6, minWidth:240 }} />
-          <input value={ip} onChange={e=>setIp(e.target.value)} placeholder="Printer IP (e.g., 192.168.1.50)" style={{ padding:8, border:'1px solid #ddd', borderRadius:6 }} />
-          <input value={port} onChange={e=>setPort(e.target.value)} placeholder="9100" style={{ padding:8, border:'1px solid #ddd', borderRadius:6, width:100 }} />
-          <button onClick={saveRelay} style={{ padding:'10px 12px', borderRadius:8 }}>Save Relay</button>
-        </div>
+  <input value={relayUrl} onChange={e=>setRelayUrl(e.target.value)} placeholder="http://127.0.0.1:3333/print" style={{ padding:8, border:'1px solid #ddd', borderRadius:6, minWidth:240 }} />
+  <input value={ip} onChange={e=>setIp(e.target.value)} placeholder="Printer IP (e.g., 192.168.1.50)" style={{ padding:8, border:'1px solid #ddd', borderRadius:6 }} />
+  <input value={port} onChange={e=>setPort(e.target.value)} placeholder="9100" style={{ padding:8, border:'1px solid #ddd', borderRadius:6, width:100 }} />
+  <button onClick={saveRelay} style={{ padding:'10px 12px', borderRadius:8 }}>Save Relay</button>
+  <button
+    onClick={async () => {
+      try {
+        await printUniversal({
+          text: 'TEST',
+          relayUrl: localStorage.getItem('PRINT_RELAY_URL') || undefined,
+          ip: localStorage.getItem('PRINTER_IP') || undefined,
+          port: Number(localStorage.getItem('PRINTER_PORT') || 9100),
+          allowPrompt: false,
+          allowSystemDialog: false
+        });
+        setMsg('✓ Relay test sent');
+      } catch (e) {
+        setMsg(`✗ Relay test failed: ${e.message}`);
+      }
+    }}
+    style={{ padding:'10px 12px', borderRadius:8 }}
+  >
+    Test Relay
+  </button>
+</div>
+
+
       </div>
       {msg ? <div style={{ marginTop:10, color: msg.startsWith('✓') ? '#065f46' : '#991b1b' }}>{msg}</div> : null}
     </div>

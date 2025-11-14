@@ -107,8 +107,12 @@ function isDesktopPWA() {
     }
 
     // 2) Desktop PWA & Native Android: try silent transports
-    const allowSystemDialog = !onDesktopStandalone && !onNativeAndroid;
-    
+    const hasSilentConfig =
+    (!!localStorage.getItem('PRINTER_READY')) ||
+    (!!localStorage.getItem('PRINT_RELAY_URL') && !!localStorage.getItem('PRINTER_IP'));
+    // If a silent path exists (USB/Serial remembered or Relay), do not open system dialogs
+    const allowSystemDialog = hasSilentConfig ? false : (!onDesktopStandalone && !onNativeAndroid);   
+ 
     await printUniversal({
       text,
       relayUrl: localStorage.getItem('PRINT_RELAY_URL') || undefined,
