@@ -3,6 +3,62 @@ import styled from 'styled-components';
 import { useRequireAuth } from '../../lib/useRequireAuth';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { getSupabase } from '../../services/supabase';
+
+// Standard units commonly used in restaurants for ingredients
+const RESTAURANT_UNITS = ['kg', 'g', 'L', 'ml', 'pcs', 'dozen'];
+
+function UnitSelect({ value, onChange, disabled, placeholder = 'Select unit...' }) {
+  const [open, setOpen] = React.useState(false);
+  const wrapperRef = React.useRef(null);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const handleClickOutside = (event) => {
+      if (!wrapperRef.current || wrapperRef.current.contains(event.target)) return;
+      setOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [open]);
+
+  const handleSelect = (unit) => {
+    onChange(unit);
+    setOpen(false);
+  };
+
+  return (
+    <UnitSelectWrapper ref={wrapperRef}>
+      <UnitSelectButton
+        type="button"
+        onClick={() => !disabled && setOpen((prev) => !prev)}
+        disabled={disabled}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        <span className={!value ? 'placeholder' : ''}>
+          {value || placeholder}
+        </span>
+        <span className="chevron">▾</span>
+      </UnitSelectButton>
+      {open && !disabled && (
+        <UnitSelectList role="listbox">
+          {RESTAURANT_UNITS.map((unit) => (
+            <UnitOption
+              key={unit}
+              type="button"
+              onClick={() => handleSelect(unit)}
+              $active={unit === value}
+            >
+              <span>{unit}</span>
+              {unit === value && <span className="check">✓</span>}
+            </UnitOption>
+          ))}
+        </UnitSelectList>
+      )}
+    </UnitSelectWrapper>
+  );
+}
+
 export default function InventoryPage() {
   const supabase = getSupabase();
   const { checking } = useRequireAuth(supabase)
@@ -337,7 +393,7 @@ export default function InventoryPage() {
                     </InfoRow>
                     <InfoRow>
                       <Label>Current Stock:</Label>
-                      <StockValue>{ing.current_stock}</StockValue>
+                      <StockValue $low={Number(ing.current_stock) <= 0}>{ing.current_stock}</StockValue>
                     </InfoRow>
                     <InfoRow>
                       <Label>Reorder Threshold:</Label>
@@ -433,12 +489,10 @@ export default function InventoryPage() {
               </FormGroup>
               <FormGroup>
                 <FormLabel>Unit of Measurement *</FormLabel>
-                <FormInput
-                  placeholder="e.g., kg, L, pcs, g..."
+                <UnitSelect
                   value={ingredientForm.unit}
-                  onChange={(e) => setIngredientForm({ ...ingredientForm, unit: e.target.value })}
+                  onChange={(unit) => setIngredientForm({ ...ingredientForm, unit })}
                   disabled={!!editingIngredient}
-                  title={editingIngredient ? 'Unit cannot be changed after creation' : undefined}
                 />
               </FormGroup>
               <FormGroup>
@@ -720,7 +774,7 @@ const Value = styled.span`
   font-weight: 600;
 `
 const StockValue = styled.span`
-  color: #059669;
+  color: ${props => props.$low ? '#dc2626' : '#059669'};
   font-weight: 700;
 `
 const CardActions = styled.div`
@@ -893,6 +947,83 @@ const FormInput = styled.input`
     outline: none;
     border-color: #3b82f6;
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  }
+`
+
+const UnitSelectWrapper = styled.div`
+  position: relative;
+`
+
+const UnitSelectButton = styled.button`
+  width: 100%;
+  padding: 0.75rem;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #fff;
+  color: #111827;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, background-color 0.15s;
+  box-sizing: border-box;
+  .placeholder {
+    color: #9ca3af;
+  }
+  .chevron {
+    font-size: 0.75rem;
+    color: #6b7280;
+    margin-left: 0.5rem;
+  }
+  &:hover {
+    background-color: #f9fafb;
+  }
+  &:focus-visible {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  }
+  &:disabled {
+    cursor: not-allowed;
+    background-color: #f3f4f6;
+    color: #9ca3af;
+  }
+`
+
+const UnitSelectList = styled.div`
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  right: 0;
+  margin-top: 0.35rem;
+  background: #ffffff;
+  border-radius: 10px;
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.15);
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 0.35rem;
+`
+
+const UnitOption = styled.button`
+  width: 100%;
+  border: none;
+  background: ${props => (props.$active ? '#eff6ff' : 'transparent')};
+  color: #111827;
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.95rem;
+  cursor: pointer;
+  text-align: left;
+  &:hover {
+    background: ${props => (props.$active ? '#dbeafe' : '#f3f4f6')};
+  }
+  .check {
+    font-size: 0.85rem;
+    color: #3b82f6;
   }
 `
 const ModalFooter = styled.div`
