@@ -31,6 +31,10 @@ function isAndroidPWA() {
   return uaAndroid && inStandalone;
 }
 
+function isWindowsDesktop() {
+  try { return /Windows/i.test(navigator.userAgent); } catch { return false; }
+}
+
 export default function KotPrint({ order, onClose, onPrint, autoPrint = true }) {
   const [status, setStatus] = useState('');
   const [bill, setBill] = useState(null);
@@ -90,41 +94,43 @@ function isDesktopPWA() {
   const onAndroidPWA = isAndroidPWA();
   const onNativeAndroid = isNativeAndroid();
   const onDesktopStandalone = isDesktopPWA();
+  const onWindows = isWindowsDesktop();
+
+  // Decide if we have any silent path configured (USB/Serial remembered or Relay)
+  const hasSilentConfig =
+    (!!localStorage.getItem('PRINTER_READY')) ||
+    (!!localStorage.getItem('PRINT_RELAY_URL') && !!localStorage.getItem('PRINTER_IP'));
+
+  // Policy:
+  // - Android PWA: deep link to printing apps (silent by app)
+  // - Native Android: silent via plugin
+  // - Windows (Chrome or PWA): show system preview unless a silent path exists
+  // - Other desktop browsers: allow preview unless silent is configured
+  const allowSystemDialog = onNativeAndroid
+    ? false
+    : (onWindows ? !hasSilentConfig : (!hasSilentConfig && !onDesktopStandalone));
 
   try {
-    // 1) Android PWA: deep-link immediately
+    // Android PWA path
     if (onAndroidPWA) {
-      try { 
-        openThermerWithText(text); 
-        onPrint?.(); 
-      } catch { 
-        try { 
-          openRawBTWithText(text); 
-          onPrint?.(); 
-        } catch { /* fall through */ } 
-      }
+      try { openThermerWithText(text); onPrint?.(); } 
+      catch { try { openRawBTWithText(text); onPrint?.(); } catch {} }
       return;
     }
 
-    // 2) Desktop PWA & Native Android: try silent transports
-    const hasSilentConfig =
-    (!!localStorage.getItem('PRINTER_READY')) ||
-    (!!localStorage.getItem('PRINT_RELAY_URL') && !!localStorage.getItem('PRINTER_IP'));
-    // If a silent path exists (USB/Serial remembered or Relay), do not open system dialogs
-    const allowSystemDialog = hasSilentConfig ? false : (!onDesktopStandalone && !onNativeAndroid);   
- 
+    // Universal print path
     await printUniversal({
       text,
       relayUrl: localStorage.getItem('PRINT_RELAY_URL') || undefined,
       ip: localStorage.getItem('PRINTER_IP') || undefined,
       port: Number(localStorage.getItem('PRINTER_PORT') || 9100),
       codepage: 0,
-      allowPrompt: false,  // Never prompt during auto-print
-      allowSystemDialog    // Allow system dialog only for regular browsers
+      allowPrompt: false,
+      allowSystemDialog
     });
-    
-    onPrint?.(); 
-    onClose?.(); 
+
+    onPrint?.();
+    onClose?.();
     return;
   } catch (err) {
     console.error('Print failed:', err);
@@ -133,6 +139,7 @@ function isDesktopPWA() {
     setTimeout(() => { lockRef.current = false; }, 600);
   }
 }, [order, bill, restaurantProfile, onPrint, onClose]);
+
 
   // Auto‑run everywhere except Android PWA (needs user gesture for app‑link)
   useEffect(() => {
@@ -191,7 +198,7 @@ Amount: ₹${amount.toFixed(2)}`}</pre>
 if (autoPrint && !status) return null;
 
 // When desktop PWA and no saved printer, show a tiny setup nudge
-if (isDesktopPWA() && !localStorage.getItem('PRINTER_READY')) {
+if (isDesktopPWA() && !isWindowsDesktop() && !localStorage.getItem('PRINTER_READY')) {
   return (
     <div className="kot-overlay">
       <div className="kot-modal">
