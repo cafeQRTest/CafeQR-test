@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRequireAuth } from '../../lib/useRequireAuth'
 import { useRestaurant } from '../../context/RestaurantContext'
 import { getSupabase } from '../../services/supabase'
+import { istSpanUtcISO } from '../../utils/istTime';
 
 export default function CreditSalesReportPage() {
   const supabase = getSupabase()
@@ -79,13 +80,13 @@ const customerTiles = useMemo(() => {
   setLoading(true);
   setError('');
   try {
-    // 1) Orders just for listing (use the effective credit orders view and its customer fields)
+    const { startUtc, endUtc } = istSpanUtcISO(startDate, endDate);
     const { data: orders, error: ordersErr } = await supabase
       .from('v_credit_orders_effective')
       .select('id, credit_customer_id, customer_name, customer_phone, total_amount, total_tax, total_inc_tax, created_at, status')
       .eq('restaurant_id', restaurantId)
-      .gte('created_at', `${startDate}T00:00:00`)
-      .lte('created_at', `${endDate}T23:59:59`)
+      .gte('created_at', startUtc)
+      .lt('created_at', endUtc)
       .order('created_at', { ascending: false });
     if (ordersErr) throw ordersErr;
 
@@ -94,8 +95,8 @@ const customerTiles = useMemo(() => {
       .from('credit_transactions')
       .select('id, credit_customer_id, transaction_type, amount, payment_method, description, transaction_date, order_id, notes')
       .eq('restaurant_id', restaurantId)
-      .gte('transaction_date', `${startDate}T00:00:00`)
-      .lte('transaction_date', `${endDate}T23:59:59`)
+      .gte('transaction_date', startUtc)
+      .lt('transaction_date', endUtc)
       .order('transaction_date', { ascending: false });
     if (txnErr) throw txnErr;
 

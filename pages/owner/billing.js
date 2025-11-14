@@ -4,6 +4,7 @@ import { getSupabase } from '../../services/supabase';
 import { useRestaurant } from '../../context/RestaurantContext';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
+import { istSpanUtcISO } from '../../utils/istTime';
 
 export default function BillingPage() {
   const supabase = getSupabase();
@@ -60,19 +61,21 @@ export default function BillingPage() {
       label: inv?.status === 'open' ? '⏳ Open' : '✅ Paid',
     };
   };
-
+   
+  
   const loadInvoices = async () => {
     if (!restaurant?.id || !supabase) return;
 
     setLoading(true);
     setError('');
     try {
+      const { startUtc, endUtc } = istSpanUtcISO(from, to);
       const { data, error } = await supabase
         .from('invoices')
         .select('*')
         .eq('restaurant_id', restaurant.id)
-        .gte('invoice_date', `${from}T00:00:00Z`)
-        .lte('invoice_date', `${to}T23:59:59Z`)
+        .gte('invoice_date', startUtc)
+        .lt('invoice_date', endUtc)
         .order('invoice_date', { ascending: false });
 
       if (error) throw error;

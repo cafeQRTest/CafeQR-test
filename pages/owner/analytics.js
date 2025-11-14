@@ -6,6 +6,7 @@ import { useRestaurant } from '../../context/RestaurantContext';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import { getSupabase } from '../../services/supabase'; // 1. IMPORT ADDED
+import { istSpanFromDatesUtcISO } from '../../utils/istTime';
 
 export default function AnalyticsPage() {
   // 2. & 3. APPLY SINGLETON PATTERN
@@ -41,13 +42,14 @@ export default function AnalyticsPage() {
     setError('');
     try {
       const { start, end } = getDateRange(timeRange);
+      const { startUtc, endUtc } = istSpanFromDatesUtcISO(start, end);
 
       const { data: orders, error: ordersError } = await supabase
         .from('orders')
         .select('id, total_amount, total_inc_tax, created_at, status, items')
         .eq('restaurant_id', restaurantId)
-        .gte('created_at', start.toISOString())
-        .lte('created_at', end.toISOString())
+        .gte('created_at', startUtc)
+        .lt('created_at', endUtc)
         .neq('status', 'cancelled');
 
       if (ordersError) throw ordersError;
@@ -72,6 +74,15 @@ export default function AnalyticsPage() {
         .map(([name, quantity]) => ({ name, quantity }));
 
       const hourlyData = generateHourlyData(orderData, timeRange === 'today');
+      const hourFmt = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', hour12:         false });
+      const hMap = {};
+      orderData.forEach(o => {
+      const h = hourFmt.format(new Date(o.created_at));
+      const amt = Number(o.total_inc_tax ?? o.total_amount ?? 0);
+      if (!hMap[h]) hMap[h] = { count: 0, amount: 0 };
+      hMap[h].count += 1; hMap[h].amount += amt;
+      });
+      const hourlyData = Object.keys(hMap).sort().map(h => ({ hour: `${h}:00`, orders: hMap[h].count, revenue:     hMap[h].amount }));
 
       setStats({ orders: totalOrders, revenue: totalRevenue, avgOrderValue, topItems, hourlyData });
     } catch (e) {

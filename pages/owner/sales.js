@@ -9,6 +9,7 @@ import DateRangePicker from '../../components/ui/DateRangePicker'
 import { getSupabase } from '../../services/supabase'
 import { printSalesReport } from '../../utils/printSalesReport'
 import { exportSalesReportToCSV, exportSalesReportToExcel } from '../../utils/exportSalesReport'
+import { istSpanFromDatesUtcISO } from '../../utils/istTime';
 
 
 export default function SalesPage() {
@@ -112,7 +113,8 @@ export default function SalesPage() {
           itemCategoryMap[item.name] = item.category || 'Uncategorized'
         })
       }
-
+   
+      const { startUtc, endUtc } = istSpanFromDatesUtcISO(range.start, range.end)
       const { data: orders, error: ordersError } = await supabase
         .from('orders')
         .select(`
@@ -125,11 +127,12 @@ export default function SalesPage() {
           items,
           payment_method,
           actual_payment_method,
+          mixed_payment_details,
           order_type
         `)
         .eq('restaurant_id', restaurantId)
-        .gte('created_at', range.start.toISOString())
-        .lte('created_at', range.end.toISOString())
+        .gte('created_at', startUtc)
+        .lt('created_at', endUtc)
         .neq('status', 'cancelled')
 
       if (ordersError) throw ordersError
@@ -227,6 +230,25 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
   percentage: totalRevenue > 0 ? ((data.amount / totalRevenue) * 100).toFixed(1) : '0.0'
 })));
 
+// Hourly in IST
+     const fmtHour = new Intl.DateTimeFormat('en-GB', {
+       timeZone: 'Asia/Kolkata', hour: '2-digit', hour12: false
+     })
+     const hourlyMap = {}
+     orderData.forEach(o => {
+       const key = fmtHour.format(new Date(o.created_at)) // "06", "17", etc.
+       const amount = Number(o.total_inc_tax ?? o.total_amount ?? 0)
+       if (!hourlyMap[key]) hourlyMap[key] = { count: 0, amount: 0 }
+       hourlyMap[key].count += 1
+       hourlyMap[key].amount += amount
+     })
+     setHourlyBreakdown(
+       Object.keys(hourlyMap).sort().map(h => ({
+         hour: `${h}:00`,
+         order_count: hourlyMap[h].count,
+         total_amount: hourlyMap[h].amount
+       }))
+     )
 
       const orderTypeMap = {}
       orderData.forEach(o => {
@@ -249,22 +271,7 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
         { tax_type: 'Total Tax', amount: Math.round(totalTax * 100) / 100 }
       ])
 
-      const hourlyMap = {}
-      orderData.forEach(o => {
-        const hour = new Date(o.created_at).getHours()
-        const amount = Number(o.total_inc_tax ?? o.total_amount ?? 0)
-        if (!hourlyMap[hour]) hourlyMap[hour] = { count: 0, amount: 0 }
-        hourlyMap[hour].count += 1
-        hourlyMap[hour].amount += amount
-      })
-      setHourlyBreakdown(
-        Array.from({ length: 24 }, (_, i) => ({
-          hour: `${String(i).padStart(2, '0')}:00`,
-          order_count: hourlyMap[i]?.count || 0,
-          total_amount: hourlyMap[i]?.amount || 0
-        })).filter(h => h.order_count > 0)
-      )
-
+      
       setCategoryBreakdown(Object.entries(categoryMap)
         .map(([cat, amount]) => ({
           category: cat || 'Uncategorized',
