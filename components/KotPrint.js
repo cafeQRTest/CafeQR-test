@@ -4,7 +4,7 @@ import { buildReceiptText, downloadTextAndShare } from '../utils/printUtils';
 import { getSupabase } from '../services/supabase';
 import { printUniversal } from '../utils/printGateway';
 import { openThermerWithText, openRawBTWithText } from '../utils/thermer';
-import { Capacitor } from '@capacitor/core'; 
+import { Capacitor } from '@capacitor/core'; // +++
 
 
 function getOrderTypeLabelLocal(order) {
@@ -29,10 +29,6 @@ function isAndroidPWA() {
     typeof window.matchMedia === 'function' &&
     window.matchMedia('(display-mode: standalone)').matches;
   return uaAndroid && inStandalone;
-}
-
-function isWindowsDesktop() {
-  try { return /Windows/i.test(navigator.userAgent); } catch { return false; }
 }
 
 export default function KotPrint({ order, onClose, onPrint, autoPrint = true }) {
@@ -87,59 +83,44 @@ function isDesktopPWA() {
 }
 
   const doPrint = useCallback(async () => {
-  if (lockRef.current) return;
-  lockRef.current = true;
+    if (lockRef.current) return;
+    lockRef.current = true;
 
-  const text = buildReceiptText(order, bill, restaurantProfile);
-  const onAndroidPWA = isAndroidPWA();
-  const onNativeAndroid = isNativeAndroid();
-  const onDesktopStandalone = isDesktopPWA();
-  const onWindows = isWindowsDesktop();
+    const text = buildReceiptText(order, bill, restaurantProfile);
+    const onAndroidPWA = isAndroidPWA();
+    const onNativeAndroid = isNativeAndroid();
+    const onDesktopStandalone = isDesktopPWA();
 
-  // Decide if we have any silent path configured (USB/Serial remembered or Relay)
-  const hasSilentConfig =
-    (!!localStorage.getItem('PRINTER_READY')) ||
-    (!!localStorage.getItem('PRINT_RELAY_URL') && !!localStorage.getItem('PRINTER_IP'));
+    
 
-  // Policy:
-  // - Android PWA: deep link to printing apps (silent by app)
-  // - Native Android: silent via plugin
-  // - Windows (Chrome or PWA): show system preview unless a silent path exists
-  // - Other desktop browsers: allow preview unless silent is configured
-  const allowSystemDialog = onNativeAndroid
-    ? false
-    : (onWindows ? !hasSilentConfig : (!hasSilentConfig && !onDesktopStandalone));
+    try {
+      // 1) Android PWA: deep‑link immediately under user gesture, then return
+      if (onAndroidPWA) {
+        try { openThermerWithText(text); onPrint?.(); } 
+        catch { try { openRawBTWithText(text); onPrint?.(); } catch { /* fall through */ } }
+        return; // do not await anything before this to preserve user activation
+      }
 
-  try {
-    // Android PWA path
-    if (onAndroidPWA) {
-      try { openThermerWithText(text); onPrint?.(); } 
-      catch { try { openRawBTWithText(text); onPrint?.(); } catch {} }
-      return;
+      // 2) Other platforms: try silent transports
+      const allowSystemDialog = onNativeAndroid ? false : (onDesktopStandalone ? false : true);
+      await printUniversal({
+         text,
+         relayUrl: localStorage.getItem('PRINT_RELAY_URL') || undefined,
+         ip: localStorage.getItem('PRINTER_IP') || undefined,
+         port: Number(localStorage.getItem('PRINTER_PORT') || 9100),
+         codepage: 0,
+         allowPrompt: false,
+        allowSystemDialog
+      });
+      onPrint?.(); onClose?.(); return;
+    } catch {
+      // 3) Last resort share/download anywhere
+      try { await downloadTextAndShare(order, bill, restaurantProfile); onPrint?.(); }
+      catch { setStatus('✗ Printing failed'); }
+    } finally {
+      setTimeout(() => { lockRef.current = false; }, 600);
     }
-
-    // Universal print path
-    await printUniversal({
-      text,
-      relayUrl: localStorage.getItem('PRINT_RELAY_URL') || undefined,
-      ip: localStorage.getItem('PRINTER_IP') || undefined,
-      port: Number(localStorage.getItem('PRINTER_PORT') || 9100),
-      codepage: 0,
-      allowPrompt: false,
-      allowSystemDialog
-    });
-
-    onPrint?.();
-    onClose?.();
-    return;
-  } catch (err) {
-    console.error('Print failed:', err);
-    setStatus('✗ Printing failed. Please configure printer in settings.');
-  } finally {
-    setTimeout(() => { lockRef.current = false; }, 600);
-  }
-}, [order, bill, restaurantProfile, onPrint, onClose]);
-
+  }, [order, bill, restaurantProfile, onPrint, onClose]);
 
   // Auto‑run everywhere except Android PWA (needs user gesture for app‑link)
   useEffect(() => {
@@ -198,7 +179,7 @@ Amount: ₹${amount.toFixed(2)}`}</pre>
 if (autoPrint && !status) return null;
 
 // When desktop PWA and no saved printer, show a tiny setup nudge
-if (isDesktopPWA() && !isWindowsDesktop() && !localStorage.getItem('PRINTER_READY')) {
+if (isDesktopPWA() && !localStorage.getItem('PRINTER_READY')) {
   return (
     <div className="kot-overlay">
       <div className="kot-modal">
