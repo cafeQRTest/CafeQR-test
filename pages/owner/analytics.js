@@ -73,7 +73,6 @@ export default function AnalyticsPage() {
         .sort(([, a], [, b]) => b - a).slice(0, 5)
         .map(([name, quantity]) => ({ name, quantity }));
 
-      const hourlyData = generateHourlyData(orderData, timeRange === 'today');
       const hourFmt = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', hour12:         false });
       const hMap = {};
       orderData.forEach(o => {
