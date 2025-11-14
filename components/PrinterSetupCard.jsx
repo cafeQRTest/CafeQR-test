@@ -50,6 +50,27 @@ export default function PrinterSetupCard() {
   }
 };
 
+const saveRelay = async () => {
+  const url = (relayUrl || '').trim();
+  const host = (ip || '').trim();
+  const p = String(port || '').trim() || '9100';
+
+  if (!/^https?:\/\//i.test(url)) {
+    setMsg('✗ Relay URL must start with http:// or https://');
+    return;
+  }
+  if (!host) {
+    setMsg('✗ Printer IP is required');
+    return;
+  }
+
+  localStorage.setItem('PRINT_RELAY_URL', url);
+  localStorage.setItem('PRINTER_IP', host);
+  localStorage.setItem('PRINTER_PORT', p);
+  localStorage.setItem('PRINTER_READY', '1');
+
+  setMsg('✓ Relay saved for silent printing');
+};
 
   return (
     <div style={{ border:'1px solid #e5e7eb', borderRadius:12, padding:16, background:'#fff' }}>
