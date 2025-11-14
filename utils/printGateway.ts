@@ -131,7 +131,11 @@ if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android') {
       });
       return { via: 'relay' };
     }
-
+    
+    if (!opts.allowSystemDialog) {
+  // For desktop PWA, don't fall back to system dialog or share
+  throw new Error('NO_PRINTER_CONFIGURED');
+}
     // 5) Browser UI fallbacks (only if allowed)
     if (opts.allowSystemDialog !== false) {
       const w = window.open('', '_blank', 'width=480,height=640');

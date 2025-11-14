@@ -10,23 +10,46 @@ export default function PrinterSetupCard() {
   const [msg, setMsg] = useState('');
 
   const chooseUsbOrSerial = async () => {
-    setSaving(true);
-    try {
-      await printUniversal({ text: 'TEST', allowPrompt: true, allowSystemDialog: false, codepage: 0 });
-      localStorage.setItem('PRINTER_READY', '1');
-      setMsg('✓ USB/Serial printer saved for silent printing');
-    } catch (e) {
-      setMsg('✗ Selection cancelled or failed');
-    } finally { setSaving(false); }
-  };
+  setSaving(true);
+  try {
+    const n = navigator;
+    
+    // Try WebUSB first
+    if (n.usb) {
+      try {
+        const device = await n.usb.requestDevice({ filters: [] });
+        localStorage.setItem('PRINTER_READY', '1');
+        localStorage.setItem('PRINTER_TYPE', 'usb');
+        setMsg('✓ USB printer saved for silent printing');
+        setSaving(false);
+        return;
+      } catch (e) {
+        console.log('USB selection cancelled or failed');
+      }
+    }
+    
+    // Try Web Serial
+    if (n.serial) {
+      try {
+        const port = await n.serial.requestPort();
+        localStorage.setItem('PRINTER_READY', '1');
+        localStorage.setItem('PRINTER_TYPE', 'serial');
+        setMsg('✓ Serial printer saved for silent printing');
+        setSaving(false);
+        return;
+      } catch (e) {
+        console.log('Serial selection cancelled');
+      }
+    }
+    
+    setMsg('✗ No compatible printer interface found');
+  } catch (e) {
+    setMsg('✗ Selection cancelled or failed');
+  } finally {
+    setSaving(false);
+  }
+};
 
-  const saveRelay = async () => {
-    localStorage.setItem('PRINT_RELAY_URL', relayUrl.trim());
-    localStorage.setItem('PRINTER_IP', ip.trim());
-    localStorage.setItem('PRINTER_PORT', String(port || 9100));
-    localStorage.setItem('PRINTER_READY', '1');
-    setMsg('✓ Relay saved for silent printing');
-  };
 
   return (
     <div style={{ border:'1px solid #e5e7eb', borderRadius:12, padding:16, background:'#fff' }}>

@@ -4,7 +4,7 @@ import { buildReceiptText, downloadTextAndShare } from '../utils/printUtils';
 import { getSupabase } from '../services/supabase';
 import { printUniversal } from '../utils/printGateway';
 import { openThermerWithText, openRawBTWithText } from '../utils/thermer';
-import { Capacitor } from '@capacitor/core'; // +++
+import { Capacitor } from '@capacitor/core'; 
 
 
 function getOrderTypeLabelLocal(order) {
@@ -83,44 +83,52 @@ function isDesktopPWA() {
 }
 
   const doPrint = useCallback(async () => {
-    if (lockRef.current) return;
-    lockRef.current = true;
+  if (lockRef.current) return;
+  lockRef.current = true;
 
-    const text = buildReceiptText(order, bill, restaurantProfile);
-    const onAndroidPWA = isAndroidPWA();
-    const onNativeAndroid = isNativeAndroid();
-    const onDesktopStandalone = isDesktopPWA();
+  const text = buildReceiptText(order, bill, restaurantProfile);
+  const onAndroidPWA = isAndroidPWA();
+  const onNativeAndroid = isNativeAndroid();
+  const onDesktopStandalone = isDesktopPWA();
 
-    
-
-    try {
-      // 1) Android PWA: deep‑link immediately under user gesture, then return
-      if (onAndroidPWA) {
-        try { openThermerWithText(text); onPrint?.(); } 
-        catch { try { openRawBTWithText(text); onPrint?.(); } catch { /* fall through */ } }
-        return; // do not await anything before this to preserve user activation
+  try {
+    // 1) Android PWA: deep-link immediately
+    if (onAndroidPWA) {
+      try { 
+        openThermerWithText(text); 
+        onPrint?.(); 
+      } catch { 
+        try { 
+          openRawBTWithText(text); 
+          onPrint?.(); 
+        } catch { /* fall through */ } 
       }
-
-      // 2) Other platforms: try silent transports
-      const allowSystemDialog = onNativeAndroid ? false : (onDesktopStandalone ? false : true);
-      await printUniversal({
-         text,
-         relayUrl: localStorage.getItem('PRINT_RELAY_URL') || undefined,
-         ip: localStorage.getItem('PRINTER_IP') || undefined,
-         port: Number(localStorage.getItem('PRINTER_PORT') || 9100),
-         codepage: 0,
-         allowPrompt: false,
-        allowSystemDialog
-      });
-      onPrint?.(); onClose?.(); return;
-    } catch {
-      // 3) Last resort share/download anywhere
-      try { await downloadTextAndShare(order, bill, restaurantProfile); onPrint?.(); }
-      catch { setStatus('✗ Printing failed'); }
-    } finally {
-      setTimeout(() => { lockRef.current = false; }, 600);
+      return;
     }
-  }, [order, bill, restaurantProfile, onPrint, onClose]);
+
+    // 2) Desktop PWA & Native Android: try silent transports
+    const allowSystemDialog = !onDesktopStandalone && !onNativeAndroid;
+    
+    await printUniversal({
+      text,
+      relayUrl: localStorage.getItem('PRINT_RELAY_URL') || undefined,
+      ip: localStorage.getItem('PRINTER_IP') || undefined,
+      port: Number(localStorage.getItem('PRINTER_PORT') || 9100),
+      codepage: 0,
+      allowPrompt: false,  // Never prompt during auto-print
+      allowSystemDialog    // Allow system dialog only for regular browsers
+    });
+    
+    onPrint?.(); 
+    onClose?.(); 
+    return;
+  } catch (err) {
+    console.error('Print failed:', err);
+    setStatus('✗ Printing failed. Please configure printer in settings.');
+  } finally {
+    setTimeout(() => { lockRef.current = false; }, 600);
+  }
+}, [order, bill, restaurantProfile, onPrint, onClose]);
 
   // Auto‑run everywhere except Android PWA (needs user gesture for app‑link)
   useEffect(() => {
