@@ -7,6 +7,7 @@ import Alert from "../../components/Alert";
 import ItemEditor from "../../components/ItemEditor";
 import LibraryPicker from "../../components/LibraryPicker";
 import Button from "../../components/ui/Button";
+import NiceSelect from "../../components/NiceSelect";
 import { getSupabase } from "../../services/supabase";
 import styled from "styled-components";
 const ToolBar = styled.div`
@@ -103,7 +104,7 @@ export default function MenuPage() {
         const { data: its, error: itsErr } = await supabase
           .from("menu_items")
           .select(
-            "id, name, category, price, code_number, hsn, tax_rate, status, veg, is_packaged_good, compensation_cess_rate"
+            "id, name, category, price, code_number, hsn, tax_rate, status, veg, is_packaged_good, compensation_cess_rate, ispopular"
           )
           .eq("restaurant_id", restaurantId)
           .order("category", { ascending: true })
@@ -223,19 +224,17 @@ export default function MenuPage() {
           onChange={(e) => setFilterText(e.target.value)}
           style={{ fontSize: 16 }}
         />
-        <select
-          className="select category-select"
-          value={filterCategory}
-          onChange={(e) => setFilterCategory(e.target.value)}
-          style={{ fontSize: 16 }}
-        >
-          <option value="all">All Categories</option>
-          {categories.map((c) => (
-            <option key={c.id} value={c.name}>
-              {c.name}
-            </option>
-          ))}
-        </select>
+        <div style={{ maxWidth: 260 }}>
+          <NiceSelect
+            value={filterCategory}
+            onChange={setFilterCategory}
+            placeholder="All Categories"
+            options={[
+              { value: "all", label: "All Categories" },
+              ...categories.map((c) => ({ value: c.name, label: c.name })),
+            ]}
+          />
+        </div>
 
         <div className="checkbox-row">
           <div className="flag">
@@ -474,7 +473,7 @@ export default function MenuPage() {
       <ItemEditor
         open={!!editorItem}
         onClose={() => setEditorItem(null)}
-        item={editorItem?.id ? editorItem : null}
+        item={editorItem}
         restaurantId={restaurantId}
         supabase={supabase}
         onSaved={handleSaved}

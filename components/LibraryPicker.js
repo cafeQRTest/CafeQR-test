@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import Button from './ui/Button'
+import NiceSelect from './NiceSelect'
 
 export default function LibraryPicker({ supabase, open, onClose, restaurantId, onAdded }) {
   const [loading, setLoading] = useState(false)
@@ -154,10 +155,17 @@ export default function LibraryPicker({ supabase, open, onClose, restaurantId, o
               <input type="checkbox" checked={vegOnly} onChange={e => setVegOnly(e.target.checked)} />
               <span className="muted">Veg only</span>
             </label>
-            <select className="select" value={cat} onChange={e => setCat(e.target.value)} style={{ fontSize: 16 }}>
-              <option value="all">All categories</option>
-              {cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            <div style={{ minWidth: 180 }}>
+              <NiceSelect
+                value={cat}
+                onChange={setCat}
+                placeholder="All categories"
+                options={[
+                  { value: 'all', label: 'All categories' },
+                  ...cats.map(c => ({ value: c.id, label: c.name })),
+                ]}
+              />
+            </div>
           </div>
 
           <div className="filters-row">

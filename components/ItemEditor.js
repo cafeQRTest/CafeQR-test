@@ -1,85 +1,7 @@
 // components/ItemEditor.js
 
-import { useState, useEffect, useMemo, useRef } from "react";
-
-function NiceSelect({ value, onChange, options, placeholder = "Select..." }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-
-  const current = options.find((o) => o.value === value);
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
-
-  return (
-    <div style={selectWrapper} ref={ref}>
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        style={{
-          ...selectInput,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
-        <span style={{ color: current ? "#111827" : "#9ca3af" }}>
-          {current?.label || placeholder}
-        </span>
-        <span style={selectChevron}>▾</span>
-      </button>
-      {open && (
-        <div
-          style={{
-            position: "absolute",
-            zIndex: 20,
-            marginTop: 4,
-            width: "100%",
-            background: "#fff",
-            borderRadius: 10,
-            border: "1px solid #e5e7eb",
-            boxShadow: "0 12px 30px rgba(15, 23, 42, 0.18)",
-            maxHeight: 220,
-            overflowY: "auto",
-          }}
-        >
-          {options.map((opt) => {
-            const active = opt.value === value;
-            return (
-              <div
-                key={opt.value}
-                onClick={() => {
-                  onChange(opt.value);
-                  setOpen(false);
-                }}
-                style={{
-                  padding: "8px 10px",
-                  fontSize: 14,
-                  cursor: "pointer",
-                  background: active ? "#fff7ed" : "#fff", // subtle orange bg
-                  color: active ? "#9a3412" : "#111827", // deep orange text
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                }}
-              >
-                <span>{opt.label}</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
+import { useState, useEffect, useMemo } from "react";
+import NiceSelect from "./NiceSelect";
 
 export default function ItemEditor({
   supabase,
@@ -103,6 +25,7 @@ export default function ItemEditor({
   const [category, setCategory] = useState(item?.category || "main");
   const [status, setStatus] = useState(item?.status || "available");
   const [veg, setVeg] = useState(item?.veg ?? true);
+  const [isPopular, setIsPopular] = useState(!!item?.ispopular);
   const [hsn, setHsn] = useState(item?.hsn || "");
   const [taxRate, setTaxRate] = useState(item?.tax_rate ?? 0);
   const [isPackaged, setIsPackaged] = useState(!!item?.is_packaged_good);
@@ -138,6 +61,7 @@ export default function ItemEditor({
     setCategory(item?.category || "main");
     setStatus(item?.status || "available");
     setVeg(item?.veg ?? true);
+    setIsPopular(!!item?.ispopular);
     setHsn(item?.hsn || "");
     setTaxRate(item?.tax_rate ?? 0);
     setIsPackaged(!!item?.is_packaged_good);
@@ -158,7 +82,9 @@ export default function ItemEditor({
   const save = async (e) => {
     e.preventDefault();
     if (!supabase || !canSubmit) {
-      onError?.("Please fill required fields.");
+      const msg = "Please fill in all required details: name and a valid price greater than 0.";
+      setErr(msg);
+      onError?.(msg);
       return;
     }
     setErr("");
@@ -192,6 +118,7 @@ export default function ItemEditor({
         category: category.trim(),
         status,
         veg,
+        ispopular: isPopular,
         hsn: hsn.trim() || null,
         tax_rate: Number(taxRate),
         is_packaged_good: isPackaged,
@@ -339,7 +266,6 @@ export default function ItemEditor({
             type="checkbox"
             checked={veg}
             onChange={(e) => setVeg(e.target.checked)}
-        
           />
           <span>
           Veg
@@ -353,6 +279,16 @@ export default function ItemEditor({
           />
           <span style={{whiteSpace:"nowrap"}}>
           Packaged goods
+          </span>
+        </div>
+        <div style={checkboxLabel}>
+          <input
+            type="checkbox"
+            checked={isPopular}
+            onChange={(e) => setIsPopular(e.target.checked)}
+          />
+          <span style={{whiteSpace:"nowrap"}}>
+          Popular
           </span>
         </div>
         </div>
@@ -405,7 +341,7 @@ export default function ItemEditor({
           </button>
           <button
             type="submit"
-            disabled={saving || !canSubmit}
+            disabled={saving}
             style={primaryBtn}
           >
             {saving ? "Saving…" : isEdit ? "Save" : "Add"}
@@ -539,30 +475,6 @@ const input = {
   backgroundColor: "#f9fafb",
 };
 
-const selectWrapper = {
-  position: "relative",
-  width: "100%",
-};
-
-const selectInput = {
-  ...input,
-  appearance: "none",
-  WebkitAppearance: "none",
-  MozAppearance: "none",
-  paddingRight: 32,
-  backgroundColor: "#f9fafb",
-  cursor: "pointer",
-};
-
-const selectChevron = {
-  position: "absolute",
-  right: 10,
-  top: "50%",
-  transform: "translateY(-50%)",
-  pointerEvents: "none",
-  fontSize: 12,
-  color: "#6b7280",
-};
 const row2 = {
   display: "grid",
   gridTemplateColumns: "1fr 1fr",

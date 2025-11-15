@@ -123,16 +123,16 @@ const cacheMenuIntoMap = (list) => {
 
         const { data: menu, error: menuErr } = await supabase
           .from('menu_items')
-          .select('id, name, price, description, category, veg, status, is_packaged_good')
+          .select('id, name, price, description, category, veg, status, is_packaged_good, ispopular')
           .eq('restaurant_id', restaurantId)
           .order('category', { ascending: true })
           .order('name', { ascending: true })
         if (menuErr) throw menuErr
 
-        const cleaned = (menu || []).map((item, i) => ({
+        const cleaned = (menu || []).map((item) => ({
           ...item,
           rating: Number((3.8 + Math.random() * 1.0).toFixed(1)),
-          popular: i % 4 === 0
+          popular: !!item.ispopular
         }))
 
         if (!cancelled) {
@@ -175,6 +175,7 @@ const cacheMenuIntoMap = (list) => {
           if (typeof newRow.description !== 'undefined') merged.description = newRow.description
           if (typeof newRow.category !== 'undefined') merged.category = newRow.category
           if (typeof newRow.veg !== 'undefined') merged.veg = newRow.veg
+          if (typeof newRow.ispopular !== 'undefined') merged.popular = !!newRow.ispopular
 
           map.set(newRow.id, merged)
 
