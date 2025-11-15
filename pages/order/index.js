@@ -19,25 +19,17 @@ export default function OrderPage() {
   const [error, setError] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [filterMode, setFilterMode] = useState('all')
+  const [categoryFilter, setCategoryFilter] = useState('all')
   const [isOutsideHours, setIsOutsideHours] = useState(false)
   const [hoursMessage, setHoursMessage] = useState('')
-const menuMapRef = useRef(new Map())
-const cacheMenuIntoMap = (list) => {
-  const m = new Map()
-  ;(list || []).forEach((row) => m.set(row.id, row))
-  menuMapRef.current = m
-}
-
-  // …rest of your code unchanged
-
-  
-
-  
-
-  // 2. Now it’s safe to initialize Supabase and load data
- 
-
-
+  const menuMapRef = useRef(new Map())
+  const cacheMenuIntoMap = (list) => {
+    const m = new Map()
+    ;(list || []).forEach((row) => m.set(row.id, row))
+    menuMapRef.current = m
+  }
+  const [justAddedItem, setJustAddedItem] = useState('')
+  const addToastTimeoutRef = useRef(null)
 
   useEffect(() => {
     if (!restaurantId || !tableNumber) return
@@ -207,6 +199,16 @@ const cacheMenuIntoMap = (list) => {
       if (existing) return prev.map(c => c.id === item.id ? { ...c, quantity: c.quantity + 1 } : c)
       return [...prev, { ...item, quantity: 1 }]
     })
+
+    // Lightweight "added to cart" feedback
+    const name = item.name || 'Item'
+    setJustAddedItem(name)
+    if (addToastTimeoutRef.current) {
+      clearTimeout(addToastTimeoutRef.current)
+    }
+    addToastTimeoutRef.current = setTimeout(() => {
+      setJustAddedItem('')
+    }, 1500)
   }
 
   const updateCartItem = (itemId, quantity) => {
@@ -221,10 +223,24 @@ const cacheMenuIntoMap = (list) => {
     return (menuItems || []).filter(item => {
       if (filterMode === 'veg' && !item.veg) return false
       if (filterMode === 'popular' && !item.popular) return false
+      const itemCategory = item.category || 'Others'
+      if (categoryFilter !== 'all' && itemCategory !== categoryFilter) return false
       if (!q) return true
-      return (item.name || '').toLowerCase().includes(q) || (item.description || '').toLowerCase().includes(q)
+      return (
+        (item.name || '').toLowerCase().includes(q) ||
+        (item.description || '').toLowerCase().includes(q)
+      )
     })
-  }, [menuItems, filterMode, searchQuery])
+  }, [menuItems, filterMode, searchQuery, categoryFilter])
+
+  const categoryChips = useMemo(() => {
+    const set = new Set()
+    ;(menuItems || []).forEach((item) => {
+      const cat = item.category || 'Others'
+      set.add(cat)
+    })
+    return Array.from(set)
+  }, [menuItems])
 
   const groupedItems = useMemo(() => {
     return filteredItems.reduce((acc, item) => {
@@ -237,8 +253,6 @@ const cacheMenuIntoMap = (list) => {
 
   const cartTotal = useMemo(() => cart.reduce((s, i) => s + i.price * i.quantity, 0), [cart])
   const cartItemsCount = useMemo(() => cart.reduce((s, i) => s + i.quantity, 0), [cart])
-
-
 
   const brandColor = restaurant?.restaurant_profiles?.brand_color || '#f59e0b'
 
@@ -279,15 +293,31 @@ const cacheMenuIntoMap = (list) => {
           {'<'}
         </button>
         <div style={{ flex: 1 }}>
-          <h1 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 600 }}>
-            {restaurant?.name || 'Restaurant'}
-          </h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <h1 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 600 }}>
+              {restaurant?.name || 'Restaurant'}
+            </h1>
+            {tableNumber && (
+              <span
+                style={{
+                  fontSize: 12,
+                  padding: '2px 8px',
+                  borderRadius: 999,
+                  border: '1px solid #e5e7eb',
+                  color: '#4b5563',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Table {tableNumber}
+              </span>
+            )}
+          </div>
           <div style={{ fontSize: 14, color: '#666', marginTop: 4 }}>
             <span style={{ color: brandColor, fontWeight: 500 }}>⏱️ 15-20 mins</span>
             <span style={{ marginLeft: 16, color: '#f59e0b' }}>⭐ 4.3 (500+ orders)</span>
           </div>
         </div>
-<AlertRestaurantButton restaurantId={restaurantId} tableNumber={tableNumber} brandColor={brandColor} />
+        <AlertRestaurantButton restaurantId={restaurantId} tableNumber={tableNumber} brandColor={brandColor} />
       </header>
 
       <div style={{ padding: '1rem', background: '#fff' }}>
@@ -340,7 +370,88 @@ const cacheMenuIntoMap = (list) => {
         ))}
       </div>
 
+      {categoryChips.length > 1 && (
+        <div
+          style={{
+            display: 'flex',
+            gap: 8,
+            padding: '0 1rem 0.75rem',
+            background: '#fff',
+            borderBottom: '1px solid #f3f4f6',
+            overflowX: 'auto'
+          }}
+        >
+          {['all', ...categoryChips].map((cat) => (
+            <button
+              key={cat}
+              onClick={() => setCategoryFilter(cat)}
+              style={{
+                padding: '6px 14px',
+                border: '1px solid #e5e7eb',
+                borderRadius: 999,
+                background: categoryFilter === cat ? '#111827' : '#fff',
+                color: categoryFilter === cat ? '#fff' : '#000',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                fontSize: 13,
+                fontWeight: categoryFilter === cat ? 600 : 500,
+              }}
+            >
+              {cat === 'all' ? 'All categories' : cat}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div>
+        {!loading && !error && menuItems.length === 0 && (
+          <div
+            style={{
+              padding: '2rem 1.5rem',
+              textAlign: 'center',
+              color: '#4b5563',
+            }}
+          >
+            <h2 style={{ fontSize: 18, marginBottom: 8 }}>Menu not available</h2>
+            <p style={{ margin: 0, fontSize: 14 }}>Please contact the staff for today&apos;s menu.</p>
+          </div>
+        )}
+
+        {!loading && !error && menuItems.length > 0 && Object.keys(groupedItems).length === 0 && (
+          <div
+            style={{
+              padding: '2rem 1.5rem',
+              textAlign: 'center',
+              color: '#4b5563',
+            }}
+          >
+            <h2 style={{ fontSize: 18, marginBottom: 8 }}>No dishes match your search</h2>
+            <p style={{ margin: '0 0 12px 0', fontSize: 14 }}>
+              Try clearing filters or searching for a different dish.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setSearchQuery('')
+                setFilterMode('all')
+                setCategoryFilter('all')
+              }}
+              style={{
+                padding: '8px 16px',
+                borderRadius: 999,
+                border: '1px solid #e5e7eb',
+                background: '#fff',
+                color: '#111827',
+                cursor: 'pointer',
+                fontSize: 14,
+                fontWeight: 500,
+              }}
+            >
+              Clear filters
+            </button>
+          </div>
+        )}
+
         {Object.entries(groupedItems).map(([category, items]) => (
           <section key={category} style={{ background: '#fff', marginBottom: 8 }}>
             <h2 style={{ margin: 0, padding: '16px 20px 8px', fontSize: 18, fontWeight: 600 }}>
@@ -391,19 +502,19 @@ const cacheMenuIntoMap = (list) => {
                       )}
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                       <span style={{ fontSize: 12 }}>{item.veg ? '🟢' : '🔺'}</span>
                       <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>{item.name}</h3>
                     </div>
 
                     {item.description && (
-                      <p style={{ margin: '0 0 12px 0', color: '#6b7280', fontSize: 14 }}>
+                      <p style={{ margin: '0 0 10px 0', color: '#6b7280', fontSize: 13, lineHeight: 1.5 }}>
                         {item.description}
                       </p>
                     )}
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: 16, fontWeight: 600 }}>
+                      <span style={{ fontSize: 16, fontWeight: 700 }}>
                         ₹{Number(item.price).toFixed(2)}
                       </span>
 
@@ -489,6 +600,25 @@ const cacheMenuIntoMap = (list) => {
           </section>
         ))}
       </div>
+
+      {justAddedItem && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: cartItemsCount > 0 ? 56 : 16,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            background: '#111827',
+            color: '#fff',
+            padding: '8px 16px',
+            borderRadius: 999,
+            fontSize: 13,
+            boxShadow: '0 4px 10px rgba(0,0,0,0.2)',
+          }}
+        >
+          Added to cart: <span style={{ fontWeight: 600 }}>{justAddedItem}</span>
+        </div>
+      )}
 
       {cartItemsCount > 0 && (
         <div
