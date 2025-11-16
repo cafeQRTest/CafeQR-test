@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 
-export default function NiceSelect({ value, onChange, options, placeholder = "Select..." }) {
+export default function NiceSelect({ value, onChange, options, placeholder = "Select...", disabled = false }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -22,12 +22,15 @@ export default function NiceSelect({ value, onChange, options, placeholder = "Se
     <div style={selectWrapper} ref={ref}>
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        disabled={disabled}
+        onClick={() => !disabled && setOpen((o) => !o)}
         style={{
           ...selectInput,
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
+          cursor: disabled ? "not-allowed" : selectInput.cursor,
+          opacity: disabled ? 0.7 : 1,
         }}
       >
         <span style={{ color: current ? "#111827" : "#9ca3af" }}>

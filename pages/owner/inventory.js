@@ -5,6 +5,7 @@ import styled from 'styled-components';
 import { useRequireAuth } from '../../lib/useRequireAuth';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { getSupabase } from '../../services/supabase';
+import NiceSelect from '../../components/NiceSelect';
 
 // Standard units commonly used in restaurants for ingredients
 const RESTAURANT_UNITS = ['kg', 'g', 'L', 'ml', 'pcs', 'dozen'];
@@ -81,6 +82,10 @@ export default function InventoryPage() {
   const [selectedMenuItem, setSelectedMenuItem] = useState(null) // menu item currently being edited in recipe modal
   const [confirmDialog, setConfirmDialog] = useState(null) // { message, onConfirm, onCancel }
   const [ingredientFormError, setIngredientFormError] = useState('')
+  const [savingRecipe, setSavingRecipe] = useState(false)
+  const [recipeFormError, setRecipeFormError] = useState('')
+  const [ingredientSearch, setIngredientSearch] = useState('')
+  const [recipeSearch, setRecipeSearch] = useState('')
 
   useEffect(() => {
     if (checking || restLoading || !restaurantId || !supabase) return
@@ -218,6 +223,7 @@ export default function InventoryPage() {
 
   const openRecipe = (menuItem, recipe) => {
     setShowRecipeEditor(true)
+    setRecipeFormError('')
     setSelectedMenuItem(menuItem || null)
     if (recipe) {
       setRecipeForm({
@@ -237,12 +243,14 @@ export default function InventoryPage() {
     setShowRecipeEditor(false)
     setSelectedMenuItem(null)
     setRecipeForm({ menuItemId: '', items: [] })
+    setRecipeFormError('')
   }
 
   const changeRecipeByKey = (key, field, value) => {
+    // Store raw input (as string) for quantity so the field can be fully cleared
     setRecipeForm((prev) => {
       const items = prev.items.map((it) =>
-        it._key === key ? { ...it, [field]: field === 'quantity' ? Number(value) : value } : it
+        it._key === key ? { ...it, [field]: value } : it
       )
       return { ...prev, items }
     })
@@ -251,20 +259,61 @@ export default function InventoryPage() {
     const _key = `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`
     setRecipeForm((prev) => ({
       ...prev,
-      items: [...prev.items, { _key, ingredientId: '', quantity: 0 }],
+      // start with empty quantity so the input shows placeholder instead of 0
+      items: [...prev.items, { _key, ingredientId: '', quantity: '' }],
     }))
   }
   const removeRecipeItemByKey = (key) => {
     setRecipeForm((prev) => ({ ...prev, items: prev.items.filter((it) => it._key !== key) }))
   }
 
+  const normalizedIngredientSearch = ingredientSearch.trim().toLowerCase()
+  const filteredIngredients = normalizedIngredientSearch
+    ? ingredients.filter((ing) => (ing.name || '').toLowerCase().includes(normalizedIngredientSearch))
+    : ingredients
+
+  const normalizedRecipeSearch = recipeSearch.trim().toLowerCase()
+  const filteredMenuItems = normalizedRecipeSearch
+    ? menuItems.filter((mi) => (mi.name || '').toLowerCase().includes(normalizedRecipeSearch))
+    : menuItems
+
   const saveRecipe = async () => {
-    if (!supabase) return
+    if (!supabase || savingRecipe) return
     try {
+      setSavingRecipe(true)
       setError('')
+      setRecipeFormError('')
+
+      const rawItems = recipeForm.items
+
+      // Block save if any selected ingredient has no quantity or non-positive quantity
+      const hasMissingQty = rawItems.some((item) =>
+        item.ingredientId && (!item.quantity || Number(item.quantity) <= 0)
+      )
+      if (hasMissingQty) {
+        throw new Error('Please enter a quantity greater than 0 for each selected ingredient.')
+      }
+
+      // Only keep fully valid items
+      const items = rawItems.filter(
+        (item) => item.ingredientId && Number(item.quantity) > 0
+      )
+      if (items.length === 0) {
+        throw new Error('Add at least one ingredient with quantity before saving recipe.')
+      }
+
+      // Disallow duplicate ingredients in a single recipe
+      const seen = new Set()
+      for (const it of items) {
+        if (seen.has(it.ingredientId)) {
+          throw new Error('Each ingredient can only appear once in a recipe.')
+        }
+        seen.add(it.ingredientId)
+      }
+
       const payload = {
         menu_item_id: recipeForm.menuItemId,
-        items: recipeForm.items.filter((item) => item.ingredientId && item.quantity > 0)
+        items,
       }
       if (!payload.menu_item_id) {
         throw new Error('Select a menu item before saving recipe')
@@ -336,7 +385,9 @@ export default function InventoryPage() {
         if (!recipesError) setRecipes(recipesData || [])
       } catch {}
     } catch (e) {
-      setError(e.message)
+      setRecipeFormError(e.message)
+    } finally {
+      setSavingRecipe(false)
     }
   }
 
@@ -369,20 +420,34 @@ export default function InventoryPage() {
 
       {activeTab === 'ingredients' && (
         <Section>
-          <SectionHeader>
-            <SectionTitle>Ingredients Inventory</SectionTitle>
-            <AddButton onClick={() => { setIngredientFormError(''); setIngredientDialog('add') }}>
-              + Add Ingredient
-            </AddButton>
-          </SectionHeader>
+        <SectionHeader>
+          <SectionTitle>Ingredients Inventory</SectionTitle>
+          <AddButton onClick={() => { setIngredientFormError(''); setIngredientDialog('add') }}>
+            + Add Ingredient
+          </AddButton>
+        </SectionHeader>
+
+        <SearchRow>
+          <SearchInput
+            type="text"
+            placeholder="Search ingredients..."
+            value={ingredientSearch}
+            onChange={(e) => setIngredientSearch(e.target.value)}
+          />
+          {ingredientSearch && (
+            <ClearSearchButton type="button" onClick={() => setIngredientSearch('')} aria-label="Clear ingredient search">
+              ✕
+            </ClearSearchButton>
+          )}
+        </SearchRow>
 
           {loading ? (
             <LoadingContainer>Loading ingredients…</LoadingContainer>
-          ) : ingredients.length === 0 ? (
-            <EmptyState>No ingredients yet. Add your first ingredient!</EmptyState>
+          ) : filteredIngredients.length === 0 ? (
+            <EmptyState>No ingredients found.</EmptyState>
           ) : (
             <IngredientGrid>
-              {ingredients.map((ing) => (
+              {filteredIngredients.map((ing) => (
                 <IngredientCard key={ing.id} lowStock={ing.low_stock}>
                   <CardHeader>
                     <CardTitle>{ing.name}</CardTitle>
@@ -422,17 +487,31 @@ export default function InventoryPage() {
 
       {activeTab === 'recipes' && (
         <Section>
-          <SectionHeader>
-            <SectionTitle>Menu Item Recipes</SectionTitle>
-          </SectionHeader>
+        <SectionHeader>
+          <SectionTitle>Menu Item Recipes</SectionTitle>
+        </SectionHeader>
+
+        <SearchRow>
+          <SearchInput
+            type="text"
+            placeholder="Search recipes..."
+            value={recipeSearch}
+            onChange={(e) => setRecipeSearch(e.target.value)}
+          />
+          {recipeSearch && (
+            <ClearSearchButton type="button" onClick={() => setRecipeSearch('')} aria-label="Clear recipe search">
+              ✕
+            </ClearSearchButton>
+          )}
+        </SearchRow>
 
           {loading ? (
             <LoadingContainer>Loading recipes…</LoadingContainer>
-          ) : menuItems.length === 0 ? (
+          ) : filteredMenuItems.length === 0 ? (
             <EmptyState>No menu items found.</EmptyState>
           ) : (
             <RecipesGrid>
-              {menuItems.filter(mi => !mi.is_packaged_good).map((menuItem) => {
+              {filteredMenuItems.map((menuItem) => {
                 const recipe = recipes.find((r) => r.menu_item_id === menuItem.id)
                 return (
                   <RecipeCard key={menuItem.id}>
@@ -491,10 +570,12 @@ export default function InventoryPage() {
               </FormGroup>
               <FormGroup>
                 <FormLabel>Unit of Measurement *</FormLabel>
-                <UnitSelect
+                <NiceSelect
                   value={ingredientForm.unit}
                   onChange={(unit) => setIngredientForm({ ...ingredientForm, unit })}
                   disabled={!!editingIngredient}
+                  placeholder="Select unit..."
+                  options={RESTAURANT_UNITS.map((u) => ({ value: u, label: u }))}
                 />
               </FormGroup>
               <FormGroup>
@@ -566,36 +647,34 @@ export default function InventoryPage() {
                 <span>{selectedMenuItem.name}</span>
               </div>
             ) : (
-              <select
-                value={recipeForm.menuItemId}
-                onChange={(e) => setRecipeForm({ ...recipeForm, menuItemId: e.target.value })}
-              >
-                <option value="">Select Menu Item</option>
-                {menuItems.map((mi) => (
-                  <option key={mi.id} value={mi.id}>
-                    {mi.name}
-                  </option>
-                ))}
-              </select>
+              <div style={{ maxWidth: 320 }}>
+                <NiceSelect
+                  value={recipeForm.menuItemId}
+                  onChange={(val) => setRecipeForm({ ...recipeForm, menuItemId: val })}
+                  placeholder="Select Menu Item"
+                  options={menuItems.map((mi) => ({ value: mi.id, label: mi.name }))}
+                />
+              </div>
+            )}
+            {recipeFormError && (
+              <InlineError style={{ marginTop: 8 }}>{recipeFormError}</InlineError>
             )}
             {recipeForm.items.map((item) => (
-              <div className="form-row" key={item._key}>
-                <select
-                  value={item.ingredientId}
-                  onChange={(e) => changeRecipeByKey(item._key, 'ingredientId', e.target.value)}
-                >
-                  <option value="">Select Ingredient</option>
-                  {ingredients.map((ing) => (
-                    <option key={ing.id} value={ing.id}>
-                      {ing.name}
-                    </option>
-                  ))}
-                </select>
+              <div className="form-row" key={item._key} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <div style={{ flex: 2 }}>
+                  <NiceSelect
+                    value={item.ingredientId}
+                    onChange={(val) => changeRecipeByKey(item._key, 'ingredientId', val)}
+                    placeholder="Select Ingredient"
+                    options={ingredients.map((ing) => ({ value: ing.id, label: ing.name }))}
+                  />
+                </div>
                 <input
                   type="number"
                   placeholder="Quantity"
                   value={item.quantity}
                   onChange={(e) => changeRecipeByKey(item._key, 'quantity', e.target.value)}
+                  style={{ flex: 1 }}
                 />
                 <button type="button" onClick={() => removeRecipeItemByKey(item._key)}>Remove</button>
               </div>
@@ -604,8 +683,10 @@ export default function InventoryPage() {
               <SaveButton onClick={addRecipeItem}>+ Add Ingredient</SaveButton>
             </div>
             <div className="modal-actions" style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'flex-end' }}>
-              <SaveButton onClick={saveRecipe}>Save</SaveButton>
-              <CancelButton onClick={handleCloseRecipeEditor}>Cancel</CancelButton>
+              <SaveButton onClick={saveRecipe} disabled={savingRecipe}>
+                {savingRecipe ? 'Saving…' : 'Save'}
+              </SaveButton>
+              <CancelButton onClick={handleCloseRecipeEditor} disabled={savingRecipe}>Cancel</CancelButton>
             </div>
           </div>
         </div>
@@ -715,6 +796,45 @@ const EmptyState = styled.div`
   padding: 3rem 2rem;
   color: #9ca3af;
   font-size: 1.1rem;
+`
+const SearchRow = styled.div`
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+`
+const SearchInput = styled.input`
+  width: 100%;
+  max-width: 260px;
+  padding: 0.5rem 0.75rem;
+  border: 2px solid #e5e7eb;
+  border-radius: 9999px;
+  font-size: 0.95rem;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  box-sizing: border-box;
+  &:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  }
+`
+const ClearSearchButton = styled.button`
+  border: none;
+  background: #e5e7eb;
+  color: #4b5563;
+  border-radius: 9999px;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 0;
+  &:hover {
+    background: #d1d5db;
+  }
 `
 const IngredientGrid = styled.div`
   display: grid;
