@@ -372,29 +372,22 @@ export default function OrderPage() {
 
       {categoryChips.length > 1 && (
         <div
+          className="sales-carousel"
           style={{
-            display: 'flex',
-            gap: 8,
             padding: '0 1rem 0.75rem',
             background: '#fff',
             borderBottom: '1px solid #f3f4f6',
-            overflowX: 'auto'
           }}
         >
           {['all', ...categoryChips].map((cat) => (
             <button
               key={cat}
               onClick={() => setCategoryFilter(cat)}
+              className={`sales-carousel-btn${categoryFilter === cat ? ' active' : ''}`}
               style={{
-                padding: '6px 14px',
-                border: '1px solid #e5e7eb',
-                borderRadius: 999,
-                background: categoryFilter === cat ? '#111827' : '#fff',
-                color: categoryFilter === cat ? '#fff' : '#000',
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-                fontSize: 13,
-                fontWeight: categoryFilter === cat ? 600 : 500,
+                background: categoryFilter === cat ? '#2563eb' : '#f9fafb',
+                color: categoryFilter === cat ? '#fff' : '#374151',
+                borderColor: categoryFilter === cat ? '#2563eb' : '#e5e7eb',
               }}
             >
               {cat === 'all' ? 'All categories' : cat}
