@@ -92,7 +92,10 @@ export default function LibraryPicker({ supabase, open, onClose, restaurantId, o
   const addSelected = async () => {
     if (!supabase) return
     const ids = Object.keys(selected)
-    if (!ids.length) return onClose?.()
+    if (!ids.length) {
+      setError('Please select at least one item to add.')
+      return
+    }
     if (!restaurantId) {
       setError('Restaurant not selected.')
       return
@@ -175,34 +178,36 @@ export default function LibraryPicker({ supabase, open, onClose, restaurantId, o
               <input type="checkbox" checked={markPackaged} onChange={e => setMarkPackaged(e.target.checked)} />
               <span className="muted">Mark as packaged</span>
             </label>
-            <div className="grid-2">
-              <label className="field">
-                <span>Default Tax %</span>
-                <input
-                  className="input"
-                  type="number"
-                  step="0.01"
-                  inputMode="decimal"
-                  value={defaultTax}
-                  onChange={e => setDefaultTax(e.target.value)}
-                  style={{ fontSize: 16 }}
-                  placeholder="e.g., 28"
-                />
-              </label>
-              <label className="field">
-                <span>Cess %</span>
-                <input
-                  className="input"
-                  type="number"
-                  step="0.01"
-                  inputMode="decimal"
-                  value={defaultCess}
-                  onChange={e => setDefaultCess(e.target.value)}
-                  style={{ fontSize: 16 }}
-                  placeholder="e.g., 12"
-                />
-              </label>
-            </div>
+            {markPackaged && (
+              <div className="grid-2">
+                <label className="field">
+                  <span>Default Tax %</span>
+                  <input
+                    className="input"
+                    type="number"
+                    step="0.01"
+                    inputMode="decimal"
+                    value={defaultTax}
+                    onChange={e => setDefaultTax(e.target.value)}
+                    style={{ fontSize: 16 }}
+                    placeholder="e.g., 28"
+                  />
+                </label>
+                <label className="field">
+                  <span>Cess %</span>
+                  <input
+                    className="input"
+                    type="number"
+                    step="0.01"
+                    inputMode="decimal"
+                    value={defaultCess}
+                    onChange={e => setDefaultCess(e.target.value)}
+                    style={{ fontSize: 16 }}
+                    placeholder="e.g., 12"
+                  />
+                </label>
+              </div>
+            )}
           </div>
 
           {error && (
@@ -267,7 +272,9 @@ export default function LibraryPicker({ supabase, open, onClose, restaurantId, o
 
         <div className="lib-foot">
           <Button variant="outline" onClick={onClose} disabled={loading}>Cancel</Button>
-          <Button onClick={addSelected} disabled={loading}>{loading ? 'Adding…' : 'Add Selected'}</Button>
+          <Button onClick={addSelected} disabled={loading || !Object.keys(selected).length}>
+            {loading ? 'Adding…' : 'Add Selected'}
+          </Button>
         </div>
       </div>
 
