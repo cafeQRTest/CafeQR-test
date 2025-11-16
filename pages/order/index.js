@@ -320,20 +320,70 @@ export default function OrderPage() {
         <AlertRestaurantButton restaurantId={restaurantId} tableNumber={tableNumber} brandColor={brandColor} />
       </header>
 
-      <div style={{ padding: '1rem', background: '#fff' }}>
-        <input
-          type="text"
-          placeholder="Search for dishes..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+      <div
+        style={{
+          padding: '1rem',
+          background: '#fff',
+        }}
+      >
+        <div
           style={{
-            width: '100%',
-            padding: '12px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '6px 10px',
+            borderRadius: 9999,
+            background: '#f9fafb',
             border: '1px solid #e5e7eb',
-            borderRadius: 8,
-            fontSize: 16
           }}
-        />
+        >
+          <span
+            style={{
+              fontSize: 14,
+              color: '#9ca3af',
+            }}
+          >
+            🔍
+          </span>
+          <input
+            type="text"
+            placeholder="Search for dishes..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{
+              flex: 1,
+              border: 'none',
+              height: 32,
+              paddingLeft: 0,
+              background: 'transparent',
+              fontSize: 14,
+              outline: 'none',
+            }}
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              aria-label="Clear search"
+              style={{
+                border: 'none',
+                background: 'transparent',
+                color: '#9ca3af',
+                borderRadius: 9999,
+                width: 26,
+                height: 26,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                fontSize: 13,
+                padding: 0,
+              }}
+            >
+              ✕
+            </button>
+          )}
+        </div>
       </div>
 
       <div

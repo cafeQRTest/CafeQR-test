@@ -16,6 +16,21 @@ const ToolBar = styled.div`
   gap: 12px;
   margin-bottom: 16px;
 
+  .search-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 9999px;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+  }
+
+  .search-icon {
+    font-size: 14px;
+    color: #9ca3af;
+  }
+
   .input,
   .select {
     padding: 8px 10px;
@@ -29,6 +44,38 @@ const ToolBar = styled.div`
       border-color: #652ae2;
       box-shadow: 0 0 0 2px rgba(101, 42, 226, 0.2);
     }
+  }
+
+  .search-row .input {
+    flex: 1;
+    border: none;
+    height: 32px;
+    padding-left: 0;
+    background: transparent;
+  }
+
+  .search-row .input:focus {
+    box-shadow: none;
+  }
+
+  .clear-search-btn {
+    border: none;
+    background: transparent;
+    color: #9ca3af;
+    border-radius: 9999px;
+    width: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 0.85rem;
+    padding: 0;
+  }
+
+  .clear-search-btn:hover {
+    background: #e5e7eb;
+    color: #4b5563;
   }
 
   .checkbox-row {
@@ -217,13 +264,26 @@ export default function MenuPage() {
       {error && <Alert type="error">{error}</Alert>}
 
       <ToolBar>
-        <input
-          className="input search-input"
-          placeholder="Search by name, code, or category..."
-          value={filterText}
-          onChange={(e) => setFilterText(e.target.value)}
-          style={{ fontSize: 16 }}
-        />
+        <div className="search-row">
+          <span className="search-icon">🔍</span>
+          <input
+            className="input search-input"
+            placeholder="Search by name or code..."
+            value={filterText}
+            onChange={(e) => setFilterText(e.target.value)}
+            style={{ fontSize: 14 }}
+          />
+          {filterText && (
+            <button
+              type="button"
+              className="clear-search-btn"
+              onClick={() => setFilterText("")}
+              aria-label="Clear search"
+            >
+              ✕
+            </button>
+          )}
+        </div>
         <div style={{ maxWidth: 260 }}>
           <NiceSelect
             value={filterCategory}
