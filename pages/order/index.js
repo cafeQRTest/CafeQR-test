@@ -15,6 +15,7 @@ export default function OrderPage() {
   const [restaurant, setRestaurant] = useState(null)
   const [menuItems, setMenuItems] = useState([])
   const [cart, setCart] = useState([])
+  const [cartLoaded, setCartLoaded] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
@@ -33,18 +34,30 @@ export default function OrderPage() {
 
   useEffect(() => {
     if (!restaurantId || !tableNumber) return
+    setCartLoaded(false)
     const key = `cart_${restaurantId}_${tableNumber}`
-    const stored = localStorage.getItem(key)
-    if (stored) {
-      try { setCart(JSON.parse(stored)) } catch {}
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem(key)
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored)
+          setCart(Array.isArray(parsed) ? parsed : [])
+        } catch {
+          setCart([])
+        }
+      } else {
+        setCart([])
+      }
     }
+    setCartLoaded(true)
   }, [restaurantId, tableNumber])
 
   useEffect(() => {
-    if (!restaurantId || !tableNumber) return
+    if (!restaurantId || !tableNumber || !cartLoaded) return
+    if (typeof window === 'undefined') return
     const key = `cart_${restaurantId}_${tableNumber}`
     localStorage.setItem(key, JSON.stringify(cart))
-  }, [cart, restaurantId, tableNumber])
+  }, [cart, restaurantId, tableNumber, cartLoaded])
 
   useEffect(() => {
     if (!restaurantId) return
@@ -632,7 +645,7 @@ export default function OrderPage() {
                             cursor: isAvailable ? 'pointer' : 'not-allowed'
                           }}
                         >
-                          Add +
+                          Add to cart
                         </button>
                       )}
                     </div>
@@ -699,7 +712,7 @@ export default function OrderPage() {
               fontWeight: 600
             }}
           >
-            Checkout →
+            View Cart
           </Link>
         </div>
       )}

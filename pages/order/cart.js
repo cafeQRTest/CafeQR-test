@@ -350,9 +350,25 @@ export default function CartSummary() {
               >
                 ₹{item.price.toFixed(2)} each
               </div>
-              <div style={{ fontWeight: 600, fontSize: "14px" }}>
+              <div style={{ fontWeight: 600, fontSize: "14px", marginBottom: "4px" }}>
                 Total: ₹{(item.price * item.quantity).toFixed(2)}
               </div>
+              <button
+                type="button"
+                onClick={() => updateQuantity(item.id, 0)}
+                style={{
+                  marginTop: "4px",
+                  padding: "4px 0",
+                  border: "none",
+                  background: "none",
+                  color: "#ef4444",
+                  fontSize: "13px",
+                  cursor: "pointer",
+                  textDecoration: "underline",
+                }}
+              >
+                Remove from cart
+              </button>
             </div>
 
             <div

@@ -3,6 +3,7 @@
 
 import { useRouter } from 'next/router';
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 // 1. IMPORT the singleton function
 import { getSupabase } from '../../services/supabase';
 import AlertRestaurantButton from '../../components/AlertRestaurantButton';
@@ -18,6 +19,7 @@ export default function PaymentPage() {
 
   const [restaurant, setRestaurant] = useState(null);
   const [cart, setCart] = useState([]);
+  const [showFullSummary, setShowFullSummary] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState('cash');
   const [loading, setLoading] = useState(false);
   const [specialInstructions, setSpecialInstructions] = useState('');
@@ -395,6 +397,7 @@ export default function PaymentPage() {
           padding: 16,
           background: '#fff',
           borderBottom: '1px solid #e5e7eb',
+          gap: 8,
         }}
       >
         <button
@@ -406,16 +409,38 @@ export default function PaymentPage() {
         <h1 style={{ margin: 0, fontSize: 20, fontWeight: 600, flex: 1, textAlign: 'center' }}>
           Payment
         </h1>
-        <div style={{ fontSize: 14, fontWeight: 600, color: brandColor }}>
-          ₹{Number(totalAmount || 0).toFixed(2)}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: brandColor }}>
+            ₹{Number(totalAmount || 0).toFixed(2)}
+          </div>
+          <Link
+            href={`/order/cart?r=${restaurantId}&t=${tableNumber}`}
+            style={{
+              padding: '4px 10px',
+              borderRadius: 999,
+              border: `1px solid ${brandColor}`,
+              fontSize: 12,
+              textDecoration: 'none',
+              color: brandColor,
+              background: '#fff',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            <span>🛒</span>
+            <span>View Cart</span>
+          </Link>
         </div>
-<AlertRestaurantButton restaurantId={restaurantId} tableNumber={tableNumber} brandColor={brandColor} />
+        <AlertRestaurantButton restaurantId={restaurantId} tableNumber={tableNumber} brandColor={brandColor} />
       </header>
 
       <div style={{ background: '#fff', padding: 20, marginBottom: 8 }}>
-        <h3 style={{ margin: '0 0 12px 0', fontSize: 16, fontWeight: 600 }}>📦 Order Summary</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>📦 Order Summary</h3>
+        </div>
         <div style={{ marginBottom: 16 }}>
-          {cart.slice(0, 3).map((item) => (
+          {(showFullSummary ? cart : cart.slice(0, 3)).map((item) => (
             <div
               key={item.id}
               style={{
@@ -434,10 +459,23 @@ export default function PaymentPage() {
               </span>
             </div>
           ))}
-          {cart.length > 3 && (
-            <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>
+          {cart.length > 3 && !showFullSummary && (
+            <button
+              type="button"
+              onClick={() => setShowFullSummary(true)}
+              style={{
+                marginTop: 4,
+                padding: 0,
+                border: 'none',
+                background: 'none',
+                fontSize: 12,
+                color: '#2563eb',
+                cursor: 'pointer',
+                textDecoration: 'underline',
+              }}
+            >
               +{cart.length - 3} more items
-            </div>
+            </button>
           )}
         </div>
         <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: 12 }}>
@@ -445,12 +483,19 @@ export default function PaymentPage() {
             <span>Subtotal</span>
             <span>₹{calculateTotals.subtotalEx.toFixed(2)}</span>
           </div>
-          {calculateTotals.taxRateDisplay > 0 && (
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', color: '#6b7280' }}>
-          <span>Tax({calculateTotals.taxRateDisplay}%)</span>
-          <span>₹{calculateTotals.taxAmount.toFixed(2)}</span>
-          </div>
-   )}
+          {calculateTotals.taxAmount > 0 && (
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                marginBottom: '8px',
+                color: '#6b7280',
+              }}
+            >
+              <span>Tax({calculateTotals.taxRateDisplay}%)</span>
+              <span>₹{calculateTotals.taxAmount.toFixed(2)}</span>
+            </div>
+          )}
           <div
             style={{
               display: 'flex',
