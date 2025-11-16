@@ -423,10 +423,11 @@ const overlay = {
   inset: 0,
   background: "rgba(15, 23, 42, 0.45)",
   display: "flex",
-  alignItems: "center",
+  alignItems: "flex-start",
   justifyContent: "center",
-  padding: 16,
+  padding: 24,
   zIndex: 1000,
+  overflowY: "auto",
 };
 
 const overlayInner = {
@@ -444,11 +445,11 @@ const modal = {
   padding: 20,
   borderRadius: 14,
   width: "100%",
-  maxWidth: 460,
+  maxWidth: 520,
   boxShadow:
     "0 18px 45px rgba(15, 23, 42, 0.35)",
   border: "1px solid #e5e7eb",
-  maxHeight: "90vh",
+  maxHeight: "95vh",
   overflowY: "auto",
 };
 

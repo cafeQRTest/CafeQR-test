@@ -448,9 +448,9 @@ export default function OrderPage() {
               onClick={() => setCategoryFilter(cat)}
               className={`sales-carousel-btn${categoryFilter === cat ? ' active' : ''}`}
               style={{
-                background: categoryFilter === cat ? '#2563eb' : '#f9fafb',
+                background: categoryFilter === cat ? brandColor : '#f9fafb',
                 color: categoryFilter === cat ? '#fff' : '#374151',
-                borderColor: categoryFilter === cat ? '#2563eb' : '#e5e7eb',
+                borderColor: categoryFilter === cat ? brandColor : '#e5e7eb',
               }}
             >
               {cat === 'all' ? 'All categories' : cat}

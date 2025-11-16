@@ -639,7 +639,10 @@ export default function InventoryPage() {
           className="modal"
           onClick={(e) => e.target === e.currentTarget && handleCloseRecipeEditor()}
         >
-          <div className="modal__card" style={{ maxWidth: 700 }}>
+          <div
+            className="modal__card"
+            style={{ maxWidth: 800 }}
+          >
             <h3>{selectedMenuItem ? `Recipe for ${selectedMenuItem.name}` : 'Edit Recipe'}</h3>
             {selectedMenuItem ? (
               <div className="form-row" style={{ marginBottom: 8 }}>
@@ -660,8 +663,18 @@ export default function InventoryPage() {
               <InlineError style={{ marginTop: 8 }}>{recipeFormError}</InlineError>
             )}
             {recipeForm.items.map((item) => (
-              <div className="form-row" key={item._key} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <div style={{ flex: 2 }}>
+              <div
+                className="form-row"
+                key={item._key}
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: 8,
+                  alignItems: 'center',
+                  marginBottom: 8,
+                }}
+              >
+                <div style={{ flex: '1 1 240px', minWidth: 0 }}>
                   <NiceSelect
                     value={item.ingredientId}
                     onChange={(val) => changeRecipeByKey(item._key, 'ingredientId', val)}
@@ -674,9 +687,15 @@ export default function InventoryPage() {
                   placeholder="Quantity"
                   value={item.quantity}
                   onChange={(e) => changeRecipeByKey(item._key, 'quantity', e.target.value)}
-                  style={{ flex: 1 }}
+                  style={{ flex: '0 0 120px', minWidth: 0 }}
                 />
-                <button type="button" onClick={() => removeRecipeItemByKey(item._key)}>Remove</button>
+                <button
+                  type="button"
+                  onClick={() => removeRecipeItemByKey(item._key)}
+                  style={{ flexShrink: 0 }}
+                >
+                  Remove
+                </button>
               </div>
             ))}
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
