@@ -289,7 +289,7 @@ export default function ItemEditor({
             onChange={(e) => setIsPopular(e.target.checked)}
           />
           <span style={{whiteSpace:"nowrap"}}>
-          Popular
+          Offers
           </span>
         </div>
         </div>

@@ -134,7 +134,7 @@ export default function OrderPage() {
           .order('name', { ascending: true })
         if (menuErr) throw menuErr
 
-        const cleaned = (menu || []).map((item) => ({
+      const cleaned = (menu || []).map((item) => ({
           ...item,
           rating: Number((3.8 + Math.random() * 1.0).toFixed(1)),
           popular: !!item.ispopular
@@ -412,7 +412,7 @@ export default function OrderPage() {
         {[
           { id: 'all', label: 'All Items' },
           { id: 'veg', label: '🟢 Veg Only' },
-          { id: 'popular', label: '🔥 Popular' }
+          { id: 'popular', label: '🔥 Offers' }
         ].map((m) => (
           <button
             key={m.id}
@@ -540,7 +540,7 @@ export default function OrderPage() {
                             color: '#b45309'
                           }}
                         >
-                          🔥 Popular
+                          🔥 Offers
                         </span>
                       )}
                       {!isAvailable && (
