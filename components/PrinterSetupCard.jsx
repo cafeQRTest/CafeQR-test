@@ -29,6 +29,12 @@ export default function PrinterSetupCard() {
   }
 }
 
+  const forgetBtPrinter = () => {
+    localStorage.removeItem('BT_PRINTER_ADDR');
+    localStorage.removeItem('BT_PRINTER_NAME_HINT');
+    setMsg('Saved Bluetooth printer cleared. Next Android print will ask you to select again.');
+  };
+
 
 // components/PrinterSetupCard.jsx (grant under user gesture; leave other code as-is)
 const chooseUsbOrSerial = async () => {
@@ -132,6 +138,8 @@ const chooseUsbOrSerial = async () => {
 
       <div style={{display:'flex',gap:8}}>
         <button onClick={testClientSide}>Test print</button>
+        <button onClick={forgetBtPrinter}>Forget Bluetooth printer</button>
+
       </div>
 
       {msg && <div style={{marginTop:8}}>{msg}</div>}
