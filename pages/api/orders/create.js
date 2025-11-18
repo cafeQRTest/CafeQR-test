@@ -2,6 +2,8 @@
 import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(req, res) {
+  console.log('[/api/orders/create] handler called, method =', req.method);
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -52,7 +54,7 @@ export default async function handler(req, res) {
     // Load restaurant profile
     const { data: profile, error: profileErr } = await supabase
       .from('restaurant_profiles')
-      .select('gst_enabled, default_tax_rate, prices_include_tax')
+      .select('gst_enabled, default_tax_rate, prices_include_tax, features_inventory_enabled')
       .eq('restaurant_id', restaurant_id)
       .maybeSingle();
     if (profileErr) {
@@ -62,6 +64,7 @@ export default async function handler(req, res) {
 
     const baseRate = Number(profile?.default_tax_rate ?? 5);
     const gstEnabled = !!profile?.gst_enabled;
+    const inventoryAlertsEnabled = !!profile?.features_inventory_enabled;
     const serviceRate = gstEnabled ? baseRate : 0;
     const serviceInclude = gstEnabled
       ? (profile?.prices_include_tax === true || profile?.prices_include_tax === 'true' || profile?.prices_include_tax === 1 || profile?.prices_include_tax === '1')
@@ -214,15 +217,14 @@ export default async function handler(req, res) {
         if (menuItem?.is_packaged_good) {
           continue;
         }
-
-        // Deduct stock for each ingredient in the recipe
+        console.log(`Processing stock deduction for menu item ${item.id} with recipe ${recipe.id}`); 
         for (const recipeItem of recipe.recipe_items) {
           const deductAmount = Number(recipeItem.quantity) * Number(item.quantity);
 
-          // Get current stock
+          // Get all needed ingredient data in ONE call (id, name, current_stock, reorder_threshold)
           const { data: ingredient, error: ingErr } = await supabase
             .from('ingredients')
-            .select('id, current_stock, name')
+            .select('id, current_stock, name, reorder_threshold')
             .eq('id', recipeItem.ingredient_id)
             .eq('restaurant_id', restaurant_id)
             .single();
@@ -234,11 +236,14 @@ export default async function handler(req, res) {
 
           const newStock = Number(ingredient.current_stock) - deductAmount;
 
-          // Update stock (allow negative stock - just log warning)
-          if (newStock < 0) {
-            console.warn(`Low stock warning: ${ingredient.name} will be negative (${newStock})`);
-          }
+          console.log('Low-stock check:', {
+            ingredientId: ingredient.id,
+            name: ingredient.name,
+            newStock,
+            reorder_threshold: Number(ingredient.reorder_threshold)
+          });
 
+          // Update stock (can go negative)
           const { error: updateErr } = await supabase
             .from('ingredients')
             .update({ 
@@ -249,13 +254,40 @@ export default async function handler(req, res) {
 
           if (updateErr) {
             console.error(`Failed to update stock for ingredient ${ingredient.id}:`, updateErr);
+            continue;
+          }
+          // Notification only when inventory alerts enabled and stock is strictly below threshold
+          if (inventoryAlertsEnabled && newStock < Number(ingredient.reorder_threshold)) {
+            const alertTime = new Date().toISOString();
+            try {
+              const { data: alertData, error: alertError } = await supabase
+                .from('alert_notification')
+                .insert([
+                  {
+                    restaurant_id,
+                    table_number: table_number ?? 0,
+                    created_at: alertTime,
+                    status: 'pending',
+                    message: `${ingredient.name} (${newStock})`
+                  }
+                ])
+                .select();
+
+              if (alertError) {
+                console.error('Low-stock alert insert failed:', alertError);
+              } else {
+                console.log('Low-stock alert inserted:', alertData?.[0]?.id || null);
+              }
+            } catch (e) {
+              console.error('Low-stock alert insert exception:', e);
+            }
           }
         }
-      } catch (stockErr) {
-        // Non-blocking - log error but don't fail the order
-        console.error(`Stock deduction failed for item ${item.id}:`, stockErr.message);
+      } catch (e) {
+        console.error('Error processing recipe / stock for item:', item.id, e);
       }
     }
+
 
     // ✅ REMOVED: Manual credit customer balance update block
     // The database trigger `trg_update_credit_balance` handles credit postings automatically

@@ -13,19 +13,22 @@ export default async function handler(req, res) {
 
   const { restaurant_id, table_number, created_at, status, message } = req.body;
 
-  if (!restaurant_id || !table_number) {
-    return res.status(400).json({ error: 'Missing data' });
+  // Only restaurant_id is mandatory for an alert; table_number is optional (e.g. inventory alerts)
+  if (!restaurant_id) {
+    return res.status(400).json({ error: 'Missing restaurant_id' });
   }
 
   const { data, error } = await supabase
     .from('alert_notification')
-    .insert([{
-      restaurant_id,
-      table_number,
-      created_at,
-      status: status || 'pending',
-      message: message || 'Customer request for staff'
-    }])
+    .insert([
+      {
+        restaurant_id,
+        table_number: table_number ?? 0,
+        created_at,
+        status: status || 'pending',
+        message: message || 'Customer request for staff'
+      }
+    ])
     .select();
 
   if (error) {

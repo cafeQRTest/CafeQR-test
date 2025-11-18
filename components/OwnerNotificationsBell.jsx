@@ -248,17 +248,25 @@ export default function OwnerNotificationsBell() {
                   }}
                 >
                   <span style={{
-                    background: alert.status === 'pending' ? '#fde68a' : '#e5e7eb',
-                    color: alert.status === 'pending' ? '#78350f' : '#737373',
+                    background:
+                      Number(alert.table_number) === 0
+                        ? (alert.status === 'pending' ? '#bfdbfe' : '#e5e7eb')
+                        : (alert.status === 'pending' ? '#fde68a' : '#e5e7eb'),
+                    color:
+                      Number(alert.table_number) === 0
+                        ? (alert.status === 'pending' ? '#1d4ed8' : '#4b5563')
+                        : (alert.status === 'pending' ? '#78350f' : '#737373'),
                     fontWeight: 600,
                     borderRadius: 12,
                     fontSize: 13,
                     padding: '3px 11px'
                   }}>
-                    Table {alert.table_number}
+                    {Number(alert.table_number) === 0 ? 'Low Stock' : `Table ${alert.table_number}`}
                   </span>
                   <span style={{ fontSize: 13, color: '#6b7280', flex: 1 }}>
-                    {alert.message || "Staff called"}
+                    {Number(alert.table_number) === 0
+                      ? (alert.message || 'Stock alert')
+                      : (alert.message || 'Staff called')}
                   </span>
                   <span style={{ fontSize: 11, color: '#737373', opacity: 0.7 }}>
                     {new Date(alert.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
