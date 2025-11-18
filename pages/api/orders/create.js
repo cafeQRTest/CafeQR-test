@@ -1,4 +1,5 @@
 // pages/api/orders/create.js
+
 import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(req, res) {
@@ -18,6 +19,7 @@ export default async function handler(req, res) {
   }
 
   const supabase = createClient(supabaseUrl, supabaseKey);
+
   try {
     const {
       restaurant_id,
@@ -46,19 +48,39 @@ export default async function handler(req, res) {
       .from('menu_items')
       .select('id, is_packaged_good, tax_rate')
       .in('id', itemIds);
+
     if (menuError) {
-      if (process.env.NODE_ENV !== 'production') console.error('Menu items fetch error:', menuError);
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('Menu items fetch error:', menuError);
+      }
       return res.status(500).json({ error: 'Failed to load menu items' });
     }
 
-    // Load restaurant profile
+    // Load restaurant profile (with inventory flag)
     const { data: profile, error: profileErr } = await supabase
       .from('restaurant_profiles')
       .select('gst_enabled, default_tax_rate, prices_include_tax, features_inventory_enabled')
       .eq('restaurant_id', restaurant_id)
       .maybeSingle();
+
+    // Always load restaurant display name from restaurants table
+    const { data: restaurantRow, error: restaurantErr } = await supabase
+      .from('restaurants')
+      .select('name')
+      .eq('id', restaurant_id)
+      .maybeSingle();
+
+    if (restaurantErr && process.env.NODE_ENV !== 'production') {
+      console.error('Restaurant fetch error:', restaurantErr);
+    }
+
+    // Prefer the name sent by the client, otherwise use the DB name
+    const finalRestaurantName = restaurant_name || restaurantRow?.name || null;
+
     if (profileErr) {
-      if (process.env.NODE_ENV !== 'production') console.error('Profile fetch error:', profileErr);
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('Profile fetch error:', profileErr);
+      }
       return res.status(500).json({ error: 'Failed to load settings' });
     }
 
@@ -67,7 +89,12 @@ export default async function handler(req, res) {
     const inventoryAlertsEnabled = !!profile?.features_inventory_enabled;
     const serviceRate = gstEnabled ? baseRate : 0;
     const serviceInclude = gstEnabled
-      ? (profile?.prices_include_tax === true || profile?.prices_include_tax === 'true' || profile?.prices_include_tax === 1 || profile?.prices_include_tax === '1')
+      ? (
+          profile?.prices_include_tax === true ||
+          profile?.prices_include_tax === 'true' ||
+          profile?.prices_include_tax === 1 ||
+          profile?.prices_include_tax === '1'
+        )
       : false;
 
     // Compute totals
@@ -128,6 +155,7 @@ export default async function handler(req, res) {
 
     let processedPaymentMethod = payment_method;
     let processedMixedDetails = null;
+
     if (payment_method === 'mixed' && mixed_payment_details) {
       const { cash_amount, online_amount, online_method } = mixed_payment_details;
       const mixedTotal = Number(cash_amount || 0) + Number(online_amount || 0);
@@ -157,7 +185,7 @@ export default async function handler(req, res) {
           payment_method: processedPaymentMethod,
           payment_status,
           special_instructions,
-          restaurant_name,
+          restaurant_name: finalRestaurantName,
           customer_name: customer_name || null,
           customer_phone: customer_phone || null,
           subtotal_ex_tax: Number(subtotalEx.toFixed(2)),
@@ -197,7 +225,7 @@ export default async function handler(req, res) {
     // ✅ Deduct stock for each menu item based on recipes
     for (const item of items) {
       if (!item.id || !item.quantity) continue;
-      
+
       try {
         // Get recipe for this menu item
         const { data: recipe, error: recipeErr } = await supabase
@@ -208,7 +236,6 @@ export default async function handler(req, res) {
           .maybeSingle();
 
         if (recipeErr || !recipe || !recipe.recipe_items || recipe.recipe_items.length === 0) {
-          // No recipe found - skip stock deduction for this item
           continue;
         }
 
@@ -217,7 +244,9 @@ export default async function handler(req, res) {
         if (menuItem?.is_packaged_good) {
           continue;
         }
-        console.log(`Processing stock deduction for menu item ${item.id} with recipe ${recipe.id}`); 
+
+        console.log(`Processing stock deduction for menu item ${item.id} with recipe ${recipe.id}`);
+
         for (const recipeItem of recipe.recipe_items) {
           const deductAmount = Number(recipeItem.quantity) * Number(item.quantity);
 
@@ -236,17 +265,22 @@ export default async function handler(req, res) {
 
           const newStock = Number(ingredient.current_stock) - deductAmount;
 
-          console.log('Low-stock check:', {
-            ingredientId: ingredient.id,
-            name: ingredient.name,
-            newStock,
-            reorder_threshold: Number(ingredient.reorder_threshold)
-          });
+          // Log low-stock check OR negative warning
+          if (newStock < 0) {
+            console.warn(`Low stock warning: ${ingredient.name} will be negative (${newStock})`);
+          } else {
+            console.log('Low-stock check:', {
+              ingredientId: ingredient.id,
+              name: ingredient.name,
+              newStock,
+              reorder_threshold: Number(ingredient.reorder_threshold)
+            });
+          }
 
           // Update stock (can go negative)
           const { error: updateErr } = await supabase
             .from('ingredients')
-            .update({ 
+            .update({
               current_stock: newStock,
               updated_at: new Date().toISOString()
             })
@@ -256,8 +290,13 @@ export default async function handler(req, res) {
             console.error(`Failed to update stock for ingredient ${ingredient.id}:`, updateErr);
             continue;
           }
-          // Notification only when inventory alerts enabled and stock is strictly below threshold
-          if (inventoryAlertsEnabled && newStock < Number(ingredient.reorder_threshold)) {
+
+          // Low-stock alert only when inventory alerts enabled and stock < threshold
+          if (
+            inventoryAlertsEnabled &&
+            ingredient.reorder_threshold != null &&
+            newStock < Number(ingredient.reorder_threshold)
+          ) {
             const alertTime = new Date().toISOString();
             try {
               const { data: alertData, error: alertError } = await supabase
@@ -283,14 +322,18 @@ export default async function handler(req, res) {
             }
           }
         }
-      } catch (e) {
-        console.error('Error processing recipe / stock for item:', item.id, e);
+      } catch (stockErr) {
+        console.error(`Stock deduction failed for item ${item.id}:`, stockErr.message);
       }
     }
 
-
-    // ✅ REMOVED: Manual credit customer balance update block
-    // The database trigger `trg_update_credit_balance` handles credit postings automatically
+    // ✅ Log successful creation
+    console.log('[API CREATE ORDER] Order created successfully:', {
+      orderId: order.id,
+      restaurantId: restaurant_id,
+      status: 'new',
+      timestamp: new Date().toISOString()
+    });
 
     // Send push notification (non-blocking)
     try {
@@ -303,7 +346,9 @@ export default async function handler(req, res) {
           orderId: order.id,
           orderItems: items
         })
-      }).catch((e) => console.warn('notify-owner failed (non-blocking):', e?.message || e));
+      }).catch((e) =>
+        console.warn('notify-owner failed (non-blocking):', e?.message || e)
+      );
     } catch (e) {
       console.warn('Notification dispatch failed (non-blocking):', e?.message || e);
     }

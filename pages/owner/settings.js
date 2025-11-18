@@ -559,6 +559,7 @@ if (form.tables_count && form.tables_count > originalTables) {
 }
 
 
+
   if (checking || loadingRestaurant) return <div>Loading...</div>;
   if (loading) return <div>Loading settings...</div>;
 

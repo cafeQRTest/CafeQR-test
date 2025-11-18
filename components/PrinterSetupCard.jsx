@@ -1,118 +1,140 @@
-// components/PrinterSetupCard.jsx
-import React, { useState } from 'react';
+// components/PrinterSetupCard.jsx  (pure JS/.jsx-safe)
+import React, { useEffect, useState } from 'react';
 import { printUniversal } from '../utils/printGateway';
 
+
 export default function PrinterSetupCard() {
-  const [saving, setSaving] = useState(false);
-  const [relayUrl, setRelayUrl] = useState(localStorage.getItem('PRINT_RELAY_URL') || '');
-  const [ip, setIp] = useState(localStorage.getItem('PRINTER_IP') || '');
-  const [port, setPort] = useState(localStorage.getItem('PRINTER_PORT') || '9100');
+  // Wired (Windows helper)
+  const [listUrl, setListUrl] = useState(localStorage.getItem('PRINT_WIN_LIST_URL') || 'http://127.0.0.1:3333/printers');
+  const [postUrl, setPostUrl] = useState(localStorage.getItem('PRINT_WIN_URL') || 'http://127.0.0.1:3333/printRaw');
+  const [printers, setPrinters] = useState([]);        // removed <string[]>
+  const [pick, setPick] = useState(localStorage.getItem('PRINT_WIN_PRINTER_NAME') || '');
   const [msg, setMsg] = useState('');
 
-  const chooseUsbOrSerial = async () => {
-  setSaving(true);
+  async function selectBluetoothSerial() {
   try {
-    const n = navigator;
-    
-    // Try WebUSB first
-    if (n.usb) {
-      try {
-        const device = await n.usb.requestDevice({ filters: [] });
-        localStorage.setItem('PRINTER_READY', '1');
-        localStorage.setItem('PRINTER_TYPE', 'usb');
-        setMsg('✓ USB printer saved for silent printing');
-        setSaving(false);
-        return;
-      } catch (e) {
-        console.log('USB selection cancelled or failed');
-      }
+    if (!('serial' in navigator)) {
+      setMsg('✗ Web Serial not supported in this browser');
+      return;
     }
-    
-    // Try Web Serial
-    if (n.serial) {
-      try {
-        const port = await n.serial.requestPort();
-        localStorage.setItem('PRINTER_READY', '1');
-        localStorage.setItem('PRINTER_TYPE', 'serial');
-        setMsg('✓ Serial printer saved for silent printing');
-        setSaving(false);
-        return;
-      } catch (e) {
-        console.log('Serial selection cancelled');
-      }
+    // One-time chooser – must be called from a click
+    await navigator.serial.requestPort({});
+    localStorage.setItem('PRINTER_MODE', 'bt-serial');
+    localStorage.setItem('PRINTER_READY', '1');
+    localStorage.removeItem('PRINT_WIN_PRINTER_NAME');
+    localStorage.removeItem('PRINT_WIN_URL');
+    setMsg('✓ Bluetooth/Serial saved for silent printing');
+  } catch {
+    setMsg('✗ Selection cancelled');
+  }
+}
+
+
+// components/PrinterSetupCard.jsx (grant under user gesture; leave other code as-is)
+const chooseUsbOrSerial = async () => {
+  try {
+    if ('serial' in navigator) {
+      await navigator.serial.requestPort({});  // user gesture required
+      localStorage.setItem('PRINTER_READY', '1');
+      setMsg('✓ Bluetooth/Serial saved for silent printing');
+      return;
     }
-    
-    setMsg('✗ No compatible printer interface found');
-  } catch (e) {
+    setMsg('✗ Web Serial not supported in this browser');
+  } catch {
     setMsg('✗ Selection cancelled or failed');
-  } finally {
-    setSaving(false);
   }
 };
 
-const saveRelay = async () => {
-  const url = (relayUrl || '').trim();
-  const host = (ip || '').trim();
-  const p = String(port || '').trim() || '9100';
-
-  if (!/^https?:\/\//i.test(url)) {
-    setMsg('✗ Relay URL must start with http:// or https://');
-    return;
+  async function selectUsbWebUSB() {
+    try {
+      if (navigator && 'usb' in navigator) {
+        await navigator.usb.requestDevice({ filters: [] });  // removed "as any"
+        localStorage.setItem('PRINTER_MODE', 'webusb');
+        localStorage.setItem('PRINTER_READY', '1');
+        localStorage.removeItem('PRINT_WIN_PRINTER_NAME');
+        localStorage.removeItem('PRINT_WIN_URL');
+        setMsg('✓ USB printer saved for silent printing');
+        return;
+      }
+      setMsg('✗ WebUSB not supported in this browser');
+    } catch {
+      setMsg('✗ Selection cancelled');
+    }
   }
-  if (!host) {
-    setMsg('✗ Printer IP is required');
-    return;
-  }
 
-  localStorage.setItem('PRINT_RELAY_URL', url);
-  localStorage.setItem('PRINTER_IP', host);
-  localStorage.setItem('PRINTER_PORT', p);
-  localStorage.setItem('PRINTER_READY', '1');
+  const detect = async () => {
+    try {
+      const r = await fetch(listUrl);
+      const names = await r.json();
+      const arr = Array.isArray(names) ? names : [];
+      setPrinters(arr);
+      if (!pick && arr.length) setPick(arr[0]);
+      setMsg(`Found ${arr.length} printers`);
+    } catch {
+      setMsg('Cannot reach the local Print Hub. Start the helper and try again.');
+    }
+  };
 
-  setMsg('✓ Relay saved for silent printing');
-};
+  const saveWired = () => {
+    localStorage.setItem('PRINT_WIN_LIST_URL', listUrl.trim());
+    localStorage.setItem('PRINT_WIN_URL', postUrl.trim());
+    localStorage.setItem('PRINT_WIN_PRINTER_NAME', (pick || '').trim());
+    localStorage.setItem('PRINTER_MODE', 'winspool');
+    localStorage.setItem('PRINTER_READY', '1');
+    setMsg(pick ? `Saved: ${pick}` : 'Pick a printer first');
+  };
+
+  const testClientSide = async () => {
+    try {
+      const res = await printUniversal({
+        text: '*** TEST PRINT ***\nCafe QR\n',
+        allowPrompt: true,
+        allowSystemDialog: false
+      });
+      setMsg(`✓ Test via ${res?.via || 'unknown'}`);
+    } catch (e) {
+      setMsg(`✗ Test failed: ${e?.message || e}`);
+    }
+  };
+
+  useEffect(() => { detect(); }, []);
+
+
 
   return (
-    <div style={{ border:'1px solid #e5e7eb', borderRadius:12, padding:16, background:'#fff' }}>
-      <h3 style={{ marginTop:0 }}>Printer Setup</h3>
-      <p style={{ marginTop:8 }}>Select a USB/Serial printer once or configure a network relay for silent prints.</p>
-      <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-        <button disabled={saving} onClick={chooseUsbOrSerial} style={{ padding:'10px 12px', borderRadius:8 }}>
-          {saving ? 'Opening chooser…' : 'Select USB/Serial'}
+    <div className="card">
+      <h3>Printing</h3>
+
+      <h4>Bluetooth method</h4>
+      <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:8}}>
+        <button onClick={selectBluetoothSerial}>Select Bluetooth (Serial)</button>
+        <button onClick={() => { localStorage.setItem('PRINTER_MODE','bt-android'); localStorage.setItem('PRINTER_READY','1'); setMsg('✓ Android app link enabled'); }}>
+          Use Android app (Thermer/RawBT)
         </button>
       </div>
-      <div style={{ marginTop:12 }}>
-        <div style={{ fontWeight:600, marginBottom:6 }}>Or use local network relay</div>
-        <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-  <input value={relayUrl} onChange={e=>setRelayUrl(e.target.value)} placeholder="http://127.0.0.1:3333/print" style={{ padding:8, border:'1px solid #ddd', borderRadius:6, minWidth:240 }} />
-  <input value={ip} onChange={e=>setIp(e.target.value)} placeholder="Printer IP (e.g., 192.168.1.50)" style={{ padding:8, border:'1px solid #ddd', borderRadius:6 }} />
-  <input value={port} onChange={e=>setPort(e.target.value)} placeholder="9100" style={{ padding:8, border:'1px solid #ddd', borderRadius:6, width:100 }} />
-  <button onClick={saveRelay} style={{ padding:'10px 12px', borderRadius:8 }}>Save Relay</button>
-  <button
-    onClick={async () => {
-      try {
-        await printUniversal({
-          text: 'TEST',
-          relayUrl: localStorage.getItem('PRINT_RELAY_URL') || undefined,
-          ip: localStorage.getItem('PRINTER_IP') || undefined,
-          port: Number(localStorage.getItem('PRINTER_PORT') || 9100),
-          allowPrompt: false,
-          allowSystemDialog: false
-        });
-        setMsg('✓ Relay test sent');
-      } catch (e) {
-        setMsg(`✗ Relay test failed: ${e.message}`);
-      }
-    }}
-    style={{ padding:'10px 12px', borderRadius:8 }}
-  >
-    Test Relay
-  </button>
-</div>
 
-
+      <h4>Wired / USB (Windows)</h4>
+      <div style={{display:'flex',gap:8,marginBottom:8}}>
+        <input value={listUrl} onChange={e=>setListUrl(e.target.value)} style={{flex:1}}/>
+        <button onClick={detect}>Load printers</button>
       </div>
-      {msg ? <div style={{ marginTop:10, color: msg.startsWith('✓') ? '#065f46' : '#991b1b' }}>{msg}</div> : null}
+      <div style={{display:'flex',gap:8,marginBottom:8}}>
+        <select value={pick} onChange={e=>setPick(e.target.value)} style={{flex:1}}>
+          <option value="">— Select queue —</option>
+          {printers.map(n => <option key={n} value={n}>{n}</option>)}
+        </select>
+      </div>
+      <div style={{display:'flex',gap:8,marginBottom:8}}>
+        <input value={postUrl} onChange={e=>setPostUrl(e.target.value)} style={{flex:1}}/>
+        <button onClick={saveWired}>Save</button>
+        <button onClick={selectUsbWebUSB}>Select USB (WebUSB)</button>
+      </div>
+
+      <div style={{display:'flex',gap:8}}>
+        <button onClick={testClientSide}>Test print</button>
+      </div>
+
+      {msg && <div style={{marginTop:8}}>{msg}</div>}
     </div>
   );
 }

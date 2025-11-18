@@ -261,10 +261,17 @@ export function buildReceiptText(order, bill, restaurantProfile) {
   try {
     const items = toDisplayItems(order);
 
-    // Header fields (single definition)
-    const restaurantName =
-      ((restaurantProfile?.restaurant_name || order?.restaurant_name) || 'RESTAURANT').toUpperCase();
+    // Canonical restaurant name:
+    // 1) profile.restaurant_name
+    // 2) order.restaurant_name (from restaurants.name, filled in API)
+    // 3) default "RESTAURANT"
+    const restaurantName = String(
+      restaurantProfile?.restaurant_name ||
+      order?.restaurant_name ||
+      'RESTAURANT'
+    ).toUpperCase();
 
+    // Address prefers profile shipping fields, falls back to any address on order
     const addressParts = [
       restaurantProfile?.shipping_address_line1,
       restaurantProfile?.shipping_address_line2,
@@ -272,17 +279,32 @@ export function buildReceiptText(order, bill, restaurantProfile) {
       restaurantProfile?.shipping_state,
       restaurantProfile?.shipping_pincode
     ].filter(Boolean);
-    const address = addressParts.length ? addressParts.join(', ') : (order?.restaurant_address || '');
+    const address = addressParts.length
+      ? addressParts.join(', ')
+      : (order?.restaurant_address || '');
 
-    const phone = restaurantProfile?.shipping_phone || restaurantProfile?.phone || order?.restaurant_phone || '';
+    const phone =
+      restaurantProfile?.shipping_phone ||
+      restaurantProfile?.phone ||
+      order?.restaurant_phone ||
+      '';
 
     const orderId = order?.id?.slice(0, 8)?.toUpperCase() || 'N/A';
     const orderType = getOrderTypeLabel(order);
 
     const orderDate = new Date(order.created_at);
-    const dateStr = orderDate.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    const timeStr = orderDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+    const dateStr = orderDate.toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+    const timeStr = orderDate.toLocaleTimeString('en-IN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
 
+    // Amounts: prefer bill if present, otherwise order totals
     const grandTotal = Number(
       bill?.grand_total ||
       bill?.total_inc_tax ||
@@ -303,33 +325,39 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     const dashes = () => '-'.repeat(W);
     const lines = [];
 
-    // Header
+    // === HEADER ===
     lines.push(center(restaurantName, W));
     wrapText(address, W).forEach(l => lines.push(center(l, W)));
     if (phone) lines.push(center(`Contact No.: ${phone}`, W));
     lines.push(dashes());
 
-    // Meta
+    // === META ===
     lines.push(`${dateStr} ${timeStr}`);
     lines.push(`Order: #${orderId}`);
     lines.push(`Order Type: ${orderType}`);
 
-    // Items
+    // === ITEMS ===
     lines.push(dashes());
     lines.push('ITEM         QTY  RATE  TOTAL');
+
     items.forEach(item => {
       const nameLines = wrapText(item.name || 'Item', 14);
       if (!nameLines.length) return;
+
       const rateNum = Number(item.price || 0);
       const totalNum = rateNum * Number(item.quantity || 1);
+
       const rate = (rateNum % 1 === 0 ? rateNum.toFixed(0) : rateNum.toFixed(2)).padStart(4);
       const total = (totalNum % 1 === 0 ? totalNum.toFixed(0) : totalNum.toFixed(2)).padStart(5);
       const qty = String(item.quantity).padStart(2);
+
       lines.push(nameLines[0].padEnd(14) + qty + '  ' + rate + '  ' + total);
-      for (let i = 1; i < nameLines.length; i++) lines.push(nameLines[i].padEnd(14));
+      for (let i = 1; i < nameLines.length; i++) {
+        lines.push(nameLines[i].padEnd(14));
+      }
     });
 
-    // Totals
+    // === TOTALS ===
     lines.push(dashes());
     if (taxAmount > 0) {
       const netAmt = grandTotal - taxAmount;
@@ -349,7 +377,6 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     return 'PRINT ERROR';
   }
 }
-
 
 export async function downloadPdfAndShare(order, bill, restaurantProfile) {
   return downloadTextAndShare(order, bill, restaurantProfile);

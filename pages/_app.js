@@ -1,52 +1,67 @@
-// pages/_app.js - CORRECTED
-
 import '../styles/responsive.css'
 import '../styles/globals.css'
 import '../styles/theme.css'
 import Layout from '../components/Layout'
+import KotPrint from '../components/KotPrint'
 import { RestaurantProvider } from '../context/RestaurantContext'
 import { SubscriptionProvider, useSubscription } from '../context/SubscriptionContext'
 import { useRouter } from 'next/router'
 import { useEffect, useState } from 'react'
 import { Capacitor } from '@capacitor/core'
 import { getFCMToken } from '../lib/firebase/messaging'
-import { getSupabase, forceSupabaseSessionRestore } from '../services/supabase'
-import { ensureSessionValid } from '../lib/authActions';
-import { saveSessionSnapshot, clearSessionSnapshot, bootstrapSupabaseSession } from '../services/supabase';
+import {
+  getSupabase,
+  forceSupabaseSessionRestore,
+  bootstrapSupabaseSession,
+  saveSessionSnapshot,
+  clearSessionSnapshot
+} from '../services/supabase'
+import { ensureSessionValid } from '../lib/authActions'
+import { usePrintService } from '../lib/usePrintService'
 
-
-
-
+// ── constants ────────────────────────────────────────────────────────────────
 const OWNER_PREFIX = '/owner'
 const CUSTOMER_PREFIX = '/order'
 const PUBLIC_EXEMPT = ['/order/success', '/order/thank-you']
 
+// ── helpers (module scope) ───────────────────────────────────────────────────
 async function postSubscribe(token, platform) {
   if (!token) return
   let rid = null
   try {
     const url = new URL(window.location.href)
-    rid = url.searchParams.get('r') || url.searchParams.get('rid') || localStorage.getItem('active_restaurant_id')
+    rid =
+      url.searchParams.get('r') ||
+      url.searchParams.get('rid') ||
+      localStorage.getItem('active_restaurant_id')
   } catch {}
   if (!rid) return
   try {
     await fetch(`${process.env.NEXT_PUBLIC_API_BASE || ''}/api/push/subscribe-bridge`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ restaurantId: rid, platform, deviceToken: token }),
+      body: JSON.stringify({ restaurantId: rid, platform, deviceToken: token })
     })
   } catch {}
 }
 
+// return async initializers to support the “()()” call style
 function safeInitNative(router) {
   return async () => {
     try {
       const { PushNotifications } = await import('@capacitor/push-notifications')
-      await PushNotifications.createChannel({ id:'orders_v2', name:'Orders', description:'Order alerts', importance:5 }).catch(() => {})
+      await PushNotifications.createChannel({
+        id: 'orders_v2',
+        name: 'Orders',
+        description: 'Order alerts',
+        importance: 5
+      }).catch(() => {})
       PushNotifications.removeAllListeners().catch(() => {})
       PushNotifications.addListener('pushNotificationActionPerformed', action => {
         const url = action.notification?.data?.url || '/owner/orders'
-        router.push(url).catch(() => { window.location.href = url })
+        router.push(url).catch(() => {
+          window.location.href = url
+        })
       })
       const perm = await PushNotifications.requestPermissions()
       if (perm.receive !== 'granted') return
@@ -78,48 +93,42 @@ async function ensureSubscribed() {
   await postSubscribe(token, Capacitor.isNativePlatform() ? 'android' : 'web')
 }
 
+// ── subscription gate (must return children or null) ─────────────────────────
 function GlobalSubscriptionGate({ children }) {
   const router = useRouter()
   const path = router.pathname
-  const isOwner = path.startsWith('/owner')
   const onSubPage = path === '/owner/subscription'
-  const exempt = ['/order/success', '/order/thank-you'].includes(path)
+  const exempt = PUBLIC_EXEMPT.includes(path)
   const { subscription, loading } = useSubscription()
 
   useEffect(() => {
     let mounted = true
     async function checkAndRedirect() {
       if (!router.isReady || loading) return
-      
       const supabase = getSupabase()
       const { data } = await supabase.auth.getSession()
       const session = data?.session
-
-      // ✅ CRITICAL FIX: Redirect to subscription for ANY non-subscription owner page if expired
-      if (isOwner && !onSubPage && session) {
-        if (!subscription?.is_active) {
-          // Redirect to subscription page to allow renewal
-          if (mounted) {
-            router.replace(`/owner/subscription${window.location.search}`)
-          }
-        }
+      const isOwner = path.startsWith(OWNER_PREFIX)
+      if (isOwner && !onSubPage && session && !subscription?.is_active) {
+        if (mounted) router.replace(`/owner/subscription${window.location.search}`)
       }
     }
-
     checkAndRedirect()
-    return () => { mounted = false }
-  }, [router, loading, isOwner, onSubPage, subscription])
+    return () => {
+      mounted = false
+    }
+  }, [router, path, loading, onSubPage, subscription])
 
-  // Block customer/kitchen access if expired
   if (
-    (path.startsWith('/order') || path.startsWith('/kitchen')) &&
+    (path.startsWith(CUSTOMER_PREFIX) || path.startsWith('/kitchen')) &&
     !exempt &&
     !loading &&
     !subscription?.is_active
   ) {
     return (
       <div style={{ padding: 80, textAlign: 'center', color: '#dc2626', fontSize: 18 }}>
-        <strong>Subscription expired or inactive.</strong><br />
+        <strong>Subscription expired or inactive.</strong>
+        <br />
         Online menu & orders unavailable.
       </div>
     )
@@ -128,148 +137,137 @@ function GlobalSubscriptionGate({ children }) {
   return <>{children}</>
 }
 
+// ── print orchestrator (under providers) ─────────────────────────────────────
+function AppPrintOrchestrator() {
+  const [orderToPrint, setOrderToPrint] = useState(null)
+  usePrintService(true)
+
+  useEffect(() => {
+    const onAutoPrint = e => setOrderToPrint(e.detail)
+    window.addEventListener('auto-print-order', onAutoPrint)
+    return () => window.removeEventListener('auto-print-order', onAutoPrint)
+  }, [])
+
+  if (!orderToPrint) return null
+  return (
+    <KotPrint
+      key={orderToPrint.id}
+      order={orderToPrint}
+      autoPrint={true}
+      onClose={() => setOrderToPrint(null)}
+      onPrint={() => setOrderToPrint(null)}
+    />
+  )
+}
+
+// ── MyApp ────────────────────────────────────────────────────────────────────
 function MyApp({ Component, pageProps }) {
   const router = useRouter()
   const [ready, setReady] = useState(false)
   const [mounted, setMounted] = useState(false)
 
-useEffect(() => {
-  const supabase = getSupabase();
-  const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-    if (event === 'SIGNED_OUT') {
-      clearSessionSnapshot();
-    } else if (session && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION')) {
-      saveSessionSnapshot(session);
-    }
-  });
-  return () => subscription?.unsubscribe();
-}, []);
+  // Persist/restore Supabase auth
+  useEffect(() => {
+    const supabase = getSupabase()
+    const {
+      data: { subscription }
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT') clearSessionSnapshot()
+      else if (session) saveSessionSnapshot(session)
+    })
+    return () => subscription?.unsubscribe()
+  }, [])
 
-useEffect(() => {
-  if (!router.isReady) return;
-  let cleanup = () => {};
-
-  (async () => {
-    // dynamic import so web builds without the plugin still succeed
-    let NativeApp;
-    try { ({ App: NativeApp } = await import('@capacitor/app')); } catch {}
-
-    const supabase = getSupabase();
-
-    const onForeground = async () => {
-      await bootstrapSupabaseSession();        // restore from snapshot if process was killed [web:626]
-      await forceSupabaseSessionRestore();     // read stored session [web:626]
-      await supabase.auth.startAutoRefresh();  // restart timers in foreground [web:609]
-      await ensureSessionValid();              // proactively refresh if near/after expiry [web:614]
-    };
-    const onBackground = async () => {
-      await supabase.auth.stopAutoRefresh();   // pause timers in background [web:611]
-    };
-
-    // pages/_app.js (inside the useEffect that loads NativeApp)
-if (NativeApp?.addListener) {
-  const backSub = await NativeApp.addListener('backButton', async ({ canGoBack }) => {
-    const path = router.pathname;
-    // If user is on auth routes and already signed in, bounce to owner
-    try {
-      const { data } = await getSupabase().auth.getSession(); // [web:626]
-      if ((path === '/login' || path === '/signup') && data?.session) {
-        router.replace('/owner');
-        return;
+  // App foreground/background lifecycle + token refresh
+  useEffect(() => {
+    if (!router.isReady) return
+    let cleanup = () => {}
+    ;(async () => {
+      let NativeApp
+      try {
+        ;({ App: NativeApp } = await import('@capacitor/app'))
+      } catch {}
+      const supabase = getSupabase()
+      const onForeground = async () => {
+        await bootstrapSupabaseSession()
+        await forceSupabaseSessionRestore()
+        await supabase.auth.startAutoRefresh()
+        await ensureSessionValid()
       }
-    } catch {}
+      if (NativeApp?.addListener) {
+        const backSub = await NativeApp.addListener('backButton', async ({ canGoBack }) => {
+          const path = router.pathname
+          try {
+            const { data } = await getSupabase().auth.getSession()
+            if ((path === '/login' || path === '/signup') && data?.session) {
+              router.replace('/owner')
+              return
+            }
+          } catch {}
+          if (canGoBack) window.history.back()
+          else if (path.startsWith(OWNER_PREFIX)) NativeApp.exitApp?.()
+          else router.replace('/owner')
+        })
+        const prev = cleanup
+        cleanup = () => {
+          backSub?.remove()
+          prev?.()
+        }
+      }
+      const onFocus = () => onForeground()
+      const onVis = () => {
+        if (!document.hidden) onForeground()
+      }
+      window.addEventListener('focus', onFocus)
+      document.addEventListener('visibilitychange', onVis)
+      onForeground()
+      const prev2 = cleanup
+      cleanup = () => {
+        prev2?.()
+        window.removeEventListener('focus', onFocus)
+        document.removeEventListener('visibilitychange', onVis)
+      }
+    })()
+    return () => cleanup()
+  }, [router.isReady])
 
-    // If we can go back in history, do that; otherwise exit app from owner root
-    if (canGoBack) {
-      window.history.back();
-    } else if (path.startsWith('/owner')) {
-      NativeApp.exitApp?.();
-    } else {
-      // Default fallback: prevent falling back to login loop
-      router.replace('/owner');
-    }
-  });
-  const prev = cleanup;
-  cleanup = () => { backSub?.remove(); prev?.(); };
-}
-
-
-    const onFocus = () => onForeground();
-    const onVis = () => { if (!document.hidden) onForeground(); };
-    window.addEventListener('focus', onFocus);
-    document.addEventListener('visibilitychange', onVis);
-
-    onForeground(); // cold start [web:626]
-
-    const prev = cleanup;
-    cleanup = () => {
-      prev?.();
-      window.removeEventListener('focus', onFocus);
-      document.removeEventListener('visibilitychange', onVis);
-    };
-  })();
-
-  return () => cleanup();
-}, [router.isReady]);
-
-
-  // Track client mount
   useEffect(() => {
     setMounted(true)
   }, [])
-
-  // CRITICAL: Restore session on app cold-start
   useEffect(() => {
-    if (!mounted) return
-    let isMounted = true
-    
-    const initSession = async () => {
-      // Force restore from storage immediately on mount
-      await forceSupabaseSessionRestore()
-      if (isMounted) setReady(true)
-    }
-    
-    initSession()
-    return () => { isMounted = false }
+    if (mounted) forceSupabaseSessionRestore().then(() => setReady(true))
   }, [mounted])
 
-  // Initialize FCM
+  // FCM/web init
   useEffect(() => {
     if (!router.isReady || !ready) return
     let isMounted = true
-    const init = async () => {
-      if (Capacitor.isNativePlatform()) {
-        await safeInitNative(router)()
-      } else {
-        await safeInitWebOnly()()
-      }
+    ;(async () => {
+      if (Capacitor.isNativePlatform()) await safeInitNative(router)()
+      else await safeInitWebOnly()()
       setTimeout(ensureSubscribed, 1200)
       if (isMounted) setReady(true)
+    })()
+    return () => {
+      isMounted = false
     }
-    init()
-    return () => { isMounted = false }
   }, [router, ready])
 
-  // Setup route listeners
+  // Re‑post subscription on focus/route
   useEffect(() => {
     if (!router.isReady || !ready) return
-    
     const onRoute = () => {
       ensureSubscribed()
     }
-    
     window.addEventListener('focus', ensureSubscribed)
     router.events.on('routeChangeComplete', onRoute)
-    
     return () => {
       router.events.off('routeChangeComplete', onRoute)
       window.removeEventListener('focus', ensureSubscribed)
     }
   }, [router, ready])
 
-  if (!mounted || !router.isReady) {
-    return <div>Loading...</div>
-  }
+  if (!mounted || !router.isReady) return <div>Loading...</div>
 
   const path = router.pathname || ''
   const isOwner = path.startsWith(OWNER_PREFIX)
@@ -287,6 +285,7 @@ if (NativeApp?.addListener) {
           >
             <Component {...pageProps} />
           </Layout>
+          <AppPrintOrchestrator />
         </GlobalSubscriptionGate>
       </SubscriptionProvider>
     </RestaurantProvider>

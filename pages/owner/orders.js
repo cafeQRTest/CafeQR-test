@@ -10,7 +10,6 @@ import { useRestaurant } from '../../context/RestaurantContext';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import { subscribeOwnerDevice } from '../../helpers/subscribePush';
-import KotPrint from '../../components/KotPrint';
 
 // Constants
 const STATUSES = ['new','in_progress','ready','completed'];
@@ -407,7 +406,6 @@ export default function OrdersPage() {
   const restaurantId = restaurant?.id;
 
   // NEW: state for showing the print modal
-  const [showKotPrint, setShowKotPrint] = useState(null);
   const [cancelOrderDialog, setCancelOrderDialog] = useState(null);
 
   const [ordersByStatus, setOrdersByStatus] = useState({
@@ -683,7 +681,8 @@ const handleCancelDismiss = () => setCancelOrderDialog(null);
   }, [restaurantId, loadOrders]);
 
   // Realtime subscription & reconnection logic
-  useEffect(() => {
+  // Realtime subscription & order state sync
+useEffect(() => {
   if (!supabase || !restaurantId) return;
 
   const channel = supabase
@@ -695,6 +694,7 @@ const handleCancelDismiss = () => setCancelOrderDialog(null);
         const order = payload.new;
         if (!order) return;
 
+        // Update order in kanban/mobile list
         setOrdersByStatus((prev) => {
           const updated = { ...prev };
           for (const status of STATUSES) {
@@ -706,23 +706,9 @@ const handleCancelDismiss = () => setCancelOrderDialog(null);
           return updated;
         });
 
-        // --- Fix: Always fetch order with items before show KOT ---
+        // Only play sound for new orders (print is now handled by global service)
         if (payload.eventType === 'INSERT' && order.status === 'new') {
           playNotificationSound();
-
-          // Always fetch from backend for correct nested items
-          supabase
-            .from('orders')
-            .select('*, order_items(*, menu_items(name))')
-            .eq('id', order.id)
-            .single()
-            .then(({ data, error }) => {
-              if (!error && data) {
-                setShowKotPrint(data);
-              } else {
-                setShowKotPrint(order); // fallback (minimal info)
-              }
-            });
         }
       }
     )
@@ -870,15 +856,7 @@ const complete = async (orderId, actualPaymentMethod = null, mixedDetails = null
   if (!restaurantId) return <div style={{ padding:16 }}>No restaurant found.</div>;
 
   // // Show print modal when state is set
-   if (showKotPrint) {
-     return (
-       <KotPrint
-         order={showKotPrint}
-         onClose={() => setShowKotPrint(null)}
-       />
-   );
-    }
-
+   
   return (
     <div className="orders-wrap">
       <header className="orders-header">
@@ -928,7 +906,12 @@ const complete = async (orderId, actualPaymentMethod = null, mixedDetails = null
               onChangeStatus={updateStatus}
               onComplete={finalize}
               generatingInvoice={generatingInvoice}
-              onPrintClick={() => setShowKotPrint(order)}
+onPrintClick={() => {
+  // Dispatch global print event (will be caught by _app.js listener)
+  window.dispatchEvent(new CustomEvent('auto-print-order', { 
+  detail: { ...order, autoPrint: true, kind: 'kot' } 
+  }));
+}}
               onCancelOrderOpen={onCancelOrderOpen}
             />
           ))
@@ -955,7 +938,12 @@ const complete = async (orderId, actualPaymentMethod = null, mixedDetails = null
                     onChangeStatus={updateStatus}
                     onComplete={finalize}
                     generatingInvoice={generatingInvoice}
-                    onPrintClick={() => setShowKotPrint(order)}
+onPrintClick={() => {
+  // Dispatch global print event (will be caught by _app.js listener)
+  window.dispatchEvent(new CustomEvent('auto-print-order', { 
+  detail: { ...order, autoPrint: true, kind: 'kot' } 
+  }));
+}}
                     onCancelOrderOpen={onCancelOrderOpen}
                   />
                 ))
@@ -1050,7 +1038,10 @@ function OrderCard({ order, statusColor, onChangeStatus, onComplete, generatingI
   const pm = String(order.payment_method || '').toLowerCase();
   const isOnlinePaid = pm === 'upi' || pm === 'card' || pm === 'online';
 
-  const handlePrintOpen = () => onPrintClick(order);
+const handlePrintBill = () => {
+    window.dispatchEvent(new CustomEvent('auto-print-order', { 
+  detail: { ...order, autoPrint: true, kind: 'kot' } }));
+  };
 
   return (
     <>
@@ -1104,7 +1095,7 @@ function OrderCard({ order, statusColor, onChangeStatus, onComplete, generatingI
                     Cancel
                   </Button>
                   <button
-                    onClick={handlePrintOpen}
+                    onClick={handlePrintBill}
                     style={{
                       background: '#10b981',
                       color: '#fff',
@@ -1159,7 +1150,7 @@ function OrderCard({ order, statusColor, onChangeStatus, onComplete, generatingI
                     </Button>
                   )}
                   <button
-                    onClick={handlePrintOpen}
+                    onClick={handlePrintBill}
                     style={{
                       background: '#10b981',
                       color: '#fff',

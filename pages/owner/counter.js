@@ -548,6 +548,7 @@ const loadCreditCustomers = async () => {
       customer_phone: customerPhone.trim() || null,
       payment_method: isCredit ? 'credit' : finalPaymentMethod,
       payment_status: isCredit ? 'pending' : 'completed',
+      status: finalizeNow ? 'completed' : 'new',   // ← add this line
       items,
       is_credit: isCredit,
       credit_customer_id: isCredit ? selectedCreditCustomerId : null,
@@ -649,12 +650,7 @@ const loadCreditCustomers = async () => {
     const result = await res.json();
 
     const fullOrder = await fetchFullOrder(result.order_id);
-    const fallback = {
-      id: result.order_id, restaurant_id: restaurantId, order_type, table_number,
-      items, total_inc_tax: cartTotals.totalInc, created_at: new Date().toISOString()
-    };
-    setPrintOrder(fullOrder || fallback);
-
+    
     setCart([]); setCustomerName(''); setCustomerPhone(''); setPaymentMethod('cash');
     setOrderSelect(''); setIsCreditSale(false); setSelectedCreditCustomerId(''); setCreditCustomerBalance(0);
     setDrawerOpen(false);
@@ -923,13 +919,20 @@ const loadCreditCustomers = async () => {
     onConfirm={async (method, details) => {
       if (processing) return; // extra guard
       setProcessing(true);
-      try { await doCreateAndFinalizeOrder(method, details); }
-      catch (e) { setError('Error completing sale: ' + e.message); setTimeout(() => setError(''), 3000); }
-      finally { setProcessing(false); }
+      try {
+        // finalizeNow = true → insert with status: 'completed'
+        await doCreateAndFinalizeOrder(method, details, true);
+      } catch (e) {
+        setError('Error completing sale: ' + e.message);
+        setTimeout(() => setError(''), 3000);
+      } finally {
+        setProcessing(false);
+      }
     }}
     onCancel={() => setShowPaymentDialog(false)}
   />
 )}
+
 
 
       {/* KOT print modal */}
@@ -939,6 +942,7 @@ const loadCreditCustomers = async () => {
           onClose={() => setPrintOrder(null)}
           onPrint={() => setPrintOrder(null)}
           autoPrint
+          kind="bill"
         />
       )}
     </div>
