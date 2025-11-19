@@ -720,24 +720,48 @@ export default function InventoryPage() {
 const Container = styled.div`
   background: #f9fafb;
   min-height: 100vh;
-  padding: 2rem;
-  max-width: 1400px;
+  padding: 2rem 2rem 3rem;
+  max-width: 1200px;
   margin: 0 auto;
+
+  @media (max-width: 1024px) {
+    padding: 1.5rem 1.25rem 3.5rem;
+  }
+
+  @media (max-width: 640px) {
+    padding: 1rem 0.75rem 4rem;
+  }
 `
+
 const Header = styled.div`
   margin-bottom: 2rem;
+
+  @media (max-width: 640px) {
+    margin-bottom: 1.5rem;
+  }
 `
+
 const Title = styled.h1`
   font-size: 2rem;
   font-weight: 700;
   color: #111827;
   margin: 0 0 0.5rem 0;
+
+  @media (max-width: 640px) {
+    font-size: 1.5rem;
+  }
 `
+
 const Subtitle = styled.p`
   color: #6b7280;
   font-size: 1rem;
   margin: 0;
+
+  @media (max-width: 640px) {
+    font-size: 0.9rem;
+  }
 `
+
 const ErrorAlert = styled.div`
   background: #fee2e2;
   color: #991b1b;
@@ -746,83 +770,115 @@ const ErrorAlert = styled.div`
   margin-bottom: 1.5rem;
   border-left: 4px solid #dc2626;
 `
+
 const TabContainer = styled.div`
   display: flex;
   gap: 1rem;
   margin-bottom: 2rem;
   border-bottom: 2px solid #e5e7eb;
+  overflow-x: auto;
 `
+
 const Tab = styled.button`
   padding: 1rem 1.5rem;
   border: none;
   background: none;
   cursor: pointer;
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-weight: 600;
-  color: ${props => props.$active ? '#3b82f6' : '#6b7280'};
-  border-bottom: 3px solid ${props => props.$active ? '#3b82f6' : 'transparent'};
+  white-space: nowrap;
+  color: ${props => (props.$active ? '#3b82f6' : '#6b7280')};
+  border-bottom: 3px solid ${props => (props.$active ? '#3b82f6' : 'transparent')};
   transition: all 0.2s;
   margin-bottom: -2px;
+
   &:hover {
     color: #3b82f6;
   }
 `
+
 const Section = styled.div`
   background: #fff;
   border-radius: 12px;
   padding: 2rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+
+  @media (max-width: 768px) {
+    padding: 1.25rem 1rem 1.5rem;
+  }
 `
+
 const SectionHeader = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 2rem;
+
   @media (max-width: 768px) {
     flex-direction: column;
     align-items: flex-start;
-    gap: 1rem;
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
   }
 `
+
 const SectionTitle = styled.h2`
   font-size: 1.5rem;
   font-weight: 700;
   color: #111827;
   margin: 0;
+
+  @media (max-width: 640px) {
+    font-size: 1.25rem;
+  }
 `
+
 const AddButton = styled.button`
   background: #10b981;
   color: #fff;
   border: none;
-  padding: 0.75rem 1.5rem;
+  padding: 0.7rem 1.25rem;
   border-radius: 8px;
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
   transition: background 0.2s;
+
   &:hover {
     background: #059669;
   }
 `
+
 const LoadingContainer = styled.div`
   text-align: center;
   padding: 3rem 2rem;
   color: #6b7280;
   font-size: 1rem;
 `
+
 const EmptyState = styled.div`
   text-align: center;
   padding: 3rem 2rem;
   color: #9ca3af;
-  font-size: 1.1rem;
+  font-size: 1.05rem;
 `
+
 const SearchRow = styled.div`
   display: flex;
   justify-content: flex-end;
   align-items: center;
   gap: 0.5rem;
   margin-bottom: 1rem;
+
+  @media (max-width: 768px) {
+    justify-content: stretch;
+  }
+
+  @media (max-width: 640px) {
+    flex-direction: row;
+  }
 `
+
 const SearchInput = styled.input`
   width: 100%;
   max-width: 260px;
@@ -833,11 +889,17 @@ const SearchInput = styled.input`
   outline: none;
   transition: border-color 0.2s, box-shadow 0.2s;
   box-sizing: border-box;
+
   &:focus {
     border-color: #3b82f6;
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
   }
+
+  @media (max-width: 640px) {
+    max-width: none;
+  }
 `
+
 const ClearSearchButton = styled.button`
   border: none;
   background: #e5e7eb;
@@ -851,169 +913,220 @@ const ClearSearchButton = styled.button`
   cursor: pointer;
   font-size: 0.85rem;
   padding: 0;
+
   &:hover {
     background: #d1d5db;
   }
 `
+
 const IngredientGrid = styled.div`
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.25rem;
+
+  @media (max-width: 640px) {
+    grid-template-columns: 1fr;
+  }
 `
+
 const IngredientCard = styled.div`
-  background: ${props => props.lowStock ? '#fef3c7' : '#f3f4f6'};
-  border: 2px solid ${props => props.lowStock ? '#fcd34d' : '#e5e7eb'};
+  background: ${props => (props.lowStock ? '#fef3c7' : '#f3f4f6')};
+  border: 2px solid ${props => (props.lowStock ? '#fcd34d' : '#e5e7eb')};
   border-radius: 10px;
-  padding: 1.5rem;
+  padding: 1.25rem;
   transition: all 0.2s;
+
   &:hover {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
     border-color: #3b82f6;
   }
 `
+
 const CardHeader = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1rem;
+  margin-bottom: 0.85rem;
+  gap: 0.75rem;
 `
+
 const CardTitle = styled.h3`
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: #111827;
-  margin: 0;
-`
-const LowStockBadge = styled.span`
-  background: #fcd34d;
-  color: #78350f;
-  padding: 0.25rem 0.75rem;
-  border-radius: 9999px;
-  font-size: 0.875rem;
-  font-weight: 600;
-`
-const CardInfo = styled.div`
-  background: rgba(255, 255, 255, 0.5);
-  border-radius: 8px;
-  padding: 1rem;
-  margin-bottom: 1rem;
-`
-const InfoRow = styled.div`
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 0.5rem;
-  font-size: 0.95rem;
-  &:last-child {
-    margin-bottom: 0;
-  }
-`
-const Label = styled.span`
-  color: #6b7280;
-  font-weight: 500;
-`
-const Value = styled.span`
-  color: #111827;
-  font-weight: 600;
-`
-const StockValue = styled.span`
-  color: ${props => props.$low ? '#dc2626' : '#059669'};
-  font-weight: 700;
-`
-const CardActions = styled.div`
-  display: flex;
-  gap: 0.5rem;
-`
-const ActionButton = styled.button`
-  flex: 1;
-  padding: 0.5rem 1rem;
-  border: none;
-  border-radius: 6px;
-  font-size: 0.875rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-  background: ${props => props.$edit ? '#3b82f6' : '#ef4444'};
-  color: #fff;
-  &:hover {
-    background: ${props => props.$edit ? '#2563eb' : '#dc2626'};
-    transform: translateY(-1px);
-  }
-`
-const RecipesGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-  gap: 1.5rem;
-`
-const RecipeCard = styled.div`
-  background: #f3f4f6;
-  border: 2px solid #e5e7eb;
-  border-radius: 10px;
-  padding: 1.5rem;
-  transition: all 0.2s;
-  &:hover {
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    border-color: #8b5cf6;
-  }
-`
-const RecipeCardHeader = styled.div`
-  margin-bottom: 1rem;
-  padding-bottom: 1rem;
-  border-bottom: 2px solid #e5e7eb;
-`
-const RecipeTitle = styled.h3`
-  font-size: 1.25rem;
+  font-size: 1.1rem;
   font-weight: 700;
   color: #111827;
   margin: 0;
   word-break: break-word;
 `
+
+const LowStockBadge = styled.span`
+  background: #fcd34d;
+  color: #78350f;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+`
+
+const CardInfo = styled.div`
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 8px;
+  padding: 0.85rem;
+  margin-bottom: 0.85rem;
+`
+
+const InfoRow = styled.div`
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.45rem;
+  font-size: 0.9rem;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+`
+
+const Label = styled.span`
+  color: #6b7280;
+  font-weight: 500;
+`
+
+const Value = styled.span`
+  color: #111827;
+  font-weight: 600;
+`
+
+const StockValue = styled.span`
+  color: ${props => (props.$low ? '#dc2626' : '#059669')};
+  font-weight: 700;
+`
+
+const CardActions = styled.div`
+  display: flex;
+  gap: 0.5rem;
+
+  @media (max-width: 480px) {
+    flex-direction: column;
+  }
+`
+
+const ActionButton = styled.button`
+  flex: 1;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: ${props => (props.$edit ? '#3b82f6' : '#ef4444')};
+  color: #fff;
+
+  &:hover {
+    background: ${props => (props.$edit ? '#2563eb' : '#dc2626')};
+    transform: translateY(-1px);
+  }
+`
+
+const RecipesGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1.25rem;
+
+  @media (max-width: 640px) {
+    grid-template-columns: 1fr;
+  }
+`
+
+const RecipeCard = styled.div`
+  background: #f3f4f6;
+  border: 2px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 1.25rem;
+  transition: all 0.2s;
+
+  &:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    border-color: #8b5cf6;
+  }
+`
+
+const RecipeCardHeader = styled.div`
+  margin-bottom: 0.85rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 2px solid #e5e7eb;
+`
+
+const RecipeTitle = styled.h3`
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #111827;
+  margin: 0;
+  word-break: break-word;
+`
+
 const RecipeContent = styled.div`
   background: #fff;
   border-radius: 8px;
-  padding: 1rem;
-  margin-bottom: 1rem;
-  min-height: 80px;
+  padding: 0.9rem;
+  margin-bottom: 0.85rem;
+  min-height: 72px;
   display: flex;
   align-items: center;
 `
+
 const IngredientsList = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.45rem;
 `
+
 const IngredientItem = styled.div`
   display: flex;
   gap: 0.5rem;
   align-items: center;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   color: #374151;
+  flex-wrap: wrap;
+
   span:first-child {
     font-weight: 700;
     color: #3b82f6;
   }
+
   .unit {
     color: #9ca3af;
-    font-size: 0.85rem;
+    font-size: 0.8rem;
   }
 `
+
 const NoRecipe = styled.div`
   color: #9ca3af;
   text-align: center;
   font-style: italic;
+  font-size: 0.9rem;
 `
+
 const RecipeActions = styled.div`
   display: flex;
   gap: 0.5rem;
+
+  @media (max-width: 480px) {
+    flex-direction: column;
+  }
 `
+
 const RecipeButton = styled.button`
   flex: 1;
-  padding: 0.75rem;
+  padding: 0.7rem;
   background: #8b5cf6;
   color: #fff;
   border: none;
   border-radius: 6px;
   font-weight: 600;
+  font-size: 0.95rem;
   cursor: pointer;
   transition: background 0.2s;
+
   &:hover {
     background: #7c3aed;
   }
@@ -1025,65 +1138,81 @@ const IngredientModalOverlay = styled.div`
   background: rgba(0, 0, 0, 0.5);
   display: flex;
   justify-content: center;
-  align-items: center;
+  align-items: flex-start;
   padding: 1rem;
   z-index: 1000;
+  overflow-y: auto;
 `
+
 const IngredientModal = styled.div`
   background: #fff;
   border-radius: 12px;
   width: 100%;
   max-width: 500px;
   max-height: 90vh;
+  margin-top: 4vh;
   overflow-y: auto;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+
+  @media (max-width: 480px) {
+    margin-top: 2vh;
+  }
 `
+
 const ModalHeader = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1.5rem;
+  padding: 1.25rem 1.5rem;
   border-bottom: 2px solid #f3f4f6;
 `
+
 const ModalTitle = styled.h3`
-  font-size: 1.25rem;
+  font-size: 1.15rem;
   font-weight: 700;
   color: #111827;
   margin: 0;
 `
+
 const CloseButton = styled.button`
   background: none;
   border: none;
-  font-size: 1.5rem;
+  font-size: 1.4rem;
   cursor: pointer;
   color: #6b7280;
   padding: 0;
   transition: color 0.2s;
+
   &:hover {
     color: #111827;
   }
 `
+
 const ModalBody = styled.div`
   padding: 1.5rem;
 `
+
 const FormGroup = styled.div`
-  margin-bottom: 1.5rem;
+  margin-bottom: 1.25rem;
 `
+
 const FormLabel = styled.label`
   display: block;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   font-weight: 600;
   color: #374151;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.45rem;
 `
+
 const FormInput = styled.input`
   width: 100%;
-  padding: 0.75rem;
+  padding: 0.7rem;
   border: 2px solid #e5e7eb;
   border-radius: 8px;
-  font-size: 1rem;
+  font-size: 0.95rem;
   transition: border-color 0.2s;
   box-sizing: border-box;
+
   &:focus {
     outline: none;
     border-color: #3b82f6;
@@ -1109,22 +1238,27 @@ const UnitSelectButton = styled.button`
   cursor: pointer;
   transition: border-color 0.15s, box-shadow 0.15s, background-color 0.15s;
   box-sizing: border-box;
+
   .placeholder {
     color: #9ca3af;
   }
+
   .chevron {
     font-size: 0.75rem;
     color: #6b7280;
     margin-left: 0.5rem;
   }
+
   &:hover {
     background-color: #f9fafb;
   }
+
   &:focus-visible {
     outline: none;
     border-color: #3b82f6;
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
   }
+
   &:disabled {
     cursor: not-allowed;
     background-color: #f3f4f6;
@@ -1159,21 +1293,30 @@ const UnitOption = styled.button`
   font-size: 0.95rem;
   cursor: pointer;
   text-align: left;
+
   &:hover {
     background: ${props => (props.$active ? '#dbeafe' : '#f3f4f6')};
   }
+
   .check {
     font-size: 0.85rem;
     color: #3b82f6;
   }
 `
+
 const ModalFooter = styled.div`
   display: flex;
-  gap: 1rem;
-  padding: 1.5rem;
+  gap: 0.75rem;
+  padding: 1.25rem 1.5rem 1.5rem;
   border-top: 2px solid #f3f4f6;
   justify-content: flex-end;
+
+  @media (max-width: 480px) {
+    flex-direction: row-reverse;
+    flex-wrap: wrap;
+  }
 `
+
 const InlineError = styled.div`
   background: #fee2e2;
   color: #991b1b;
@@ -1181,29 +1324,36 @@ const InlineError = styled.div`
   border-radius: 8px;
   border-left: 4px solid #dc2626;
   margin-bottom: 1rem;
+  font-size: 0.9rem;
 `
+
 const CancelButton = styled.button`
-  padding: 0.75rem 1.5rem;
+  padding: 0.7rem 1.3rem;
   background: #e5e7eb;
   color: #374151;
   border: none;
   border-radius: 8px;
   font-weight: 600;
+  font-size: 0.95rem;
   cursor: pointer;
   transition: background 0.2s;
+
   &:hover {
     background: #d1d5db;
   }
 `
+
 const SaveButton = styled.button`
-  padding: 0.75rem 1.5rem;
+  padding: 0.7rem 1.3rem;
   background: #10b981;
   color: #fff;
   border: none;
   border-radius: 8px;
   font-weight: 600;
+  font-size: 0.95rem;
   cursor: pointer;
   transition: background 0.2s;
+
   &:hover {
     background: #059669;
   }

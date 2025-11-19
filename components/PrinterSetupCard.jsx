@@ -215,6 +215,7 @@ export default function PrinterSetupCard() {
   href={WIN_HELPER_URL}
   download="CafeQR-PrintHub-Win.zip"
   className="btn btn-primary"
+  style={{ padding: '6px 10px', fontSize: 13 }}
 >
   Download CafeQR Print Hub (Windows)
 </a>
