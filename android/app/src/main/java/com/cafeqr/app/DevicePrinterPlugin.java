@@ -316,33 +316,74 @@ public void printSunmiText(PluginCall call) {
   }
 
   private boolean connectAndWrite(BluetoothDevice dev, byte[] data) {
+    BluetoothSocket sock = null;
     try {
       try { BluetoothAdapter.getDefaultAdapter().cancelDiscovery(); } catch (Exception ignored) {}
-      BluetoothSocket sock;
+
+      // Create RFCOMM socket
       try {
         sock = dev.createInsecureRfcommSocketToServiceRecord(
-          UUID.fromString("00001101-0000-1000-8000-00805F9B34FB"));
+          UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+        );
       } catch (Exception e) {
         sock = dev.createRfcommSocketToServiceRecord(
-          UUID.fromString("00001101-0000-1000-8000-00805F9B34FB"));
+          UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+        );
       }
-      // Blocking call (~12s timeout if peer doesn’t respond)
+
+      // Connect (blocking)
       sock.connect();
       OutputStream os = sock.getOutputStream();
-      os.write(data);
+
+      // Write in small chunks so printers with tiny buffers don't drop data
+      final int CHUNK = 256;
+      int offset = 0;
+      while (offset < data.length) {
+        int len = Math.min(CHUNK, data.length - offset);
+        os.write(data, offset, len);
+        os.flush();
+        offset += len;
+        try {
+          Thread.sleep(10); // short pause to let printer drain its buffer
+        } catch (InterruptedException ignored) {}
+      }
+
+      // Extra flush + tiny delay before closing
       os.flush();
-      sock.close();
+      try { Thread.sleep(30); } catch (InterruptedException ignored) {}
+
       return true;
     } catch (Exception ex) {
+      // Fallback: try the older reflection socket, also chunked
       try {
         BluetoothSocket alt = (BluetoothSocket) dev.getClass()
           .getMethod("createRfcommSocket", int.class).invoke(dev, 1);
         alt.connect();
         OutputStream os = alt.getOutputStream();
-        os.write(data); os.flush(); alt.close();
+
+        final int CHUNK = 256;
+        int offset = 0;
+        while (offset < data.length) {
+          int len = Math.min(CHUNK, data.length - offset);
+          os.write(data, offset, len);
+          os.flush();
+          offset += len;
+          try { Thread.sleep(10); } catch (InterruptedException ignored) {}
+        }
+
+        os.flush();
+        try { Thread.sleep(30); } catch (InterruptedException ignored) {}
+        alt.close();
         return true;
-      } catch (Exception ignored) {}
-      return false;
+      } catch (Exception ignored) {
+        return false;
+      }
+    } finally {
+      if (sock != null) {
+        try { sock.close(); } catch (Exception ignored) {}
+      }
     }
-  }
-}
+  }  // <-- closes connectAndWrite
+
+}    // <-- closes class DevicePrinterPlugin
+
