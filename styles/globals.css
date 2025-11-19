@@ -824,3 +824,32 @@ input, select, textarea { font-size: 16px; } /* keep ≥16px */
 .cr-seg button { flex:1; padding:9px 10px; border-radius:8px; background:transparent; border:none; font-weight:800; }
 .cr-seg button.active { background:#fff; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
 @media (max-width: 640px) { .cr-seg { display:flex; } }
+
+/* Ensure sidebar hamburger is always visible */
+.sidebar-toggle {
+  background: #ffffff !important;
+  border: 1px solid #e5e7eb !important;
+  color: #111827 !important;
+  padding: 0 !important;               /* keep it tight around the icon */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebar-toggle svg {
+  color: #111827 !important;
+  width: 18px;
+  height: 18px;
+}
+
+.menu-toggle {
+  background: #ffffff !important;
+  border: 1px solid #e5e7eb;
+  color: #111827;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}

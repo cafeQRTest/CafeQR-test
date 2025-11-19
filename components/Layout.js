@@ -39,21 +39,25 @@ export default function Layout({
 
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const MOBILE_BREAKPOINT = 1024; // use drawer up to 1024px wide (phones + tablets)
 
-  useEffect(() => {
-    const onResize = () => setCollapsed(window.innerWidth < 1160)
-    onResize()
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
-  }, [])
 
-  const handleHamburger = () => {
-    if (typeof window !== 'undefined' && window.innerWidth <= 768) {
-      setMobileOpen(true)
-    } else {
-      setCollapsed((v) => !v)
-    }
+useEffect(() => {
+  const onResize = () => setCollapsed(window.innerWidth < 1160);
+  onResize();
+  window.addEventListener('resize', onResize);
+  return () => window.removeEventListener('resize', onResize);
+}, []);
+
+const handleHamburger = () => {
+  if (typeof window !== 'undefined' && window.innerWidth <= MOBILE_BREAKPOINT) {
+    // phones + tablets → open overlay drawer
+    setMobileOpen(true);
+  } else {
+    // larger screens → toggle collapsed desktop sidebar
+    setCollapsed((v) => !v);
   }
+};
 
   return (
     <div style={{ display: 'grid', gridTemplateRows: 'auto 1fr auto', minHeight: '100svh' }}>
@@ -83,55 +87,64 @@ export default function Layout({
 
       <Footer />
 
-      <style jsx>{`
-        .main-wrapper {
-          display: grid;
-          grid-template-columns: ${showSidebar ? (collapsed ? '64px 1fr' : '240px 1fr') : '1fr'};
-          transition: grid-template-columns 0.18s ease;
-          background: var(--bg, #f7f8fa);
-        }
-        .desktop-sidebar {
-          display: block;
-        }
-        @media (max-width: 768px) {
-          .main-wrapper {
-            grid-template-columns: 1fr !important;
-          }
-          .desktop-sidebar {
-            display: none;
-          }
-        }
-        .drawer-backdrop {
-          position: fixed;
-          inset: 0;
-          background: rgba(0, 0, 0, 0.35);
-          z-index: 999;
-        }
-        .drawer {
-          position: fixed;
-          top: 0;
-          left: 0;
-          bottom: 0;
-          width: min(80vw, 300px);
-          background: #f9fafb;
-          border-right: 1px solid #e5e7eb;
-          transform: translateX(-100%);
-          transition: transform 0.28s ease-out;
-          z-index: 1000;
-          padding: 12px;
-          padding-top: calc(12px + env(safe-area-inset-top));
-          overflow-y: auto;
-        }
-        .drawer--open {
-          transform: translateX(0);
-        }
-        @media (min-width: 769px) {
-          .drawer,
-          .drawer-backdrop {
-            display: none;
-          }
-        }
-      `}</style>
+<style jsx>{`
+  .main-wrapper {
+    display: grid;
+    grid-template-columns: ${showSidebar ? (collapsed ? '64px 1fr' : '240px 1fr') : '1fr'};
+    transition: grid-template-columns 0.18s ease;
+    background: var(--bg, #f7f8fa);
+  }
+
+  .desktop-sidebar {
+    display: block;
+  }
+
+  /* Up to 1024px (phones + tablets) → content full‑width, no desktop sidebar */
+  @media (max-width: 1024px) {
+    .main-wrapper {
+      grid-template-columns: 1fr !important;
+    }
+    .desktop-sidebar {
+      display: none;
+    }
+  }
+
+  .drawer-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.35);
+    z-index: 999;
+  }
+
+  .drawer {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(90vw, 320px); /* a bit wider on tablets */
+    background: #f9fafb;
+    border-right: 1px solid #e5e7eb;
+    transform: translateX(-100%);
+    transition: transform 0.28s ease-out;
+    z-index: 1000;
+    padding: 12px;
+    padding-top: calc(12px + env(safe-area-inset-top));
+    overflow-y: auto;
+  }
+
+  .drawer--open {
+    transform: translateX(0);
+  }
+
+  /* Desktop (from 1025px up) → hide drawer entirely */
+  @media (min-width: 1025px) {
+    .drawer,
+    .drawer-backdrop {
+      display: none;
+    }
+  }
+`}</style>
+
     </div>
   )
 }

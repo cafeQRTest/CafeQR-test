@@ -46,11 +46,16 @@ export default function Shell({ children, showSidebar = false }) {
       <div className="shell-container">
         <header className="shell-header">
           <div className="header-content">
-            {isMobile && showSidebar && (
-              <button className="menu-toggle" onClick={() => setSidebarOpen(!sidebarOpen)} aria-label="Menu">
-                ☰
-              </button>
-            )}
+            {showSidebar && (
+  <button
+    className="menu-toggle"
+    onClick={() => setSidebarOpen(!sidebarOpen)}
+    aria-label="Menu"
+  >
+    ☰
+  </button>
+)}
+
             <div className="logo">
               <Image src="/cafeqr-logo.svg" alt="Cafe QR" width={32} height={32} priority />
               <span>Cafe QR</span>
