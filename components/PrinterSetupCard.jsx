@@ -2,6 +2,8 @@
 import React, { useEffect, useState } from 'react';
 import { printUniversal } from '../utils/printGateway';
 
+
+
 export default function PrinterSetupCard() {
   // Wired (Windows helper)
   const [listUrl, setListUrl] = useState(
@@ -14,6 +16,11 @@ export default function PrinterSetupCard() {
   const [pick, setPick] = useState(localStorage.getItem('PRINT_WIN_PRINTER_NAME') || '');
   const [msg, setMsg] = useState('');
   const WIN_HELPER_URL = '/desktop/Windows/CafeQR-PrintHub-Win.zip';
+  // New: receipt width in characters
+  const [cols, setCols] = useState(() => {
+  if (typeof window === 'undefined') return '32';
+  return localStorage.getItem('PRINT_WIDTH_COLS') || '32';
+  });
 
 
   // --- existing handlers (unchanged behaviour) ------------------------------
@@ -82,6 +89,7 @@ export default function PrinterSetupCard() {
     localStorage.setItem('PRINT_WIN_PRINTER_NAME', (pick || '').trim());
     localStorage.setItem('PRINTER_MODE', 'winspool');
     localStorage.setItem('PRINTER_READY', '1');
+    localStorage.setItem('PRINT_WIDTH_COLS', cols);
     setMsg(pick ? `Saved: ${pick}` : 'Pick a printer first');
   };
 
@@ -211,6 +219,28 @@ export default function PrinterSetupCard() {
               Select USB (WebUSB)
             </button>
           </div>
+<div style={{ display:'flex', flexWrap:'wrap', gap:8, alignItems:'center', fontSize:13 }}>
+  <span>Paper width:</span>
+  <label style={{ display:'flex', alignItems:'center', gap:4 }}>
+    <input
+      type="radio"
+      value="32"
+      checked={cols === '32'}
+      onChange={e => setCols(e.target.value)}
+    />
+    2" / 58 mm (32 cols)
+  </label>
+  <label style={{ display:'flex', alignItems:'center', gap:4 }}>
+    <input
+      type="radio"
+      value="42"
+      checked={cols === '42'}
+      onChange={e => setCols(e.target.value)}
+    />
+    3" / 80 mm (≈42 cols)
+  </label>
+</div>
+
 <a
   href={WIN_HELPER_URL}
   download="CafeQR-PrintHub-Win.zip"

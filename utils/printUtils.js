@@ -81,6 +81,21 @@ function buildItemRow(item, width) {
   return `${name}${qty}  ${rate}  ${total}`;
 }
 
+function getReceiptWidth(restaurantProfile) {
+  // 1) per-device override from localStorage
+  let fromLocal = 0;
+  if (typeof window !== 'undefined') {
+    const raw = window.localStorage.getItem('PRINT_WIDTH_COLS') || '';
+    fromLocal = Number(raw) || 0;
+  }
+
+  // 2) (optional later) per-restaurant profile column, if you add one
+  const fromProfile = Number(restaurantProfile?.receipt_cols || 0) || 0;
+
+  const cols = fromLocal || fromProfile || 32; // default 32 for 2"
+  return Math.max(20, Math.min(64, cols));     // clamp to a sane range
+}
+
 export async function downloadTextAndShare(order, bill, restaurantProfile) {
   try {
     const items = toDisplayItems(order);
@@ -143,7 +158,7 @@ export async function downloadTextAndShare(order, bill, restaurantProfile) {
     );
 
     // ======= WIDTH = 32 CHARS =======
-    const W = 32;
+    const W = getReceiptWidth(restaurantProfile);
     const dashes = () => '-'.repeat(W);
 
     // Build lines
@@ -321,7 +336,7 @@ export function buildReceiptText(order, bill, restaurantProfile) {
       0
     );
 
-    const W = 32;
+    const W = getReceiptWidth(restaurantProfile);
     const dashes = () => '-'.repeat(W);
     const lines = [];
 
