@@ -112,7 +112,8 @@ function New-HubListener {
   param([int]$Port)
 
   $prefix = "http://127.0.0.1:$Port/"
-  # Use New-Object instead of ::new() so it works on older PowerShell
+
+  # Always use New-Object so it works on PowerShell 2/3/4/5+
   $listener = New-Object System.Net.HttpListener
   $listener.Prefixes.Clear()
   $listener.Prefixes.Add($prefix)
@@ -121,19 +122,22 @@ function New-HubListener {
     $listener.Start()
     return $listener, $prefix
   } catch {
-    if ($_.Exception.Message -match 'Access is denied') {
-      Write-Host "CafeQR: URL ACL missing for $prefix, attempting to add with netsh..." -ForegroundColor Yellow
+    $msg     = $_.Exception.Message
+    $account = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name  # e.g. MACHINE\User
 
-      $user = "$env:USERDOMAIN\$env:USERNAME"
-      if (-not $env:USERDOMAIN -or $env:USERDOMAIN -eq $env:COMPUTERNAME) {
-        $user = $env:USERNAME
-      }
+    if ($msg -match 'Access is denied' -or
+        $msg -match 'conflicts with an existing registration' -or
+        $msg -match 'failed to listen on prefix') {
 
-      $netshArgs = "http add urlacl url=$prefix user=""$user"" listen=yes"
+      Write-Host "CafeQR: fixing URL ACL for $prefix (account $account)..." -ForegroundColor Yellow
 
-      & netsh.exe $netshArgs | Out-Null
+      # 1) Remove any stale reservation (ignore errors if it wasn't there)
+      & netsh.exe http delete urlacl url=$prefix 2>$null | Out-Null
 
-      # Recreate listener using New-Object again
+      # 2) Add a fresh ACL for the real Windows identity
+      & netsh.exe http add urlacl url=$prefix user="$account" listen=yes | Out-Null
+
+      # 3) Recreate listener and start again
       $listener = New-Object System.Net.HttpListener
       $listener.Prefixes.Clear()
       $listener.Prefixes.Add($prefix)
