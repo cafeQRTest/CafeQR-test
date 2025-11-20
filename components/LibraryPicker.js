@@ -173,7 +173,7 @@ export default function LibraryPicker({ supabase, open, onClose, restaurantId, o
             </div>
           </div>
 
-          <div className="filters-row">
+          <div className="filters-row filters-row--packaged">
             <label className="flag">
               <input type="checkbox" checked={markPackaged} onChange={e => setMarkPackaged(e.target.checked)} />
               <span className="muted">Mark as packaged</span>
@@ -304,6 +304,7 @@ export default function LibraryPicker({ supabase, open, onClose, restaurantId, o
         .lib-filters { padding: 12px 14px; border-bottom: 1px solid #f3f4f6; background: #fff; }
         .filters-row { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; }
         @media (max-width: 480px) { .filters-row { grid-template-columns: 1fr auto; } }
+        .filters-row--packaged { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
         .flag { display: inline-grid; grid-auto-flow: column; align-items: center; column-gap: 6px; white-space: nowrap; }
         .flag input[type="checkbox"] { margin: 0; inline-size: 20px; block-size: 20px; }
         .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; }
