@@ -112,7 +112,8 @@ function New-HubListener {
   param([int]$Port)
 
   $prefix = "http://127.0.0.1:$Port/"
-  $listener = [System.Net.HttpListener]::new()
+  # Use New-Object instead of ::new() so it works on older PowerShell
+  $listener = New-Object System.Net.HttpListener
   $listener.Prefixes.Clear()
   $listener.Prefixes.Add($prefix)
 
@@ -132,7 +133,8 @@ function New-HubListener {
 
       & netsh.exe $netshArgs | Out-Null
 
-      $listener = [System.Net.HttpListener]::new()
+      # Recreate listener using New-Object again
+      $listener = New-Object System.Net.HttpListener
       $listener.Prefixes.Clear()
       $listener.Prefixes.Add($prefix)
       $listener.Start()
