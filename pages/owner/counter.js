@@ -580,42 +580,40 @@ const loadCreditCustomers = async () => {
     }
     const result = await res.json();
 
-    if (!isCredit || finalizeNow) {
-      await supabase
-        .from('orders')
-        .update({
-          status: 'completed',
-          payment_method: finalPaymentMethod,
-          actual_payment_method: finalPaymentMethod,
-          ...(mixedDetails ? { mixed_payment_details: mixedDetails } : {}),
-        })
-        .eq('id', result.order_id)
-        .eq('restaurant_id', restaurantId);
-    }
+    
+    // Kick off invoice generation, but don't wait for it
+fetch('/api/invoices/generate', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    order_id: result.order_id,
+    payment_method: isCredit ? 'credit' : finalPaymentMethod,
+    is_credit: isCredit,
+    credit_customer_id: isCredit ? selectedCreditCustomerId : null,
+    mixed_payment_details: finalPaymentMethod === 'mixed' ? mixedDetails : null
+  })
+}).catch((e) => {
+  console.warn(
+    'Invoice generation failed (non-blocking):',
+    e?.message || e
+  );
+});
 
-    const invRes = await fetch('/api/invoices/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        order_id: result.order_id,
-        payment_method: isCredit ? 'credit' : finalPaymentMethod,
-        is_credit: isCredit,
-        credit_customer_id: isCredit ? selectedCreditCustomerId : null,
-        mixed_payment_details: finalPaymentMethod === 'mixed' ? mixedDetails : null
-      })
-    });
-    // Non-blocking: invoice might fail but order can still be completed
-    if (!invRes.ok) {
-      try { const j = await invRes.json(); console.warn('Invoice generation failed (non-blocking):', j?.error || invRes.statusText); }
-      catch { console.warn('Invoice generation failed (non-blocking):', invRes.statusText); }
-    }
 
-    const fullOrder = await fetchFullOrder(result.order_id);
-    const fallback = {
-      id: result.order_id, restaurant_id: restaurantId, order_type, table_number,
-      items, total_inc_tax: cartTotals.totalInc, created_at: new Date().toISOString()
-    };
-    setPrintOrder(fullOrder || fallback);
+     const fullOrder = result.order_for_print || null;
+
+ const orderForPrint = fullOrder || {
+   id: result.order_id,
+   restaurant_id: restaurantId,
+   order_type,
+   table_number,
+   items,
+   total_inc_tax: cartTotals.totalInc,
+   created_at: new Date().toISOString()
+ };
+
+ setPrintOrder(orderForPrint);
+
 
     setCart([]); setCustomerName(''); setCustomerPhone(''); setPaymentMethod('cash');
     setOrderSelect(''); setIsCreditSale(false); setSelectedCreditCustomerId(''); setCreditCustomerBalance(0);
