@@ -152,6 +152,7 @@ export default function CounterSale() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('all');
   const [filterMode, setFilterMode] = useState('all');
 
   const [customerName, setCustomerName] = useState('');
@@ -465,30 +466,43 @@ const loadCreditCustomers = async () => {
   };
 
   const filteredItems = useMemo(() => {
-  const q = searchQuery.toLowerCase();
-  // Base filter: search + veg
-  let base = menuItems.filter((item) => {
-    if (filterMode === 'veg' && !item.veg) return false;
-    const hit = !q || item.name.toLowerCase().includes(q) || (item.code_number || '').toLowerCase().includes(q);
-    return hit;
-  });
+    const q = searchQuery.toLowerCase();
 
-  if (filterMode === 'popular') {
-    // Sort desc by sold qty, then by name to stabilize
-    base = [...base].sort((a, b) => {
-      const sb = popCounts.get(b.id) || 0;
-      const sa = popCounts.get(a.id) || 0;
-      if (sb !== sa) return sb - sa;
-      return a.name.localeCompare(b.name);
+    let base = menuItems.filter((item) => {
+      if (filterMode === 'veg' && !item.veg) return false;
+
+      const itemCategory = item.category || 'Others';
+      if (categoryFilter !== 'all' && itemCategory !== categoryFilter) return false;
+
+      const hit =
+        !q ||
+        item.name.toLowerCase().includes(q) ||
+        (item.code_number || '').toLowerCase().includes(q);
+      return hit;
     });
-  } else {
-    // Keep your existing category/name ordering when not Popular
-    base = [...base];
-  }
-  return base;
-}, [menuItems, filterMode, searchQuery, popCounts]);
 
+    if (filterMode === 'popular') {
+      base = [...base].sort((a, b) => {
+        const sb = popCounts.get(b.id) || 0;
+        const sa = popCounts.get(a.id) || 0;
+        if (sb !== sa) return sb - sa;
+        return a.name.localeCompare(b.name);
+      });
+    } else {
+      base = [...base];
+    }
 
+    return base;
+  }, [menuItems, filterMode, searchQuery, popCounts, categoryFilter]);
+
+  const categoryChips = useMemo(() => {
+    const set = new Set();
+    (menuItems || []).forEach((item) => {
+      const cat = item.category || 'Others';
+      set.add(cat);
+    });
+    return Array.from(set);
+  }, [menuItems]);
 
 
   const groupedItems = useMemo(
@@ -781,35 +795,60 @@ const loadCreditCustomers = async () => {
       <div className="counter-search-bar">
         <input type="text" placeholder="Search by name, code, or description..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="input" />
         <div className="counter-filters actions-bar">
-  {[
-    { id: 'all', label: 'All', icon: '🍽️' },
-    { id: 'veg', label: 'Veg', icon: '🥬' },
-    { id: 'popular', label: 'Popular', icon: '🔥' },
-  ].map((m) => {
-    const active = filterMode === m.id;
-    return (
-      <button
-        key={m.id}
-        onClick={() => setFilterMode(m.id)}
-        style={{
-          padding:'8px 14px',
-          borderRadius:999,
-          border: active ? 'none' : '1px solid #e5e7eb',
-          background: active ? '#f97316' : '#fff',
-          color: active ? '#fff' : '#111827',
-          fontWeight:600,
-          display:'inline-flex',
-          alignItems:'center',
-          gap:8
-        }}
-      >
-        <span aria-hidden>{m.icon}</span>{m.label}
-      </button>
-    );
-  })}
-</div>
-
+          {[
+            { id: 'all', label: 'All', icon: '🍽️' },
+            { id: 'veg', label: 'Veg', icon: '🥬' },
+            { id: 'popular', label: 'Popular', icon: '🔥' },
+          ].map((m) => {
+            const active = filterMode === m.id;
+            return (
+              <button
+                key={m.id}
+                onClick={() => setFilterMode(m.id)}
+                style={{
+                  padding: '8px 14px',
+                  borderRadius: 999,
+                  border: active ? 'none' : '1px solid #e5e7eb',
+                  background: active ? '#f97316' : '#fff',
+                  color: active ? '#fff' : '#111827',
+                  fontWeight: 600,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                }}
+              >
+                <span aria-hidden>{m.icon}</span>
+                {m.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
+      {categoryChips.length > 1 && (
+        <div
+          className="sales-carousel"
+          style={{
+            padding: '0 12px 0.75rem',
+            background: '#fff',
+            borderBottom: '1px solid #f3f4f6',
+          }}
+        >
+          {['all', ...categoryChips].map((cat) => (
+            <button
+              key={cat}
+              onClick={() => setCategoryFilter(cat)}
+              className={`sales-carousel-btn${categoryFilter === cat ? ' active' : ''}`}
+              style={{
+                background: categoryFilter === cat ? '#f97316' : '#f9fafb',
+                color: categoryFilter === cat ? '#fff' : '#374151',
+                borderColor: categoryFilter === cat ? '#f97316' : '#e5e7eb',
+              }}
+            >
+              {cat === 'all' ? 'All categories' : cat}
+            </button>
+          ))}
+        </div>
+      )}
 
       <main className="counter-main-mobile-like">
         <section className="counter-menu-items">
