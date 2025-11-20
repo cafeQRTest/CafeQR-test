@@ -253,7 +253,6 @@ export default function ItemEditor({
               options={[
                 { value: "available", label: "Available" },
                 { value: "out_of_stock", label: "Out of stock" },
-                { value: "paused", label: "Paused" },
               ]}
             />
           </label>

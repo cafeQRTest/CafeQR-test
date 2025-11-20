@@ -224,6 +224,8 @@ export default function MenuPage() {
     [selected, supabase, restaurantId]
   );
 
+  const hasSelection = useMemo(() => selected.size > 0, [selected]);
+
   const toggleStatus = useCallback(
     async (id, current) => {
       if (!supabase) return;
@@ -318,12 +320,16 @@ export default function MenuPage() {
         <div className="toolbar-cta">
           <Button onClick={() => setEditorItem({})}>Add New Item</Button>
           <Button onClick={() => setShowLibrary(true)}>Add from Library</Button>
-          <Button variant="success" onClick={() => applyBulk("available")}>
-            Mark Available
-          </Button>
-          <Button variant="outline" onClick={() => applyBulk("out_of_stock")}>
-            Mark Out of Stock
-          </Button>
+          {hasSelection && (
+            <>
+              <Button variant="success" onClick={() => applyBulk("available")}>
+                Mark Available
+              </Button>
+              <Button variant="outline" onClick={() => applyBulk("out_of_stock")}>
+                Mark Out of Stock
+              </Button>
+            </>
+          )}
         </div>
       </ToolBar>
 
