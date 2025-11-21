@@ -21,6 +21,10 @@ export default function PrinterSetupCard() {
   if (typeof window === 'undefined') return '32';
   return localStorage.getItem('PRINT_WIDTH_COLS') || '32';
   });
+  const [autoCut, setAutoCut] = useState(() => {
+  if (typeof window === 'undefined') return false;
+  return localStorage.getItem('PRINT_WIN_AUTOCUT') === '1';
+  });
 
 
   // --- existing handlers (unchanged behaviour) ------------------------------
@@ -89,6 +93,7 @@ export default function PrinterSetupCard() {
     localStorage.setItem('PRINT_WIN_PRINTER_NAME', (pick || '').trim());
     localStorage.setItem('PRINTER_MODE', 'winspool');
     localStorage.setItem('PRINTER_READY', '1');
+    localStorage.setItem('PRINT_WIN_AUTOCUT', autoCut ? '1' : '0');  // ← new
     localStorage.setItem('PRINT_WIDTH_COLS', cols);
     setMsg(pick ? `Saved: ${pick}` : 'Pick a printer first');
   };
@@ -219,6 +224,17 @@ export default function PrinterSetupCard() {
               Select USB (WebUSB)
             </button>
           </div>
+<div style={{ display:'flex', alignItems:'center', gap:8, fontSize:16 }}>
+  <label style={{ display:'flex', alignItems:'center', gap:6 }}>
+    <input
+      type="checkbox"
+      checked={autoCut}
+      onChange={e => setAutoCut(e.target.checked)}
+    />
+    Enable auto‑cut (ESC/POS) on this printer
+  </label>
+</div>
+
 <div style={{ display:'flex', flexWrap:'wrap', gap:8, alignItems:'center', fontSize:13 }}>
   <span>Paper width:</span>
   <label style={{ display:'flex', alignItems:'center', gap:4 }}>
