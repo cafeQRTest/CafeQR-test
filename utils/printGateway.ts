@@ -12,6 +12,7 @@ type Options = {
   codepage?: number;
   allowPrompt?: boolean;
   allowSystemDialog?: boolean;
+  scale?: 'normal' | 'large';      // ← NEW
 };
 
 let inFlight = false;
@@ -25,7 +26,9 @@ export async function printUniversal(opts: Options) {
   const payload = textToEscPos(opts.text, {
     codepage: opts.codepage,
     feed: 4,
-    cut: 'full'
+    cut: 'full',
+    scale: opts.scale || 'normal'    // ← NEW
+
   });
   const base64 = btoa(String.fromCharCode(...payload));
 
@@ -43,16 +46,36 @@ export async function printUniversal(opts: Options) {
 
   const mode = localStorage.getItem('PRINTER_MODE') || '';
 
-// utils/printGateway.ts
 async function printWinspool(opts: Options) {
   const { url, name } = winCfg();
   if (!name) throw new Error('NO_WIN_PRINTER');
 
-  // Convert the *actual* receipt text to plain bytes for Windows.
   const enc = new TextEncoder();
-  const raw = enc.encode(
-    (opts.text || '').replace(/\r?\n/g, '\r\n') + '\r\n\r\n\r\n'
-  );
+  const autoCut =
+    typeof window !== 'undefined' &&
+    window.localStorage.getItem('PRINT_WIN_AUTOCUT') === '1';
+
+  let txt = '';
+
+  // Always reset + set character size, even for normal
+  txt += '\x1b@'; // ESC @ reset
+
+  if (opts.scale === 'large') {
+    // double height only (n = 0x01)
+    txt += '\x1d!\x01';
+  } else {
+    // normal size
+    txt += '\x1d!\x00';
+  }
+
+  // Normalize line endings and add a few blank lines
+  txt += (opts.text || '').replace(/\r?\n/g, '\r\n') + '\r\n\r\n\r\n';
+
+  if (autoCut) {
+    txt += '\x1dV\x00';   // GS V 0 → full cut
+  }
+
+  const raw = enc.encode(txt);
   const base64Plain = btoa(String.fromCharCode(...raw));
 
   const ctrl = new AbortController();

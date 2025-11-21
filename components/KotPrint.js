@@ -145,6 +145,14 @@ export default function KotPrint({ order, onClose, onPrint, autoPrint = true, ki
     const onNativeAndroid = isNativeAndroid();
     const onDesktopStandalone = isDesktopPWA();
 
+    let cols = 32;
+    try {
+    const raw = window.localStorage.getItem('PRINT_WIDTH_COLS') || '';
+    const n = Number(raw) || 0;
+    if (n > 0) cols = n;
+    } catch {}
+    const scale = cols >= 40 ? 'large' : 'normal';
+
     try {
       // 1) Android PWA: deep‑link immediately under user gesture
       if (onAndroidPWA) {
@@ -171,7 +179,8 @@ export default function KotPrint({ order, onClose, onPrint, autoPrint = true, ki
         port: Number(localStorage.getItem('PRINTER_PORT') || 9100),
         codepage: 0,
         allowPrompt: false,
-        allowSystemDialog
+        allowSystemDialog,
+        scale          
       });
       onPrint?.();
       onClose?.();
