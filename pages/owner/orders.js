@@ -899,21 +899,31 @@ const complete = async (orderId, actualPaymentMethod = null, mixedDetails = null
           </Card>
         ) : (
           ordersByStatus[ordersByStatus.mobileFilter].map(order => (
-            <OrderCard
-              key={order.id}
-              order={order}
-              statusColor={COLORS[order.status]}
-              onChangeStatus={updateStatus}
-              onComplete={finalize}
-              generatingInvoice={generatingInvoice}
-onPrintClick={() => {
-  // Dispatch global print event (will be caught by _app.js listener)
-  window.dispatchEvent(new CustomEvent('auto-print-order', { 
-  detail: { ...order, autoPrint: true, kind: 'kot' } 
-  }));
-}}
-              onCancelOrderOpen={onCancelOrderOpen}
-            />
+            // In the mobile list map
+<OrderCard
+  key={order.id}
+  order={order}
+  statusColor={COLORS[order.status]}
+  onChangeStatus={updateStatus}
+  onComplete={finalize}
+  generatingInvoice={generatingInvoice}
+  onPrintKot={() => {
+    window.dispatchEvent(
+      new CustomEvent('auto-print-order', {
+        detail: { ...order, autoPrint: true, kind: 'kot' }
+      })
+    );
+  }}
+  onPrintBill={() => {
+    window.dispatchEvent(
+      new CustomEvent('auto-print-order', {
+        detail: { ...order, autoPrint: true, kind: 'bill' }
+      })
+    );
+  }}
+  onCancelOrderOpen={onCancelOrderOpen}
+/>
+
           ))
         )}
       </div>
@@ -932,20 +942,29 @@ onPrintClick={() => {
               ) : (
                 ordersByStatus[status].map(order => (
                   <OrderCard
-                    key={order.id}
-                    order={order}
-                    statusColor={COLORS[status]}
-                    onChangeStatus={updateStatus}
-                    onComplete={finalize}
-                    generatingInvoice={generatingInvoice}
-onPrintClick={() => {
-  // Dispatch global print event (will be caught by _app.js listener)
-  window.dispatchEvent(new CustomEvent('auto-print-order', { 
-  detail: { ...order, autoPrint: true, kind: 'kot' } 
-  }));
-}}
-                    onCancelOrderOpen={onCancelOrderOpen}
-                  />
+  key={order.id}
+  order={order}
+  statusColor={COLORS[status]}
+  onChangeStatus={updateStatus}
+  onComplete={finalize}
+  generatingInvoice={generatingInvoice}
+  onPrintKot={() => {
+    window.dispatchEvent(
+      new CustomEvent('auto-print-order', {
+        detail: { ...order, autoPrint: true, kind: 'kot' }
+      })
+    );
+  }}
+  onPrintBill={() => {
+    window.dispatchEvent(
+      new CustomEvent('auto-print-order', {
+        detail: { ...order, autoPrint: true, kind: 'bill' }
+      })
+    );
+  }}
+  onCancelOrderOpen={onCancelOrderOpen}
+/>
+
                 ))
               )}
               {status === 'completed' && ordersByStatus.completed.length >= PAGE_SIZE && (
@@ -1026,22 +1045,25 @@ function getOrderTypeLabel(order) {
 }
 
 // OrderCard component (with print button)
-function OrderCard({ order, statusColor, onChangeStatus, onComplete, generatingInvoice, onPrintClick, onCancelOrderOpen }) {
+function OrderCard({
+  order,
+  statusColor,
+  onChangeStatus,
+  onComplete,
+  generatingInvoice,
+  onPrintKot,
+  onPrintBill,
+  onCancelOrderOpen
+}) {
   const items = toDisplayItems(order);
   const hasInvoice = Boolean(order?.invoice?.pdf_url);
   const total = computeOrderTotalDisplay(order);
-  
-  // Check if this is a credit order
+
   const isCreditOrder = order?.is_credit && order?.credit_customer_id;
-  
-  // Check if payment was completed online
   const pm = String(order.payment_method || '').toLowerCase();
   const isOnlinePaid = pm === 'upi' || pm === 'card' || pm === 'online';
 
-const handlePrintBill = () => {
-    window.dispatchEvent(new CustomEvent('auto-print-order', { 
-  detail: { ...order, autoPrint: true, kind: 'kot' } }));
-  };
+  // remove handlePrintBill here – use callbacks from props instead
 
   return (
     <>
@@ -1082,34 +1104,35 @@ const handlePrintBill = () => {
             }} onClick={e=>e.stopPropagation()}>
               
               {/* NEW orders */}
-              {order.status==='new' && (
-                <>
-                  <Button size="sm" onClick={() => onChangeStatus(order.id, 'in_progress')}>
-                    Start
-                  </Button>
-                   <Button
-                    size="sm"
-                    variant="danger"
-                    onClick={() => onCancelOrderOpen(order)}
-                  >
-                    Cancel
-                  </Button>
-                  <button
-                    onClick={handlePrintBill}
-                    style={{
-                      background: '#10b981',
-                      color: '#fff',
-                      border: 'none',
-                      padding: '6px 12px',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      fontSize: '12px',
-                    }}
-                  >
-                    Print KOT
-                  </button>
-                </>
-              )}
+{order.status === 'new' && (
+  <>
+    <Button size="sm" onClick={() => onChangeStatus(order.id, 'in_progress')}>
+      Start
+    </Button>
+    <Button
+      size="sm"
+      variant="danger"
+      onClick={() => onCancelOrderOpen(order)}
+    >
+      Cancel
+    </Button>
+    <button
+      onClick={() => onPrintKot && onPrintKot(order)}
+      style={{
+        background: '#10b981',
+        color: '#fff',
+        border: 'none',
+        padding: '6px 12px',
+        borderRadius: '4px',
+        cursor: 'pointer',
+        fontSize: '12px',
+      }}
+    >
+      Print KOT
+    </button>
+  </>
+)}
+
 
               {/* IN_PROGRESS orders */}
               {order.status==='in_progress' && (
@@ -1141,30 +1164,34 @@ const handlePrintBill = () => {
   	      </Button>
 	      )}
 
-              {/* COMPLETED orders - show Bill + Print KOT buttons */}
-              {order.status==='completed' && (
-                <>
-                  {hasInvoice && (
-                    <Button size="sm" onClick={()=>window.open(order.invoice.pdf_url,'_blank')}>
-                      Invoice
-                    </Button>
-                  )}
-                  <button
-                    onClick={handlePrintBill}
-                    style={{
-                      background: '#10b981',
-                      color: '#fff',
-                      border: 'none',
-                      padding: '6px 12px',
-                      borderRadius: '4px',
-                      cursor: 'pointer',
-                      fontSize: '12px',
-                    }}
-                  >
-                    Print Bill
-                  </button>
-                </>
-              )}
+              {/* COMPLETED orders */}
+{order.status === 'completed' && (
+  <>
+    {hasInvoice && (
+      <Button
+        size="sm"
+        onClick={() => window.open(order.invoice.pdf_url, '_blank')}
+      >
+        Invoice
+      </Button>
+    )}
+    <button
+      onClick={() => onPrintBill && onPrintBill(order)}
+      style={{
+        background: '#10b981',
+        color: '#fff',
+        border: 'none',
+        padding: '6px 12px',
+        borderRadius: '4px',
+        cursor: 'pointer',
+        fontSize: '12px',
+      }}
+    >
+      Print Bill
+    </button>
+  </>
+)}
+
             </div>
           </div>
 

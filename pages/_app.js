@@ -139,25 +139,26 @@ function GlobalSubscriptionGate({ children }) {
 
 // ── print orchestrator (under providers) ─────────────────────────────────────
 function AppPrintOrchestrator() {
-  const [orderToPrint, setOrderToPrint] = useState(null)
-  usePrintService(true)
+  const [orderToPrint, setOrderToPrint] = useState(null);
+  usePrintService(true);
 
   useEffect(() => {
-    const onAutoPrint = e => setOrderToPrint(e.detail)
-    window.addEventListener('auto-print-order', onAutoPrint)
-    return () => window.removeEventListener('auto-print-order', onAutoPrint)
-  }, [])
+    const onAutoPrint = e => setOrderToPrint(e.detail);
+    window.addEventListener('auto-print-order', onAutoPrint);
+    return () => window.removeEventListener('auto-print-order', onAutoPrint);
+  }, []);
 
-  if (!orderToPrint) return null
+  if (!orderToPrint) return null;
   return (
     <KotPrint
       key={orderToPrint.id}
       order={orderToPrint}
-      autoPrint={true}
+      autoPrint={orderToPrint.autoPrint ?? true}
+      kind={orderToPrint.kind || 'bill'}
       onClose={() => setOrderToPrint(null)}
       onPrint={() => setOrderToPrint(null)}
     />
-  )
+  );
 }
 
 // ── MyApp ────────────────────────────────────────────────────────────────────

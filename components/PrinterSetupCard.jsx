@@ -217,9 +217,7 @@ export default function PrinterSetupCard() {
               onChange={e => setPostUrl(e.target.value)}
               style={{ flex: 1, minWidth: 180, padding: 6, fontSize: 13 }}
             />
-            <button onClick={saveWired} style={{ padding: '6px 10px', fontSize: 13 }}>
-              Save
-            </button>
+
             <button onClick={selectUsbWebUSB} style={{ padding: '6px 10px', fontSize: 13 }}>
               Select USB (WebUSB)
             </button>
@@ -235,7 +233,7 @@ export default function PrinterSetupCard() {
   </label>
 </div>
 
-<div style={{ display:'flex', flexWrap:'wrap', gap:8, alignItems:'center', fontSize:13 }}>
+<div style={{ display:'flex', flexWrap:'wrap', gap:8, alignItems:'center', fontSize:16 }}>
   <span>Paper width:</span>
   <label style={{ display:'flex', alignItems:'center', gap:4 }}>
     <input
@@ -265,6 +263,9 @@ export default function PrinterSetupCard() {
 >
   Download CafeQR Print Hub (Windows)
 </a>
+            <button onClick={saveWired} style={{ padding: '6px 10px', fontSize: 13 }}>
+              Save
+            </button>
         </div>
 
         {/* Wireless via Bluetooth serial */}

@@ -96,6 +96,95 @@ function getReceiptWidth(restaurantProfile) {
   return Math.max(20, Math.min(64, cols));     // clamp to a sane range
 }
 
+export function buildKotText(order, restaurantProfile) {
+  try {
+    const items = toDisplayItems(order);               // same helper you already use
+    const restaurantName = String(
+      restaurantProfile?.restaurant_name ||
+      order?.restaurant_name ||
+      'RESTAURANT'
+    ).toUpperCase();
+
+    const addressParts = [
+      restaurantProfile?.shipping_address_line1,
+      restaurantProfile?.shipping_address_line2,
+      restaurantProfile?.shipping_city,
+      restaurantProfile?.shipping_state,
+      restaurantProfile?.shipping_pincode
+    ].filter(Boolean);
+    const address = addressParts.length
+      ? addressParts.join(', ')
+      : (order?.restaurant_address || '');
+
+    const phone =
+      restaurantProfile?.shipping_phone ||
+      restaurantProfile?.phone ||
+      order?.restaurant_phone ||
+      '';
+
+    const orderId = order?.id?.slice(0, 8)?.toUpperCase() || 'N/A';
+    const orderType = getOrderTypeLabel(order);
+    const tableLabel =
+      order?.order_type === 'counter' && order?.table_number
+        ? `Table ${order.table_number}`
+        : orderType;
+
+    const orderDate = new Date(order.created_at);
+    const dateStr = orderDate.toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+    const timeStr = orderDate.toLocaleTimeString('en-IN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+
+    const W = getReceiptWidth(restaurantProfile);
+    const dashes = () => '-'.repeat(W);
+    const lines = [];
+
+    // === HEADER ===
+    lines.push(center(restaurantName, W));
+    wrapText(address, W).forEach(l => lines.push(center(l, W)));
+    if (phone) lines.push(center(`Contact No.: ${phone}`, W));
+    lines.push(dashes());
+
+    // === META: clearly mark as KOT ===
+    lines.push(center('*** KITCHEN ORDER TICKET ***', W));
+    lines.push(`${dateStr} ${timeStr}`);
+    lines.push(`Order: #${orderId}`);
+    lines.push(`For: ${tableLabel}`);
+    lines.push(dashes());
+
+    // === ITEMS: name + qty only ===
+    lines.push('ITEM                     QTY');  // simple KOT header
+    items.forEach(item => {
+      const nameLines = wrapText(item.name || 'Item', W - 5);
+      if (!nameLines.length) return;
+      const qty = String(item.quantity ?? 1).padStart(3);
+
+      // first line: name + qty at end
+      lines.push(nameLines[0].padEnd(W - 4) + ' ' + qty);
+
+      // extra lines: just the continued name
+      for (let i = 1; i < nameLines.length; i++) {
+        lines.push(nameLines[i]);
+      }
+    });
+
+    lines.push(dashes());
+    lines.push(center('*** SEND TO KITCHEN ***', W));
+    lines.push('');
+
+    return lines.join('\n');
+  } catch (e) {
+    console.error(e);
+    return 'PRINT ERROR';
+  }
+}
+
 export async function downloadTextAndShare(order, bill, restaurantProfile) {
   try {
     const items = toDisplayItems(order);

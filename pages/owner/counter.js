@@ -5,7 +5,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRequireAuth } from '../../lib/useRequireAuth';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { getSupabase } from '../../services/supabase';
-import KotPrint from '../../components/KotPrint';
 
 // -------------------------------
 // Inline Payment Confirm Dialog
@@ -171,7 +170,6 @@ export default function CounterSale() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
 
-  const [printOrder, setPrintOrder] = useState(null);
   
 
   // NEW: Order mode toggle
@@ -600,19 +598,24 @@ fetch('/api/invoices/generate', {
 });
 
 
-     const fullOrder = result.order_for_print || null;
+const fullOrder = result.order_for_print || null;
 
- const orderForPrint = fullOrder || {
-   id: result.order_id,
-   restaurant_id: restaurantId,
-   order_type,
-   table_number,
-   items,
-   total_inc_tax: cartTotals.totalInc,
-   created_at: new Date().toISOString()
- };
+const orderForPrint = fullOrder || {
+  id: result.order_id,
+  restaurant_id: restaurantId,
+  order_type,
+  table_number,
+  items,
+  total_inc_tax: cartTotals.totalInc,
+  created_at: new Date().toISOString()
+};
 
- setPrintOrder(orderForPrint);
+// Global full‑bill print when we *settle now* (status = completed)
+window.dispatchEvent(
+  new CustomEvent('auto-print-order', {
+    detail: { ...orderForPrint, autoPrint: true, kind: 'bill' }
+  })
+);
 
 
     setCart([]); setCustomerName(''); setCustomerPhone(''); setPaymentMethod('cash');
@@ -659,10 +662,21 @@ fetch('/api/invoices/generate', {
       try { const j = await res.json(); if (j?.error) msg += ': ' + j.error; } catch {}
       throw new Error(msg);
     }
-    const result = await res.json();
 
-    const fullOrder = await fetchFullOrder(result.order_id);
-    
+const result = await res.json();
+
+const fullOrder = await fetchFullOrder(result.order_id);
+
+// Build a minimal fallback if needed
+const orderForPrint = fullOrder || {
+  id: result.order_id,
+  restaurant_id: restaurantId,
+  order_type,
+  table_number,
+  items,
+  created_at: new Date().toISOString()
+};
+
     setCart([]); setCustomerName(''); setCustomerPhone(''); setPaymentMethod('cash');
     setOrderSelect(''); setIsCreditSale(false); setSelectedCreditCustomerId(''); setCreditCustomerBalance(0);
     setDrawerOpen(false);
@@ -972,16 +986,6 @@ fetch('/api/invoices/generate', {
 
 
 
-      {/* KOT print modal */}
-      {printOrder && (
-        <KotPrint
-          order={printOrder}
-          onClose={() => setPrintOrder(null)}
-          onPrint={() => setPrintOrder(null)}
-          autoPrint
-          kind="bill"
-        />
-      )}
-    </div>
+          </div>
   );
 }

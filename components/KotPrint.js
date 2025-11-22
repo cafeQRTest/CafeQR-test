@@ -1,6 +1,6 @@
 // components/KotPrint.js
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { buildReceiptText, downloadTextAndShare } from '../utils/printUtils';
+import { buildReceiptText, buildKotText, downloadTextAndShare } from '../utils/printUtils';
 import { getSupabase } from '../services/supabase';
 import { printUniversal } from '../utils/printGateway';
 import { openThermerWithText, openRawBTWithText } from '../utils/thermer';
@@ -140,7 +140,10 @@ export default function KotPrint({ order, onClose, onPrint, autoPrint = true, ki
     if (lockRef.current) return;
     lockRef.current = true;
 
-    const text = buildReceiptText(order, bill, restaurantProfile);
+const text =
+  kind === 'kot'
+    ? buildKotText(order, restaurantProfile)
+    : buildReceiptText(order, bill, restaurantProfile);
     const onAndroidPWA = isAndroidPWA();
     const onNativeAndroid = isNativeAndroid();
     const onDesktopStandalone = isDesktopPWA();

@@ -35,7 +35,8 @@ export default async function handler(req, res) {
       customer_phone = null,
       is_credit = false,
       credit_customer_id = null,
-      original_payment_method = null
+      original_payment_method = null,
+      status: incomingStatus = null 
     } = req.body;
 
     if (!restaurant_id || !Array.isArray(items) || items.length === 0) {
@@ -173,6 +174,14 @@ export default async function handler(req, res) {
       };
     }
 
+// Decide final status based on client + defaults
+let finalStatus = incomingStatus;
+if (!finalStatus) {
+  // Customer dashboard & Send-to-Kitchen default to "new"
+  finalStatus = 'new';
+}
+
+
     // Insert order
     const { data: orderData, error: orderError } = await supabase
       .from('orders')
@@ -181,7 +190,7 @@ export default async function handler(req, res) {
           restaurant_id,
           table_number: table_number || null,
           order_type,
-          status: 'new',
+          status: finalStatus,  
           payment_method: processedPaymentMethod,
           payment_status,
           special_instructions,
@@ -331,7 +340,7 @@ export default async function handler(req, res) {
     console.log('[API CREATE ORDER] Order created successfully:', {
       orderId: order.id,
       restaurantId: restaurant_id,
-      status: 'new',
+      status: finalStatus,
       timestamp: new Date().toISOString()
     });
 
