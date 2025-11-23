@@ -13,11 +13,13 @@ type Options = {
   allowPrompt?: boolean;
   allowSystemDialog?: boolean;
   scale?: 'normal' | 'large';      // ← NEW
+  jobKind?: 'bill' | 'kot';   // NEW: route to correct printer
 };
 
 let inFlight = false;
 
 export async function printUniversal(opts: Options) {
+  const jobKind: 'bill' | 'kot' = opts.jobKind === 'kot' ? 'kot' : 'bill';
   // prevent concurrent prints from racing the port
   if (inFlight) return { via: 'locked' as const };
   inFlight = true;
@@ -33,21 +35,33 @@ export async function printUniversal(opts: Options) {
   const base64 = btoa(String.fromCharCode(...payload));
 
   // --- Windows helper config (PRINT_WIN_*) ---
-  const winCfg = () => ({
-    url:
-      localStorage.getItem('PRINT_WIN_URL') ||
-      'http://127.0.0.1:3333/printRaw',
-    name: localStorage.getItem('PRINT_WIN_PRINTER_NAME') || ''
-  });
+  const winCfg = (kind: 'bill' | 'kot') => {
+  const url =
+    localStorage.getItem('PRINT_WIN_URL') ||
+    'http://127.0.0.1:3333/printRaw';
 
-  const hasWinHelper =
-    !!localStorage.getItem('PRINT_WIN_URL') &&
-    !!localStorage.getItem('PRINT_WIN_PRINTER_NAME');
+  const bill = localStorage.getItem('PRINT_WIN_PRINTER_NAME') || '';
+  const kot  = localStorage.getItem('PRINT_WIN_PRINTER_NAME_KOT') || '';
+
+  // For KOT: prefer dedicated kitchen printer, fall back to bill printer.
+  // For bill: prefer bill printer, fall back to KOT printer.
+  const name =
+    kind === 'kot'
+      ? (kot || bill)
+      : (bill || kot);
+
+  return { url, name };
+};
+
+const hasWinHelper =
+  !!localStorage.getItem('PRINT_WIN_URL') &&
+  (!!localStorage.getItem('PRINT_WIN_PRINTER_NAME') ||
+   !!localStorage.getItem('PRINT_WIN_PRINTER_NAME_KOT'));
 
   const mode = localStorage.getItem('PRINTER_MODE') || '';
 
 async function printWinspool(opts: Options) {
-  const { url, name } = winCfg();
+  const { url, name } = winCfg(opts.jobKind === 'kot' ? 'kot' : 'bill');
   if (!name) throw new Error('NO_WIN_PRINTER');
 
   const enc = new TextEncoder();
@@ -105,31 +119,43 @@ async function printWinspool(opts: Options) {
   try {
     // 1) Native Android → use DevicePrinter (no web fallbacks)
     if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android') {
-      // @ts-ignore
-      const { DevicePrinter } = (window as any).Capacitor.Plugins;
-      await DevicePrinter.ensurePermissions();
+  // @ts-ignore
+  const { DevicePrinter } = (window as any).Capacitor.Plugins;
+  await DevicePrinter.ensurePermissions();
 
-      let addr = localStorage.getItem('BT_PRINTER_ADDR') || undefined;
-      if (!addr) {
-        const pick = await DevicePrinter.pickPrinter();
-        addr = pick?.address;
-        if (!addr) throw new Error('No printer selected');
-        try {
-          await DevicePrinter.pairDevice({ address: addr });
-        } catch {}
-        localStorage.setItem('BT_PRINTER_ADDR', addr);
-        if (pick?.name) localStorage.setItem('BT_PRINTER_NAME_HINT', pick.name);
-      }
+  const jobKind: 'bill' | 'kot' = opts.jobKind === 'kot' ? 'kot' : 'bill';
 
-      const nameHint =
-        localStorage.getItem('BT_PRINTER_NAME_HINT') || 'pos';
-      const res = await DevicePrinter.printRaw({
-        base64,
-        address: addr,
-        nameContains: nameHint
-      });
-      return { via: res?.via || 'android-pos' };
-    }
+  const addrKey     = jobKind === 'kot' ? 'BT_PRINTER_ADDR_KOT'      : 'BT_PRINTER_ADDR';
+  const nameHintKey = jobKind === 'kot' ? 'BT_PRINTER_NAME_HINT_KOT' : 'BT_PRINTER_NAME_HINT';
+
+  // Prefer dedicated KOT/bill address; fall back to the other if missing
+  let addr =
+    localStorage.getItem(addrKey) ||
+    localStorage.getItem(jobKind === 'kot' ? 'BT_PRINTER_ADDR' : 'BT_PRINTER_ADDR_KOT') ||
+    undefined;
+
+  if (!addr) {
+    const pick = await DevicePrinter.pickPrinter();
+    addr = pick?.address;
+    if (!addr) throw new Error('No printer selected');
+    try { await DevicePrinter.pairDevice({ address: addr }); } catch {}
+    localStorage.setItem(addrKey, addr);
+    if (pick?.name) localStorage.setItem(nameHintKey, pick.name);
+  }
+
+  const nameHint =
+    localStorage.getItem(nameHintKey) ||
+    localStorage.getItem(jobKind === 'kot' ? 'BT_PRINTER_NAME_HINT' : 'BT_PRINTER_NAME_HINT_KOT') ||
+    'pos';
+
+  const res = await DevicePrinter.printRaw({
+    base64,
+    address: addr,
+    nameContains: nameHint
+  });
+  return { via: res?.via || 'android-pos' };
+}
+
 
     const n: any = navigator as any;
 

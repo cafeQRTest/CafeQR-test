@@ -183,7 +183,9 @@ const text =
         codepage: 0,
         allowPrompt: false,
         allowSystemDialog,
-        scale          
+        scale,
+        jobKind: kind === 'kot' ? 'kot' : 'bill'   // NEW
+         
       });
       onPrint?.();
       onClose?.();

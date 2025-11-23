@@ -2,47 +2,65 @@
 import React, { useEffect, useState } from 'react';
 import { printUniversal } from '../utils/printGateway';
 
-
-
 export default function PrinterSetupCard() {
   // Wired (Windows helper)
   const [listUrl, setListUrl] = useState(
-    localStorage.getItem('PRINT_WIN_LIST_URL') || 'http://127.0.0.1:3333/printers'
+    typeof window !== 'undefined'
+      ? localStorage.getItem('PRINT_WIN_LIST_URL') || 'http://127.0.0.1:3333/printers'
+      : 'http://127.0.0.1:3333/printers'
   );
   const [postUrl, setPostUrl] = useState(
-    localStorage.getItem('PRINT_WIN_URL') || 'http://127.0.0.1:3333/printRaw'
+    typeof window !== 'undefined'
+      ? localStorage.getItem('PRINT_WIN_URL') || 'http://127.0.0.1:3333/printRaw'
+      : 'http://127.0.0.1:3333/printRaw'
   );
   const [printers, setPrinters] = useState([]);
-  const [pick, setPick] = useState(localStorage.getItem('PRINT_WIN_PRINTER_NAME') || '');
+
+  // Separate picks for Bill vs KOT
+  const [pickBill, setPickBill] = useState(
+    typeof window !== 'undefined'
+      ? localStorage.getItem('PRINT_WIN_PRINTER_NAME') || ''
+      : ''
+  );
+  const [pickKot, setPickKot] = useState(
+    typeof window !== 'undefined'
+      ? localStorage.getItem('PRINT_WIN_PRINTER_NAME_KOT') || ''
+      : ''
+  );
+
   const [msg, setMsg] = useState('');
   const WIN_HELPER_URL = '/desktop/Windows/CafeQR-PrintHub-Win.zip';
-  // New: receipt width in characters
+
+  // Receipt width + autocut
   const [cols, setCols] = useState(() => {
-  if (typeof window === 'undefined') return '32';
-  return localStorage.getItem('PRINT_WIDTH_COLS') || '32';
+    if (typeof window === 'undefined') return '32';
+    return localStorage.getItem('PRINT_WIDTH_COLS') || '32';
   });
   const [autoCut, setAutoCut] = useState(() => {
-  if (typeof window === 'undefined') return false;
-  return localStorage.getItem('PRINT_WIN_AUTOCUT') === '1';
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('PRINT_WIN_AUTOCUT') === '1';
   });
 
-
-  // --- existing handlers (unchanged behaviour) ------------------------------
+  // --- handlers -------------------------------------------------------------
 
   async function selectBluetoothSerial() {
     try {
-      if (!('serial' in navigator)) {
+      const nav = typeof navigator !== 'undefined' ? navigator : null;
+      if (!nav || !('serial' in nav)) {
         setMsg('✗ Web Serial not supported in this browser');
         return;
       }
       // One-time chooser – must be called from a click
-      await navigator.serial.requestPort({});
+      // @ts-ignore (safe in JS, TS hint only)
+      await nav.serial.requestPort({});
       localStorage.setItem('PRINTER_MODE', 'bt-serial');
       localStorage.setItem('PRINTER_READY', '1');
+      // clear Windows helper config when switching modes
       localStorage.removeItem('PRINT_WIN_PRINTER_NAME');
+      localStorage.removeItem('PRINT_WIN_PRINTER_NAME_KOT');
       localStorage.removeItem('PRINT_WIN_URL');
       setMsg('✓ Bluetooth/Serial saved for silent printing');
-    } catch {
+    } catch (err) {
       setMsg('✗ Selection cancelled');
     }
   }
@@ -50,24 +68,30 @@ export default function PrinterSetupCard() {
   const forgetBtPrinter = () => {
     localStorage.removeItem('BT_PRINTER_ADDR');
     localStorage.removeItem('BT_PRINTER_NAME_HINT');
+    localStorage.removeItem('BT_PRINTER_ADDR_KOT');
+    localStorage.removeItem('BT_PRINTER_NAME_HINT_KOT');
     setMsg(
-      'Saved Bluetooth printer cleared. Next Android print will ask you to select again.'
+      'Saved Bluetooth printers cleared. Next Android bill/KOT print will ask you to select again.'
     );
   };
 
   async function selectUsbWebUSB() {
     try {
-      if (navigator && 'usb' in navigator) {
-        await navigator.usb.requestDevice({ filters: [] });
+      const nav = typeof navigator !== 'undefined' ? navigator : null;
+      if (nav && 'usb' in nav) {
+        // one‑time chooser
+        // @ts-ignore
+        await nav.usb.requestDevice({ filters: [] });
         localStorage.setItem('PRINTER_MODE', 'webusb');
         localStorage.setItem('PRINTER_READY', '1');
         localStorage.removeItem('PRINT_WIN_PRINTER_NAME');
+        localStorage.removeItem('PRINT_WIN_PRINTER_NAME_KOT');
         localStorage.removeItem('PRINT_WIN_URL');
         setMsg('✓ USB printer saved for silent printing');
         return;
       }
       setMsg('✗ WebUSB not supported in this browser');
-    } catch {
+    } catch (err) {
       setMsg('✗ Selection cancelled');
     }
   }
@@ -78,9 +102,10 @@ export default function PrinterSetupCard() {
       const names = await r.json();
       const arr = Array.isArray(names) ? names : [];
       setPrinters(arr);
-      if (!pick && arr.length) setPick(arr[0]);
+      // If no bill printer saved yet, default to the first queue
+      if (!pickBill && arr.length) setPickBill(arr[0]);
       setMsg(`Found ${arr.length} printers`);
-    } catch {
+    } catch (err) {
       setMsg(
         'Cannot reach the local Print Hub. Start the helper on this Windows machine and try again.'
       );
@@ -90,29 +115,51 @@ export default function PrinterSetupCard() {
   const saveWired = () => {
     localStorage.setItem('PRINT_WIN_LIST_URL', listUrl.trim());
     localStorage.setItem('PRINT_WIN_URL', postUrl.trim());
-    localStorage.setItem('PRINT_WIN_PRINTER_NAME', (pick || '').trim());
+    localStorage.setItem('PRINT_WIN_PRINTER_NAME', (pickBill || '').trim());
+    localStorage.setItem('PRINT_WIN_PRINTER_NAME_KOT', (pickKot || '').trim());
     localStorage.setItem('PRINTER_MODE', 'winspool');
     localStorage.setItem('PRINTER_READY', '1');
-    localStorage.setItem('PRINT_WIN_AUTOCUT', autoCut ? '1' : '0');  // ← new
+    localStorage.setItem('PRINT_WIN_AUTOCUT', autoCut ? '1' : '0');
     localStorage.setItem('PRINT_WIDTH_COLS', cols);
-    setMsg(pick ? `Saved: ${pick}` : 'Pick a printer first');
+    setMsg(
+      pickBill
+        ? `Saved bill printer${pickKot ? ' and kitchen KOT printer' : ''}.`
+        : 'Pick at least a bill printer queue first.'
+    );
   };
 
-  const testClientSide = async () => {
+  // Test both printers through the same pipeline
+  const testBillPrinter = async () => {
     try {
       const res = await printUniversal({
-        text: '*** TEST PRINT ***\nCafe QR\n',
+        text: '*** TEST BILL PRINTER ***\nCafe QR\n',
         allowPrompt: true,
-        allowSystemDialog: false
+        allowSystemDialog: false,
+        jobKind: 'bill'
       });
-      setMsg(`✓ Test via ${res?.via || 'unknown'}`);
+      setMsg(`✓ Bill printer test via ${res && res.via ? res.via : 'unknown'}`);
     } catch (e) {
-      setMsg(`✗ Test failed: ${e?.message || e}`);
+      setMsg(`✗ Bill printer test failed: ${e && e.message ? e.message : e}`);
+    }
+  };
+
+  const testKotPrinter = async () => {
+    try {
+      const res = await printUniversal({
+        text: '*** TEST KOT PRINTER ***\nKitchen Ticket\n',
+        allowPrompt: true,
+        allowSystemDialog: false,
+        jobKind: 'kot'
+      });
+      setMsg(`✓ KOT printer test via ${res && res.via ? res.via : 'unknown'}`);
+    } catch (e) {
+      setMsg(`✗ KOT printer test failed: ${e && e.message ? e.message : e}`);
     }
   };
 
   useEffect(() => {
     detect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // --- layout ---------------------------------------------------------------
@@ -127,7 +174,6 @@ export default function PrinterSetupCard() {
         boxSizing: 'border-box'
       }}
     >
-
       {/* Windows section */}
       <div
         style={{
@@ -141,7 +187,8 @@ export default function PrinterSetupCard() {
       >
         <h4 style={{ margin: 0 }}>Windows (Chrome / PWA)</h4>
         <p style={{ margin: 0, fontSize: 13, color: '#4b5563' }}>
-          Configure how this Windows device prints silently to your thermal printer.
+          Configure how this Windows device prints silently to your thermal printers.
+          You can use one printer for both or dedicate a separate KOT printer for the kitchen.
         </p>
 
         {/* Wired / USB / Network via helper */}
@@ -158,45 +205,29 @@ export default function PrinterSetupCard() {
           <div style={{ fontWeight: 600, fontSize: 13 }}>Wired (USB / Windows helper)</div>
           <p style={{ margin: 0, fontSize: 12, color: '#6b7280' }}>
             Use the Cafe QR Print Hub on this PC to send raw data to any installed printer
-            (USB, Bluetooth, or network). Start the helper, then load printers and save a
-            queue.
+            (USB, Bluetooth, or network). Start the helper, then load printers and save queues.
           </p>
 
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: 8
-            }}
-          >
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             <input
               value={listUrl}
               onChange={e => setListUrl(e.target.value)}
-              style={{
-                flex: 1,
-                minWidth: 180,
-                padding: 6,
-                fontSize: 13
-              }}
+              style={{ flex: 1, minWidth: 180, padding: 6, fontSize: 13 }}
             />
             <button onClick={detect} style={{ padding: '6px 10px', fontSize: 13 }}>
               Load printers
             </button>
           </div>
 
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: 8
-            }}
-          >
+          {/* Bill printer select */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <label style={{ fontSize: 13, fontWeight: 500 }}>Bill printer (Counter)</label>
             <select
-              value={pick}
-              onChange={e => setPick(e.target.value)}
+              value={pickBill}
+              onChange={e => setPickBill(e.target.value)}
               style={{ flex: 1, minWidth: 180, padding: 6, fontSize: 13 }}
             >
-              <option value="">— Select printer queue —</option>
+              <option value="">— Select bill printer —</option>
               {printers.map(n => (
                 <option key={n} value={n}>
                   {n}
@@ -205,67 +236,91 @@ export default function PrinterSetupCard() {
             </select>
           </div>
 
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: 8
-            }}
-          >
+          {/* KOT printer select */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <label style={{ fontSize: 13, fontWeight: 500 }}>
+              Kitchen KOT printer (optional)
+            </label>
+            <select
+              value={pickKot}
+              onChange={e => setPickKot(e.target.value)}
+              style={{ flex: 1, minWidth: 180, padding: 6, fontSize: 13 }}
+            >
+              <option value="">— Use bill printer for KOT —</option>
+              {printers.map(n => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             <input
               value={postUrl}
               onChange={e => setPostUrl(e.target.value)}
               style={{ flex: 1, minWidth: 180, padding: 6, fontSize: 13 }}
             />
-
             <button onClick={selectUsbWebUSB} style={{ padding: '6px 10px', fontSize: 13 }}>
               Select USB (WebUSB)
             </button>
           </div>
-<div style={{ display:'flex', alignItems:'center', gap:8, fontSize:16 }}>
-  <label style={{ display:'flex', alignItems:'center', gap:6 }}>
-    <input
-      type="checkbox"
-      checked={autoCut}
-      onChange={e => setAutoCut(e.target.checked)}
-    />
-    Enable auto‑cut (ESC/POS) on this printer
-  </label>
-</div>
 
-<div style={{ display:'flex', flexWrap:'wrap', gap:8, alignItems:'center', fontSize:16 }}>
-  <span>Paper width:</span>
-  <label style={{ display:'flex', alignItems:'center', gap:4 }}>
-    <input
-      type="radio"
-      value="32"
-      checked={cols === '32'}
-      onChange={e => setCols(e.target.value)}
-    />
-    2" / 58 mm (32 cols)
-  </label>
-  <label style={{ display:'flex', alignItems:'center', gap:4 }}>
-    <input
-      type="radio"
-      value="42"
-      checked={cols === '42'}
-      onChange={e => setCols(e.target.value)}
-    />
-    3" / 80 mm (≈42 cols)
-  </label>
-</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input
+                type="checkbox"
+                checked={autoCut}
+                onChange={e => setAutoCut(e.target.checked)}
+              />
+              Enable auto‑cut (ESC/POS) on this printer
+            </label>
+          </div>
 
-<a
-  href={WIN_HELPER_URL}
-  download="CafeQR-PrintHub-Win.zip"
-  className="btn btn-primary"
-  style={{ padding: '6px 10px', fontSize: 13 }}
->
-  Download CafeQR Print Hub (Windows)
-</a>
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 8,
+              alignItems: 'center',
+              fontSize: 13
+            }}
+          >
+            <span>Paper width:</span>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <input
+                type="radio"
+                value="32"
+                checked={cols === '32'}
+                onChange={e => setCols(e.target.value)}
+              />
+              2" / 58 mm (32 cols)
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <input
+                type="radio"
+                value="42"
+                checked={cols === '42'}
+                onChange={e => setCols(e.target.value)}
+              />
+              3" / 80 mm (≈42 cols)
+            </label>
+          </div>
+
+          <a
+            href={WIN_HELPER_URL}
+            download="CafeQR-PrintHub-Win.zip"
+            className="btn btn-primary"
+            style={{ padding: '6px 10px', fontSize: 13 }}
+          >
+            Download CafeQR Print Hub (Windows)
+          </a>
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
             <button onClick={saveWired} style={{ padding: '6px 10px', fontSize: 13 }}>
               Save
             </button>
+          </div>
         </div>
 
         {/* Wireless via Bluetooth serial */}
@@ -284,13 +339,7 @@ export default function PrinterSetupCard() {
             If your printer appears as a Bluetooth COM port on Windows, grant this site
             access once using Web Serial.
           </p>
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: 8
-            }}
-          >
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             <button
               onClick={selectBluetoothSerial}
               style={{ padding: '6px 10px', fontSize: 13, flexShrink: 0 }}
@@ -330,13 +379,7 @@ export default function PrinterSetupCard() {
             On Android Chrome / PWA, Cafe QR can forward receipts to Thermer or RawBT for
             Bluetooth printing.
           </p>
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: 8
-            }}
-          >
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             <button
               onClick={() => {
                 localStorage.setItem('PRINTER_MODE', 'bt-android');
@@ -363,24 +406,18 @@ export default function PrinterSetupCard() {
         >
           <div style={{ fontWeight: 600, fontSize: 13 }}>Android Cafe QR app</div>
           <p style={{ margin: 0, fontSize: 12, color: '#6b7280' }}>
-            The APK uses the built‑in Bluetooth driver. If you change printers on this
-            device, clear the saved address so the app asks you to pick again.
+            The APK uses the built‑in Bluetooth driver. Configure separate bill and kitchen
+            printers by printing once from each kind of ticket (bill vs KOT) on this device.
           </p>
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: 8
-            }}
-          >
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             <button onClick={forgetBtPrinter} style={{ padding: '6px 10px', fontSize: 13 }}>
-              Forget Bluetooth printer
+              Forget Bluetooth printers
             </button>
           </div>
         </div>
       </div>
 
-      {/* Bottom row: test + status */}
+      {/* Bottom row: separate tests + status */}
       <div
         style={{
           marginTop: 16,
@@ -389,13 +426,22 @@ export default function PrinterSetupCard() {
           gap: 8
         }}
       >
-        <button onClick={testClientSide} style={{ padding: '6px 10px', fontSize: 13 }}>
-          Test print
+        <button onClick={testBillPrinter} style={{ padding: '6px 10px', fontSize: 13 }}>
+          Test bill printer
+        </button>
+        <button onClick={testKotPrinter} style={{ padding: '6px 10px', fontSize: 13 }}>
+          Test KOT printer
         </button>
       </div>
 
       {msg && (
-        <div style={{ marginTop: 8, fontSize: 13, color: msg.startsWith('✗') ? '#b91c1c' : '#166534' }}>
+        <div
+          style={{
+            marginTop: 8,
+            fontSize: 13,
+            color: msg.startsWith('✗') ? '#b91c1c' : '#166534'
+          }}
+        >
           {msg}
         </div>
       )}
