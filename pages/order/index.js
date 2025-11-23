@@ -32,6 +32,44 @@ export default function OrderPage() {
   const [justAddedItem, setJustAddedItem] = useState('')
   const addToastTimeoutRef = useRef(null)
 
+  // 🔧 Fix for "data only comes after clearing browser cache" on QR flows.
+  // When a customer opens the QR menu, aggressively clear any old
+  // service‑worker caches once. This prevents stale PWA caches from
+  // serving outdated data and makes the behaviour equivalent to the
+  // manual "Clear site data" workaround.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (!('serviceWorker' in navigator)) return
+
+    ;(async () => {
+      try {
+        // 1. Unregister any old app-wide service workers (keep FCM worker if present)
+        const regs = await navigator.serviceWorker.getRegistrations()
+        await Promise.all(
+          regs.map(async (reg) => {
+            const scriptUrl = reg.active?.scriptURL || reg.installing?.scriptURL || reg.waiting?.scriptURL || ''
+            // Keep the dedicated Firebase messaging SW (used for owner alerts)
+            if (scriptUrl.includes('firebase-messaging-sw.js')) return
+            try {
+              await reg.unregister()
+            } catch {
+              // ignore – better to fail silently than block the page
+            }
+          })
+        )
+
+        // 2. Clear all HTTP caches for this origin (same as clearing site data caches)
+        if (window.caches) {
+          const keys = await caches.keys()
+          await Promise.all(keys.map((key) => caches.delete(key)))
+        }
+      } catch (e) {
+        // Failing to clean up should never break ordering
+        console.warn('[order] cache cleanup skipped:', e?.message || e)
+      }
+    })()
+  }, [])
+
   useEffect(() => {
     if (!restaurantId || !tableNumber) return
     setCartLoaded(false)
