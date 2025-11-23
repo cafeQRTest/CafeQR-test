@@ -164,6 +164,8 @@ export default function CounterSale() {
   const [selectedCreditCustomerId, setSelectedCreditCustomerId] = useState('');
   const [creditCustomerBalance, setCreditCustomerBalance] = useState(0);
   const [showNewCreditCustomer, setShowNewCreditCustomer] = useState(false);
+  const [creditFeatureEnabled, setCreditFeatureEnabled] = useState(false);
+
 
   const [orderSelect, setOrderSelect] = useState('');
   const [processing, setProcessing] = useState(false);
@@ -286,21 +288,37 @@ export default function CounterSale() {
 
         // Pull tax settings for client calc
         const { data: profile, error: profErr } = await supabase
-          .from('restaurant_profiles')
-          .select('tables_count,gst_enabled,default_tax_rate,prices_include_tax')
-          .eq('restaurant_id', restaurantId)
-          .limit(1)
-          .maybeSingle();
-        if (profErr) throw profErr;
+  .from('restaurant_profiles')
+  .select(
+    'tables_count,gst_enabled,default_tax_rate,prices_include_tax,features_credit_enabled'
+  )
+  .eq('restaurant_id', restaurantId)
+  .limit(1)
+  .maybeSingle();
 
-        const count = profile?.tables_count || 0;
-        setTables(Array.from({ length: count }, (_, i) => String(i + 1)));
+if (profErr) throw profErr;
 
-        setProfileTax({
-          gst_enabled: !!profile?.gst_enabled,
-          default_tax_rate: Number(profile?.default_tax_rate ?? 0),
-          prices_include_tax: !!profile?.prices_include_tax
-        });
+const count = profile?.tables_count || 0;
+setTables(Array.from({ length: count }, (_, i) => String(i + 1)));
+
+setProfileTax({
+  gst_enabled: !!profile?.gst_enabled,
+  default_tax_rate: Number(profile?.default_tax_rate ?? 0),
+  prices_include_tax: !!profile?.prices_include_tax
+});
+
+// NEW: set credit feature flag
+setCreditFeatureEnabled(!!profile?.features_credit_enabled);
+
+// Only load credit customers if feature is enabled
+if (profile?.features_credit_enabled) {
+  await loadCreditCustomers();
+} else {
+  setCreditCustomers([]);
+  setIsCreditSale(false);
+  setSelectedCreditCustomerId('');
+}
+
 
         await loadCreditCustomers();
       } catch (e) {
@@ -369,20 +387,23 @@ useEffect(() => {
 
   // pages/owner/counter.js
 const loadCreditCustomers = async () => {
+  if (!restaurantId) return;   // ← keep only this guard
+
   const { data, error } = await supabase
     .from('v_credit_customer_ledger')
     .select('id, name, phone, status, current_balance_calc')
     .eq('restaurant_id', restaurantId)
     .eq('status', 'active')
     .order('name');
+
   if (!error) {
     setCreditCustomers(
-      (data || []).map(r => ({
+      (data || []).map((r) => ({
         id: r.id,
         name: r.name,
         phone: r.phone,
         status: r.status,
-        current_balance: Number(r.current_balance_calc || 0), // use ledger
+        current_balance: Number(r.current_balance_calc || 0),
       }))
     );
   }
@@ -721,18 +742,32 @@ const orderForPrint = fullOrder || {
 
         {/* Credit toggle + Order mode */}
         <div style={{ padding: '8px 12px', display: 'flex', gap: 12, alignItems: 'center', marginBottom: 8, flexWrap:'wrap' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontWeight: 600 }}>
-            <input
-              type="checkbox"
-              checked={isCreditSale}
-              onChange={(e) => {
-                setIsCreditSale(e.target.checked);
-                if (!e.target.checked) { setSelectedCreditCustomerId(''); setCustomerName(''); setCustomerPhone(''); }
-              }}
-              style={{ width: 18, height: 18, cursor: 'pointer' }}
-            />
-            💳 Credit Sale
-          </label>
+  {creditFeatureEnabled && (
+    <label
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        cursor: 'pointer',
+        fontWeight: 600,
+      }}
+    >
+      <input
+        type="checkbox"
+        checked={isCreditSale}
+        onChange={(e) => {
+          setIsCreditSale(e.target.checked);
+          if (!e.target.checked) {
+            setSelectedCreditCustomerId('');
+            setCustomerName('');
+            setCustomerPhone('');
+          }
+        }}
+        style={{ width: 18, height: 18, cursor: 'pointer' }}
+      />
+      💳 Credit Sale
+    </label>
+  )}
 
           <div style={{ display:'flex', border:'1px solid #e5e7eb', borderRadius:8, overflow:'hidden' }}>
             <button

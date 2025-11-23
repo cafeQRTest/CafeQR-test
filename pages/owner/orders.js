@@ -16,6 +16,11 @@ const STATUSES = ['new','in_progress','ready','completed'];
 const LABELS = { new: 'New', in_progress: 'Cooking', ready: 'Ready', completed: 'Done' };
 const COLORS = { new: '#3b82f6', in_progress: '#f59e0b', ready: '#10b981', completed: '#6b7280' };
 const PAGE_SIZE = 20;
+const UI_COLUMNS = [
+  { id: 'new', label: 'New', statuses: ['new'] },
+  { id: 'inprogress', label: 'In Progress', statuses: ['in_progress', 'ready'] },
+  { id: 'completed', label: 'Done', statuses: ['completed'] },
+];
 
 // Restore stock for a set of order_items
 async function restoreStockForOrder(supabase, restaurantId, orderItems) {
@@ -852,8 +857,23 @@ const complete = async (orderId, actualPaymentMethod = null, mixedDetails = null
 };
 
 
+
   if (checking || restLoading) return <div style={{ padding:16 }}>Loading…</div>;
   if (!restaurantId) return <div style={{ padding:16 }}>No restaurant found.</div>;
+
+// Before rendering mobile list:
+let mobileOrders;
+if (ordersByStatus.mobileFilter === 'inprogress') {
+  mobileOrders = [
+    ...ordersByStatus.in_progress,
+    ...ordersByStatus.ready,
+  ].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+} else {
+  mobileOrders =
+    ordersByStatus[ordersByStatus.mobileFilter] || [];
+}
+
+
 
   // // Show print modal when state is set
    
@@ -878,114 +898,141 @@ const complete = async (orderId, actualPaymentMethod = null, mixedDetails = null
         </Card>
       )}
 
-      <div className="mobile-filters">
-        {STATUSES.map((s) => (
-          <button
-            key={s}
-            className={`chip ${s === ordersByStatus.mobileFilter ? 'chip--active' : ''}`}
-            onClick={() => setOrdersByStatus(prev => ({ ...prev, mobileFilter: s }))}
-          >
-            <span className="chip-label">{LABELS[s]}</span>
-            <span className="chip-count">{ordersByStatus[s].length}</span>
-          </button>
-        ))}
-      </div>
+     <div className="mobile-filters">
+  {UI_COLUMNS.map((col) => {
+    const count =
+      col.id === 'inprogress'
+        ? ordersByStatus.in_progress.length + ordersByStatus.ready.length
+        : (ordersByStatus[col.id] || []).length;
+
+    return (
+      <button
+        key={col.id}
+        className={`chip ${col.id === ordersByStatus.mobileFilter ? 'chip--active' : ''}`}
+        onClick={() =>
+          setOrdersByStatus((prev) => ({ ...prev, mobileFilter: col.id }))
+        }
+      >
+        <span className="chip-label">{col.label}</span>
+        <span className="chip-count">{count}</span>
+      </button>
+    );
+  })}
+</div>
+
+
 
       {/* Mobile list */}
       <div className="mobile-list orders-list">
-        {ordersByStatus[ordersByStatus.mobileFilter].length === 0 ? (
-          <Card className="muted" padding={12} style={{ textAlign:'center' }}>
-            No {LABELS[ordersByStatus.mobileFilter].toLowerCase()} orders
-          </Card>
-        ) : (
-          ordersByStatus[ordersByStatus.mobileFilter].map(order => (
-            // In the mobile list map
-<OrderCard
-  key={order.id}
-  order={order}
-  statusColor={COLORS[order.status]}
-  onChangeStatus={updateStatus}
-  onComplete={finalize}
-  generatingInvoice={generatingInvoice}
-  onPrintKot={() => {
-    window.dispatchEvent(
-      new CustomEvent('auto-print-order', {
-        detail: { ...order, autoPrint: true, kind: 'kot' }
-      })
-    );
-  }}
-  onPrintBill={() => {
-    window.dispatchEvent(
-      new CustomEvent('auto-print-order', {
-        detail: { ...order, autoPrint: true, kind: 'bill' }
-      })
-    );
-  }}
-  onCancelOrderOpen={onCancelOrderOpen}
-/>
+  {mobileOrders.length === 0 ? (
+    <Card className="muted" padding={12} style={{ textAlign: 'center' }}>
+      No {ordersByStatus.mobileFilter === 'inprogress' ? 'in progress' : ordersByStatus.mobileFilter} orders
+    </Card>
+  ) : (
+    mobileOrders.map((order) => (
+      <OrderCard
+        key={order.id}
+        order={order}
+        statusColor={COLORS[order.status]}
+        onChangeStatus={updateStatus}
+        onComplete={finalize}
+        generatingInvoice={generatingInvoice}
+        onPrintKot={() => {
+          window.dispatchEvent(
+            new CustomEvent('auto-print-order', {
+              detail: { ...order, autoPrint: true, kind: 'kot' }
+            })
+          );
+        }}
+        onPrintBill={() => {
+          window.dispatchEvent(
+            new CustomEvent('auto-print-order', {
+              detail: { ...order, autoPrint: true, kind: 'bill' }
+            })
+          );
+        }}
+        onCancelOrderOpen={onCancelOrderOpen}
+      />
+    ))
+  )}
+</div>
 
-          ))
-        )}
-      </div>
 
       {/* Kanban grid for desktop */}
       <div className="kanban">
-        {STATUSES.map(status => (
-          <Card key={status} padding={12}>
-            <div className="kanban-col-header">
-              <strong style={{ color: COLORS[status] }}>{LABELS[status]}</strong>
-              <span className="pill">{ordersByStatus[status].length}</span>
-            </div>
-            <div className="kanban-col-body">
-              {ordersByStatus[status].length === 0 ? (
-                <div className="empty-col">No {LABELS[status].toLowerCase()} orders</div>
-              ) : (
-                ordersByStatus[status].map(order => (
-                  <OrderCard
-  key={order.id}
-  order={order}
-  statusColor={COLORS[status]}
-  onChangeStatus={updateStatus}
-  onComplete={finalize}
-  generatingInvoice={generatingInvoice}
-  onPrintKot={() => {
-    window.dispatchEvent(
-      new CustomEvent('auto-print-order', {
-        detail: { ...order, autoPrint: true, kind: 'kot' }
-      })
-    );
-  }}
-  onPrintBill={() => {
-    window.dispatchEvent(
-      new CustomEvent('auto-print-order', {
-        detail: { ...order, autoPrint: true, kind: 'bill' }
-      })
-    );
-  }}
-  onCancelOrderOpen={onCancelOrderOpen}
-/>
+  {UI_COLUMNS.map((col) => {
+    const colOrders = col.statuses
+      .flatMap((st) => ordersByStatus[st] || [])
+      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
 
-                ))
-              )}
-              {status === 'completed' && ordersByStatus.completed.length >= PAGE_SIZE && (
-                <>
-                  <div style={{ fontSize:12, color:'#6b7280' }}>
-                    Showing latest {ordersByStatus.completed.length} completed orders
-                  </div>
-                  <div style={{ paddingTop:8 }}>
-                    <Button variant="outline" onClick={() => {
-                      setCompletedPage(p => p+1);
-                      loadOrders(completedPage+1);
-                    }}>
-                      Load more
-                    </Button>
-                  </div>
-                </>
-              )}
+    return (
+      <Card key={col.id} padding={12}>
+        <div className="kanban-col-header">
+          <strong style={{ color: COLORS[col.statuses[0]] }}>
+            {col.label}
+          </strong>
+          <span className="pill">{colOrders.length}</span>
+        </div>
+        <div className="kanban-col-body">
+          {colOrders.length === 0 ? (
+            <div className="empty-col">
+              No {col.label.toLowerCase()} orders
             </div>
-          </Card>
-        ))}
-      </div>
+          ) : (
+            colOrders.map((order) => (
+              <OrderCard
+                key={order.id}
+                order={order}
+                statusColor={COLORS[order.status]}
+                onChangeStatus={updateStatus}
+                onComplete={finalize}
+                generatingInvoice={generatingInvoice}
+                onPrintKot={() => {
+                  window.dispatchEvent(
+                    new CustomEvent('auto-print-order', {
+                      detail: { ...order, autoPrint: true, kind: 'kot' }
+                    })
+                  );
+                }}
+                onPrintBill={() => {
+                  window.dispatchEvent(
+                    new CustomEvent('auto-print-order', {
+                      detail: { ...order, autoPrint: true, kind: 'bill' }
+                    })
+                  );
+                }}
+                onCancelOrderOpen={onCancelOrderOpen}
+              />
+            ))
+          )}
+
+          {/* Keep pagination only on Done column */}
+          {col.id === 'completed' &&
+            ordersByStatus.completed.length >= PAGE_SIZE && (
+              <>
+                <div style={{ fontSize: 12, color: '#6b7280' }}>
+                  Showing latest {ordersByStatus.completed.length} completed
+                  orders
+                </div>
+                <div style={{ paddingTop: 8 }}>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setCompletedPage((p) => p + 1);
+                      loadOrders(completedPage + 1);
+                    }}
+                  >
+                    Load more
+                  </Button>
+                </div>
+              </>
+            )}
+        </div>
+      </Card>
+    );
+  })}
+</div>
+
 
       {paymentConfirmDialog && (
         <PaymentConfirmDialog
@@ -1011,7 +1058,7 @@ const complete = async (orderId, actualPaymentMethod = null, mixedDetails = null
 .header-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
 .muted { color:#6b7280; font-size:14px; }
 .mobile-list { display:none; }
-.kanban { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; padding:12px 16px; }
+.kanban { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; padding:12px 16px; }
 .kanban-col-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
 .pill { background:#f3f4f6; padding:4px 10px; border-radius:9999px; font-size:12px; }
 .kanban-col-body { display:flex; flex-direction:column; gap:10px; max-height:70vh; overflow-y:auto; }
@@ -1104,6 +1151,7 @@ function OrderCard({
             }} onClick={e=>e.stopPropagation()}>
               
               {/* NEW orders */}
+{/* NEW orders (unchanged) */}
 {order.status === 'new' && (
   <>
     <Button size="sm" onClick={() => onChangeStatus(order.id, 'in_progress')}>
@@ -1133,38 +1181,27 @@ function OrderCard({
   </>
 )}
 
+{(order.status === 'in_progress' || order.status === 'ready') && (
+  <>
+    <Button
+      size="sm"
+      variant="danger"
+      onClick={() => onCancelOrderOpen(order)}
+    >
+      Cancel
+    </Button>
+    <Button
+      size="sm"
+      variant="success"
+      onClick={() => onComplete(order)}
+      disabled={generatingInvoice === order.id}
+      title="Complete order and generate invoice"
+    >
+      {generatingInvoice === order.id ? 'Processing…' : 'Done'}
+    </Button>
+  </>
+)}
 
-              {/* IN_PROGRESS orders */}
-              {order.status==='in_progress' && (
-                <>
-             <Button size="sm" variant="success" onClick={() => onChangeStatus(order.id, 'ready')}>
-              Ready
-             </Button>
-             <Button
-               size="sm"
-               variant="danger"
-               onClick={() => onCancelOrderOpen(order)}
-             >
-             Cancel
-            </Button>
-           </>
-              )}
-
-              {/* READY orders - show Done button for all payment types */}
-              {/* For CREDIT orders: no payment dialog will show
-                  For other orders: payment dialog will show (cash/online/mixed) */}
-              {order.status==='ready' && (
-  	      <Button
-   	      size="sm"
-  	      onClick={() => onComplete(order)}
-  	      disabled={generatingInvoice===order.id}
-	      title={isCreditOrder ? "Complete credit order (no payment dialog)" : "Complete order - payment dialog will appear"}
-	      >
-   	      {generatingInvoice===order.id ? 'Processing…' : 'Done'}
-  	      </Button>
-	      )}
-
-              {/* COMPLETED orders */}
 {order.status === 'completed' && (
   <>
     {hasInvoice && (
