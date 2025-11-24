@@ -32,6 +32,9 @@ export async function printUniversal(opts: Options) {
     scale: opts.scale || 'normal'    // ← NEW
 
   });
+console.log('ESC/POS bytes (first 64):',
+  Array.from(payload.slice(0, 64)).map(b => b.toString(16).padStart(2, '0')).join(' ')
+);
   const base64 = btoa(String.fromCharCode(...payload));
 
   // --- Windows helper config (PRINT_WIN_*) ---
@@ -64,33 +67,33 @@ async function printWinspool(opts: Options) {
   const { url, name } = winCfg(opts.jobKind === 'kot' ? 'kot' : 'bill');
   if (!name) throw new Error('NO_WIN_PRINTER');
 
-  const enc = new TextEncoder();
   const autoCut =
     typeof window !== 'undefined' &&
     window.localStorage.getItem('PRINT_WIN_AUTOCUT') === '1';
 
   let txt = '';
 
-  // Always reset + set character size, even for normal
+  // Reset + size (keep exactly as you have now)
   txt += '\x1b@'; // ESC @ reset
-
   if (opts.scale === 'large') {
-    // double height only (n = 0x01)
-    txt += '\x1d!\x01';
+    txt += '\x1d!\x01';   // double height
   } else {
-    // normal size
-    txt += '\x1d!\x00';
+    txt += '\x1d!\x00';   // normal
   }
 
-  // Normalize line endings and add a few blank lines
+  // IMPORTANT: txt already contains logoEsc + body text from buildReceiptText
   txt += (opts.text || '').replace(/\r?\n/g, '\r\n') + '\r\n\r\n\r\n';
 
   if (autoCut) {
     txt += '\x1dV\x00';   // GS V 0 → full cut
   }
 
-  const raw = enc.encode(txt);
-  const base64Plain = btoa(String.fromCharCode(...raw));
+  // BINARY ENCODE: 1 JS char = 1 byte (no UTF‑8)
+  let bin = '';
+  for (let i = 0; i < txt.length; i++) {
+    bin += String.fromCharCode(txt.charCodeAt(i) & 0xff);
+  }
+  const base64Plain = btoa(bin);
 
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 8000);

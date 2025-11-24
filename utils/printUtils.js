@@ -46,6 +46,7 @@ function wrapText(text, width) {
   return lines;
 }
 
+
 // Helper: Right-align text
 function rightAlign(str, width) {
   if (str.length > width) str = str.substring(0, width);
@@ -59,6 +60,88 @@ function center(str, width) {
   const padding = Math.max(0, Math.floor((width - str.length) / 2));
   return ' '.repeat(padding) + str;
 }
+
+// utils/printUtils.js
+
+// Build ESC/POS bit image commands from print_logo_* fields
+// utils/printUtils.js
+
+// Build ESC/POS raster bit image (GS v 0) from print_logo_* fields
+function buildLogoEscPos(restaurantProfile) {
+  const bits = restaurantProfile?.print_logo_bitmap;
+  const cols = Number(restaurantProfile?.print_logo_cols || 0);
+  const rows = Number(restaurantProfile?.print_logo_rows || 0);
+
+  // bits is row‑major: length must be cols * rows
+  if (!bits || !cols || !rows || bits.length !== cols * rows) return '';
+
+  const bytesPerRow = Math.ceil(cols / 8);
+  const GS  = '\x1d';
+  const ESC = '\x1b';
+
+  let out = '';
+
+  // Center alignment ON (ESC a 1)
+  out += ESC + 'a' + '\x01';
+
+  // GS v 0 m xL xH yL yH   (m = 0 → normal scale)
+  const m  = 0;
+  const xL = bytesPerRow & 0xff;
+  const xH = (bytesPerRow >> 8) & 0xff;
+  const yL = rows & 0xff;
+  const yH = (rows >> 8) & 0xff;
+
+  out += GS + 'v' + '0' + String.fromCharCode(m, xL, xH, yL, yH);
+
+  // d1..dk = raster data: left→right, top→bottom, 8 horizontal dots per byte
+  for (let y = 0; y < rows; y++) {
+    for (let bx = 0; bx < bytesPerRow; bx++) {
+      let byte = 0;
+      for (let bit = 0; bit < 8; bit++) {
+        const x = bx * 8 + bit;
+        if (x < cols && bits[y * cols + x] === '1') {
+          byte |= 0x80 >> bit;  // MSB = leftmost pixel
+        }
+      }
+      out += String.fromCharCode(byte);
+    }
+  }
+
+  // One line feed after image
+  out += '\r\n';
+
+  // Reset alignment to left (ESC a 0)
+  out += ESC + 'a' + '\x00';
+
+  return out;
+}
+
+// utils/printUtils.js (below center()/wrapText helpers)
+
+function renderLogoFromBitmap(restaurantProfile, width) {
+  const bits = restaurantProfile?.print_logo_bitmap;
+  const cols = Number(restaurantProfile?.print_logo_cols || 0);
+  const rows = Number(restaurantProfile?.print_logo_rows || 0);
+
+  if (!bits || !cols || !rows || bits.length !== cols * rows) return [];
+
+  const DARK = '#';   // ASCII only
+  const LIGHT = ' ';  // space
+
+  const lines = [];
+  const cellWidth = Math.max(1, Math.floor(width / cols));
+
+  for (let y = 0; y < rows; y++) {
+    let line = '';
+    for (let x = 0; x < cols; x++) {
+      const bit = bits[y * cols + x] === '1';
+      line += (bit ? DARK : LIGHT).repeat(cellWidth);
+    }
+    lines.push(center(line, width));
+  }
+  return lines;
+}
+
 
 // Helper: Build item row with word-wrapped name
 function buildItemRow(item, width) {
@@ -365,17 +448,12 @@ export function buildReceiptText(order, bill, restaurantProfile) {
   try {
     const items = toDisplayItems(order);
 
-    // Canonical restaurant name:
-    // 1) profile.restaurant_name
-    // 2) order.restaurant_name (from restaurants.name, filled in API)
-    // 3) default "RESTAURANT"
     const restaurantName = String(
       restaurantProfile?.restaurant_name ||
       order?.restaurant_name ||
       'RESTAURANT'
     ).toUpperCase();
 
-    // Address prefers profile shipping fields, falls back to any address on order
     const addressParts = [
       restaurantProfile?.shipping_address_line1,
       restaurantProfile?.shipping_address_line2,
@@ -408,7 +486,6 @@ export function buildReceiptText(order, bill, restaurantProfile) {
       hour12: true
     });
 
-    // Amounts: prefer bill if present, otherwise order totals
     const grandTotal = Number(
       bill?.grand_total ||
       bill?.total_inc_tax ||
@@ -429,7 +506,7 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     const dashes = () => '-'.repeat(W);
     const lines = [];
 
-    // === HEADER ===
+    // === HEADER (text only) ===
     lines.push(center(restaurantName, W));
     wrapText(address, W).forEach(l => lines.push(center(l, W)));
     if (phone) lines.push(center(`Contact No.: ${phone}`, W));
@@ -475,7 +552,14 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     lines.push(center('** THANK YOU! VISIT AGAIN !! **', W));
     lines.push('');
 
-    return lines.join('\n');
+    // === COMBINE TEXT + LOGO BYTES ===
+    const bodyText = lines.join('\n');
+    const logoEsc = buildLogoEscPos(restaurantProfile);  // uses print_logo_* from DB
+
+    if (logoEsc) {
+      return logoEsc + bodyText;   // logo printed first, then normal receipt
+    }
+    return bodyText;
   } catch (e) {
     console.error(e);
     return 'PRINT ERROR';

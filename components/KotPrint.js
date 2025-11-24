@@ -115,9 +115,7 @@ export default function KotPrint({ order, onClose, onPrint, autoPrint = true, ki
         supabase.from('bills').select('*').eq('order_id', order.id).maybeSingle(),
         supabase
           .from('restaurant_profiles')
-          .select(
-            'shipping_address_line1,shipping_address_line2,shipping_city,shipping_state,shipping_pincode,phone,restaurant_name,shipping_phone'
-          )
+          .select('shipping_address_line1,shipping_address_line2,shipping_city,shipping_state,shipping_pincode,phone,restaurant_na         me,shipping_phone,print_logo_bitmap,print_logo_cols,print_logo_rows')
           .eq('restaurant_id', order.restaurant_id)
           .maybeSingle(),
         supabase.from('restaurants').select('name').eq('id', order.restaurant_id).maybeSingle()

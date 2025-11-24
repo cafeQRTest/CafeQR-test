@@ -8,6 +8,7 @@ import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import { getSupabase } from '../../services/supabase'; // 1. IMPORT
 import PrinterSetupCard from '../../components/PrinterSetupCard';
+import { fileToBitmapGrid } from '../../utils/logoBitmap';
 
 
 
@@ -35,6 +36,122 @@ function Field({ label, required, children, hint }) {
       {hint && (
         <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
           {hint}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// === Printed bill logo (thermal only) ========================
+function PrintLogoField({ restaurantId, supabase }) {
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState('');
+
+  const ensureReady = () => {
+    if (!restaurantId) {
+      setMsg('✗ Restaurant not loaded. Please reload this page and try again.');
+      return false;
+    }
+    if (!supabase) {
+      setMsg('✗ Supabase client not ready.');
+      return false;
+    }
+    return true;
+  };
+
+  const handleFile = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    if (!ensureReady()) return;
+
+    setSaving(true);
+    setMsg('');
+    try {
+      // Convert the image to a tiny black‑and‑white bitmap
+      const { bitmap, cols, rows } = await fileToBitmapGrid(file); // no 32,16 overrides
+
+      const { error } = await supabase
+        .from('restaurant_profiles')
+        .upsert(
+          {
+            restaurant_id: restaurantId,
+            print_logo_bitmap: bitmap,
+            print_logo_cols: cols,
+            print_logo_rows: rows,
+          },
+          { onConflict: 'restaurant_id', ignoreDuplicates: false }
+        );
+
+      if (error) throw error;
+
+      setMsg('✓ Print logo saved. New bills will include it above the header.');
+    } catch (err) {
+      setMsg('✗ Could not save logo: ' + (err.message || String(err)));
+    } finally {
+      setSaving(false);
+      if (e.target) e.target.value = '';
+    }
+  };
+
+  const clearLogo = async () => {
+    if (!ensureReady()) return;
+
+    setSaving(true);
+    setMsg('');
+    try {
+      const { error } = await supabase
+        .from('restaurant_profiles')
+        .update({
+          print_logo_bitmap: null,
+          print_logo_cols: null,
+          print_logo_rows: null,
+        })
+        .eq('restaurant_id', restaurantId);
+
+      if (error) throw error;
+
+      setMsg('✓ Print logo cleared. Bills will print without a logo.');
+    } catch (err) {
+      setMsg('✗ Could not clear logo: ' + (err.message || String(err)));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{ marginTop: 16 }}>
+      <label style={{ display: 'block', fontWeight: 500, marginBottom: 6 }}>
+        Printed logo (thermal bill only)
+      </label>
+      <p style={{ margin: 0, fontSize: 12, color: '#6b7280' }}>
+        Upload any logo image (JPG, PNG, etc.). It will be converted to a small black‑and‑white
+        icon and printed at the top of the final bill. KOT tickets will not include this logo.
+      </p>
+      <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+        <input
+          type="file"
+          accept="image/*"
+          onChange={handleFile}
+          disabled={saving}
+        />
+        <button
+          type="button"
+          onClick={clearLogo}
+          disabled={saving}
+          style={{ padding: '6px 10px', fontSize: 13 }}
+        >
+          Clear
+        </button>
+      </div>
+      {msg && (
+        <div
+          style={{
+            marginTop: 6,
+            fontSize: 12,
+            color: msg.startsWith('✗') ? '#b91c1c' : '#166534',
+          }}
+        >
+          {msg}
         </div>
       )}
     </div>
@@ -957,6 +1074,7 @@ if (form.tables_count && form.tables_count > originalTables) {
             <textarea className="input" rows="3" value={form.description} onChange={onChange('description')} />
           </Field>
         </Section>
+<PrintLogoField restaurantId={restaurant?.id} supabase={supabase} />
 
         {/* Third-party Integrations */}
         <Section title="Third-party Integrations" icon="🔗">
