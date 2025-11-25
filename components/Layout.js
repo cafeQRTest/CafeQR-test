@@ -253,6 +253,7 @@ function Sidebar({ collapsed }) {
   // analytics/sales/settings/billing (always shown)
   { href: '/owner/analytics', label: 'Analytics', icon: <FaChartBar /> },
   { href: '/owner/sales', label: 'Sales', icon: <FaCreditCard /> },
+  { href: '/owner/expenses', label: 'Expenses & P&L', icon: <FaFileAlt /> },
   { href: '/owner/settings', label: 'Settings', icon: <FaCog /> },
   { href: '/owner/billing', label: 'Billing', icon: <FaFileInvoice /> },
 ];
@@ -296,6 +297,7 @@ const credit = feature.credit_enabled ? [
 const insights = [
   { href: '/owner/analytics', label: 'Analytics', icon: <FaChartBar /> },
   { href: '/owner/sales', label: 'Sales', icon: <FaCreditCard /> },
+  { href: '/owner/expenses', label: 'Expenses & P&L', icon: <FaFileAlt /> },
 ];
 
 const account = [
@@ -447,6 +449,7 @@ function MobileSidebar({ onNavigate }) {
   const insights = [
     { href: '/owner/analytics', label: 'Analytics', icon: <FaChartBar /> },
     { href: '/owner/sales', label: 'Sales', icon: <FaCreditCard /> },
+  { href: '/owner/expenses', label: 'Expenses & P&L', icon: <FaFileAlt /> },
   ];
 
   const account = [
