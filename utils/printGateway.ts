@@ -27,7 +27,7 @@ export async function printUniversal(opts: Options) {
 
   const payload = textToEscPos(opts.text, {
     codepage: opts.codepage,
-    feed: 4,
+    feed: 1,
     cut: 'full',
     scale: opts.scale || 'normal'    // ← NEW
 
