@@ -315,27 +315,65 @@ public void printSunmiText(PluginCall call) {
     return connectAndWrite(arr[0], data);
   }
 
-  private boolean connectAndWrite(BluetoothDevice dev, byte[] data) {
-    BluetoothSocket sock = null;
+private boolean connectAndWrite(BluetoothDevice dev, byte[] data) {
+  BluetoothSocket sock = null;
+  try {
+    try { BluetoothAdapter.getDefaultAdapter().cancelDiscovery(); } catch (Exception ignored) {}
+
+    // Create RFCOMM socket
     try {
-      try { BluetoothAdapter.getDefaultAdapter().cancelDiscovery(); } catch (Exception ignored) {}
+      sock = dev.createInsecureRfcommSocketToServiceRecord(
+        UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+      );
+    } catch (Exception e) {
+      sock = dev.createRfcommSocketToServiceRecord(
+        UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+      );
+    }
 
-      // Create RFCOMM socket
+    sock.connect();
+    OutputStream os = sock.getOutputStream();
+
+    // --- HARD RESET BEFORE EACH JOB (safety) ---
+    // ESC @ then a short pause so the printer leaves any partial graphics mode.
+    os.write(new byte[]{ 0x1b, '@' });  // ESC @
+    os.flush();
+    try { Thread.sleep(80); } catch (InterruptedException ignored) {}
+
+    // --- PAYLOAD IN SMALL CHUNKS ---
+    final int CHUNK = 256;
+    int offset = 0;
+    while (offset < data.length) {
+      int len = Math.min(CHUNK, data.length - offset);
+      os.write(data, offset, len);
+      os.flush();
+      offset += len;
       try {
-        sock = dev.createInsecureRfcommSocketToServiceRecord(
-          UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
-        );
-      } catch (Exception e) {
-        sock = dev.createRfcommSocketToServiceRecord(
-          UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
-        );
-      }
+        Thread.sleep(15);   // give printer time to empty its buffer
+      } catch (InterruptedException ignored) {}
+    }
 
-      // Connect (blocking)
-      sock.connect();
-      OutputStream os = sock.getOutputStream();
+    // Extra feeds + final flush to be sure everything is printed
+    os.write(new byte[]{ 0x0a, 0x0a });  // 2 LF
+    os.flush();
+    try { Thread.sleep(350); } catch (InterruptedException ignored) {}
 
-      // Write in small chunks so printers with tiny buffers don't drop data
+    os.close();
+    return true;
+
+  } catch (Exception ex) {
+    // Fallback below…
+    try {
+      BluetoothSocket alt = (BluetoothSocket) dev.getClass()
+        .getMethod("createRfcommSocket", int.class).invoke(dev, 1);
+      alt.connect();
+      OutputStream os = alt.getOutputStream();
+
+      // Same reset + chunked write for the fallback socket
+      os.write(new byte[]{ 0x1b, '@' });
+      os.flush();
+      try { Thread.sleep(80); } catch (InterruptedException ignored) {}
+
       final int CHUNK = 256;
       int offset = 0;
       while (offset < data.length) {
@@ -343,47 +381,23 @@ public void printSunmiText(PluginCall call) {
         os.write(data, offset, len);
         os.flush();
         offset += len;
-        try {
-          Thread.sleep(10); // short pause to let printer drain its buffer
-        } catch (InterruptedException ignored) {}
+        try { Thread.sleep(15); } catch (InterruptedException ignored) {}
       }
 
-      // Extra flush + tiny delay before closing
+      os.write(new byte[]{ 0x0a, 0x0a });
       os.flush();
-      try { Thread.sleep(30); } catch (InterruptedException ignored) {}
+      try { Thread.sleep(350); } catch (InterruptedException ignored) {}
 
+      os.close();
+      alt.close();
       return true;
-    } catch (Exception ex) {
-      // Fallback: try the older reflection socket, also chunked
-      try {
-        BluetoothSocket alt = (BluetoothSocket) dev.getClass()
-          .getMethod("createRfcommSocket", int.class).invoke(dev, 1);
-        alt.connect();
-        OutputStream os = alt.getOutputStream();
-
-        final int CHUNK = 256;
-        int offset = 0;
-        while (offset < data.length) {
-          int len = Math.min(CHUNK, data.length - offset);
-          os.write(data, offset, len);
-          os.flush();
-          offset += len;
-          try { Thread.sleep(10); } catch (InterruptedException ignored) {}
-        }
-
-        os.flush();
-        try { Thread.sleep(30); } catch (InterruptedException ignored) {}
-        alt.close();
-        return true;
-      } catch (Exception ignored) {
-        return false;
-      }
-    } finally {
-      if (sock != null) {
-        try { sock.close(); } catch (Exception ignored) {}
-      }
+    } catch (Exception ignored) {
+      return false;
     }
-  }  // <-- closes connectAndWrite
-
-}    // <-- closes class DevicePrinterPlugin
-
+  } finally {
+    if (sock != null) {
+      try { sock.close(); } catch (Exception ignored) {}
+    }
+  }
+}
+}

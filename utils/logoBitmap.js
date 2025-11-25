@@ -1,6 +1,6 @@
 // utils/logoBitmap.js
 
-export async function fileToBitmapGrid(file, maxWidth = 384, maxHeight = 128) {
+export async function fileToBitmapGrid(file, paperWidthDots = 384, maxHeight = 160) {
   const dataUrl = await new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result);
@@ -15,11 +15,11 @@ export async function fileToBitmapGrid(file, maxWidth = 384, maxHeight = 128) {
     image.src = dataUrl;
   });
 
-  // Keep aspect ratio, but limit physical size
+  const maxWidth = paperWidthDots;
   const scale = Math.min(
     maxWidth / img.width,
     maxHeight / img.height,
-    1 // never upscale
+    1
   );
 
   const w = Math.max(8, Math.round(img.width * scale));
@@ -39,6 +39,10 @@ export async function fileToBitmapGrid(file, maxWidth = 384, maxHeight = 128) {
 
   let bits = '';
 
+  // Single global threshold: tune for logo colors
+  // Brown text/shapes → black, yellow / light areas → white.
+  const threshold = 190; // try 185–200 if you want it darker/lighter
+
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const idx = (y * w + x) * 4;
@@ -46,17 +50,15 @@ export async function fileToBitmapGrid(file, maxWidth = 384, maxHeight = 128) {
       const g = data[idx + 1];
       const b = data[idx + 2];
 
-      // simple luminance
       const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+      const isDark = lum < threshold;
 
-      // threshold (you can tune 160 → darker / lighter)
-      const isDark = lum < 160;
       bits += isDark ? '1' : '0';
     }
   }
 
   return {
-    bitmap: bits, // length = w * h, row‑major
+    bitmap: bits,
     cols: w,
     rows: h,
   };
