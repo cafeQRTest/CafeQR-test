@@ -5,6 +5,10 @@ import { useRestaurant } from '../../context/RestaurantContext';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import { istSpanUtcISO } from '../../utils/istTime';
+import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
+
 
 export default function BillingPage() {
   const supabase = getSupabase();
@@ -131,7 +135,7 @@ export default function BillingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [restaurant?.id, from, to, reportType, supabase]);
 
-  const exportCSV = (type) => {
+  const exportCSV = async (type) => {
     if (!restaurant?.id) return;
     const qs = new URLSearchParams({
       from,
@@ -139,7 +143,44 @@ export default function BillingPage() {
       restaurant_id: restaurant.id,
       report_type: type,
     }).toString();
-    window.location.href = `/api/reports/sales?${qs}`;
+    const relUrl = `/api/reports/sales?${qs}`;
+
+    // Web / desktop: keep existing behavior
+    if (!Capacitor.isNativePlatform()) {
+      window.location.href = relUrl;
+      return;
+    }
+
+    try {
+      // In Capacitor WebView we can just fetch the same relative URL
+      const res = await fetch(relUrl);
+      if (!res.ok) throw new Error('Failed to generate CSV');
+      const csv = await res.text();
+
+      const fileName = `Billing_${type}_${from}_to_${to}.csv`;
+      const path = `CafeQR/${fileName}`;
+
+      await Filesystem.writeFile({
+        directory: Directory.Documents,
+        path,
+        data: csv,
+        encoding: 'utf8',
+      });
+
+      const { uri } = await Filesystem.getUri({
+        directory: Directory.Documents,
+        path,
+      });
+
+      await Share.share({
+        title: fileName,
+        text: 'Cafe QR billing CSV export',
+        url: uri,
+      });
+    } catch (e) {
+      console.error('Billing CSV export failed', e);
+      alert(e.message || 'Failed to export CSV');
+    }
   };
 
   const handleViewInvoice = (invoice) => {

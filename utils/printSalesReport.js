@@ -1,3 +1,6 @@
+import { Capacitor } from '@capacitor/core';
+import { Share } from '@capacitor/share';
+
 // Helper functions (same as printUtils)
 function center(str, width) {
   if (str.length > width) str = str.substring(0, width)
@@ -120,31 +123,47 @@ export async function printSalesReport(data) {
   lines.push(dashes())
   lines.push('')
 
-  const text = lines.join('\n')
 
   // Try Web Share API
+  const text = lines.join('\n');
+
+  // Native (APK) → use Capacitor Share so user can send to printer app / Files, etc.
+  if (Capacitor.isNativePlatform()) {
+    try {
+      await Share.share({
+        title: `Sales-Report-${Date.now()}`,
+        text,
+      });
+      return { success: true, method: 'native-share' };
+    } catch (err) {
+      console.error('Native share failed', err);
+      // fall through to web fallback below
+    }
+  }
+
+  // Web Share API (PWA / browser)
   if (navigator.canShare && navigator.canShare({ text })) {
     try {
       await navigator.share({
         title: `Sales-Report-${Date.now()}`,
-        text: text
-      })
-      return { success: true, method: 'share' }
+        text,
+      });
+      return { success: true, method: 'web-share' };
     } catch (err) {
-      console.log('Share cancelled or failed', err)
+      console.log('Share cancelled or failed', err);
     }
   }
 
-  // Fallback to download
-  const blob = new Blob([text], { type: 'text/plain' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `Sales-Report-${Date.now()}.txt`
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  URL.revokeObjectURL(url)
+  // Fallback to download as .txt
+  const blob = new Blob([text], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `Sales-Report-${Date.now()}.txt`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 
-  return { success: true, method: 'download' }
+  return { success: true, method: 'download' };
 }

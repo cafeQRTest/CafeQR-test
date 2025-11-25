@@ -1,87 +1,120 @@
 // utils/exportProductionReport.js
+import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
+
+async function saveAndShareText({ contents, fileName }) {
+  if (!Capacitor.isNativePlatform()) {
+    // Web browser: Blob + download
+    const blob = new Blob([contents], { type: 'text/plain;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    return true;
+  }
+
+  try {
+    const path = `CafeQR/${fileName}`;
+    await Filesystem.writeFile({
+      directory: Directory.Documents,
+      path,
+      data: contents,
+      encoding: 'utf8',
+    });
+    const { uri } = await Filesystem.getUri({ directory: Directory.Documents, path });
+    await Share.share({
+      title: fileName,
+      text: 'Cafe QR production export',
+      url: uri,
+    });
+    return true;
+  } catch (err) {
+    console.error('Native production export failed', err);
+    return false;
+  }
+}
 
 export const exportProductionToCSV = ({
   date,
   restaurantName,
   productionRecords,
-  balanceReport
+  balanceReport,
 }) => {
   try {
-    const dateStr = new Date(date).toLocaleDateString()
-    
-    let csvContent = ''
-    
-    // Header
-    csvContent += `Production Report - ${restaurantName}\n`
-    csvContent += `Date: ${dateStr}\n`
-    csvContent += `Generated: ${new Date().toLocaleString()}\n`
-    csvContent += '\n'
+    const dateStr = new Date(date).toLocaleDateString();
 
-    // Production Records Section
+    let csvContent = '';
+
+    csvContent += `Production Report - ${restaurantName}\n`;
+    csvContent += `Date: ${dateStr}\n`;
+    csvContent += `Generated: ${new Date().toLocaleString()}\n\n`;
+
     if (productionRecords.length > 0) {
-      csvContent += `PRODUCTION RECORDS\n`
-      csvContent += `Shift,Item,Quantity Produced,Cost/Unit,Total Cost\n`
-      
-      productionRecords.forEach(record => {
-        record.items?.forEach(item => {
-          const totalCost = item.quantity_produced * (item.cost_per_unit || 0)
-          csvContent += `${record.shift},${item.item_name},${item.quantity_produced},${item.cost_per_unit || 0},${totalCost.toFixed(2)}\n`
-        })
-      })
-      csvContent += '\n'
+      csvContent += `PRODUCTION RECORDS\n`;
+      csvContent += `Shift,Item,Quantity Produced,Cost/Unit,Total Cost\n`;
+
+      productionRecords.forEach((record) => {
+        record.items?.forEach((item) => {
+          const totalCost =
+            item.quantity_produced * (item.cost_per_unit || 0);
+          csvContent += `${record.shift},${item.item_name},${item.quantity_produced},${
+            item.cost_per_unit || 0
+          },${totalCost.toFixed(2)}\n`;
+        });
+      });
+      csvContent += '\n';
     }
 
-    // Balance Report Section
     if (balanceReport.length > 0) {
-      csvContent += `ITEM BALANCE REPORT\n`
-      csvContent += `Item,Produced,Sold,Balance,Status\n`
-      
-      balanceReport.forEach(item => {
-        csvContent += `"${item.item_name}",${item.produced},${item.sold},${item.balance},"${item.wasteStatus}"\n`
-      })
-      csvContent += '\n'
+      csvContent += `ITEM BALANCE REPORT\n`;
+      csvContent += `Item,Produced,Sold,Balance,Status\n`;
 
-      // Summary
-      const totalProduced = balanceReport.reduce((sum, item) => sum + item.produced, 0)
-      const totalSold = balanceReport.reduce((sum, item) => sum + item.sold, 0)
-      const totalBalance = balanceReport.reduce((sum, item) => sum + item.balance, 0)
+      balanceReport.forEach((item) => {
+        csvContent += `"${item.item_name}",${item.produced},${item.sold},${item.balance},"${item.wasteStatus}"\n`;
+      });
+      csvContent += '\n';
 
-      csvContent += `SUMMARY\n`
-      csvContent += `Total Produced,Total Sold,Total Balance\n`
-      csvContent += `${totalProduced},${totalSold},${totalBalance}\n`
+      const totalProduced = balanceReport.reduce(
+        (sum, item) => sum + item.produced,
+        0
+      );
+      const totalSold = balanceReport.reduce(
+        (sum, item) => sum + item.sold,
+        0
+      );
+      const totalBalance = balanceReport.reduce(
+        (sum, item) => sum + item.balance,
+        0
+      );
+
+      csvContent += `SUMMARY\n`;
+      csvContent += `Total Produced,Total Sold,Total Balance\n`;
+      csvContent += `${totalProduced},${totalSold},${totalBalance}\n`;
     }
 
-    // Create Blob and Download
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    const url = URL.createObjectURL(blob)
-    
-    const fileName = `Production_Report_${dateStr.replace(/\//g, '-')}.csv`
-    link.setAttribute('href', url)
-    link.setAttribute('download', fileName)
-    link.style.visibility = 'hidden'
-    
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
-    
-    return true
+    const fileName = `Production_Report_${dateStr.replace(/\//g, '-')}.csv`;
+    return saveAndShareText({ contents: csvContent, fileName });
   } catch (error) {
-    console.error('Error exporting CSV:', error)
-    return false
+    console.error('Error exporting CSV:', error);
+    return false;
   }
-}
+};
 
 export const exportProductionToExcel = ({
   date,
   restaurantName,
   productionRecords,
-  balanceReport
+  balanceReport,
 }) => {
   try {
-    const dateStr = new Date(date).toLocaleDateString()
-    
+    const dateStr = new Date(date).toLocaleDateString();
+
     const styles = `
       <style>
         body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
@@ -94,10 +127,8 @@ export const exportProductionToExcel = ({
         .header { background-color: #f3f4f6; padding: 15px; margin-bottom: 20px; }
         .summary { background-color: #f0fdf4; padding: 12px; border-left: 4px solid #10b981; margin-top: 16px; }
         .summary-item { margin: 8px 0; }
-        .warning { color: #f59e0b; font-weight: 600; }
-        .success { color: #059669; font-weight: 600; }
       </style>
-    `
+    `;
 
     let htmlContent = `
       <!DOCTYPE html>
@@ -113,9 +144,8 @@ export const exportProductionToExcel = ({
           <p><strong>Date:</strong> ${dateStr}</p>
           <p><strong>Generated:</strong> ${new Date().toLocaleString()}</p>
         </div>
-    `
+    `;
 
-    // Production Records Section
     if (productionRecords.length > 0) {
       htmlContent += `
         <h2>Production Records</h2>
@@ -130,11 +160,12 @@ export const exportProductionToExcel = ({
             </tr>
           </thead>
           <tbody>
-      `
+      `;
 
-      productionRecords.forEach(record => {
-        record.items?.forEach(item => {
-          const totalCost = item.quantity_produced * (item.cost_per_unit || 0)
+      productionRecords.forEach((record) => {
+        record.items?.forEach((item) => {
+          const totalCost =
+            item.quantity_produced * (item.cost_per_unit || 0);
           htmlContent += `
             <tr>
               <td style="text-transform: capitalize;">${record.shift}</td>
@@ -143,17 +174,16 @@ export const exportProductionToExcel = ({
               <td style="text-align: right;">₹${(item.cost_per_unit || 0).toFixed(2)}</td>
               <td style="text-align: right; font-weight: 600;">₹${totalCost.toFixed(2)}</td>
             </tr>
-          `
-        })
-      })
+          `;
+        });
+      });
 
       htmlContent += `
           </tbody>
         </table>
-      `
+      `;
     }
 
-    // Balance Report Section
     if (balanceReport.length > 0) {
       htmlContent += `
         <h2>Item Balance Report</h2>
@@ -168,10 +198,15 @@ export const exportProductionToExcel = ({
             </tr>
           </thead>
           <tbody>
-      `
+      `;
 
-      balanceReport.forEach(item => {
-        const balanceColor = item.balance < 0 ? '#dc2626' : item.balance === 0 ? '#059669' : '#f59e0b'
+      balanceReport.forEach((item) => {
+        const balanceColor =
+          item.balance < 0
+            ? '#dc2626'
+            : item.balance === 0
+            ? '#059669'
+            : '#f59e0b';
         htmlContent += `
           <tr>
             <td>${item.item_name}</td>
@@ -182,13 +217,21 @@ export const exportProductionToExcel = ({
             </td>
             <td style="font-size: 12px;">${item.wasteStatus}</td>
           </tr>
-        `
-      })
+        `;
+      });
 
-      // Summary
-      const totalProduced = balanceReport.reduce((sum, item) => sum + item.produced, 0)
-      const totalSold = balanceReport.reduce((sum, item) => sum + item.sold, 0)
-      const totalBalance = balanceReport.reduce((sum, item) => sum + item.balance, 0)
+      const totalProduced = balanceReport.reduce(
+        (sum, item) => sum + item.produced,
+        0
+      );
+      const totalSold = balanceReport.reduce(
+        (sum, item) => sum + item.sold,
+        0
+      );
+      const totalBalance = balanceReport.reduce(
+        (sum, item) => sum + item.balance,
+        0
+      );
 
       htmlContent += `
           </tbody>
@@ -200,7 +243,7 @@ export const exportProductionToExcel = ({
           <div class="summary-item"><strong>Total Sold:</strong> ${totalSold} units</div>
           <div class="summary-item"><strong>Total Remaining:</strong> ${totalBalance} units</div>
         </div>
-      `
+      `;
     }
 
     htmlContent += `
@@ -210,25 +253,12 @@ export const exportProductionToExcel = ({
         </div>
       </body>
       </html>
-    `
+    `;
 
-    const blob = new Blob([htmlContent], { type: 'application/vnd.ms-excel;charset=utf-8;' })
-    const link = document.createElement('a')
-    const url = URL.createObjectURL(blob)
-    
-    const fileName = `Production_Report_${dateStr.replace(/\//g, '-')}.xls`
-    link.setAttribute('href', url)
-    link.setAttribute('download', fileName)
-    link.style.visibility = 'hidden'
-    
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
-    
-    return true
+    const fileName = `Production_Report_${dateStr.replace(/\//g, '-')}.xls`;
+    return saveAndShareText({ contents: htmlContent, fileName });
   } catch (error) {
-    console.error('Error exporting Excel:', error)
-    return false
+    console.error('Error exporting Excel:', error);
+    return false;
   }
-}
+};
