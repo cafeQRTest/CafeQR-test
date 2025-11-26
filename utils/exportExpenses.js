@@ -65,6 +65,10 @@ function buildExpensesCsv({ range, summary, expenses }) {
 
 // Public API used by the page
 export async function exportExpensesToCSV({ range, summary, expenses }) {
+  alert(
+    `Capacitor debug: platform=${Capacitor.getPlatform?.() || 'none'}, ` +
+    `isNative=${Capacitor.isNativePlatform?.()}`
+  );
   const csv = buildExpensesCsv({ range, summary, expenses });
   const fileName = `EXPENSES_${range.start.toISOString().slice(0, 10)}_${range.end
     .toISOString()

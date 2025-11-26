@@ -135,6 +135,7 @@ export const exportSalesReportToCSV = ({
 };
 
 export const exportSalesReportToExcel = ({
+
   range,
   summaryStats,
   salesData,

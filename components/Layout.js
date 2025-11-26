@@ -1,17 +1,13 @@
 // components/layout.js
-
-import React, { useEffect, useState } from 'react'
-import Link from 'next/link'
-import { useRouter } from 'next/router'
-import { useRestaurant } from '../context/RestaurantContext'
-import OwnerNotificationsBell from './OwnerNotificationsBell.jsx'
+import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/router';
+import { useRestaurant } from '../context/RestaurantContext';
+import OwnerNotificationsBell from './OwnerNotificationsBell.jsx';
 import {
   FaBars,
   FaHome,
-  FaList,
   FaClock,
-  FaLeaf,
-  FaTags,
   FaChartBar,
   FaCog,
   FaFileInvoice,
@@ -24,9 +20,49 @@ import {
   FaUsers,
   FaCrown,
   FaFileAlt,
-} from 'react-icons/fa'
-import { signOutAndRedirect } from '../lib/authActions'
-import { getSupabase } from '../services/supabase'
+} from 'react-icons/fa';
+import { signOutAndRedirect } from '../lib/authActions';
+import { getSupabase } from '../services/supabase';
+
+// --- role → allowed route prefixes ------------------------------------------
+// Easy to tweak later: add or remove entries per role.
+const ROLE_ALLOWED_PREFIXES = {
+  admin: ['*'], // everything
+  manager: [
+    '/owner', // overview
+    '/owner/menu',
+    '/owner/orders',
+    '/owner/counter',
+    '/owner/inventory',
+    '/owner/availability',
+    '/owner/production',
+    '/owner/credit-customers',
+    '/owner/credit-sales-report',
+    '/owner/analytics',
+    '/owner/sales',
+    '/owner/expenses',
+    '/owner/billing',
+    // manager CANNOT see /owner/settings or /owner/subscription
+  ],
+  staff: [
+    '/owner/menu',
+    '/owner/orders',
+    '/owner/counter',
+  ],
+};
+
+function canAccess(href, role) {
+  if (role === 'admin') return true;
+  const list = ROLE_ALLOWED_PREFIXES[role] || [];
+  return list.some(
+    (prefix) =>
+      href === prefix || href.startsWith(prefix + '/')
+  );
+}
+
+// -----------------------------------------------------------------------------
+// Layout shell
+// -----------------------------------------------------------------------------
 
 export default function Layout({
   children,
@@ -35,33 +71,34 @@ export default function Layout({
   hideChrome = false,
   showCustomerHeader = false,
 }) {
-  if (hideChrome) return <main style={{ padding: 20 }}>{children}</main>
+  if (hideChrome) return <main style={{ padding: 20 }}>{children}</main>;
 
-  const [collapsed, setCollapsed] = useState(false)
-  const [mobileOpen, setMobileOpen] = useState(false)
+  const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const MOBILE_BREAKPOINT = 1024; // use drawer up to 1024px wide (phones + tablets)
 
+  useEffect(() => {
+    const onResize = () => setCollapsed(window.innerWidth < 1160);
+    onResize();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
-useEffect(() => {
-  const onResize = () => setCollapsed(window.innerWidth < 1160);
-  onResize();
-  window.addEventListener('resize', onResize);
-  return () => window.removeEventListener('resize', onResize);
-}, []);
-
-const handleHamburger = () => {
-  if (typeof window !== 'undefined' && window.innerWidth <= MOBILE_BREAKPOINT) {
-    // phones + tablets → open overlay drawer
-    setMobileOpen(true);
-  } else {
-    // larger screens → toggle collapsed desktop sidebar
-    setCollapsed((v) => !v);
-  }
-};
+  const handleHamburger = () => {
+    if (typeof window !== 'undefined' && window.innerWidth <= MOBILE_BREAKPOINT) {
+      setMobileOpen(true);
+    } else {
+      setCollapsed((v) => !v);
+    }
+  };
 
   return (
     <div style={{ display: 'grid', gridTemplateRows: 'auto 1fr auto', minHeight: '100svh' }}>
-      <Header showSidebar={showSidebar} onHamburger={handleHamburger} isCustomer={showCustomerHeader} />
+      <Header
+        showSidebar={showSidebar}
+        onHamburger={handleHamburger}
+        isCustomer={showCustomerHeader}
+      />
 
       <div className="main-wrapper">
         {showSidebar && (
@@ -71,14 +108,22 @@ const handleHamburger = () => {
         )}
 
         <main className="container main-content" style={{ paddingTop: 24, paddingBottom: 40 }}>
-          {title && <h1 className="h1" style={{ marginBottom: 16 }}>{title}</h1>}
+          {title && (
+            <h1 className="h1" style={{ marginBottom: 16 }}>
+              {title}
+            </h1>
+          )}
           {children}
         </main>
       </div>
 
       {showSidebar && (
         <>
-          <div className="drawer-backdrop" style={{ display: mobileOpen ? 'block' : 'none' }} onClick={() => setMobileOpen(false)} />
+          <div
+            className="drawer-backdrop"
+            style={{ display: mobileOpen ? 'block' : 'none' }}
+            onClick={() => setMobileOpen(false)}
+          />
           <aside className={`drawer ${mobileOpen ? 'drawer--open' : ''}`}>
             <MobileSidebar onNavigate={() => setMobileOpen(false)} />
           </aside>
@@ -87,90 +132,100 @@ const handleHamburger = () => {
 
       <Footer />
 
-<style jsx>{`
-  .main-wrapper {
-    display: grid;
-    grid-template-columns: ${showSidebar ? (collapsed ? '64px 1fr' : '240px 1fr') : '1fr'};
-    transition: grid-template-columns 0.18s ease;
-    background: var(--bg, #f7f8fa);
-  }
+      <style jsx>{`
+        .main-wrapper {
+          display: grid;
+          grid-template-columns: ${showSidebar
+            ? collapsed
+              ? '64px 1fr'
+              : '240px 1fr'
+            : '1fr'};
+          transition: grid-template-columns 0.18s ease;
+          background: var(--bg, #f7f8fa);
+        }
 
-  .desktop-sidebar {
-    display: block;
-  }
+        .desktop-sidebar {
+          display: block;
+        }
 
-  /* Up to 1024px (phones + tablets) → content full‑width, no desktop sidebar */
-  @media (max-width: 1024px) {
-    .main-wrapper {
-      grid-template-columns: 1fr !important;
-    }
-    .desktop-sidebar {
-      display: none;
-    }
-  }
+        @media (max-width: 1024px) {
+          .main-wrapper {
+            grid-template-columns: 1fr !important;
+          }
+          .desktop-sidebar {
+            display: none;
+          }
+        }
 
-  .drawer-backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.35);
-    z-index: 999;
-  }
+        .drawer-backdrop {
+          position: fixed;
+          inset: 0;
+          background: rgba(0, 0, 0, 0.35);
+          z-index: 999;
+        }
 
-  .drawer {
-    position: fixed;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    width: min(90vw, 320px); /* a bit wider on tablets */
-    background: #f9fafb;
-    border-right: 1px solid #e5e7eb;
-    transform: translateX(-100%);
-    transition: transform 0.28s ease-out;
-    z-index: 1000;
-    padding: 12px;
-    padding-top: calc(12px + env(safe-area-inset-top));
-    overflow-y: auto;
-  }
+        .drawer {
+          position: fixed;
+          top: 0;
+          left: 0;
+          bottom: 0;
+          width: min(90vw, 320px);
+          background: #f9fafb;
+          border-right: 1px solid #e5e7eb;
+          transform: translateX(-100%);
+          transition: transform 0.28s ease-out;
+          z-index: 1000;
+          padding: 12px;
+          padding-top: calc(12px + env(safe-area-inset-top));
+          overflow-y: auto;
+        }
 
-  .drawer--open {
-    transform: translateX(0);
-  }
+        .drawer--open {
+          transform: translateX(0);
+        }
 
-  /* Desktop (from 1025px up) → hide drawer entirely */
-  @media (min-width: 1025px) {
-    .drawer,
-    .drawer-backdrop {
-      display: none;
-    }
-  }
-`}</style>
-
+        @media (min-width: 1025px) {
+          .drawer,
+          .drawer-backdrop {
+            display: none;
+          }
+        }
+      `}</style>
     </div>
-  )
+  );
 }
 
+// -----------------------------------------------------------------------------
+// Header
+// -----------------------------------------------------------------------------
+
 function Header({ showSidebar, onHamburger, isCustomer }) {
-  const router = useRouter()
-  const supabase = getSupabase()
-  const [hasSession, setHasSession] = React.useState(false)
+  const router = useRouter();
+  const supabase = getSupabase();
+  const [hasSession, setHasSession] = React.useState(false);
 
   React.useEffect(() => {
-    let unsub
+    let unsub;
     async function init() {
       try {
-        const { data } = await supabase.auth.getSession()
-        setHasSession(!!data?.session)
+        const { data } = await supabase.auth.getSession();
+        setHasSession(!!data?.session);
       } catch {}
       const { data: listener } = supabase.auth.onAuthStateChange((_e, session) => {
-        setHasSession(!!session)
-      })
-      unsub = () => listener?.subscription?.unsubscribe()
+        setHasSession(!!session);
+      });
+      unsub = () => listener?.subscription?.unsubscribe();
     }
-    init()
-    return () => { try { unsub?.() } catch {} }
-  }, [supabase])
+    init();
+    return () => {
+      try {
+        unsub?.();
+      } catch {}
+    };
+  }, [supabase]);
 
-  const isOwnerRoute = router.pathname?.startsWith('/owner')
+  const isOwnerRoute = router.pathname?.startsWith('/owner');
+
   return (
     <header
       className="shell-header"
@@ -221,94 +276,35 @@ function Header({ showSidebar, onHamburger, isCustomer }) {
           </Link>
         </nav>
       )}
-       {isOwnerRoute && hasSession ? <OwnerNotificationsBell /> : null}
+      {isOwnerRoute && hasSession ? <OwnerNotificationsBell /> : null}
     </header>
-  )
+  );
 }
+
+// -----------------------------------------------------------------------------
+// Desktop sidebar (role-aware)
+// -----------------------------------------------------------------------------
 
 function Sidebar({ collapsed }) {
-  const router = useRouter()
-  const supabase = getSupabase()
-  const { restaurant } = useRestaurant()
-  const hasAggregatorIntegration = Boolean(restaurant?.swiggy_api_key || restaurant?.zomato_api_key)
-  const [signingOut, setSigningOut] = useState(false)
+  const router = useRouter();
+  const supabase = getSupabase();
+  const { restaurant, role: ctxRole } = useRestaurant();
+  const hasAggregatorIntegration = Boolean(
+    restaurant?.swiggy_api_key || restaurant?.zomato_api_key
+  );
+  const [signingOut, setSigningOut] = useState(false);
 
   const feature = restaurant?.features || {};
-  const items = [
-  // defaults (always shown)
-  { href: '/owner', label: 'Overview', icon: <FaHome /> },
-  { href: '/owner/menu', label: 'Menu', icon: <FaBars /> },
-  { href: '/owner/orders', label: 'Orders', icon: <FaUtensils /> },
-  { href: '/owner/counter', label: 'Counter Sale', icon: <FaCashRegister /> },
+  const role = ctxRole || 'admin';
 
-  // optional modules
-  ...(feature.inventory_enabled ? [{ href: '/owner/inventory', label: 'Inventory', icon: <FaBoxes /> }] : []),
-  ...(feature.table_ordering_enabled ? [{ href: '/owner/availability', label: 'Availability', icon: <FaClock /> }] : []),
-  ...(feature.production_enabled ? [{ href: '/owner/production', label: 'Production', icon: <FaIndustry /> }] : []),
-  ...(feature.credit_enabled ? [
-    { href: '/owner/credit-customers', label: 'Credit Customers', icon: <FaUsers /> },
-    { href: '/owner/credit-sales-report', label: 'Credit Sales Report', icon: <FaFileAlt /> },
-  ] : []),
-
-  // analytics/sales/settings/billing (always shown)
-  { href: '/owner/analytics', label: 'Analytics', icon: <FaChartBar /> },
-  { href: '/owner/sales', label: 'Sales', icon: <FaCreditCard /> },
-  { href: '/owner/expenses', label: 'Expenses & P&L', icon: <FaFileAlt /> },
-  { href: '/owner/settings', label: 'Settings', icon: <FaCog /> },
-  { href: '/owner/billing', label: 'Billing', icon: <FaFileInvoice /> },
-];
-
-// Keep existing aggregator push-on condition
-if (hasAggregatorIntegration) {
-  items.push({ href: '/owner/aggregator-poller', label: 'Aggregator Orders', icon: <FaUtensils /> });
-}
-
-const sectionStyle = { margin: '10px 6px 4px', fontSize: 11, fontWeight: 800, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '.03em' };
-
-const renderItem = (it) => {
-  const active = router.pathname === it.href || router.pathname.startsWith(it.href + '/');
-  return (
-    <Link key={it.href} href={it.href} style={itemStyle(active)}>
-      <span style={{ width: 18, textAlign: 'center' }}>{it.icon}</span>
-      {!collapsed && <span>{it.label}</span>}
-    </Link>
-  );
-};
-
-// Arrange links into sections
-const ops = [
-  { href: '/owner', label: 'Overview', icon: <FaHome /> },
-  { href: '/owner/menu', label: 'Menu', icon: <FaBars /> },
-  { href: '/owner/orders', label: 'Orders', icon: <FaUtensils /> },
-  { href: '/owner/counter', label: 'Counter Sale', icon: <FaCashRegister /> },
-];
-
-const addons = [
-  ...(feature.inventory_enabled ? [{ href: '/owner/inventory', label: 'Inventory', icon: <FaBoxes /> }] : []),
-  ...(feature.table_ordering_enabled ? [{ href: '/owner/availability', label: 'Availability', icon: <FaClock /> }] : []),
-  ...(feature.production_enabled ? [{ href: '/owner/production', label: 'Production', icon: <FaIndustry /> }] : []),
-];
-
-const credit = feature.credit_enabled ? [
-  { href: '/owner/credit-customers', label: 'Credit Customers', icon: <FaUsers /> },
-  { href: '/owner/credit-sales-report', label: 'Credit Sales Report', icon: <FaFileAlt /> },
-] : [];
-
-const insights = [
-  { href: '/owner/analytics', label: 'Analytics', icon: <FaChartBar /> },
-  { href: '/owner/sales', label: 'Sales', icon: <FaCreditCard /> },
-  { href: '/owner/expenses', label: 'Expenses & P&L', icon: <FaFileAlt /> },
-];
-
-const account = [
-  { href: '/owner/subscription', label: 'Subscription', icon: <FaCrown /> },
-  { href: '/owner/settings', label: 'Settings', icon: <FaCog /> },
-  { href: '/owner/billing', label: 'Billing', icon: <FaFileInvoice /> },
-];
-
-const integrations = hasAggregatorIntegration ? [
-  { href: '/owner/aggregator-poller', label: 'Aggregator Orders', icon: <FaUtensils /> },
-] : [];
+  const sectionStyle = {
+    margin: '10px 6px 4px',
+    fontSize: 11,
+    fontWeight: 800,
+    color: '#6b7280',
+    textTransform: 'uppercase',
+    letterSpacing: '.03em',
+  };
 
   const itemStyle = (active) => ({
     display: 'flex',
@@ -321,111 +317,21 @@ const integrations = hasAggregatorIntegration ? [
     textDecoration: 'none',
     justifyContent: collapsed ? 'center' : 'flex-start',
     transition: 'all .15s ease',
-  })
+  });
 
-  const handleSignOut = async () => {
-    setSigningOut(true)
-    try {
-      await signOutAndRedirect(supabase, router.replace)
-    } catch (err) {
-      console.error('Sign out error:', err)
-      alert(`Sign out failed: ${err.message}`)
-      setSigningOut(false)
-    }
-  }
+  const renderItem = (it) => {
+    if (!canAccess(it.href, role)) return null;
+    const active =
+      router.pathname === it.href || router.pathname.startsWith(it.href + '/');
+    return (
+      <Link key={it.href} href={it.href} style={itemStyle(active)}>
+        <span style={{ width: 18, textAlign: 'center' }}>{it.icon}</span>
+        {!collapsed && <span>{it.label}</span>}
+      </Link>
+    );
+  };
 
-return (
-  <aside
-    className="sidebar"
-    style={{
-      background: '#f9fafb',
-      borderRight: '1px solid #e5e7eb',
-      padding: 12,
-      position: 'sticky',
-      top: 64,
-      height: 'calc(100vh - 64px)',
-      display: 'flex',
-      flexDirection: 'column',
-    }}
-  >
-    {!collapsed && (
-      <div style={{ fontWeight: 700, margin: '6px 6px 12px', color: '#111827' }}>
-        Owner Panel
-      </div>
-    )}
-
-    <nav
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 8,
-        flex: 1,                 // fills available space
-        overflowY: 'auto',       // scrolls if long
-        paddingBottom: 8,        // breathing room above footer
-      }}
-    >
-      {/* Sections */}
-      {!collapsed && <div style={sectionStyle}>Operations</div>}
-      {ops.map(renderItem)}
-
-      {(feature.inventory_enabled || feature.table_ordering_enabled || feature.production_enabled || feature.credit_enabled) && !collapsed && (
-        <div style={sectionStyle}>Add‑ons</div>
-      )}
-      {addons.map(renderItem)}
-      {credit.map(renderItem)}
-
-      {!collapsed && <div style={sectionStyle}>Insights</div>}
-      {insights.map(renderItem)}
-
-      {!collapsed && <div style={sectionStyle}>Account</div>}
-      {account.map(renderItem)}
-
-      {hasAggregatorIntegration && (
-        <>
-          {!collapsed && <div style={sectionStyle}>Integrations</div>}
-          {integrations.map(renderItem)}
-        </>
-      )}
-    </nav>
-
-    <div style={{ marginTop: 'auto' }}>
-      <button
-        onClick={handleSignOut}
-        disabled={signingOut}
-        title="Sign Out"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: collapsed ? 0 : 8,
-          padding: '10px 12px',
-          width: '100%',
-          background: 'transparent',
-          border: '1px solid #e5e7eb',
-          borderRadius: 8,
-          color: signingOut ? '#d1d5db' : '#6b7280',
-          cursor: signingOut ? 'not-allowed' : 'pointer',
-          transition: 'all 0.2s ease',
-          opacity: signingOut ? 0.6 : 1,
-        }}
-      >
-        <FaSignOutAlt />
-        {!collapsed && <span>{signingOut ? 'Signing Out...' : 'Sign Out'}</span>}
-      </button>
-    </div>
-  </aside>
-)
-}
-
-function MobileSidebar({ onNavigate }) {
-  const router = useRouter();
-  const supabase = getSupabase();
-  const { restaurant } = useRestaurant();
-  const hasAggregatorIntegration = Boolean(restaurant?.swiggy_api_key || restaurant?.zomato_api_key);
-  const [signingOut, setSigningOut] = useState(false);
-
-  const feature = restaurant?.features || {};
-
-  // Sectioned lists (same grouping as desktop)
+  // Arrange links into sections
   const ops = [
     { href: '/owner', label: 'Overview', icon: <FaHome /> },
     { href: '/owner/menu', label: 'Menu', icon: <FaBars /> },
@@ -434,32 +340,257 @@ function MobileSidebar({ onNavigate }) {
   ];
 
   const addons = [
-    ...(feature.inventory_enabled ? [{ href: '/owner/inventory', label: 'Inventory', icon: <FaBoxes /> }] : []),
-    ...(feature.table_ordering_enabled ? [{ href: '/owner/availability', label: 'Availability', icon: <FaClock /> }] : []),
-    ...(feature.production_enabled ? [{ href: '/owner/production', label: 'Production', icon: <FaIndustry /> }] : []),
+    ...(feature.inventory_enabled
+      ? [{ href: '/owner/inventory', label: 'Inventory', icon: <FaBoxes /> }]
+      : []),
+    ...(feature.table_ordering_enabled
+      ? [{ href: '/owner/availability', label: 'Availability', icon: <FaClock /> }]
+      : []),
+    ...(feature.production_enabled
+      ? [{ href: '/owner/production', label: 'Production', icon: <FaIndustry /> }]
+      : []),
   ];
 
-  const credit = feature.credit_enabled
-    ? [
-        { href: '/owner/credit-customers', label: 'Credit Customers', icon: <FaUsers /> },
-        { href: '/owner/credit-sales-report', label: 'Credit Sales Report', icon: <FaFileAlt /> },
-      ]
-    : [];
+  const credit =
+    feature.credit_enabled && canAccess('/owner/credit-customers', role)
+      ? [
+          {
+            href: '/owner/credit-customers',
+            label: 'Credit Customers',
+            icon: <FaUsers />,
+          },
+          {
+            href: '/owner/credit-sales-report',
+            label: 'Credit Sales Report',
+            icon: <FaFileAlt />,
+          },
+        ]
+      : [];
 
   const insights = [
     { href: '/owner/analytics', label: 'Analytics', icon: <FaChartBar /> },
     { href: '/owner/sales', label: 'Sales', icon: <FaCreditCard /> },
-  { href: '/owner/expenses', label: 'Expenses & P&L', icon: <FaFileAlt /> },
+    {
+      href: '/owner/expenses',
+      label: 'Expenses & P&L',
+      icon: <FaFileAlt />,
+    },
   ];
 
   const account = [
-    { href: '/owner/subscription', label: 'Subscription', icon: <FaCrown /> },
+  // Only admin should see Team & Access
+  ...(role === 'admin'
+    ? [
+        {
+          href: '/owner/staff',
+          label: 'Team & Access',
+          icon: <FaUsers />,
+        },
+      ]
+    : []),
+    {
+      href: '/owner/subscription',
+      label: 'Subscription',
+      icon: <FaCrown />,
+    },
     { href: '/owner/settings', label: 'Settings', icon: <FaCog /> },
     { href: '/owner/billing', label: 'Billing', icon: <FaFileInvoice /> },
   ];
 
   const integrations = hasAggregatorIntegration
-    ? [{ href: '/owner/aggregator-poller', label: 'Aggregator Orders', icon: <FaUtensils /> }]
+    ? [
+        {
+          href: '/owner/aggregator-poller',
+          label: 'Aggregator Orders',
+          icon: <FaUtensils />,
+        },
+      ]
+    : [];
+
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    try {
+      await signOutAndRedirect(supabase, router.replace);
+    } catch (err) {
+      console.error('Sign out error:', err);
+      alert(`Sign out failed: ${err.message}`);
+      setSigningOut(false);
+    }
+  };
+
+  return (
+    <aside
+      className="sidebar"
+      style={{
+        background: '#f9fafb',
+        borderRight: '1px solid #e5e7eb',
+        padding: 12,
+        position: 'sticky',
+        top: 64,
+        height: 'calc(100vh - 64px)',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      {!collapsed && (
+        <div style={{ fontWeight: 700, margin: '6px 6px 12px', color: '#111827' }}>
+          Owner Panel
+        </div>
+      )}
+
+      <nav
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8,
+          flex: 1,
+          overflowY: 'auto',
+          paddingBottom: 8,
+        }}
+      >
+        {!collapsed && <div style={sectionStyle}>Operations</div>}
+        {ops.map(renderItem)}
+
+        {(feature.inventory_enabled ||
+          feature.table_ordering_enabled ||
+          feature.production_enabled ||
+          feature.credit_enabled) &&
+          !collapsed && <div style={sectionStyle}>Add-ons</div>}
+        {addons.map(renderItem)}
+        {credit.map(renderItem)}
+
+        {!collapsed && <div style={sectionStyle}>Insights</div>}
+        {insights.map(renderItem)}
+
+        {!collapsed && <div style={sectionStyle}>Account</div>}
+        {account.map(renderItem)}
+
+        {hasAggregatorIntegration && (
+          <>
+            {!collapsed && <div style={sectionStyle}>Integrations</div>}
+            {integrations.map(renderItem)}
+          </>
+        )}
+      </nav>
+
+      <div style={{ marginTop: 'auto' }}>
+        <button
+          onClick={handleSignOut}
+          disabled={signingOut}
+          title="Sign Out"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: collapsed ? 0 : 8,
+            padding: '10px 12px',
+            width: '100%',
+            background: 'transparent',
+            border: '1px solid #e5e7eb',
+            borderRadius: 8,
+            color: signingOut ? '#d1d5db' : '#6b7280',
+            cursor: signingOut ? 'not-allowed' : 'pointer',
+            transition: 'all 0.2s ease',
+            opacity: signingOut ? 0.6 : 1,
+          }}
+        >
+          <FaSignOutAlt />
+          {!collapsed && (
+            <span>{signingOut ? 'Signing Out...' : 'Sign Out'}</span>
+          )}
+        </button>
+      </div>
+    </aside>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// Mobile sidebar (role-aware)
+// -----------------------------------------------------------------------------
+
+function MobileSidebar({ onNavigate }) {
+  const router = useRouter();
+  const supabase = getSupabase();
+  const { restaurant, role: ctxRole } = useRestaurant();
+  const hasAggregatorIntegration = Boolean(
+    restaurant?.swiggy_api_key || restaurant?.zomato_api_key
+  );
+  const [signingOut, setSigningOut] = useState(false);
+
+  const feature = restaurant?.features || {};
+  const role = ctxRole || 'admin';
+
+  const ops = [
+    { href: '/owner', label: 'Overview', icon: <FaHome /> },
+    { href: '/owner/menu', label: 'Menu', icon: <FaBars /> },
+    { href: '/owner/orders', label: 'Orders', icon: <FaUtensils /> },
+    { href: '/owner/counter', label: 'Counter Sale', icon: <FaCashRegister /> },
+  ].filter((it) => canAccess(it.href, role));
+
+  const addons = [
+    ...(feature.inventory_enabled
+      ? [{ href: '/owner/inventory', label: 'Inventory', icon: <FaBoxes /> }]
+      : []),
+    ...(feature.table_ordering_enabled
+      ? [{ href: '/owner/availability', label: 'Availability', icon: <FaClock /> }]
+      : []),
+    ...(feature.production_enabled
+      ? [{ href: '/owner/production', label: 'Production', icon: <FaIndustry /> }]
+      : []),
+  ].filter((it) => canAccess(it.href, role));
+
+  const credit = feature.credit_enabled
+    ? [
+        {
+          href: '/owner/credit-customers',
+          label: 'Credit Customers',
+          icon: <FaUsers />,
+        },
+        {
+          href: '/owner/credit-sales-report',
+          label: 'Credit Sales Report',
+          icon: <FaFileAlt />,
+        },
+      ].filter((it) => canAccess(it.href, role))
+    : [];
+
+  const insights = [
+    { href: '/owner/analytics', label: 'Analytics', icon: <FaChartBar /> },
+    { href: '/owner/sales', label: 'Sales', icon: <FaCreditCard /> },
+    {
+      href: '/owner/expenses',
+      label: 'Expenses & P&L',
+      icon: <FaFileAlt />,
+    },
+  ].filter((it) => canAccess(it.href, role));
+
+  const account = [
+  ...(role === 'admin'
+    ? [
+        {
+          href: '/owner/staff',
+          label: 'Team & Access',
+          icon: <FaUsers />,
+        },
+      ]
+    : []),
+
+    {
+      href: '/owner/subscription',
+      label: 'Subscription',
+      icon: <FaCrown />,
+    },
+    { href: '/owner/settings', label: 'Settings', icon: <FaCog /> },
+    { href: '/owner/billing', label: 'Billing', icon: <FaFileInvoice /> },
+  ].filter((it) => canAccess(it.href, role));
+
+  const integrations = hasAggregatorIntegration
+    ? [
+        {
+          href: '/owner/aggregator-poller',
+          label: 'Aggregator Orders',
+          icon: <FaUtensils />,
+        },
+      ].filter((it) => canAccess(it.href, role))
     : [];
 
   const handleSignOut = async () => {
@@ -475,7 +606,10 @@ function MobileSidebar({ onNavigate }) {
 
   const groups = [
     { title: 'Operations', items: ops },
-    { title: (addons.length || credit.length) ? 'Add-ons' : null, items: [...addons, ...credit] },
+    {
+      title: addons.length || credit.length ? 'Add-ons' : null,
+      items: [...addons, ...credit],
+    },
     { title: 'Insights', items: insights },
     { title: 'Account', items: account },
     { title: integrations.length ? 'Integrations' : null, items: integrations },
@@ -483,13 +617,32 @@ function MobileSidebar({ onNavigate }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
-      <div style={{ fontWeight: 700, margin: '6px 6px 12px', color: '#111827' }}>Owner Panel</div>
+      <div style={{ fontWeight: 700, margin: '6px 6px 12px', color: '#111827' }}>
+        Owner Panel
+      </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, flex: 1, overflowY: 'auto' }}>
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 12,
+          flex: 1,
+          overflowY: 'auto',
+        }}
+      >
         {groups.map((g, idx) => (
           <React.Fragment key={idx}>
             {g.title && (
-              <div style={{ margin: '6px 6px 2px', fontSize: 11, fontWeight: 800, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '.03em' }}>
+              <div
+                style={{
+                  margin: '6px 6px 2px',
+                  fontSize: 11,
+                  fontWeight: 800,
+                  color: '#6b7280',
+                  textTransform: 'uppercase',
+                  letterSpacing: '.03em',
+                }}
+              >
                 {g.title}
               </div>
             )}
@@ -539,7 +692,9 @@ function MobileSidebar({ onNavigate }) {
   );
 }
 
-
+// -----------------------------------------------------------------------------
+// Footer
+// -----------------------------------------------------------------------------
 
 function Footer() {
   return (
@@ -559,9 +714,12 @@ function Footer() {
       <span>🔒 Powered by SharpINtell</span>
       <span>•</span>
       <span>Secure payments by Razorpay</span>
-      <Link href="/privacy-policy" style={{ color: '#2563eb', textDecoration: 'underline' }}>
+      <Link
+        href="/privacy-policy"
+        style={{ color: '#2563eb', textDecoration: 'underline' }}
+      >
         Privacy Policy
       </Link>
     </footer>
-  )
+  );
 }

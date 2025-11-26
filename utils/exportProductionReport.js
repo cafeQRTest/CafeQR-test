@@ -41,6 +41,10 @@ async function saveAndShareText({ contents, fileName }) {
 }
 
 export const exportProductionToCSV = ({
+  alert(
+    `Capacitor debug: platform=${Capacitor.getPlatform?.() || 'none'}, ` +
+    `isNative=${Capacitor.isNativePlatform?.()}`
+  );
   date,
   restaurantName,
   productionRecords,
@@ -107,6 +111,10 @@ export const exportProductionToCSV = ({
 };
 
 export const exportProductionToExcel = ({
+  alert(
+    `Capacitor debug: platform=${Capacitor.getPlatform?.() || 'none'}, ` +
+    `isNative=${Capacitor.isNativePlatform?.()}`
+  );
   date,
   restaurantName,
   productionRecords,
