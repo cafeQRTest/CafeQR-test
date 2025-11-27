@@ -222,6 +222,7 @@ export default function SettingsPage() {
     features_production_enabled: false,
     features_inventory_enabled: false,
     features_table_ordering_enabled: false,
+    features_counter_send_to_kitchen_enabled: true,   // NEW
   });
 
   const [originalTables, setOriginalTables] = useState(0);
@@ -273,6 +274,8 @@ export default function SettingsPage() {
             features_production_enabled: !!sanitizedProfile.features_production_enabled,
             features_inventory_enabled: !!sanitizedProfile.features_inventory_enabled,
             features_table_ordering_enabled: !!sanitizedProfile.features_table_ordering_enabled,
+            features_counter_send_to_kitchen_enabled:
+            sanitizedProfile.features_counter_send_to_kitchen_enabled !== false, // default ON
 
           }));
           setOriginalTables(profile.tables_count || 0);
@@ -475,6 +478,8 @@ async function save(e) {
       features_production_enabled: !!rest.features_production_enabled,
       features_inventory_enabled: !!rest.features_inventory_enabled,
       features_table_ordering_enabled: !!rest.features_table_ordering_enabled,
+      features_counter_send_to_kitchen_enabled:
+      rest.features_counter_send_to_kitchen_enabled !== false,
 
     };
 
@@ -1161,6 +1166,19 @@ if (form.tables_count && form.tables_count > originalTables) {
       <span>Inventory (Inventory page)</span>
     </label>
   </div>
+  <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+    <input
+      type="checkbox"
+      checked={form.features_counter_send_to_kitchen_enabled}
+      onChange={(e) =>
+        setForm(f => ({
+          ...f,
+          features_counter_send_to_kitchen_enabled: e.target.checked,
+        }))
+      }
+    />
+    <span>Show “Send to Kitchen” option on Counter Sale</span>
+  </label>
 
 </Section>
 

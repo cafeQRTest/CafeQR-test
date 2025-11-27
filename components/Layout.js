@@ -19,6 +19,7 @@ import {
   FaIndustry,
   FaUsers,
   FaCrown,
+  FaIdBadge,
   FaFileAlt,
 } from 'react-icons/fa';
 import { signOutAndRedirect } from '../lib/authActions';

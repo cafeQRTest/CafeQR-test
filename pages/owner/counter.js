@@ -9,8 +9,10 @@ import { getSupabase } from '../../services/supabase';
 // -------------------------------
 // Inline Payment Confirm Dialog
 // -------------------------------
-function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false }) {
-  const BRAND = { orange: '#f97316', orangeDark: '#ea580c', bgSoft: '#fff7ed', border: '#e5e7eb', text: '#111827' };
+function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false, mode = 'settle' }) {
+  const BRAND = mode === 'kitchen'
+    ? { orange: '#f97316', orangeDark: '#ea580c', bgSoft: '#fff7ed', border: '#e5e7eb', text: '#111827' }
+    : { orange: '#16a34a', orangeDark: '#15803d', bgSoft: '#ecfdf3', border: '#e5e7eb', text: '#111827' };
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [showMixedForm, setShowMixedForm] = useState(false);
   const [cashAmount, setCashAmount] = useState('');
@@ -144,6 +146,7 @@ export default function CounterSale() {
   const nameIndexRef = useRef(new Map());                  // normalized name -> id
 
 
+
   const [tables, setTables] = useState([]);
   const [menuItems, setMenuItems] = useState([]);
   const [cart, setCart] = useState([]);
@@ -172,10 +175,18 @@ export default function CounterSale() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
 
-  
+  const [sendToKitchenEnabled, setSendToKitchenEnabled] = useState(true);
+
 
   // NEW: Order mode toggle
-  const [orderMode, setOrderMode] = useState('kitchen');
+const [orderMode, setOrderMode] = useState('settle');
+  // inside CounterSale component
+  const THEME = orderMode === 'kitchen'
+  ? { main: '#f97316', dark: '#ea580c', soft: '#fff7ed' }  // orange
+  : { main: '#16a34a', dark: '#15803d', soft: '#ecfdf3' }; // green
+
+
+
 
   // NEW: profile tax settings for client‑side totals
   const [profileTax, setProfileTax] = useState({
@@ -290,7 +301,7 @@ export default function CounterSale() {
         const { data: profile, error: profErr } = await supabase
   .from('restaurant_profiles')
   .select(
-    'tables_count,gst_enabled,default_tax_rate,prices_include_tax,features_credit_enabled'
+    'tables_count,gst_enabled,default_tax_rate,prices_include_tax,features_credit_enabled,features_counter_send_to_kitchen_enabled'
   )
   .eq('restaurant_id', restaurantId)
   .limit(1)
@@ -309,6 +320,15 @@ setProfileTax({
 
 // NEW: set credit feature flag
 setCreditFeatureEnabled(!!profile?.features_credit_enabled);
+setSendToKitchenEnabled(profile?.features_counter_send_to_kitchen_enabled !== false);
+
+// after loading profile
+setOrderMode(
+  profile?.features_counter_send_to_kitchen_enabled === false
+    ? 'settle'
+    : 'kitchen'
+);
+
 
 // Only load credit customers if feature is enabled
 if (profile?.features_credit_enabled) {
@@ -769,25 +789,38 @@ const orderForPrint = fullOrder || {
     </label>
   )}
 
-          <div style={{ display:'flex', border:'1px solid #e5e7eb', borderRadius:8, overflow:'hidden' }}>
-            <button
-              type="button"
-              onClick={() => setOrderMode('kitchen')}
-              style={{ padding:'6px 10px', border:'none', cursor:'pointer', background: orderMode === 'kitchen' ? '#eff6ff' : '#fff', color:'#111827' }}
-              title="Customer is ordering now → send to Kitchen"
-            >
-              🍳 Send to Kitchen
-            </button>
-            <button
-              type="button"
-              onClick={() => setOrderMode('settle')}
-              style={{ padding:'6px 10px', border:'none', cursor:'pointer', background: orderMode === 'settle' ? '#eff6ff' : '#fff', color:'#111827', borderLeft:'1px solid #e5e7eb' }}
-              title="Customer already eaten → settle now"
-            >
-              ✅ Settle Now
-            </button>
-          </div>
-        </div>
+  {sendToKitchenEnabled && (
+    <div style={{ display:'flex', border:'1px solid #e5e7eb', borderRadius:8, overflow:'hidden' }}>
+      <button
+        type="button"
+        onClick={() => setOrderMode('kitchen')}
+        style={{
+          padding:'6px 10px',
+          border:'none',
+          cursor:'pointer',
+          background: orderMode === 'kitchen' ? '#eff6ff' : '#fff',
+          color:'#111827',
+        }}
+      >
+        🍳 Send to Kitchen
+      </button>
+      <button
+        type="button"
+        onClick={() => setOrderMode('settle')}
+        style={{
+          padding:'6px 10px',
+          border:'none',
+          cursor:'pointer',
+          background: orderMode === 'settle' ? '#eff6ff' : '#fff',
+          color:'#111827',
+          borderLeft:'1px solid #e5e7eb',
+        }}
+      >
+        ✅ Settle Now
+      </button>
+    </div>
+  )}
+</div>
 
         <div className="counter-inputs-row">
           {isCreditSale ? (
@@ -856,7 +889,7 @@ const orderForPrint = fullOrder || {
                   padding: '8px 14px',
                   borderRadius: 999,
                   border: active ? 'none' : '1px solid #e5e7eb',
-                  background: active ? '#f97316' : '#fff',
+                  background: active ? THEME.main : '#fff',      // ← use theme
                   color: active ? '#fff' : '#111827',
                   fontWeight: 600,
                   display: 'inline-flex',
@@ -880,20 +913,24 @@ const orderForPrint = fullOrder || {
             borderBottom: '1px solid #f3f4f6',
           }}
         >
-          {['all', ...categoryChips].map((cat) => (
-            <button
-              key={cat}
-              onClick={() => setCategoryFilter(cat)}
-              className={`sales-carousel-btn${categoryFilter === cat ? ' active' : ''}`}
-              style={{
-                background: categoryFilter === cat ? '#f97316' : '#f9fafb',
-                color: categoryFilter === cat ? '#fff' : '#374151',
-                borderColor: categoryFilter === cat ? '#f97316' : '#e5e7eb',
-              }}
-            >
-              {cat === 'all' ? 'All categories' : cat}
-            </button>
-          ))}
+ {['all', ...categoryChips].map((cat) => {
+  const active = categoryFilter === cat;
+  return (
+    <button
+      key={cat}
+      onClick={() => setCategoryFilter(cat)}
+      className={`sales-carousel-btn${active ? ' active' : ''}`}
+      style={{
+        background: active ? THEME.main : '#f9fafb',
+        color: active ? '#fff' : '#374151',
+        borderColor: active ? THEME.main : '#e5e7eb',
+      }}
+    >
+      {cat === 'all' ? 'All categories' : cat}
+    </button>
+  );
+})}
+
         </div>
       )}
 
@@ -916,16 +953,35 @@ const orderForPrint = fullOrder || {
                         </div>
                       </div>
                       <div className="counter-item-actions">
-                        {qty > 0 ? (
-                          <div className="counter-cart-qty">
-                            <button onClick={() => updateCartItem(item.id, qty - 1)}>-</button>
-                            <div>{qty}</div>
-                            <button onClick={() => updateCartItem(item.id, qty + 1)} disabled={!avail}>+</button>
-                          </div>
-                        ) : (
-                          <button onClick={() => addToCart(item)} disabled={!avail} className="btn">Add</button>
-                        )}
-                      </div>
+  {qty > 0 ? (
+    <div className="counter-cart-qty">
+      <button
+        onClick={() => updateCartItem(item.id, qty - 1)}
+        style={{ background: THEME.main, color: '#fff' }}
+      >
+        -
+      </button>
+      <div>{qty}</div>
+      <button
+        onClick={() => updateCartItem(item.id, qty + 1)}
+        disabled={!avail}
+        style={{ background: THEME.main, color: '#fff' }}
+      >
+        +
+      </button>
+    </div>
+  ) : (
+    <button
+      onClick={() => addToCart(item)}
+      disabled={!avail}
+      className="btn"
+      style={{ background: THEME.main, borderColor: THEME.main }}
+    >
+      Add
+    </button>
+  )}
+</div>
+
                     </div>
                   );
                 })}
@@ -936,10 +992,15 @@ const orderForPrint = fullOrder || {
       </main>
 
       {cartItemsCount > 0 && (
-        <button onClick={() => setDrawerOpen(true)} className="counter-mobile-cart-btn">
-          View Cart • {cartItemsCount} • ₹{cartTotals.totalInc.toFixed(2)}
-        </button>
-      )}
+  <button
+    onClick={() => setDrawerOpen(true)}
+    className="counter-mobile-cart-btn"
+    style={{ background: THEME.main }}
+  >
+    View Cart • {cartItemsCount} • ₹{cartTotals.totalInc.toFixed(2)}
+  </button>
+)}
+
 
       {drawerOpen && (
         <div className="counter-drawer-overlay" onClick={() => setDrawerOpen(false)}>
@@ -961,10 +1022,39 @@ const orderForPrint = fullOrder || {
                     <div className="drawer-sub">₹{i.price} × {i.quantity} = ₹{(i.price * i.quantity).toFixed(2)}</div>
                   </div>
                   <div className="cart-qty-controls">
-                    <button onClick={() => updateCartItem(i.id, i.quantity - 1)}>-</button>
-                    <span>{i.quantity}</span>
-                    <button onClick={() => updateCartItem(i.id, i.quantity + 1)}>+</button>
-                  </div>
+  <button
+    onClick={() => updateCartItem(i.id, i.quantity - 1)}
+    style={{
+      background: THEME.main,
+      color: '#fff',
+      border: 'none',
+      width: 32,
+      height: 32,
+      borderRadius: 6,
+      cursor: 'pointer',
+      fontWeight: 700,
+    }}
+  >
+    -
+  </button>
+  <span>{i.quantity}</span>
+  <button
+    onClick={() => updateCartItem(i.id, i.quantity + 1)}
+    style={{
+      background: THEME.main,
+      color: '#fff',
+      border: 'none',
+      width: 32,
+      height: 32,
+      borderRadius: 6,
+      cursor: 'pointer',
+      fontWeight: 700,
+    }}
+  >
+    +
+  </button>
+</div>
+
                 </div>
               ))}
             </div>
@@ -983,7 +1073,12 @@ const orderForPrint = fullOrder || {
                   <span>₹{cartTotals.totalInc.toFixed(2)}</span>
                 </div>
               </div>
-              <button onClick={completeSale} disabled={processing} className="btn btn--lg" style={{ width: '100%', marginTop:10 }}>
+            <button
+  onClick={completeSale}
+  disabled={processing}
+  className="btn btn--lg"
+  style={{ width: '100%', marginTop:10, background: THEME.main, borderColor: THEME.main }}
+>
                 {processing
                   ? 'Processing…'
                   : orderMode === 'kitchen'
@@ -1002,6 +1097,7 @@ const orderForPrint = fullOrder || {
   <PaymentConfirmDialog
     amount={cartTotals.totalInc}
     busy={processing}
+    mode={orderMode}
     onConfirm={async (method, details) => {
       if (processing) return; // extra guard
       setProcessing(true);
