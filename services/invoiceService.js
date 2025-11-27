@@ -168,42 +168,42 @@ export class InvoiceService {
       }
 
       // ✅ FIXED: Pass payment method to generateBillPdf
-      const pdfPayload = {
-        invoice: {
-          invoice_no: inv.invoice_no,
-          invoice_date: inv.invoice_date,
-          customer_name: inv.customer_name,
-          customer_gstin: inv.customer_gstin,
-          payment_method: inv.payment_method, // ✅ Include payment method
-          subtotal_ex_tax: inv.subtotal_ex_tax,
-          total_tax: inv.total_tax,
-          total_inc_tax: inv.total_inc_tax,
-          gst_enabled: inv.gst_enabled,
-          prices_include_tax: inv.prices_include_tax,
-          mixed_payment_details: inv.mixed_payment_details // ✅ Include mixed payment details
-        },
-        items: items.map(it => ({
-          item_name: it.item_name || it.name || 'Item',
-          quantity: it.quantity ?? 1,
-           price: it.is_packaged_good && !inv.prices_include_tax ? it.unit_price_ex_tax : (it.price ?? 0),
-          hsn: it.hsn ?? '',
-          tax_rate: it.tax_rate ?? 0
-        })),
-        restaurant: {
-          name: restaurant.name,
-          address: [
-            profile?.shipping_address_line1,
-            profile?.shipping_address_line2,
-            [profile?.shipping_city, profile?.shipping_state, profile?.shipping_pincode].filter(Boolean).join(' ')
-          ].filter(Boolean).join(', '),
-          gstin: profile?.gstin || '',
-          phone: profile?.phone || '',
-          email: profile?.support_email || ''
-        }
-      }
-      const { pdfUrl } = await generateBillPdf(pdfPayload, restaurant.id)
-      await supabase.from('invoices').update({ pdf_url: pdfUrl }).eq('id', inv.id)
-      return { invoiceId: inv.id, invoiceNo, pdfUrl }
+      // const pdfPayload = {
+      //   invoice: {
+      //     invoice_no: inv.invoice_no,
+      //     invoice_date: inv.invoice_date,
+      //     customer_name: inv.customer_name,
+      //     customer_gstin: inv.customer_gstin,
+      //     payment_method: inv.payment_method, // ✅ Include payment method
+      //     subtotal_ex_tax: inv.subtotal_ex_tax,
+      //     total_tax: inv.total_tax,
+      //     total_inc_tax: inv.total_inc_tax,
+      //     gst_enabled: inv.gst_enabled,
+      //     prices_include_tax: inv.prices_include_tax,
+      //     mixed_payment_details: inv.mixed_payment_details // ✅ Include mixed payment details
+      //   },
+      //   items: items.map(it => ({
+      //     item_name: it.item_name || it.name || 'Item',
+      //     quantity: it.quantity ?? 1,
+      //      price: it.is_packaged_good && !inv.prices_include_tax ? it.unit_price_ex_tax : (it.price ?? 0),
+      //     hsn: it.hsn ?? '',
+      //     tax_rate: it.tax_rate ?? 0
+      //   })),
+      //   restaurant: {
+      //     name: restaurant.name,
+      //     address: [
+      //       profile?.shipping_address_line1,
+      //       profile?.shipping_address_line2,
+      //       [profile?.shipping_city, profile?.shipping_state, profile?.shipping_pincode].filter(Boolean).join(' ')
+      //     ].filter(Boolean).join(', '),
+      //     gstin: profile?.gstin || '',
+      //     phone: profile?.phone || '',
+      //     email: profile?.support_email || ''
+      //   }
+      // }
+      // const { pdfUrl } = await generateBillPdf(pdfPayload, restaurant.id)
+      // await supabase.from('invoices').update({ pdf_url: pdfUrl }).eq('id', inv.id)
+      return { invoiceId: inv.id, invoiceNo }
     } catch (err) {
       console.error('Invoice generation error:', err)
       throw err

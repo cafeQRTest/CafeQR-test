@@ -57,8 +57,8 @@ if (existing) {
 }
 
     // Create invoice
-    const { invoiceId, invoiceNo, pdfUrl } = await InvoiceService.createInvoiceFromOrder(order_id);
-    return res.status(200).json({ invoice_id: invoiceId, invoice_no: invoiceNo, pdfUrl });
+    const { invoiceId, invoiceNo } = await InvoiceService.createInvoiceFromOrder(order_id);
+    return res.status(200).json({ invoice_id: invoiceId, invoice_no: invoiceNo });
   } catch (e) {
     return res.status(400).json({ error: e.message || 'Invoice generation failed' });
   }

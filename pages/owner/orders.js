@@ -10,6 +10,8 @@ import { useRestaurant } from '../../context/RestaurantContext';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import { subscribeOwnerDevice } from '../../helpers/subscribePush';
+import { downloadInvoicePdf } from '../../lib/downloadInvoicePdf'
+
 
 // Constants
 const STATUSES = ['new','in_progress','ready','completed'];
@@ -1103,7 +1105,6 @@ function OrderCard({
   onCancelOrderOpen
 }) {
   const items = toDisplayItems(order);
-  const hasInvoice = Boolean(order?.invoice?.pdf_url);
   const total = computeOrderTotalDisplay(order);
 
   const isCreditOrder = order?.is_credit && order?.credit_customer_id;
@@ -1204,14 +1205,20 @@ function OrderCard({
 
 {order.status === 'completed' && (
   <>
-    {hasInvoice && (
-      <Button
-        size="sm"
-        onClick={() => window.open(order.invoice.pdf_url, '_blank')}
-      >
-        Invoice
-      </Button>
-    )}
+    <Button
+      size="sm"
+      onClick={async () => {
+        try {
+          await downloadInvoicePdf(order.id)
+        } catch (e) {
+          alert(e.message || 'Failed to download invoice')
+        }
+      }}
+      disabled={generatingInvoice === order.id}
+    >
+      Invoice
+    </Button>
+
     <button
       onClick={() => onPrintBill && onPrintBill(order)}
       style={{
@@ -1228,6 +1235,7 @@ function OrderCard({
     </button>
   </>
 )}
+
 
             </div>
           </div>

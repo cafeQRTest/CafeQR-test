@@ -8,6 +8,8 @@ import { istSpanUtcISO } from '../../utils/istTime';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
+import { downloadInvoicePdf } from '../../lib/downloadInvoicePdf'
+
 
 
 export default function BillingPage() {
@@ -183,21 +185,19 @@ export default function BillingPage() {
     }
   };
 
-  const handleViewInvoice = (invoice) => {
-    if (!invoice || !invoice.restaurant_id) {
-      alert('Invoice data incomplete');
-      return;
-    }
-    let fiscalYear = 'FY25-26';
-    if (invoice.invoice_no && invoice.invoice_no.includes('/')) {
-      fiscalYear = invoice.invoice_no.split('/')[0];
-    }
-    const invoiceNumber = invoice.invoice_no?.split('/')[1] || invoice.invoice_no || 'unknown';
-    const pdfPath = `bills/bills/${invoice.restaurant_id}/${fiscalYear}/${invoiceNumber}.pdf`;
-    const supabaseProject = supabase.supabaseUrl.split('.supabase.co')[0].split('//')[1];
-    const invoiceUrl = `https://${supabaseProject}.supabase.co/storage/v1/object/public/${pdfPath}`;
-    window.open(invoiceUrl, '_blank');
-  };
+ 
+  const handleViewInvoice = async (invoice) => {
+  if (!invoice?.order_id) {
+    alert('Missing order id for this invoice')
+    return
+  }
+  try {
+    await downloadInvoicePdf(invoice.order_id)
+  } catch (e) {
+    alert(e.message || 'Failed to open invoice PDF')
+  }
+}
+
 
   const toggleInvoiceExpand = (invoiceId) => {
     setExpandedInvoice(expandedInvoice === invoiceId ? null : invoiceId);
