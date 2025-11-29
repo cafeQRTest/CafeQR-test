@@ -1268,21 +1268,20 @@ function OrderCard({
 
 {(order.status === 'in_progress' || order.status === 'ready') && (
   <>
+   <Button
+      size="sm"
+      onClick={() => onComplete(order)}
+      disabled={generatingInvoice === order.id}
+      title="Complete order and generate invoice"
+    >
+      {generatingInvoice === order.id ? 'Processing…' : 'Done'}
+    </Button>
     <Button
       size="sm"
       variant="danger"
       onClick={() => onCancelOrderOpen(order)}
     >
       Cancel
-    </Button>
-    <Button
-      size="sm"
-      variant="success"
-      onClick={() => onComplete(order)}
-      disabled={generatingInvoice === order.id}
-      title="Complete order and generate invoice"
-    >
-      {generatingInvoice === order.id ? 'Processing…' : 'Done'}
     </Button>
       <button
       onClick={() => onPrintBill && onPrintBill(order)}
