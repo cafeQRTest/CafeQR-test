@@ -291,6 +291,7 @@ export async function downloadTextAndShare(order, bill, restaurantProfile) {
     // Bill details
     const orderId = order?.id?.slice(0, 8)?.toUpperCase() || 'N/A';
     const orderType = getOrderTypeLabel(order);
+    const invoiceNo = order?.invoice_no || bill?.invoice_no || '';
     
     // Date & Time
     const orderDate = new Date(order.created_at);
@@ -352,7 +353,8 @@ export async function downloadTextAndShare(order, bill, restaurantProfile) {
     
     // === DATE & TIME (RIGHT ALIGNED) ===
     lines.push(`${dateStr} ${timeStr}`);
-    lines.push(`Order: #${orderId}`);
+        lines.push(`Invoice: ${invoiceNo}`);
+    // lines.push(`Order: #${orderId}`);
     lines.push(`Order Type: ${orderType}`);
     
     lines.push(dashes());
@@ -473,6 +475,8 @@ export function buildReceiptText(order, bill, restaurantProfile) {
 
     const orderId = order?.id?.slice(0, 8)?.toUpperCase() || 'N/A';
     const orderType = getOrderTypeLabel(order);
+    const invoiceNo = order?.invoice_no || bill?.invoice_no || '';
+
 
     const orderDate = new Date(order.created_at);
     const dateStr = orderDate.toLocaleDateString('en-IN', {
@@ -514,7 +518,8 @@ export function buildReceiptText(order, bill, restaurantProfile) {
 
     // === META ===
     lines.push(`${dateStr} ${timeStr}`);
-    lines.push(`Order: #${orderId}`);
+    // lines.push(`Order: #${orderId}`);
+     lines.push(`Invoice: ${invoiceNo}`);
     lines.push(`Order Type: ${orderType}`);
 
     // === ITEMS ===

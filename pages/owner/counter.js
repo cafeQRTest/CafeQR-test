@@ -621,22 +621,22 @@ const loadCreditCustomers = async () => {
 
     
     // Kick off invoice generation, but don't wait for it
-fetch('/api/invoices/generate', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    order_id: result.order_id,
-    payment_method: isCredit ? 'credit' : finalPaymentMethod,
-    is_credit: isCredit,
-    credit_customer_id: isCredit ? selectedCreditCustomerId : null,
-    mixed_payment_details: finalPaymentMethod === 'mixed' ? mixedDetails : null
-  })
-}).catch((e) => {
-  console.warn(
-    'Invoice generation failed (non-blocking):',
-    e?.message || e
-  );
-});
+// fetch('/api/invoices/generate', {
+//   method: 'POST',
+//   headers: { 'Content-Type': 'application/json' },
+//   body: JSON.stringify({
+//     order_id: result.order_id,
+//     payment_method: isCredit ? 'credit' : finalPaymentMethod,
+//     is_credit: isCredit,
+//     credit_customer_id: isCredit ? selectedCreditCustomerId : null,
+//     mixed_payment_details: finalPaymentMethod === 'mixed' ? mixedDetails : null
+//   })
+// }).catch((e) => {
+//   console.warn(
+//     'Invoice generation failed (non-blocking):',
+//     e?.message || e
+//   );
+// });
 
 
 const fullOrder = result.order_for_print || null;
@@ -687,7 +687,7 @@ window.dispatchEvent(
       table_number,
       customer_name: customerName.trim() || null,
       customer_phone: customerPhone.trim() || null,
-      payment_method: isCredit ? 'credit' : 'cash',
+      payment_method: isCredit ? 'credit' : 'none',
       payment_status: 'pending',
       items,
       is_credit: isCredit,

@@ -637,8 +637,6 @@ const handleCancelDismiss = () => setCancelOrderDialog(null);
     if (error) throw error;
     return data;
   }
-
-  // loadOrders
   const loadOrders = useCallback(async (page = completedPage) => {
     if (!supabase || !restaurantId) return;
     setLoading(true);
@@ -651,26 +649,11 @@ const handleCancelDismiss = () => setCancelOrderDialog(null);
         fetchBucket('completed', page),
       ]);
 
-      const all = [...n, ...i, ...r, ...c];
-      const ids = all.map((o) => o.id);
-      let invMap = {};
-
-      if (ids.length) {
-        const { data: invoices, error } = await supabase
-          .from('invoices')
-          .select('order_id, pdf_url')
-          .in('order_id', ids);
-        if (error) console.error('Invoice fetch error:', error);
-        invoices?.forEach((inv) => { invMap[inv.order_id] = inv.pdf_url; });
-      }
-
-      const attach = (rows) => rows.map((o) => ({ ...o, invoice: invMap[o.id] ? { pdf_url: invMap[o.id] } : null }));
-
       setOrdersByStatus({
-        new: attach(n),
-        in_progress: attach(i),
-        ready: attach(r),
-        completed: attach(c),
+        new: n,
+        in_progress: i,
+        ready: r,
+        completed: c,
         mobileFilter: 'new',
       });
     } catch (e) {
@@ -766,7 +749,28 @@ useEffect(() => {
     }
   }
 
-  const finalize = (order) => {
+  const finalize = async (order) => {
+
+
+ if (!order?.id || !supabase || !restaurantId) return;
+
+  // 1) Load latest invoice for this order
+  const { data: invoice, error: invErr } = await supabase
+    .from('invoices')
+    .select('*')
+    .eq('restaurant_id', restaurantId)
+    .eq('order_id', order.id)
+    .order('invoice_date', { ascending: false })
+    .maybeSingle();
+
+  if (invErr) {
+    console.error('Invoice fetch error in finalize:', invErr);
+  }
+  //  const fullOrder = {
+  //   ...order,
+  //   invoice,
+  // };
+
   // ✅ Check PAYMENT_METHOD first for credit orders
   if (order?.payment_method === 'credit') {
     // Credit orders don't need payment confirmation - just complete
@@ -775,7 +779,7 @@ useEffect(() => {
   }
 
   // If invoice already exists, customer paid online - skip dialog
-  if (order?.invoice?.pdf_url) {
+  if (invoice.id > 0) {
     complete(order.id);
     return;
   }
@@ -946,12 +950,34 @@ if (ordersByStatus.mobileFilter === 'inprogress') {
             })
           );
         }}
-        onPrintBill={() => {
-          window.dispatchEvent(
-            new CustomEvent('auto-print-order', {
-              detail: { ...order, autoPrint: true, kind: 'bill' }
-            })
-          );
+        onPrintBill={async () => {
+          try {
+            const s = getSupabase();
+            const { data: invoice } = await s
+              .from('invoices')
+              .select('invoice_no')
+              .eq('order_id', order.id)
+              .order('invoice_date', { ascending: false })
+              .maybeSingle();
+
+            const orderForPrint = {
+              ...order,
+              invoice_no: invoice?.invoice_no || null,
+            };
+
+            window.dispatchEvent(
+              new CustomEvent('auto-print-order', {
+                detail: { ...orderForPrint, autoPrint: true, kind: 'bill' }
+              })
+            );
+          } catch (err) {
+            console.error('Print bill invoice fetch failed (mobile)', err);
+            window.dispatchEvent(
+              new CustomEvent('auto-print-order', {
+                detail: { ...order, autoPrint: true, kind: 'bill' }
+              })
+            );
+          }
         }}
         onCancelOrderOpen={onCancelOrderOpen}
       />
@@ -960,8 +986,9 @@ if (ordersByStatus.mobileFilter === 'inprogress') {
 </div>
 
 
+
       {/* Kanban grid for desktop */}
-      <div className="kanban">
+   <div className="kanban"> 
   {UI_COLUMNS.map((col) => {
     const colOrders = col.statuses
       .flatMap((st) => ordersByStatus[st] || [])
@@ -996,12 +1023,33 @@ if (ordersByStatus.mobileFilter === 'inprogress') {
                     })
                   );
                 }}
-                onPrintBill={() => {
-                  window.dispatchEvent(
-                    new CustomEvent('auto-print-order', {
-                      detail: { ...order, autoPrint: true, kind: 'bill' }
-                    })
-                  );
+                onPrintBill={async () => {
+                  try {
+                    const s = getSupabase();
+                    const { data: invoice } = await s
+                      .from('invoices')
+                      .select('invoice_no')
+                      .eq('order_id', order.id)
+                      .order('invoice_date', { ascending: false })
+                      .maybeSingle();
+                    const orderForPrint = {
+                      ...order,
+                      invoice_no: invoice?.invoice_no || null,
+                    };
+
+                    window.dispatchEvent(
+                      new CustomEvent('auto-print-order', {
+                        detail: { ...orderForPrint, autoPrint: true, kind: 'bill' }
+                      })
+                    );
+                  } catch (err) {
+                    console.error('Print bill invoice fetch failed (desktop)', err);
+                    window.dispatchEvent(
+                      new CustomEvent('auto-print-order', {
+                        detail: { ...order, autoPrint: true, kind: 'bill' }
+                      })
+                    );
+                  }
                 }}
                 onCancelOrderOpen={onCancelOrderOpen}
               />
@@ -1034,6 +1082,7 @@ if (ordersByStatus.mobileFilter === 'inprogress') {
     );
   })}
 </div>
+
 
 
       {paymentConfirmDialog && (
@@ -1200,7 +1249,22 @@ function OrderCard({
     >
       {generatingInvoice === order.id ? 'Processing…' : 'Done'}
     </Button>
+      <button
+      onClick={() => onPrintBill && onPrintBill(order)}
+      style={{
+        background: '#10b981',
+        color: '#fff',
+        border: 'none',
+        padding: '6px 12px',
+        borderRadius: '4px',
+        cursor: 'pointer',
+        fontSize: '12px',
+      }}
+    >
+      Print Bill
+    </button>
   </>
+
 )}
 
 {order.status === 'completed' && (

@@ -55,15 +55,15 @@ export default function PaymentSuccess() {
       await router.replace(`/order/success?id=${result.order_id}&method=online&amt=${amt}`)
 
       // Open bill PDF via existing invoice endpoint
-      const gen = await fetch('/api/invoices/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ order_id: result.order_id })
-      })
-      if (gen.ok) {
-        const { pdf_url } = await gen.json()
-        window.open(pdf_url, '_blank')
-      }
+      // const gen = await fetch('/api/invoices/generate', {
+      //   method: 'POST',
+      //   headers: { 'Content-Type': 'application/json' },
+      //   body: JSON.stringify({ order_id: result.order_id })
+      // })
+      // if (gen.ok) {
+      //   const { pdf_url } = await gen.json()
+      //   window.open(pdf_url, '_blank')
+      // }
     } catch (error) {
       console.error('Payment processing failed:', error)
       setStatus('error')

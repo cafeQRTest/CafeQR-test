@@ -1,6 +1,6 @@
 // pages/api/orders/create.js
-
 import { createClient } from '@supabase/supabase-js';
+import { InvoiceService } from '../../../services/invoiceService';
 
 export default async function handler(req, res) {
   console.log('[/api/orders/create] handler called, method =', req.method);
@@ -174,41 +174,38 @@ export default async function handler(req, res) {
       };
     }
 
-// Decide final status based on client + defaults
-let finalStatus = incomingStatus;
-if (!finalStatus) {
-  // Customer dashboard & Send-to-Kitchen default to "new"
-  finalStatus = 'new';
-}
-
+    // Decide final status based on client + defaults
+    let finalStatus = incomingStatus;
+    if (!finalStatus) {
+      // Customer dashboard & Send-to-Kitchen default to "new"
+      finalStatus = 'new';
+    }
 
     // Insert order
     const { data: orderData, error: orderError } = await supabase
       .from('orders')
-      .insert([
-        {
-          restaurant_id,
-          table_number: table_number || null,
-          order_type,
-          status: finalStatus,  
-          payment_method: processedPaymentMethod,
-          payment_status,
-          special_instructions,
-          restaurant_name: finalRestaurantName,
-          customer_name: customer_name || null,
-          customer_phone: customer_phone || null,
-          subtotal_ex_tax: Number(subtotalEx.toFixed(2)),
-          total_tax: Number(totalTax.toFixed(2)),
-          total_inc_tax: Number(totalInc.toFixed(2)),
-          total_amount: Number(totalInc.toFixed(2)),
-          prices_include_tax: serviceInclude,
-          gst_enabled: gstEnabled,
-          mixed_payment_details: processedMixedDetails,
-          is_credit: is_credit ?? false,
-          credit_customer_id: credit_customer_id ?? null,
-          original_payment_method: original_payment_method || null
-        }
-      ])
+      .insert([{
+        restaurant_id,
+        table_number: table_number || null,
+        order_type,
+        status: finalStatus,  
+        payment_method: processedPaymentMethod,
+        payment_status,
+        special_instructions,
+        restaurant_name: finalRestaurantName,
+        customer_name: customer_name || null,
+        customer_phone: customer_phone || null,
+        subtotal_ex_tax: Number(subtotalEx.toFixed(2)),
+        total_tax: Number(totalTax.toFixed(2)),
+        total_inc_tax: Number(totalInc.toFixed(2)),
+        total_amount: Number(totalInc.toFixed(2)),
+        prices_include_tax: serviceInclude,
+        gst_enabled: gstEnabled,
+        mixed_payment_details: processedMixedDetails,
+        is_credit: is_credit ?? false,
+        credit_customer_id: credit_customer_id ?? null,
+        original_payment_method: original_payment_method || null
+      }])
       .select('id');
 
     if (orderError) {
@@ -229,6 +226,27 @@ if (!finalStatus) {
       console.error('Order items error:', itemsError);
       await supabase.from('orders').delete().eq('id', order.id);
       return res.status(500).json({ error: 'Failed to create order items' });
+    }
+    let invoice = null;
+    try {
+      await InvoiceService.createInvoiceFromOrder(
+        order.id,
+       null
+      );
+      const { data: invoiceData } = await supabase
+        .from('invoices')
+        .select('id, invoice_no')
+        .eq('order_id', order.id)
+        .single();
+
+      invoice = invoiceData;
+
+    } catch (invoiceErr) {
+      // Rollback order + items
+      await supabase.from('order_items').delete().eq('order_id', order.id);
+      await supabase.from('orders').delete().eq('id', order.id);
+      console.error('InvoiceService failed:', invoiceErr);
+      return res.status(500).json({ error: 'Failed to create invoice via service' });
     }
 
     // ✅ Deduct stock for each menu item based on recipes
@@ -310,15 +328,13 @@ if (!finalStatus) {
             try {
               const { data: alertData, error: alertError } = await supabase
                 .from('alert_notification')
-                .insert([
-                  {
-                    restaurant_id,
-                    table_number: table_number ?? 0,
-                    created_at: alertTime,
-                    status: 'pending',
-                    message: `${ingredient.name} (${newStock})`
-                  }
-                ])
+                .insert([{
+                  restaurant_id,
+                  table_number: table_number ?? 0,
+                  created_at: alertTime,
+                  status: 'pending',
+                  message: `${ingredient.name} (${newStock})`
+                }])
                 .select();
 
               if (alertError) {
@@ -341,6 +357,7 @@ if (!finalStatus) {
       orderId: order.id,
       restaurantId: restaurant_id,
       status: finalStatus,
+      invoiceNo: invoice.invoice_no,
       timestamp: new Date().toISOString()
     });
 
@@ -364,10 +381,27 @@ if (!finalStatus) {
 
     return res.status(200).json({
       success: true,
-      id: order.id,
       order_id: order.id,
-      order_number: order.id.slice(0, 8).toUpperCase()
+      invoice_id: invoice.id,
+      invoice_no: invoice.invoice_no,
+      order_number: order.id.slice(0, 8).toUpperCase(),
+      order_for_print: {
+        id: order.id,
+        restaurant_id,
+        order_type,
+        table_number: table_number || null,
+        customer_name,
+        customer_phone,
+        subtotal_ex_tax: Number(subtotalEx.toFixed(2)),
+        total_tax: Number(totalTax.toFixed(2)),
+        total_inc_tax: Number(totalInc.toFixed(2)),
+        items: preparedItems,
+        payment_status,
+        status: finalStatus,
+        invoice_no: invoice.invoice_no
+      }
     });
+
   } catch (e) {
     console.error('API error:', e);
     return res.status(500).json({ error: e?.message || 'Internal server error' });
