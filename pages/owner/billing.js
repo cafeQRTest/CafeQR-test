@@ -82,17 +82,17 @@ export default function BillingPage() {
         .eq('restaurant_id', restaurant.id)
         .gte('invoice_date', startUtc)
         .lt('invoice_date', endUtc)
+        .neq('status', 'unpaid')
         .order('invoice_date', { ascending: false });
 
       if (error) throw error;
 
       let list = data || [];
-
       // Filter by report type
       if (reportType === 'sales') {
         list = list.filter(inv => inv.payment_method !== 'credit' && String(inv.status || '').toLowerCase() !== 'void');
-      } else if (reportType === 'credit') {
-        list = list.filter(inv => inv.payment_method === 'credit' && String(inv.status || '').toLowerCase() !== 'void');
+       } else if (reportType === 'credit') {
+         list = list.filter(inv => inv.payment_method === 'credit' && String(inv.status || '').toLowerCase() !== 'void');
       } else if (reportType === 'voided') {
         list = list.filter(inv => String(inv.status || '').toLowerCase() === 'void');
       } // 'all' shows everything

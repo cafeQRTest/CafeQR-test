@@ -546,7 +546,7 @@ const handleCancelConfirm = async (reason) => {
        console.log('[CANCEL ORDER] order_items:', fullOrder?.order_items);
        console.log('[CANCEL ORDER] order_items length:', fullOrder?.order_items?.length);
        console.log('[CANCEL ORDER] order_items is array?', Array.isArray(fullOrder?.order_items));
-       
+
        // Cancel the order
        await supabase
        .from('orders')
@@ -554,7 +554,35 @@ const handleCancelConfirm = async (reason) => {
        .eq('id', cancelOrderDialog.id)
        .eq('restaurant_id', restaurantId);
        console.log('[CANCEL ORDER] Order status updated to cancelled');
+   
+      const { data: invoice } = await supabase
+      .from('invoices')
+      .select('id')
+      .eq('order_id', cancelOrderDialog.id)
+      .eq('restaurant_id', restaurantId)
+      .maybeSingle();
 
+      if (invoice) {
+      console.log('[CANCEL ORDER] Found invoice, voiding:', invoice.id);
+      const res = await fetch('/api/invoices/void', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          invoice_id: invoice.id,
+          restaurant_id: restaurantId,
+          reason: reason,
+        }),
+      });
+ if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        console.warn('[CANCEL ORDER] Invoice void failed (non-critical):', j?.error);
+        // Don't throw - order cancel + stock restore should succeed anyway
+      } else {
+        console.log('[CANCEL ORDER] Invoice voided successfully');
+      }
+    } else {
+      console.log('[CANCEL ORDER] No invoice found - skipping void');
+    }
        // Restore stock for cancelled order
        let itemsToRestore = fullOrder?.order_items;
        
