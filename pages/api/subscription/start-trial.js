@@ -1,4 +1,4 @@
-// pages/api/subscription/start-trial
+// pages/api/subscription/start-trial.js
 
 import { getServerSupabase } from '../../../services/supabase-server';
 
@@ -15,42 +15,67 @@ export default async function handler(req, res) {
   try {
     const supabase = getServerSupabase();
 
-    // Check restaurant exists
-    const { data: restaurant, error: restError } = await supabase
+    // 1) Ensure a restaurant row exists for this id
+    let restaurant = null;
+
+    const { data: existingRestaurant, error: restError } = await supabase
       .from('restaurants')
       .select('id')
       .eq('id', restaurant_id)
       .maybeSingle();
 
-    if (restError || !restaurant) {
-      return res.status(404).json({ error: 'Restaurant not found' });
+    if (restError) {
+      console.error('[start-trial] Error fetching restaurant:', restError);
+      return res.status(500).json({ error: 'Failed to fetch restaurant' });
     }
 
-    // Check subscription doesn't exist
-const { data: existing, error: existError } = await supabase
-  .from('restaurant_subscriptions')
-  .select('*')
-  .eq('restaurant_id', restaurant_id)
-  .maybeSingle();
+    if (!existingRestaurant) {
+      // Auto‑create a minimal restaurant row.
+      // Add any extra default columns your schema requires.
+      const { data: created, error: createError } = await supabase
+        .from('restaurants')
+        .insert({
+          id: restaurant_id,
+          // name: 'New restaurant',        // <- optional defaults
+          // owner_email: '<optional-email>'
+        })
+        .select('id')
+        .single(); // returns the inserted row [web:80][web:87]
 
-if (existError && existError.code !== 'PGRST116') {
-  console.error('Error checking subscription:', existError);
-  return res.status(500).json({ error: 'DB query failed' });
-}
+      if (createError) {
+        console.error('[start-trial] Error creating restaurant:', createError);
+        return res.status(500).json({ error: 'Failed to create restaurant' });
+      }
 
+      restaurant = created;
+    } else {
+      restaurant = existingRestaurant;
+    }
 
-    if (existing) {
+    // 2) Check subscription doesn't already exist
+    const { data: existingSub, error: existError } = await supabase
+      .from('restaurant_subscriptions')
+      .select('*')
+      .eq('restaurant_id', restaurant.id)
+      .maybeSingle();
+
+    if (existError && existError.code !== 'PGRST116') {
+      console.error('[start-trial] Error checking subscription:', existError);
+      return res.status(500).json({ error: 'DB query failed' });
+    }
+
+    if (existingSub) {
       return res.status(200).json({ message: 'Already exists' });
     }
 
-    // Create trial
+    // 3) Create trial subscription
     const trialEnd = new Date();
     trialEnd.setDate(trialEnd.getDate() + 7);
 
     const { data, error } = await supabase
       .from('restaurant_subscriptions')
       .insert({
-        restaurant_id,
+        restaurant_id: restaurant.id,
         status: 'trial',
         is_active: true,
         trial_ends_at: trialEnd.toISOString(),
@@ -58,13 +83,14 @@ if (existError && existError.code !== 'PGRST116') {
         next_due_at: trialEnd.toISOString(),
       })
       .select()
-      .single();
+      .single(); // return the created subscription [web:87]
 
-    if (error) throw error;
+    if (error) {
+      console.error('[start-trial] Error creating trial:', error);
+      return res.status(500).json({ error: 'Failed to create trial' });
+    }
 
-    // ← FAST RESPONSE (don't wait for anything)
     return res.status(200).json({ success: true, subscription: data });
-
   } catch (err) {
     console.error('[start-trial] Error:', err);
     return res.status(500).json({ error: err.message });
