@@ -1,4 +1,5 @@
 // pages/owner/billing.js
+
 import React, { useEffect, useState } from 'react';
 import { getSupabase } from '../../services/supabase';
 import { useRestaurant } from '../../context/RestaurantContext';
