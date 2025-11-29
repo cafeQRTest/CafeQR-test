@@ -1,4 +1,5 @@
 // components/Alert.js script
+
 export default function Alert({ type = 'info', children }) {
   const styles = {
     error: { color: '#ff0000', bg: '#ffe6e6' },
