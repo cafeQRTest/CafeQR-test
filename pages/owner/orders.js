@@ -779,7 +779,7 @@ useEffect(() => {
   }
 
   // If invoice already exists, customer paid online - skip dialog
-  if (invoice.id > 0) {
+  if (invoice.status == 'paid') {
     complete(order.id);
     return;
   }
@@ -840,20 +840,28 @@ const complete = async (orderId, actualPaymentMethod = null, mixedDetails = null
       .eq('restaurant_id', restaurantId);
     
     // ✅ FIX: Pass the CORRECT payment_method from order to API
-    const resp = await fetch('/api/invoices/generate', {
-      method: 'POST', 
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        order_id: orderId, 
-        restaurant_id: restaurantId,
-        payment_method: finalPaymentMethod,  // ✅ Pass final payment method
-        is_credit: order?.is_credit,
-        credit_customer_id: order?.credit_customer_id,
-        mixed_payment_details: mixedDetails
-      }),
-    });
-    
-    if (!resp.ok) throw new Error('Invoice generation failed');
+    // ✅ REPLACE the fetch() block with this:
+const { data: updatedInvoice, error: invoiceErr } = await supabase
+  .from('invoices')
+  .update({
+    payment_method: finalPaymentMethod,
+    mixed_payment_details: mixedDetails,
+    status: 'paid'
+  })
+  .eq('order_id', orderId)
+  .eq('restaurant_id', restaurantId)
+  .select();
+
+if (invoiceErr) {
+  if (invoiceErr.code === 'PGRST116') { // No rows updated (no invoice exists)
+    console.warn('No existing invoice - skipping update');
+  } else {
+    throw new Error(`Invoice update failed: ${invoiceErr.message}`);
+  }
+}
+
+console.log('Invoice updated:', updatedInvoice?.[0]);
+
     loadOrders();
   } catch (e) {
     setError(e.message);
