@@ -206,7 +206,7 @@ export default async function handler(req, res) {
         credit_customer_id: credit_customer_id ?? null,
         original_payment_method: original_payment_method || null
       }])
-      .select('id');
+      .select('id, created_at');
 
     if (orderError) {
       console.error('Order creation error:', orderError);
@@ -395,10 +395,15 @@ export default async function handler(req, res) {
         subtotal_ex_tax: Number(subtotalEx.toFixed(2)),
         total_tax: Number(totalTax.toFixed(2)),
         total_inc_tax: Number(totalInc.toFixed(2)),
-        items: preparedItems,
+        items: preparedItems.map(pi => ({
+         ...pi,
+         name: pi.item_name,
+         })),
         payment_status,
         status: finalStatus,
-        invoice_no: invoice.invoice_no
+        invoice_no: invoice.invoice_no,
+        created_at: order.created_at
+
       }
     });
 

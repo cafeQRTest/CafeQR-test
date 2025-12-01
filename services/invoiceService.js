@@ -115,6 +115,8 @@ export class InvoiceService {
             igst: 0,
             payment_method: payMethod,
             status: payMethod === 'none' ? 'unpaid' : 'paid',
+            paid_amount: payMethod === 'none' ? 0 : (order.total_inc_tax ?? order.total_amount ?? 0),
+            paid_amount:payMethod === 'none'? 0: (order.total_inc_tax ?? order.total_amount ?? 0),
             mixed_payment_details: order.mixed_payment_details || null,
             generation_method: regenerationReason ? 'regenerated' : 'auto',
             regenerated_from_invoice_id: null,

@@ -223,7 +223,7 @@ export default function PaymentPage() {
           subtotal: calculateTotals.subtotalEx,
           tax: calculateTotals.taxAmount,
           total_amount: calculateTotals.totalInc,
-          payment_method: 'cash',
+          payment_method: 'none',
           special_instructions: specialInstructions.trim(),
           payment_status: 'pending',
         };
