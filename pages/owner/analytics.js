@@ -242,9 +242,18 @@ const fetchAiSuggestions = async () => {
 )}
 
 {aiSuggestions && (
-  <Card padding="20px" style={{ marginTop: 16 }}>
-    <h3 style={{ marginTop: 0 }}>AI Sales Suggestions</h3>
-    <div style={{ whiteSpace: 'pre-wrap', fontSize: 14, color: '#111827' }}>
+  <Card padding="20px" style={{ marginTop: 16, maxHeight: 480, overflowY: 'auto' }}>
+    <h3 style={{ marginTop: 0 }}>
+      AI Sales Suggestions for {restaurant?.name || 'your restaurant'}
+    </h3>
+    <p style={{ color: '#6b7280', fontSize: 12, margin: '4px 0 12px' }}>
+      Period: {timeRange === 'today'
+        ? 'Today'
+        : timeRange === 'week'
+        ? 'Last 7 days'
+        : 'Last 30 days'}
+    </p>
+    <div style={{ whiteSpace: 'pre-wrap', fontSize: 14, color: '#111827', lineHeight: 1.5 }}>
       {aiSuggestions}
     </div>
   </Card>

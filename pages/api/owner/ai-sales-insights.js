@@ -40,6 +40,49 @@ export default async function handler(req, res) {
     const { start, end } = getDateRange(timeRange);
     const { startUtc, endUtc } = istSpanFromDatesUtcISO(start, end);
 
+
+
+    // NEW: fetch restaurant metadata (name + location)
+    const { data: restaurantRow, error: restError } = await supabase
+      .from('restaurants')
+      .select('name, created_at')
+      .eq('id', restaurantId)
+      .single();
+
+    if (restError) throw restError;
+
+    const { data: profileRow } = await supabase
+      .from('restaurant_profiles')
+      .select(`
+        shipping_city,
+        shipping_state,
+        shipping_pincode,
+        profile_address_city,
+        profile_address_state,
+        profile_address_pincode,
+        profile_category,
+        profile_subcategory
+      `)
+      .eq('restaurant_id', restaurantId)
+      .maybeSingle(); // profile may or may not exist
+
+    const restaurantMeta = {
+      name: restaurantRow?.name || 'Unknown Restaurant',
+      city: profileRow?.shipping_city || profileRow?.profile_address_city || null,
+      state: profileRow?.shipping_state || profileRow?.profile_address_state || null,
+      pincode: profileRow?.shipping_pincode || profileRow?.profile_address_pincode || null,
+      category: profileRow?.profile_category || null,
+      subcategory: profileRow?.profile_subcategory || null,
+    };
+
+    // Extra stats about the window
+    const daysInRange = Math.max(
+      1,
+      Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))
+    );
+    const dateRangeLabel = `${start.toLocaleDateString('en-IN')} to ${end.toLocaleDateString('en-IN')}`;
+
+
     // 1) Fetch orders
     const { data: orders, error: ordersError } = await supabase
       .from('orders')
@@ -132,17 +175,88 @@ export default async function handler(req, res) {
       revenue: d.revenue,
     }));
 
-    const summaryForAI = {
-      timeRange,
-      totalOrders,
-      totalRevenue,
-      avgOrderValue: totalOrders ? totalRevenue / totalOrders : 0,
-      totalTax,
-      topItems,
-      weakItems,
-      hourlyData,
-      orderTypeData,
-    };
+const avgOrderValue = totalOrders ? totalRevenue / totalOrders : 0;
+
+
+// After you compute orderData / hourlyData / orderTypeData...
+
+// 3) Sales totals (you already have totalRevenue and totalTax)
+const grossSales = totalRevenue;
+
+// 4) Expenses in range
+const { data: expRows, error: expErr } = await supabase
+  .from('expenses')
+  .select('amount, expense_date, category_id')
+  .eq('restaurant_id', restaurantId)
+  .gte('expense_date', startUtc)
+  .lte('expense_date', endUtc);
+
+if (expErr) throw expErr;
+const totalExpenses = (expRows || []).reduce(
+  (s, e) => s + Number(e.amount || 0),
+  0
+);
+
+// 5) Credit ledger
+const { data: txns, error: txnErr } = await supabase
+  .from('credit_transactions')
+  .select('transaction_type, amount, transaction_date')
+  .eq('restaurant_id', restaurantId)
+  .gte('transaction_date', startUtc)
+  .lt('transaction_date', endUtc);
+
+if (txnErr) throw txnErr;
+
+let creditExtended = 0;
+let creditPayments = 0;
+(txns || []).forEach((t) => {
+  const amt = Number(t.amount || 0);
+  if (t.transaction_type === 'credit' || t.transaction_type === 'adjustment') {
+    creditExtended += amt;
+  } else if (t.transaction_type === 'payment') {
+    creditPayments += amt;
+  }
+});
+
+const creditOutstanding = creditExtended - creditPayments;
+const netProfitAccrual = grossSales - totalExpenses;
+const netCashProfit = netProfitAccrual - creditOutstanding;
+
+// 6) Opening hours
+const { data: hoursRows } = await supabase
+  .from('restaurant_hours')
+  .select('weekday, open_time, close_time, is_open')
+  .eq('restaurant_id', restaurantId);
+
+const summaryForAI = {
+  // existing fields...
+  timeRange,
+  dateRangeLabel,
+  daysInRange,
+  restaurant: restaurantMeta,
+  totalOrders,
+  totalRevenue,
+  avgOrderValue,
+  totalTax,
+  topItems,
+  weakItems,
+  hourlyData,
+  orderTypeData,
+
+  // NEW:
+  financialStats: {
+    grossSales,
+    totalExpenses,
+    totalTax,
+    netProfitAccrual,
+    creditExtended,
+    creditPayments,
+    creditOutstanding,
+    netCashProfit,
+  },
+  openingHours: hoursRows || [],
+};
+
 
     // 3) Call the AI helper
     const suggestions = await generateSalesSuggestions(summaryForAI);
