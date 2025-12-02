@@ -72,7 +72,7 @@ export default function ItemEditor({
   const canSubmit = useMemo(() => {
     if (!name.trim()) return false;
     if (price === "" || Number.isNaN(Number(price))) return false;
-    if (Number(price) <= 0) return false; // price mandatory and > 0
+    if (price !== "" && Number(price) === 0) return false; // block zero only
     if (taxRate < 0 || cessRate < 0) return false;
     // code is optional, so we don't require it
     return true;
@@ -207,7 +207,7 @@ export default function ItemEditor({
               value={price}
               onChange={(e) => setPrice(e.target.value)}
               required
-              min="0.01"
+             // min="0.01"
               style={input}
               placeholder="Enter price"
             />
