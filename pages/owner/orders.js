@@ -664,7 +664,33 @@ const handleCancelDismiss = () => setCancelOrderDialog(null);
     if (error) throw error;
     return data;
   }
-  const loadOrders = useCallback(async (page = completedPage) => {
+  
+// Fetch orders helper
+async function fetchBucket(status, page = 1) {
+  if (!supabase || !restaurantId) return [];
+  let q = supabase
+    .from('orders')
+    .select('*, order_items(*, menu_items(name))')
+    .eq('restaurant_id', restaurantId)
+    .eq('status', status);
+
+  if (status === 'completed') {
+    const to = page * PAGE_SIZE - 1;
+    const { data, error } = await q
+      .order('created_at', { ascending: false })
+      .range(0, to);
+    if (error) throw error;
+    return data;
+  }
+
+  const { data, error } = await q.order('created_at', { ascending: true });
+  if (error) throw error;
+  return data;
+}
+
+// ✅ Only ONE loadOrders, independent of completedPage
+const loadOrders = useCallback(
+  async (page = 1) => {
     if (!supabase || !restaurantId) return;
     setLoading(true);
     setError('');
@@ -688,14 +714,17 @@ const handleCancelDismiss = () => setCancelOrderDialog(null);
     } finally {
       setLoading(false);
     }
-  }, [completedPage, restaurantId, supabase]);
+  },
+  [restaurantId, supabase]
+);
 
-  useEffect(() => {
-    if (restaurantId) {
-      setCompletedPage(1);
-      loadOrders(1);
-    }
-  }, [restaurantId, loadOrders]);
+// Initial load / when restaurant changes
+useEffect(() => {
+  if (restaurantId) {
+    setCompletedPage(1);
+    loadOrders(1);
+  }
+}, [restaurantId, loadOrders]);
 
   // Realtime subscription & reconnection logic
   // Realtime subscription & order state sync
@@ -904,14 +933,23 @@ console.log('Invoice updated:', updatedInvoice?.[0]);
 
 // Before rendering mobile list:
 let mobileOrders;
+
 if (ordersByStatus.mobileFilter === 'inprogress') {
+  // Cooking column: oldest → newest
   mobileOrders = [
     ...ordersByStatus.in_progress,
     ...ordersByStatus.ready,
   ].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+} else if (ordersByStatus.mobileFilter === 'completed') {
+  // Done: newest → oldest
+  mobileOrders = [...(ordersByStatus.completed || [])].sort(
+    (a, b) => new Date(b.created_at) - new Date(a.created_at)
+  );
 } else {
-  mobileOrders =
-    ordersByStatus[ordersByStatus.mobileFilter] || [];
+  // New column: oldest → newest
+  mobileOrders = [...(ordersByStatus[ordersByStatus.mobileFilter] || [])].sort(
+    (a, b) => new Date(a.created_at) - new Date(b.created_at)
+  );
 }
 
 
@@ -1025,9 +1063,19 @@ if (ordersByStatus.mobileFilter === 'inprogress') {
       {/* Kanban grid for desktop */}
    <div className="kanban"> 
   {UI_COLUMNS.map((col) => {
-    const colOrders = col.statuses
-      .flatMap((st) => ordersByStatus[st] || [])
-      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    let colOrders = col.statuses.flatMap((st) => ordersByStatus[st] || []);
+
+colOrders =
+  col.id === 'completed'
+    // Done: newest → oldest
+    ? [...colOrders].sort(
+        (a, b) => new Date(b.created_at) - new Date(a.created_at)
+      )
+    // Other columns: oldest → newest
+    : [...colOrders].sort(
+        (a, b) => new Date(a.created_at) - new Date(b.created_at)
+      );
+
 
     return (
       <Card key={col.id} padding={12}>
@@ -1101,14 +1149,16 @@ if (ordersByStatus.mobileFilter === 'inprogress') {
                 </div>
                 <div style={{ paddingTop: 8 }}>
                   <Button
-                    variant="outline"
-                    onClick={() => {
-                      setCompletedPage((p) => p + 1);
-                      loadOrders(completedPage + 1);
-                    }}
-                  >
-                    Load more
-                  </Button>
+  variant="outline"
+  onClick={() => {
+    const next = completedPage + 1;
+    setCompletedPage(next);
+    loadOrders(next);
+  }}
+>
+  Load more
+</Button>
+
                 </div>
               </>
             )}
