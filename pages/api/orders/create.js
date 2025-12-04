@@ -36,14 +36,14 @@ export default async function handler(req, res) {
       is_credit = false,
       credit_customer_id = null,
       original_payment_method = null,
-      status: incomingStatus = null 
+      status: incomingStatus = null,
     } = req.body;
 
     if (!restaurant_id || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    // Load menu item attributes
+    // 1) Load menu item attributes
     const itemIds = items.map((it) => it.id).filter(Boolean);
     const { data: menuItems, error: menuError } = await supabase
       .from('menu_items')
@@ -57,14 +57,16 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Failed to load menu items' });
     }
 
-    // Load restaurant profile (with inventory flag)
+    // 2) Load restaurant profile
     const { data: profile, error: profileErr } = await supabase
       .from('restaurant_profiles')
-      .select('gst_enabled, default_tax_rate, prices_include_tax, features_inventory_enabled')
+      .select(
+        'gst_enabled, default_tax_rate, prices_include_tax, features_inventory_enabled'
+      )
       .eq('restaurant_id', restaurant_id)
       .maybeSingle();
 
-    // Always load restaurant display name from restaurants table
+    // 3) Load restaurant display name
     const { data: restaurantRow, error: restaurantErr } = await supabase
       .from('restaurants')
       .select('name')
@@ -75,7 +77,6 @@ export default async function handler(req, res) {
       console.error('Restaurant fetch error:', restaurantErr);
     }
 
-    // Prefer the name sent by the client, otherwise use the DB name
     const finalRestaurantName = restaurant_name || restaurantRow?.name || null;
 
     if (profileErr) {
@@ -89,16 +90,14 @@ export default async function handler(req, res) {
     const gstEnabled = !!profile?.gst_enabled;
     const inventoryAlertsEnabled = !!profile?.features_inventory_enabled;
     const serviceRate = gstEnabled ? baseRate : 0;
-    const serviceInclude = gstEnabled
-      ? (
-          profile?.prices_include_tax === true ||
-          profile?.prices_include_tax === 'true' ||
-          profile?.prices_include_tax === 1 ||
-          profile?.prices_include_tax === '1'
-        )
-      : false;
+    const serviceInclude =
+      gstEnabled &&
+      (profile?.prices_include_tax === true ||
+        profile?.prices_include_tax === 'true' ||
+        profile?.prices_include_tax === 1 ||
+        profile?.prices_include_tax === '1');
 
-    // Compute totals
+    // 4) Compute totals
     let subtotalEx = 0;
     let totalTax = 0;
     let totalInc = 0;
@@ -150,10 +149,11 @@ export default async function handler(req, res) {
         unit_tax_amount: Number((unitIncR - unitExR).toFixed(2)),
         tax_rate: effectiveRate,
         hsn: it.hsn || null,
-        is_packaged_good: isPackaged
+        is_packaged_good: isPackaged,
       };
     });
 
+    // 5) Mixed payment validation
     let processedPaymentMethod = payment_method;
     let processedMixedDetails = null;
 
@@ -163,63 +163,68 @@ export default async function handler(req, res) {
       const orderTotal = Number(totalInc.toFixed(2));
       if (Math.abs(mixedTotal - orderTotal) > 0.01) {
         return res.status(400).json({
-          error: 'Mixed payment amounts do not match order total'
+          error: 'Mixed payment amounts do not match order total',
         });
       }
       processedMixedDetails = {
         cash_amount: Number(cash_amount).toFixed(2),
         online_amount: Number(online_amount).toFixed(2),
         online_method: online_method || 'upi',
-        is_mixed: true
+        is_mixed: true,
       };
     }
 
-    // Decide final status based on client + defaults
+    // 6) Final status
     let finalStatus = incomingStatus;
     if (!finalStatus) {
-      // Customer dashboard & Send-to-Kitchen default to "new"
       finalStatus = 'new';
     }
 
-    // Insert order
+    // 7) Insert order
     const { data: orderData, error: orderError } = await supabase
       .from('orders')
-      .insert([{
-        restaurant_id,
-        table_number: table_number || null,
-        order_type,
-        status: finalStatus,  
-        payment_method: processedPaymentMethod,
-        payment_status,
-        special_instructions,
-        restaurant_name: finalRestaurantName,
-        customer_name: customer_name || null,
-        customer_phone: customer_phone || null,
-        subtotal_ex_tax: Number(subtotalEx.toFixed(2)),
-        total_tax: Number(totalTax.toFixed(2)),
-        total_inc_tax: Number(totalInc.toFixed(2)),
-        total_amount: Number(totalInc.toFixed(2)),
-        prices_include_tax: serviceInclude,
-        gst_enabled: gstEnabled,
-        mixed_payment_details: processedMixedDetails,
-        is_credit: is_credit ?? false,
-        credit_customer_id: credit_customer_id ?? null,
-        original_payment_method: original_payment_method || null
-      }])
+      .insert([
+        {
+          restaurant_id,
+          table_number: table_number || null,
+          order_type,
+          status: finalStatus,
+          payment_method: processedPaymentMethod,
+          payment_status,
+          special_instructions,
+          restaurant_name: finalRestaurantName,
+          customer_name: customer_name || null,
+          customer_phone: customer_phone || null,
+          subtotal_ex_tax: Number(subtotalEx.toFixed(2)),
+          total_tax: Number(totalTax.toFixed(2)),
+          total_inc_tax: Number(totalInc.toFixed(2)),
+          total_amount: Number(totalInc.toFixed(2)),
+          prices_include_tax: serviceInclude,
+          gst_enabled: gstEnabled,
+          mixed_payment_details: processedMixedDetails,
+          is_credit: is_credit ?? false,
+          credit_customer_id: credit_customer_id ?? null,
+          original_payment_method: original_payment_method || null,
+        },
+      ])
       .select('id, created_at');
 
     if (orderError) {
       console.error('Order creation error:', orderError);
-      return res.status(500).json({ error: 'Failed to create order: ' + orderError.message });
+      return res
+        .status(500)
+        .json({ error: 'Failed to create order: ' + orderError.message });
     }
 
     if (!orderData || orderData.length === 0) {
-      return res.status(500).json({ error: 'Order created but could not retrieve ID' });
+      return res
+        .status(500)
+        .json({ error: 'Order created but could not retrieve ID' });
     }
 
     const order = orderData[0];
 
-    // Insert order items
+    // 8) Insert order items
     const orderItems = preparedItems.map((oi) => ({ ...oi, order_id: order.id }));
     const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
     if (itemsError) {
@@ -227,12 +232,11 @@ export default async function handler(req, res) {
       await supabase.from('orders').delete().eq('id', order.id);
       return res.status(500).json({ error: 'Failed to create order items' });
     }
+
+    // 9) Create invoice synchronously (so invoice_no is ready for printing)
     let invoice = null;
     try {
-      await InvoiceService.createInvoiceFromOrder(
-        order.id,
-       null
-      );
+      await InvoiceService.createInvoiceFromOrder(order.id, null);
       const { data: invoiceData } = await supabase
         .from('invoices')
         .select('id, invoice_no')
@@ -240,146 +244,17 @@ export default async function handler(req, res) {
         .single();
 
       invoice = invoiceData;
-
     } catch (invoiceErr) {
-      // Rollback order + items
       await supabase.from('order_items').delete().eq('order_id', order.id);
       await supabase.from('orders').delete().eq('id', order.id);
       console.error('InvoiceService failed:', invoiceErr);
-      return res.status(500).json({ error: 'Failed to create invoice via service' });
+      return res
+        .status(500)
+        .json({ error: 'Failed to create invoice via service' });
     }
 
-    // ✅ Deduct stock for each menu item based on recipes
-    for (const item of items) {
-      if (!item.id || !item.quantity) continue;
-
-      try {
-        // Get recipe for this menu item
-        const { data: recipe, error: recipeErr } = await supabase
-          .from('recipes')
-          .select('id, recipe_items(ingredient_id, quantity)')
-          .eq('menu_item_id', item.id)
-          .eq('restaurant_id', restaurant_id)
-          .maybeSingle();
-
-        if (recipeErr || !recipe || !recipe.recipe_items || recipe.recipe_items.length === 0) {
-          continue;
-        }
-
-        // Check if menu item is packaged good - skip if true
-        const menuItem = menuItems?.find((mi) => mi.id === item.id);
-        if (menuItem?.is_packaged_good) {
-          continue;
-        }
-
-        console.log(`Processing stock deduction for menu item ${item.id} with recipe ${recipe.id}`);
-
-        for (const recipeItem of recipe.recipe_items) {
-          const deductAmount = Number(recipeItem.quantity) * Number(item.quantity);
-
-          // Get all needed ingredient data in ONE call (id, name, current_stock, reorder_threshold)
-          const { data: ingredient, error: ingErr } = await supabase
-            .from('ingredients')
-            .select('id, current_stock, name, reorder_threshold')
-            .eq('id', recipeItem.ingredient_id)
-            .eq('restaurant_id', restaurant_id)
-            .single();
-
-          if (ingErr || !ingredient) {
-            console.warn(`Ingredient not found: ${recipeItem.ingredient_id}`);
-            continue;
-          }
-
-          const newStock = Number(ingredient.current_stock) - deductAmount;
-
-          // Log low-stock check OR negative warning
-          if (newStock < 0) {
-            console.warn(`Low stock warning: ${ingredient.name} will be negative (${newStock})`);
-          } else {
-            console.log('Low-stock check:', {
-              ingredientId: ingredient.id,
-              name: ingredient.name,
-              newStock,
-              reorder_threshold: Number(ingredient.reorder_threshold)
-            });
-          }
-
-          // Update stock (can go negative)
-          const { error: updateErr } = await supabase
-            .from('ingredients')
-            .update({
-              current_stock: newStock,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', ingredient.id);
-
-          if (updateErr) {
-            console.error(`Failed to update stock for ingredient ${ingredient.id}:`, updateErr);
-            continue;
-          }
-
-          // Low-stock alert only when inventory alerts enabled and stock < threshold
-          if (
-            inventoryAlertsEnabled &&
-            ingredient.reorder_threshold != null &&
-            newStock < Number(ingredient.reorder_threshold)
-          ) {
-            const alertTime = new Date().toISOString();
-            try {
-              const { data: alertData, error: alertError } = await supabase
-                .from('alert_notification')
-                .insert([{
-                  restaurant_id,
-                  table_number: table_number ?? 0,
-                  created_at: alertTime,
-                  status: 'pending',
-                  message: `${ingredient.name} (${newStock})`
-                }])
-                .select();
-
-              if (alertError) {
-                console.error('Low-stock alert insert failed:', alertError);
-              } else {
-                console.log('Low-stock alert inserted:', alertData?.[0]?.id || null);
-              }
-            } catch (e) {
-              console.error('Low-stock alert insert exception:', e);
-            }
-          }
-        }
-      } catch (stockErr) {
-        console.error(`Stock deduction failed for item ${item.id}:`, stockErr.message);
-      }
-    }
-
-    // ✅ Log successful creation
-    console.log('[API CREATE ORDER] Order created successfully:', {
-      orderId: order.id,
-      restaurantId: restaurant_id,
-      status: finalStatus,
-      invoiceNo: invoice.invoice_no,
-      timestamp: new Date().toISOString()
-    });
-
-    // Send push notification (non-blocking)
-    try {
-      const base = process.env.NEXT_PUBLIC_BASE_URL || '';
-      await fetch(`${base}/api/notify-owner`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          restaurantId: restaurant_id,
-          orderId: order.id,
-          orderItems: items
-        })
-      }).catch((e) =>
-        console.warn('notify-owner failed (non-blocking):', e?.message || e)
-      );
-    } catch (e) {
-      console.warn('Notification dispatch failed (non-blocking):', e?.message || e);
-    }
-
-    return res.status(200).json({
+    // 10) Build response payload for fast client-side print
+    const responsePayload = {
       success: true,
       order_id: order.id,
       invoice_id: invoice.id,
@@ -395,20 +270,178 @@ export default async function handler(req, res) {
         subtotal_ex_tax: Number(subtotalEx.toFixed(2)),
         total_tax: Number(totalTax.toFixed(2)),
         total_inc_tax: Number(totalInc.toFixed(2)),
-        items: preparedItems.map(pi => ({
-         ...pi,
-         name: pi.item_name,
-         })),
+        items: preparedItems.map((pi) => ({
+          ...pi,
+          name: pi.item_name,
+        })),
         payment_status,
         status: finalStatus,
         invoice_no: invoice.invoice_no,
-        created_at: order.created_at
+        created_at: order.created_at,
+      },
+    };
 
+    // 11) Fire-and-forget background tasks (inventory + low-stock alerts + notify-owner)
+    (async () => {
+      try {
+        // ✅ Deduct stock for each menu item based on recipes
+        for (const item of items) {
+          if (!item.id || !item.quantity) continue;
+
+          try {
+            const { data: recipe, error: recipeErr } = await supabase
+              .from('recipes')
+              .select('id, recipe_items(ingredient_id, quantity)')
+              .eq('menu_item_id', item.id)
+              .eq('restaurant_id', restaurant_id)
+              .maybeSingle();
+
+            if (
+              recipeErr ||
+              !recipe ||
+              !recipe.recipe_items ||
+              recipe.recipe_items.length === 0
+            ) {
+              continue;
+            }
+
+            const menuItem = menuItems?.find((mi) => mi.id === item.id);
+            if (menuItem?.is_packaged_good) {
+              continue;
+            }
+
+            console.log(
+              `Processing stock deduction for menu item ${item.id} with recipe ${recipe.id}`
+            );
+
+            for (const recipeItem of recipe.recipe_items) {
+              const deductAmount =
+                Number(recipeItem.quantity) * Number(item.quantity);
+
+              const { data: ingredient, error: ingErr } = await supabase
+                .from('ingredients')
+                .select('id, current_stock, name, reorder_threshold')
+                .eq('id', recipeItem.ingredient_id)
+                .eq('restaurant_id', restaurant_id)
+                .single();
+
+              if (ingErr || !ingredient) {
+                console.warn(`Ingredient not found: ${recipeItem.ingredient_id}`);
+                continue;
+              }
+
+              const newStock =
+                Number(ingredient.current_stock) - deductAmount;
+
+              if (newStock < 0) {
+                console.warn(
+                  `Low stock warning: ${ingredient.name} will be negative (${newStock})`
+                );
+              } else {
+                console.log('Low-stock check:', {
+                  ingredientId: ingredient.id,
+                  name: ingredient.name,
+                  newStock,
+                  reorder_threshold: Number(ingredient.reorder_threshold),
+                });
+              }
+
+              const { error: updateErr } = await supabase
+                .from('ingredients')
+                .update({
+                  current_stock: newStock,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', ingredient.id);
+
+              if (updateErr) {
+                console.error(
+                  `Failed to update stock for ingredient ${ingredient.id}:`,
+                  updateErr
+                );
+                continue;
+              }
+
+              if (
+                inventoryAlertsEnabled &&
+                ingredient.reorder_threshold != null &&
+                newStock < Number(ingredient.reorder_threshold)
+              ) {
+                const alertTime = new Date().toISOString();
+                try {
+                  const { error: alertError } = await supabase
+                    .from('alert_notification')
+                    .insert([
+                      {
+                        restaurant_id,
+                        table_number: table_number ?? 0,
+                        created_at: alertTime,
+                        status: 'pending',
+                        message: `${ingredient.name} (${newStock})`,
+                      },
+                    ]);
+
+                  if (alertError) {
+                    console.error(
+                      'Low-stock alert insert failed:',
+                      alertError
+                    );
+                  }
+                } catch (e) {
+                  console.error('Low-stock alert insert exception:', e);
+                }
+              }
+            }
+          } catch (stockErr) {
+            console.error(
+              `Stock deduction failed for item ${item.id}:`,
+              stockErr.message
+            );
+          }
+        }
+
+        console.log('[API CREATE ORDER] Order created successfully:', {
+          orderId: order.id,
+          restaurantId: restaurant_id,
+          status: finalStatus,
+          invoiceNo: invoice.invoice_no,
+          timestamp: new Date().toISOString(),
+        });
+
+        // Push notification (non-blocking, background)
+        try {
+          const base = process.env.NEXT_PUBLIC_BASE_URL || '';
+          await fetch(`${base}/api/notify-owner`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              restaurantId: restaurant_id,
+              orderId: order.id,
+              orderItems: items,
+            }),
+          }).catch((e) =>
+            console.warn(
+              'notify-owner failed (non-blocking):',
+              e?.message || e
+            )
+          );
+        } catch (e) {
+          console.warn(
+            'Notification dispatch failed (non-blocking):',
+            e?.message || e
+          );
+        }
+      } catch (bgErr) {
+        console.error('Background tasks failed:', bgErr);
       }
-    });
+    })();
 
+    // 12) Send response now (client can print immediately)
+    return res.status(200).json(responsePayload);
   } catch (e) {
     console.error('API error:', e);
-    return res.status(500).json({ error: e?.message || 'Internal server error' });
+    return res
+      .status(500)
+      .json({ error: e?.message || 'Internal server error' });
   }
 }

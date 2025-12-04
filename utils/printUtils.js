@@ -446,6 +446,8 @@ export async function downloadTextAndShare(order, bill, restaurantProfile) {
 
 
 
+// utils/printUtils.js
+
 export function buildReceiptText(order, bill, restaurantProfile) {
   try {
     const items = toDisplayItems(order);
@@ -461,7 +463,7 @@ export function buildReceiptText(order, bill, restaurantProfile) {
       restaurantProfile?.shipping_address_line2,
       restaurantProfile?.shipping_city,
       restaurantProfile?.shipping_state,
-      restaurantProfile?.shipping_pincode
+      restaurantProfile?.shipping_pincode,
     ].filter(Boolean);
     const address = addressParts.length
       ? addressParts.join(', ')
@@ -473,21 +475,19 @@ export function buildReceiptText(order, bill, restaurantProfile) {
       order?.restaurant_phone ||
       '';
 
-    const orderId = order?.id?.slice(0, 8)?.toUpperCase() || 'N/A';
     const orderType = getOrderTypeLabel(order);
     const invoiceNo = order?.invoice_no || bill?.invoice_no || '';
-
 
     const orderDate = new Date(order.created_at);
     const dateStr = orderDate.toLocaleDateString('en-IN', {
       day: '2-digit',
       month: '2-digit',
-      year: 'numeric'
+      year: 'numeric',
     });
     const timeStr = orderDate.toLocaleTimeString('en-IN', {
       hour: '2-digit',
       minute: '2-digit',
-      hour12: true
+      hour12: true,
     });
 
     const grandTotal = Number(
@@ -510,41 +510,61 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     const dashes = () => '-'.repeat(W);
     const lines = [];
 
-    // === HEADER (text only) ===
+    // HEADER
     lines.push(center(restaurantName, W));
-    wrapText(address, W).forEach(l => lines.push(center(l, W)));
+    wrapText(address, W).forEach((l) => lines.push(center(l, W)));
     if (phone) lines.push(center(`Contact No.: ${phone}`, W));
+    lines.push('');
     lines.push(dashes());
+    lines.push('');
 
-    // === META ===
+    // META
     lines.push(`${dateStr} ${timeStr}`);
-    // lines.push(`Order: #${orderId}`);
-     lines.push(`Invoice: ${invoiceNo}`);
+    if (invoiceNo) {
+      lines.push(`Invoice: ${invoiceNo}`);
+    }
     lines.push(`Order Type: ${orderType}`);
-
-    // === ITEMS ===
     lines.push(dashes());
+    lines.push('');
+
+    // ITEMS
     lines.push('ITEM         QTY  RATE  TOTAL');
 
-    items.forEach(item => {
-      const nameLines = wrapText(item.name || 'Item', 14);
+    items.forEach((item) => {
+      const itemName = item.name || 'Item';
+      const nameLines = wrapText(itemName, 14);
       if (!nameLines.length) return;
 
       const rateNum = Number(item.price || 0);
-      const totalNum = rateNum * Number(item.quantity || 1);
+      const qtyNum = Number(item.quantity || 1);
+      const totalNum = rateNum * qtyNum;
 
-      const rate = (rateNum % 1 === 0 ? rateNum.toFixed(0) : rateNum.toFixed(2)).padStart(4);
-      const total = (totalNum % 1 === 0 ? totalNum.toFixed(0) : totalNum.toFixed(2)).padStart(5);
-      const qty = String(item.quantity).padStart(2);
+      const rate =
+        rateNum % 1 === 0
+          ? rateNum.toFixed(0).padStart(4)
+          : rateNum.toFixed(2).padStart(4);
 
-      lines.push(nameLines[0].padEnd(14) + qty + '  ' + rate + '  ' + total);
+      const total =
+        totalNum % 1 === 0
+          ? totalNum.toFixed(0).padStart(5)
+          : totalNum.toFixed(2).padStart(5);
+
+      const qty = `${qtyNum}`.padStart(2);
+
+      const firstLine =
+        nameLines[0].padEnd(14) + qty + '  ' + rate + '  ' + total;
+      lines.push(firstLine);
+
       for (let i = 1; i < nameLines.length; i++) {
         lines.push(nameLines[i].padEnd(14));
       }
     });
 
-    // === TOTALS ===
+    lines.push('');
     lines.push(dashes());
+    lines.push('');
+
+    // TOTALS
     if (taxAmount > 0) {
       const netAmt = grandTotal - taxAmount;
       lines.push(`Net Amt: ${netAmt.toFixed(2)}`);
@@ -553,18 +573,13 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     } else {
       lines.push(`Total: ${grandTotal.toFixed(2)}`);
     }
+
     lines.push(dashes());
+    lines.push('');
     lines.push(center('** THANK YOU! VISIT AGAIN !! **', W));
     lines.push('');
 
-    // === COMBINE TEXT + LOGO BYTES ===
-    const bodyText = lines.join('\n');
-    const logoEsc = buildLogoEscPos(restaurantProfile);  // uses print_logo_* from DB
-
-    if (logoEsc) {
-      return logoEsc + bodyText;   // logo printed first, then normal receipt
-    }
-    return bodyText;
+    return lines.join('\n\n');
   } catch (e) {
     console.error(e);
     return 'PRINT ERROR';

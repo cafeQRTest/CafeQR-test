@@ -587,93 +587,94 @@ const loadCreditCustomers = async () => {
   };
 
   // Create + finalize (settle now)
-  async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finalizeNow = false) {
-    let order_type = 'counter';
-    let table_number = null;
-    if (orderSelect === 'parcel') order_type = 'parcel';
-    else if (orderSelect && orderSelect.startsWith('table:')) table_number = orderSelect.split(':')[1] || null;
+// inside pages/owner/counter.js
 
-    const items = cart.map((i) => ({
-      id: i.id, name: i.name, price: i.price, quantity: i.quantity,
-      hsn: i.hsn, tax_rate: i.tax_rate, is_packaged_good: i.is_packaged_good, code_number: i.code_number
-    }));
+async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finalizeNow = false) {
+  let order_type = 'counter';
+  let table_number = null;
+  if (orderSelect === 'parcel') order_type = 'parcel';
+  else if (orderSelect && orderSelect.startsWith('table:')) {
+    table_number = orderSelect.split(':')[1] || null;
+  }
 
-    const isCredit = isCreditSale;
+  const items = cart.map((i) => ({
+    id: i.id,
+    name: i.name,
+    price: i.price,
+    quantity: i.quantity,
+    hsn: i.hsn,
+    tax_rate: i.tax_rate,
+    is_packaged_good: i.is_packaged_good,
+    code_number: i.code_number,
+  }));
 
-    const orderData = {
-      restaurant_id: restaurantId,
-      order_type,
-      table_number,
-      customer_name: customerName.trim() || null,
-      customer_phone: customerPhone.trim() || null,
-      payment_method: isCredit ? 'credit' : finalPaymentMethod,
-      payment_status: isCredit ? 'pending' : 'completed',
-      status: finalizeNow ? 'completed' : 'new',   // ← add this line
-      items,
-      is_credit: isCredit,
-      credit_customer_id: isCredit ? selectedCreditCustomerId : null,
-      original_payment_method: isCredit ? null : finalPaymentMethod,
-      ...(finalPaymentMethod === 'mixed' && mixedDetails ? { mixed_payment_details: mixedDetails } : {}),
-    };
+  const isCredit = isCreditSale;
 
-    const res = await fetch('/api/orders/create', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(orderData)
-    });
-    if (!res.ok) {
-      let msg = 'Failed to create order';
-      try { const j = await res.json(); if (j?.error) msg += ': ' + j.error; } catch {}
-      throw new Error(msg);
-    }
-    const result = await res.json();
+  const orderData = {
+    restaurant_id: restaurantId,
+    order_type,
+    table_number,
+    customer_name: customerName.trim() || null,
+    customer_phone: customerPhone.trim() || null,
+    payment_method: isCredit ? 'credit' : finalPaymentMethod,
+    payment_status: isCredit ? 'pending' : 'completed',
+    status: finalizeNow ? 'completed' : 'new',
+    items,
+    is_credit: isCredit,
+    credit_customer_id: isCredit ? selectedCreditCustomerId : null,
+    original_payment_method: isCredit ? null : finalPaymentMethod,
+    ...(finalPaymentMethod === 'mixed' && mixedDetails
+      ? { mixed_payment_details: mixedDetails }
+      : {}),
+  };
 
-    
-    // Kick off invoice generation, but don't wait for it
-// fetch('/api/invoices/generate', {
-//   method: 'POST',
-//   headers: { 'Content-Type': 'application/json' },
-//   body: JSON.stringify({
-//     order_id: result.order_id,
-//     payment_method: isCredit ? 'credit' : finalPaymentMethod,
-//     is_credit: isCredit,
-//     credit_customer_id: isCredit ? selectedCreditCustomerId : null,
-//     mixed_payment_details: finalPaymentMethod === 'mixed' ? mixedDetails : null
-//   })
-// }).catch((e) => {
-//   console.warn(
-//     'Invoice generation failed (non-blocking):',
-//     e?.message || e
-//   );
-// });
+  const res = await fetch('/api/orders/create', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(orderData),
+  });
 
+  if (!res.ok) {
+    let msg = 'Failed to create order';
+    try {
+      const j = await res.json();
+      if (j?.error) msg += ': ' + j.error;
+    } catch {}
+    throw new Error(msg);
+  }
 
-const fullOrder = result.order_for_print || null;
+  const result = await res.json();
 
-const orderForPrint = fullOrder || {
-  id: result.order_id,
-  restaurant_id: restaurantId,
-  order_type,
-  table_number,
-  items,
-  created_at: new Date().toISOString(),
-  restaurant_name: restaurant?.name || printProfile?.restaurant_name || null,
-  _profile: printProfile || null,
-  bill: {
-    grand_total: cartTotals.totalInc,
-    subtotal: cartTotals.subtotalEx,
-    tax_total: cartTotals.totalTax,
-    invoice_no: null,
-  },
-};
+  const fullOrder = result.order_for_print || null;
 
-window.dispatchEvent(
-  new CustomEvent('auto-print-order', {
-    detail: {
-      ...(orderForPrint.bill ? { ...orderForPrint, bill: orderForPrint.bill } : orderForPrint),
-      autoPrint: true,
-      kind: 'bill',
+  const orderForPrint = fullOrder || {
+    id: result.order_id,
+    restaurant_id: restaurantId,
+    order_type,
+    table_number,
+    items,
+    created_at: new Date().toISOString(),
+    restaurant_name: restaurant?.name || printProfile?.restaurant_name || null,
+    _profile: printProfile || null,
+    bill: {
+      grand_total: cartTotals.totalInc,
+      subtotal: cartTotals.subtotalEx,
+      tax_total: cartTotals.totalTax,
+      invoice_no: result.invoice_no || null,
     },
-  })
-);
+  };
+
+  window.dispatchEvent(
+    new CustomEvent('auto-print-order', {
+      detail: {
+        ...orderForPrint,
+        autoPrint: true,
+        kind: 'bill',
+      },
+    })
+  );
+
+  // clear UI, reload credit customers as you already do...
 
     setCart([]); setCustomerName(''); setCustomerPhone(''); setPaymentMethod('cash');
     setOrderSelect(''); setIsCreditSale(false); setSelectedCreditCustomerId(''); setCreditCustomerBalance(0);
