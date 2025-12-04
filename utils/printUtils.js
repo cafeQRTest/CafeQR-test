@@ -181,7 +181,11 @@ function getReceiptWidth(restaurantProfile) {
 
 export function buildKotText(order, restaurantProfile) {
   try {
-    const items = toDisplayItems(order);               // same helper you already use
+    const items = toDisplayItems(order);
+     const removedItems = Array.isArray(order.removed_items)
+      ? order.removed_items.filter(ri => Number(ri.quantity) > 0)
+      : [];
+      console.log('Removed Items:', removedItems);
     const restaurantName = String(
       restaurantProfile?.restaurant_name ||
       order?.restaurant_name ||
@@ -256,6 +260,26 @@ export function buildKotText(order, restaurantProfile) {
         lines.push(nameLines[i]);
       }
     });
+     if (removedItems.length) {
+      lines.push(dashes());
+      lines.push(center('*** REMOVED ITEMS ***', W));
+      lines.push('ITEM                     QTY');
+
+      removedItems.forEach(ri => {
+        const nameLines = wrapText(ri.name || 'Item', W - 5);
+        if (!nameLines.length) return;
+        const qty = String(ri.quantity ?? 1).padStart(3);
+
+        // prefix with "-" so kitchen immediately sees it as cancellation
+        const firstName = ('- ' + nameLines[0]).substring(0, W - 5);
+        lines.push(firstName.padEnd(W - 4) + ' ' + qty);
+
+        for (let i = 1; i < nameLines.length; i++) {
+          const cont = ('  ' + nameLines[i]).substring(0, W);
+          lines.push(cont);
+        }
+      });
+    }
 
     lines.push(dashes());
     lines.push(center('*** SEND TO KITCHEN ***', W));

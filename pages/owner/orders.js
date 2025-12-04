@@ -526,10 +526,12 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
 }
 
 function EditOrderPanel({ order, onClose, onSave }) {
+  const [originalLines] = useState(() => toDisplayItems(order)); // snapshot of original
   const [lines, setLines] = useState(() => toDisplayItems(order));
   const [showMenuPicker, setShowMenuPicker] = useState(false);
   const [menuSearch, setMenuSearch] = useState('');
   const [menuItems, setMenuItems] = useState([]);
+  const [saving, setSaving] = useState(false);
 
   const total = lines.reduce(
     (sum, l) => sum + (Number(l.price) || 0) * (Number(l.quantity) || 0),
@@ -549,12 +551,50 @@ function EditOrderPanel({ order, onClose, onSave }) {
     setLines((prev) => prev.filter((_, i) => i !== index));
   };
 
+  // Normalize + compare current vs original to detect real edits
+  const normalizeLines = (arr) =>
+    (arr || [])
+      .map((l) => {
+        const key =
+          l.menu_item_id ??
+          l.id ??
+          `${(l.name || '').trim().toLowerCase()}::${Number(l.price) || 0}`;
+        return {
+          key,
+          name: (l.name || '').trim().toLowerCase(),
+          quantity: Number(l.quantity) || 0,
+          price: Number(l.price) || 0,
+        };
+      })
+      .sort((a, b) => a.key.toString().localeCompare(b.key.toString()));
+
+  const hasChanges = (() => {
+    const a = normalizeLines(originalLines);
+    const b = normalizeLines(lines);
+    if (a.length !== b.length) return true;
+    for (let i = 0; i < a.length; i++) {
+      if (
+        a[i].key !== b[i].key ||
+        a[i].name !== b[i].name ||
+        a[i].quantity !== b[i].quantity ||
+        a[i].price !== b[i].price
+      ) {
+        return true;
+      }
+    }
+    return false;
+  })();
+
   const handleSave = () => {
+    // guard: no lines, no real change, or already saving
+    if (lines.length === 0 || !hasChanges || saving) return;
+    setSaving(true);
     onSave({
       ...order,
       lines,
       total,
     });
+    // parent should close/unmount panel after success
   };
 
   const openMenuPicker = async () => {
@@ -578,36 +618,35 @@ function EditOrderPanel({ order, onClose, onSave }) {
     }
   };
 
-const addMenuItemToLines = (item) => {
-  setLines((prev) => {
-    const existingIndex = prev.findIndex(
-      (l) => l.menu_item_id === item.id || l.name === item.name
-    );
-
-    // If already exists, just increase qty
-    if (existingIndex !== -1) {
-      return prev.map((l, i) =>
-        i === existingIndex
-          ? { ...l, quantity: (Number(l.quantity) || 0) + 1 }
-          : l
+  const addMenuItemToLines = (item) => {
+    setLines((prev) => {
+      const existingIndex = prev.findIndex(
+        (l) => l.menu_item_id === item.id || l.name === item.name
       );
-    }
 
-    // Otherwise add new line
-    return [
-      ...prev,
-      {
-        name: item.name,
-        quantity: 1,
-        price: item.price,
-        menu_item_id: item.id,
-      },
-    ];
-  });
+      // If already exists, just increase qty
+      if (existingIndex !== -1) {
+        return prev.map((l, i) =>
+          i === existingIndex
+            ? { ...l, quantity: (Number(l.quantity) || 0) + 1 }
+            : l
+        );
+      }
 
-  setShowMenuPicker(false);
-};
+      // Otherwise add new line
+      return [
+        ...prev,
+        {
+          name: item.name,
+          quantity: 1,
+          price: item.price,
+          menu_item_id: item.id,
+        },
+      ];
+    });
 
+    setShowMenuPicker(false);
+  };
 
   const filteredMenuItems = menuItems.filter((m) =>
     m.name.toLowerCase().includes(menuSearch.toLowerCase())
@@ -771,7 +810,7 @@ const addMenuItemToLines = (item) => {
                 }}
                 title="Remove item"
               >
-                  🗑
+                🗑
               </span>
             </div>
           ))}
@@ -820,25 +859,27 @@ const addMenuItemToLines = (item) => {
             <strong>₹{total.toFixed(2)}</strong>
           </div>
           <div
-    style={{
-      marginBottom: 8,
-      fontSize: 12,
-      color: '#b45309',
-      backgroundColor: '#fffbeb',
-      borderRadius: 6,
-      padding: '6px 8px',
-      border: '1px solid #facc15',
-    }}
-  >
-    <strong style={{ fontWeight: 600 }}>Note:</strong>{' '}
-    Saving changes will void the current order and invoice, create a new order
-    and invoice in “New” status, and send a fresh KOT to the kitchen.
-  </div>
+            style={{
+              marginBottom: 8,
+              fontSize: 12,
+              color: '#b45309',
+              backgroundColor: '#fffbeb',
+              borderRadius: 6,
+              padding: '6px 8px',
+              border: '1px solid #facc15',
+            }}
+          >
+            <strong style={{ fontWeight: 600 }}>Note:</strong>{' '}
+            Saving changes will void the current order and invoice, create a
+            new order and invoice in “New” status, and send a fresh KOT to the
+            kitchen.
+          </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <Button
               variant="outline"
               style={{ flex: 1 }}
               onClick={onClose}
+              disabled={saving}
             >
               Cancel
             </Button>
@@ -846,9 +887,9 @@ const addMenuItemToLines = (item) => {
               variant="success"
               style={{ flex: 1 }}
               onClick={handleSave}
-              disabled={lines.length === 0}
+              disabled={lines.length === 0 || !hasChanges || saving}
             >
-              Save & Reprint KOT
+              {saving ? 'Saving…' : 'Save & Reprint KOT'}
             </Button>
           </div>
         </div>
@@ -961,13 +1002,11 @@ const addMenuItemToLines = (item) => {
                       padding: '8px 10px',
                       marginBottom: 6,
                       cursor: 'pointer',
-                      transition:
-                        'background-color 0.12s, transform 0.08s',
+                      transition: 'background-color 0.12s, transform 0.08s',
                     }}
                     onMouseEnter={(e) => {
                       e.currentTarget.style.background = '#e0f2fe';
-                      e.currentTarget.style.transform =
-                        'translateY(-1px)';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
                     }}
                     onMouseLeave={(e) => {
                       e.currentTarget.style.background = '#f9fafb';
@@ -1010,6 +1049,7 @@ const addMenuItemToLines = (item) => {
     </div>
   );
 }
+
 
 function CancelConfirmDialog({ order, onConfirm, onCancel }) {
   const [reason, setReason] = useState('');
@@ -1303,7 +1343,7 @@ const handleEditSave = async (edited) => {
       setError('No restaurant selected');
       return;
     }
-setEditingOrder(null);
+
     const resp = await fetch('/api/orders/edit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1335,10 +1375,15 @@ setEditingOrder(null);
 
     // Refresh & close
     await loadOrders();
+    setEditingOrder(null);
+   
+
   } catch (e) {
     setError(e.message || 'Failed to save order changes');
   }
 };
+
+
 
 
   // Fetch orders helper
@@ -1885,6 +1930,14 @@ colOrders =
           onCancel={handleCancelDismiss}
         />
       )}
+
+         {editingOrder && (
+  <EditOrderPanel
+    order={editingOrder}
+    onClose={() => setEditingOrder(null)}
+    onSave={handleEditSave}
+  />
+)}
 
 
       <style jsx>{`

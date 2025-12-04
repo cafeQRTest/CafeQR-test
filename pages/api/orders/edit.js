@@ -93,19 +93,36 @@ export default async function handler(req, res) {
 
     const newMap = new Map(validLines.map(l => [l.menu_item_id, l]));
 
-    // 6) Restore stock for fully removed items
-    const removedItems = (currentItems || []).filter(
-      item => item.menu_item_id && !newMap.has(item.menu_item_id)
-    );
-    if (removedItems.length > 0) {
-      await restoreStockForItems(supabase, restaurant_id, removedItems);
-    }
-
-    // 7) Apply delta for new/changed items (with KOT delta quantity)
+    // 6) Prepare collections
     const inserts = [];
     const updates = [];
     const changedItems = [];
+    const removed_items = []; // <-- declare BEFORE any push
 
+    // 6a) Restore stock for fully removed items
+    const removedItems = (currentItems || []).filter(
+      item => item.menu_item_id && !newMap.has(item.menu_item_id)
+    );
+
+    if (removedItems.length > 0) {
+      await restoreStockForItems(supabase, restaurant_id, removedItems);
+
+      // record fully removed items
+      for (const ri of removedItems) {
+        removed_items.push({
+          menu_item_id: ri.menu_item_id,
+          name: ri.item_name,
+          quantity: ri.quantity,
+          price: ri.price,
+          hsn: ri.hsn,
+          action: 'REMOVED_FULL',
+          old_qty: ri.quantity,
+          new_qty: 0,
+        });
+      }
+    }
+
+    // 7) Apply delta for new/changed items (with KOT delta quantity)
     await Promise.all(
       Array.from(newMap.entries()).map(async ([menuItemId, newLine]) => {
         const current = currentMap.get(menuItemId);
@@ -160,9 +177,22 @@ export default async function handler(req, res) {
               quantity: qtyDiff,
             });
           } else if (qtyDiff < 0) {
+            const removedQty = Math.abs(qtyDiff);
+
             await restoreStockForItems(supabase, restaurant_id, [
-              { ...current, quantity: Math.abs(qtyDiff) },
+              { ...current, quantity: removedQty },
             ]);
+
+            removed_items.push({
+              menu_item_id: menuItemId,
+              name: newLine.name,
+              quantity: removedQty,
+              price: newLine.price,
+              hsn: newLine.hsn,
+              action: 'REMOVED_PARTIAL',
+              old_qty: current.quantity,
+              new_qty: newLine.quantity,
+            });
           }
         }
         // unchanged → no DB/stock/KOT change
@@ -326,6 +356,7 @@ export default async function handler(req, res) {
         total_inc_tax: Number(newTotals.total_inc_tax.toFixed(2)),
         payment_status: order.payment_status || 'pending',
         status: 'new',
+        removed_items,
         created_at: order.created_at,
         items: changedItems.map(ci => ({
           ...ci,
