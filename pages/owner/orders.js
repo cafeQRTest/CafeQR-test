@@ -858,22 +858,6 @@ function EditOrderPanel({ order, onClose, onSave }) {
             <span>Total</span>
             <strong>₹{total.toFixed(2)}</strong>
           </div>
-          <div
-            style={{
-              marginBottom: 8,
-              fontSize: 12,
-              color: '#b45309',
-              backgroundColor: '#fffbeb',
-              borderRadius: 6,
-              padding: '6px 8px',
-              border: '1px solid #facc15',
-            }}
-          >
-            <strong style={{ fontWeight: 600 }}>Note:</strong>{' '}
-            Saving changes will void the current order and invoice, create a
-            new order and invoice in “New” status, and send a fresh KOT to the
-            kitchen.
-          </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <Button
               variant="outline"
