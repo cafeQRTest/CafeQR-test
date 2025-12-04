@@ -578,8 +578,9 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     lines.push('');
     lines.push(center('** THANK YOU! VISIT AGAIN !! **', W));
     lines.push('');
+    lines.push('');
 
-    return lines.join('\n\n');
+    return lines.join('\n');
   } catch (e) {
     console.error(e);
     return 'PRINT ERROR';
