@@ -1016,42 +1016,54 @@ if (ordersByStatus.mobileFilter === 'inprogress') {
         onChangeStatus={updateStatus}
         onComplete={finalize}
         generatingInvoice={generatingInvoice}
-        onPrintKot={() => {
-          window.dispatchEvent(
-            new CustomEvent('auto-print-order', {
-              detail: { ...order, autoPrint: true, kind: 'kot' }
-            })
-          );
-        }}
-        onPrintBill={async () => {
-          try {
-            const s = getSupabase();
-            const { data: invoice } = await s
-              .from('invoices')
-              .select('invoice_no')
-              .eq('order_id', order.id)
-              .order('invoice_date', { ascending: false })
-              .maybeSingle();
+        onPrintKot={(orderObj) => {
+  window.dispatchEvent(
+    new CustomEvent('auto-print-order', {
+      detail: { ...orderObj, autoPrint: true, kind: 'kot' }
+    })
+  );
+}}
 
-            const orderForPrint = {
-              ...order,
-              invoice_no: invoice?.invoice_no || null,
-            };
+        onPrintBill={async (order) => {
+  try {
+    const s = getSupabase();
 
-            window.dispatchEvent(
-              new CustomEvent('auto-print-order', {
-                detail: { ...orderForPrint, autoPrint: true, kind: 'bill' }
-              })
-            );
-          } catch (err) {
-            console.error('Print bill invoice fetch failed (mobile)', err);
-            window.dispatchEvent(
-              new CustomEvent('auto-print-order', {
-                detail: { ...order, autoPrint: true, kind: 'bill' }
-              })
-            );
-          }
-        }}
+    // Ensure we have items + menu_items(name)
+    const { data: fullOrder } = await s
+      .from('orders')
+      .select('*, order_items(*, menu_items(name))')
+      .eq('id', order.id)
+      .maybeSingle();
+
+    const base = fullOrder || order;
+
+    const { data: invoice } = await s
+      .from('invoices')
+      .select('invoice_no')
+      .eq('order_id', order.id)
+      .order('invoice_date', { ascending: false })
+      .maybeSingle();
+
+    const orderForPrint = {
+      ...base,
+      invoice_no: invoice?.invoice_no || base.invoice_no || null,
+    };
+
+    window.dispatchEvent(
+      new CustomEvent('auto-print-order', {
+        detail: { ...orderForPrint, autoPrint: true, kind: 'bill' },
+      })
+    );
+  } catch (err) {
+    console.error('Print bill fetch failed', err);
+    window.dispatchEvent(
+      new CustomEvent('auto-print-order', {
+        detail: { ...order, autoPrint: true, kind: 'bill' },
+      })
+    );
+  }
+}}
+
         onCancelOrderOpen={onCancelOrderOpen}
       />
     ))
@@ -1099,41 +1111,54 @@ colOrders =
                 onChangeStatus={updateStatus}
                 onComplete={finalize}
                 generatingInvoice={generatingInvoice}
-                onPrintKot={() => {
-                  window.dispatchEvent(
-                    new CustomEvent('auto-print-order', {
-                      detail: { ...order, autoPrint: true, kind: 'kot' }
-                    })
-                  );
-                }}
-                onPrintBill={async () => {
-                  try {
-                    const s = getSupabase();
-                    const { data: invoice } = await s
-                      .from('invoices')
-                      .select('invoice_no')
-                      .eq('order_id', order.id)
-                      .order('invoice_date', { ascending: false })
-                      .maybeSingle();
-                    const orderForPrint = {
-                      ...order,
-                      invoice_no: invoice?.invoice_no || null,
-                    };
+                onPrintKot={(orderObj) => {
+  window.dispatchEvent(
+    new CustomEvent('auto-print-order', {
+      detail: { ...orderObj, autoPrint: true, kind: 'kot' }
+    })
+  );
+}}
 
-                    window.dispatchEvent(
-                      new CustomEvent('auto-print-order', {
-                        detail: { ...orderForPrint, autoPrint: true, kind: 'bill' }
-                      })
-                    );
-                  } catch (err) {
-                    console.error('Print bill invoice fetch failed (desktop)', err);
-                    window.dispatchEvent(
-                      new CustomEvent('auto-print-order', {
-                        detail: { ...order, autoPrint: true, kind: 'bill' }
-                      })
-                    );
-                  }
-                }}
+                onPrintBill={async (order) => {
+  try {
+    const s = getSupabase();
+
+    // Ensure we have items + menu_items(name)
+    const { data: fullOrder } = await s
+      .from('orders')
+      .select('*, order_items(*, menu_items(name))')
+      .eq('id', order.id)
+      .maybeSingle();
+
+    const base = fullOrder || order;
+
+    const { data: invoice } = await s
+      .from('invoices')
+      .select('invoice_no')
+      .eq('order_id', order.id)
+      .order('invoice_date', { ascending: false })
+      .maybeSingle();
+
+    const orderForPrint = {
+      ...base,
+      invoice_no: invoice?.invoice_no || base.invoice_no || null,
+    };
+
+    window.dispatchEvent(
+      new CustomEvent('auto-print-order', {
+        detail: { ...orderForPrint, autoPrint: true, kind: 'bill' },
+      })
+    );
+  } catch (err) {
+    console.error('Print bill fetch failed', err);
+    window.dispatchEvent(
+      new CustomEvent('auto-print-order', {
+        detail: { ...order, autoPrint: true, kind: 'bill' },
+      })
+    );
+  }
+}}
+
                 onCancelOrderOpen={onCancelOrderOpen}
               />
             ))

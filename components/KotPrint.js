@@ -95,43 +95,66 @@ async function ensurePrinterConfigured() {
 
 export default function KotPrint({ order, onClose, onPrint, autoPrint = true, kind = 'bill' }) {
   const [status, setStatus] = useState('');
-  const [bill, setBill] = useState(null);
-  const [restaurantProfile, setRestaurantProfile] = useState(order?._profile || null);
-  const [loadingData, setLoadingData] = useState(true);
+  const [bill, setBill] = useState(order?.bill || null);                // ← use embedded bill if present
+  const [restaurantProfile, setRestaurantProfile] = useState(order?._profile || null); // already there
+  const [loadingData, setLoadingData] = useState(!order?._profile && kind !== 'kot');   // KOT doesn't need bill
   const ranRef = useRef(false);
   const lockRef = useRef(false);
 
   // Load bill + restaurant profile on mount
-  useEffect(() => {
+useEffect(() => {
   let alive = true;
   (async () => {
     try {
-      if (restaurantProfile) {
-        // already have profile from orchestrator; nothing to fetch
+      // If we already have everything we need, just stop loading
+      if (restaurantProfile && (kind === 'kot' || bill)) {
+        setLoadingData(false);
         return;
       }
+
       const supabase = getSupabase();
-      const [b, rp, rn] = await Promise.all([
-        supabase.from('bills').select('*').eq('order_id', order.id).maybeSingle(),
-        supabase
-          .from('restaurant_profiles')
-          .select('shipping_address_line1,shipping_address_line2,shipping_city,shipping_state,shipping_pincode,phone,restaurant_na         me,shipping_phone,print_logo_bitmap,print_logo_cols,print_logo_rows')
-          .eq('restaurant_id', order.restaurant_id)
-          .maybeSingle(),
-        supabase.from('restaurants').select('name').eq('id', order.restaurant_id).maybeSingle()
-      ]);
+      let nextBill = bill || order?.bill || null;
+      let nextProfile = restaurantProfile || order?._profile || null;
+
+      // Fetch bill from DB only if needed and relevant (for bills, not KOT)
+      if (!nextBill && kind !== 'kot' && order?.id) {
+        const b = await supabase
+          .from('bills')
+          .select('*')
+          .eq('order_id', order.id)
+          .maybeSingle();
+        if (!alive) return;
+        if (b?.data) nextBill = b.data;
+      }
+
+      // Fetch restaurant profile only if needed
+      if (!nextProfile && order?.restaurant_id) {
+        const [rp, rn] = await Promise.all([
+          supabase
+            .from('restaurant_profiles')
+            .select('restaurant_name,shipping_address_line1,shipping_address_line2,shipping_city,shipping_state,shipping_pincode,phone,shipping_phone,print_logo_bitmap,print_logo_cols,print_logo_rows')
+            .eq('restaurant_id', order.restaurant_id)
+            .maybeSingle(),
+          supabase
+            .from('restaurants')
+            .select('name')
+            .eq('id', order.restaurant_id)
+            .maybeSingle(),
+        ]);
+        if (!alive) return;
+        if (rp?.data) nextProfile = rp.data;
+        if (rn?.data?.name) order.restaurant_name = rn.data.name;
+      }
+
       if (!alive) return;
-      if (b?.data) setBill(b.data);
-      if (rp?.data) setRestaurantProfile(rp.data);
-      if (rn?.data?.name) order.restaurant_name = rn.data.name;
+      if (nextBill && nextBill !== bill) setBill(nextBill);
+      if (nextProfile && nextProfile !== restaurantProfile) setRestaurantProfile(nextProfile);
     } finally {
       if (alive) setLoadingData(false);
     }
   })();
-  return () => {
-    alive = false;
-  };
-}, [order, restaurantProfile]);
+  return () => { alive = false; };
+}, [order, kind, bill, restaurantProfile]);
 
 
   const doPrint = useCallback(async () => {

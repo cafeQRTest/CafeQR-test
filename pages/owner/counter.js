@@ -144,6 +144,8 @@ export default function CounterSale() {
   const [popularIds, setPopularIds] = useState(new Set());
   const [popCounts, setPopCounts] = useState(new Map());   // id -> total qty
   const nameIndexRef = useRef(new Map());                  // normalized name -> id
+// inside CounterSale
+  const [printProfile, setPrintProfile] = useState(null);
 
 
 
@@ -271,15 +273,7 @@ const [orderMode, setOrderMode] = useState('settle');
 
 
 
-  async function fetchFullOrder(orderId) {
-    const { data, error } = await supabase
-      .from('orders')
-      .select('*, order_items(*, menu_items(name))')
-      .eq('id', orderId)
-      .single();
-    return error ? null : data;
-  }
-
+  
   // Startup loads
   useEffect(() => {
     if (checking || loadingRestaurant || !restaurantId) return;
@@ -300,23 +294,37 @@ const [orderMode, setOrderMode] = useState('settle');
         // Pull tax settings for client calc
         const { data: profile, error: profErr } = await supabase
   .from('restaurant_profiles')
-  .select(
-    'tables_count,gst_enabled,default_tax_rate,prices_include_tax,features_credit_enabled,features_counter_send_to_kitchen_enabled'
-  )
+  .select(`
+    tables_count,
+    gst_enabled,
+    default_tax_rate,
+    prices_include_tax,
+    features_credit_enabled,
+    features_counter_send_to_kitchen_enabled,
+    restaurant_name,
+    shipping_address_line1,
+    shipping_address_line2,
+    shipping_city,
+    shipping_state,
+    shipping_pincode,
+    phone,
+    shipping_phone,
+    print_logo_bitmap,
+    print_logo_cols,
+    print_logo_rows
+  `)
   .eq('restaurant_id', restaurantId)
   .limit(1)
   .maybeSingle();
 
-if (profErr) throw profErr;
-
-const count = profile?.tables_count || 0;
-setTables(Array.from({ length: count }, (_, i) => String(i + 1)));
+setPrintProfile(profile || null);
 
 setProfileTax({
   gst_enabled: !!profile?.gst_enabled,
   default_tax_rate: Number(profile?.default_tax_rate ?? 0),
-  prices_include_tax: !!profile?.prices_include_tax
+  prices_include_tax: !!profile?.prices_include_tax,
 });
+
 
 // NEW: set credit feature flag
 setCreditFeatureEnabled(!!profile?.features_credit_enabled);
@@ -340,7 +348,6 @@ if (profile?.features_credit_enabled) {
 }
 
 
-        await loadCreditCustomers();
       } catch (e) {
         setError(e.message || 'Failed to load data');
       } finally {
@@ -647,17 +654,26 @@ const orderForPrint = fullOrder || {
   order_type,
   table_number,
   items,
-  total_inc_tax: cartTotals.totalInc,
-  created_at: new Date().toISOString()
+  created_at: new Date().toISOString(),
+  restaurant_name: restaurant?.name || printProfile?.restaurant_name || null,
+  _profile: printProfile || null,
+  bill: {
+    grand_total: cartTotals.totalInc,
+    subtotal: cartTotals.subtotalEx,
+    tax_total: cartTotals.totalTax,
+    invoice_no: null,
+  },
 };
 
-// Global full‑bill print when we *settle now* (status = completed)
 window.dispatchEvent(
   new CustomEvent('auto-print-order', {
-    detail: { ...orderForPrint, autoPrint: true, kind: 'bill' }
+    detail: {
+      ...(orderForPrint.bill ? { ...orderForPrint, bill: orderForPrint.bill } : orderForPrint),
+      autoPrint: true,
+      kind: 'bill',
+    },
   })
 );
-
 
     setCart([]); setCustomerName(''); setCustomerPhone(''); setPaymentMethod('cash');
     setOrderSelect(''); setIsCreditSale(false); setSelectedCreditCustomerId(''); setCreditCustomerBalance(0);
@@ -706,17 +722,23 @@ window.dispatchEvent(
 
 const result = await res.json();
 
-const fullOrder = await fetchFullOrder(result.order_id);
-
-// Build a minimal fallback if needed
-const orderForPrint = fullOrder || {
+const orderForPrint = {
   id: result.order_id,
   restaurant_id: restaurantId,
   order_type,
   table_number,
   items,
-  created_at: new Date().toISOString()
+  created_at: new Date().toISOString(),
+  restaurant_name: restaurant?.name || printProfile?.restaurant_name || null,
+  _profile: printProfile || null,
 };
+
+// Immediate KOT print for this counter order
+window.dispatchEvent(
+  new CustomEvent('auto-print-order', {
+    detail: { ...orderForPrint, autoPrint: true, kind: 'kot' },
+  })
+);
 
     setCart([]); setCustomerName(''); setCustomerPhone(''); setPaymentMethod('cash');
     setOrderSelect(''); setIsCreditSale(false); setSelectedCreditCustomerId(''); setCreditCustomerBalance(0);
