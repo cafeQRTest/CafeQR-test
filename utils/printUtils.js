@@ -514,9 +514,7 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     lines.push(center(restaurantName, W));
     wrapText(address, W).forEach((l) => lines.push(center(l, W)));
     if (phone) lines.push(center(`Contact No.: ${phone}`, W));
-    lines.push('');
     lines.push(dashes());
-    lines.push('');
 
     // META
     lines.push(`${dateStr} ${timeStr}`);
@@ -525,10 +523,10 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     }
     lines.push(`Order Type: ${orderType}`);
     lines.push(dashes());
-    lines.push('');
 
     // ITEMS
     lines.push('ITEM         QTY  RATE  TOTAL');
+    lines.push(dashes());
 
     items.forEach((item) => {
       const itemName = item.name || 'Item';
@@ -560,9 +558,7 @@ export function buildReceiptText(order, bill, restaurantProfile) {
       }
     });
 
-    lines.push('');
     lines.push(dashes());
-    lines.push('');
 
     // TOTALS
     if (taxAmount > 0) {
@@ -575,12 +571,16 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     }
 
     lines.push(dashes());
-    lines.push('');
     lines.push(center('** THANK YOU! VISIT AGAIN !! **', W));
     lines.push('');
     lines.push('');
+    
 
-    return lines.join('\n');
+    const body = lines.join('\n');
+
+    // ✅ prepend ESC/POS logo bytes if bitmap is configured
+    const logoEsc = buildLogoEscPos(restaurantProfile);
+    return logoEsc + body;
   } catch (e) {
     console.error(e);
     return 'PRINT ERROR';
