@@ -185,7 +185,6 @@ export function buildKotText(order, restaurantProfile) {
      const removedItems = Array.isArray(order.removed_items)
       ? order.removed_items.filter(ri => Number(ri.quantity) > 0)
       : [];
-      console.log('Removed Items:', removedItems);
     const restaurantName = String(
       restaurantProfile?.restaurant_name ||
       order?.restaurant_name ||
