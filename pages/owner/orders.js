@@ -1064,6 +1064,8 @@ export default function OrdersPage() {
 
   // NEW: state for showing the print modal
   const [cancelOrderDialog, setCancelOrderDialog] = useState(null);
+  const [editingOrder, setEditingOrder] = useState(null);
+
 
   const [ordersByStatus, setOrdersByStatus] = useState({
     new: [], in_progress: [], ready: [], completed: [], mobileFilter: 'new'
