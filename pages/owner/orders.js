@@ -551,22 +551,21 @@ function EditOrderPanel({ order, onClose, onSave }) {
     setLines((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // Normalize + compare current vs original to detect real edits
+  // Normalize lines by content only (name, price, quantity) for change detection
   const normalizeLines = (arr) =>
     (arr || [])
-      .map((l) => {
-        const key =
-          l.menu_item_id ??
-          l.id ??
-          `${(l.name || '').trim().toLowerCase()}::${Number(l.price) || 0}`;
-        return {
-          key,
-          name: (l.name || '').trim().toLowerCase(),
-          quantity: Number(l.quantity) || 0,
-          price: Number(l.price) || 0,
-        };
-      })
-      .sort((a, b) => a.key.toString().localeCompare(b.key.toString()));
+      .map((l) => ({
+        name: (l.name || '').trim().toLowerCase(),
+        quantity: Number(l.quantity) || 0,
+        price: Number(l.price) || 0,
+      }))
+      .sort((a, b) => {
+        const n = a.name.localeCompare(b.name);
+        if (n !== 0) return n;
+        const p = a.price - b.price;
+        if (p !== 0) return p;
+        return a.quantity - b.quantity;
+      });
 
   const hasChanges = (() => {
     const a = normalizeLines(originalLines);
@@ -574,7 +573,6 @@ function EditOrderPanel({ order, onClose, onSave }) {
     if (a.length !== b.length) return true;
     for (let i = 0; i < a.length; i++) {
       if (
-        a[i].key !== b[i].key ||
         a[i].name !== b[i].name ||
         a[i].quantity !== b[i].quantity ||
         a[i].price !== b[i].price
@@ -1033,6 +1031,7 @@ function EditOrderPanel({ order, onClose, onSave }) {
     </div>
   );
 }
+
 
 
 function CancelConfirmDialog({ order, onConfirm, onCancel }) {
