@@ -97,7 +97,8 @@ export default async function handler(req, res) {
     const inserts = [];
     const updates = [];
     const changedItems = [];
-    const removed_items = []; // <-- declare BEFORE any push
+    const removed_items = [];
+    const added_items = []; // NEW: for KOT added/increased lines
 
     // 6a) Restore stock for fully removed items
     const removedItems = (currentItems || []).filter(
@@ -137,6 +138,20 @@ export default async function handler(req, res) {
             price: newLine.price,
             hsn: newLine.hsn,
           });
+
+          // For KOT: full qty as added
+          added_items.push({
+            menu_item_id: menuItemId,
+            name: newLine.name,
+            quantity: newLine.quantity,
+            price: newLine.price,
+            hsn: newLine.hsn,
+            action: 'ADDED_FULL',
+            old_qty: 0,
+            new_qty: newLine.quantity,
+          });
+
+          // For internal tracking (stock/invoice)
           changedItems.push({
             menu_item_id: menuItemId,
             name: newLine.name,
@@ -145,6 +160,7 @@ export default async function handler(req, res) {
             hsn: newLine.hsn,
             action: 'ADDED',
           });
+
           await deductStockForItem(supabase, restaurant_id, newLine);
         } else if (current.quantity !== newLine.quantity) {
           // CHANGED item
@@ -159,10 +175,11 @@ export default async function handler(req, res) {
           const qtyDiff = newLine.quantity - current.quantity;
 
           if (qtyDiff !== 0) {
+            // keep full change history
             changedItems.push({
               menu_item_id: menuItemId,
               name: newLine.name,
-              quantity: Math.abs(qtyDiff), // only the delta for KOT
+              quantity: Math.abs(qtyDiff), // delta
               price: newLine.price,
               hsn: newLine.hsn,
               action: qtyDiff > 0 ? 'INCREASED' : 'DECREASED',
@@ -172,6 +189,18 @@ export default async function handler(req, res) {
           }
 
           if (qtyDiff > 0) {
+            // positive delta → added for KOT
+            added_items.push({
+              menu_item_id: menuItemId,
+              name: newLine.name,
+              quantity: qtyDiff,
+              price: newLine.price,
+              hsn: newLine.hsn,
+              action: 'INCREASED',
+              old_qty: current.quantity,
+              new_qty: newLine.quantity,
+            });
+
             await deductStockForItem(supabase, restaurant_id, {
               ...newLine,
               quantity: qtyDiff,
@@ -358,10 +387,16 @@ export default async function handler(req, res) {
         status: 'new',
         removed_items,
         created_at: order.created_at,
-        items: changedItems.map(ci => ({
-          ...ci,
-          name: ci.name || ci.item_name,
-        })), // only changed/added for delta KOT, qty = delta
+
+        // KOT should use only added/increased items
+        items: added_items.map(ai => ({
+          ...ai,
+          name: ai.name || ai.item_name,
+        })),
+
+        // keep full change history if ever needed on client
+        changed_items: changedItems,
+
         is_edited: true,
         edit_reason: reason,
       },

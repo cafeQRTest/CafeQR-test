@@ -1352,7 +1352,6 @@ const handleEditSave = async (edited) => {
           ...data.order_for_print,
           autoPrint: true,
           kind: 'kot',
-          isEdited: true,
         },
       })
     );
