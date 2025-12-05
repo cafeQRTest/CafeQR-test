@@ -44,7 +44,7 @@ export default async function handler(req, res) {
     const { data: order, error: orderErr } = await supabase
       .from('orders')
       .select(
-        'id, status, restaurant_id, table_number, order_type, customer_name, customer_phone, payment_status, created_at'
+        'id, status, restaurant_id, table_number, order_type, customer_name, customer_phone, payment_status, created_at, updated_at'
       )
       .eq('id', order_id)
       .eq('restaurant_id', restaurant_id)
@@ -386,7 +386,7 @@ export default async function handler(req, res) {
         payment_status: order.payment_status || 'pending',
         status: 'new',
         removed_items,
-        created_at: order.created_at,
+        created_at: order.updated_at || order.created_at,
 
         // KOT should use only added/increased items
         items: added_items.map(ai => ({

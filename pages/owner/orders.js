@@ -1380,12 +1380,12 @@ const handleEditSave = async (edited) => {
 
     if (status === 'completed') {
       const to = page * PAGE_SIZE - 1;
-      const { data, error } = await q.order('created_at', { ascending: false }).range(0, to);
+      const { data, error } = await q.order('updated_at', { ascending: false }).range(0, to);
       if (error) throw error;
       return data;
     }
 
-    const { data, error } = await q.order('created_at', { ascending: true });
+    const { data, error } = await q.order('updated_at', { ascending: true });
     if (error) throw error;
     return data;
   }
@@ -1402,13 +1402,13 @@ async function fetchBucket(status, page = 1) {
   if (status === 'completed') {
     const to = page * PAGE_SIZE - 1;
     const { data, error } = await q
-      .order('created_at', { ascending: false })
+      .order('updated_at', { ascending: false })
       .range(0, to);
     if (error) throw error;
     return data;
   }
 
-  const { data, error } = await q.order('created_at', { ascending: true });
+  const { data, error } = await q.order('updated_at', { ascending: true });
   if (error) throw error;
   return data;
 }
@@ -1495,8 +1495,8 @@ useEffect(() => {
             .select('*, order_items(*, menu_items(name))')
             .eq('restaurant_id', restaurantId)
             .eq('status', 'new')
-            .gte('created_at', new Date(Date.now() - 120000).toISOString())
-            .order('created_at', { ascending: true });
+            .gte('updated_at', new Date(Date.now() - 120000).toISOString())
+            .order('updated_at', { ascending: true });
           if (data) {
             setOrdersByStatus((prev) => ({
               ...prev,
@@ -1664,16 +1664,16 @@ if (ordersByStatus.mobileFilter === 'inprogress') {
   mobileOrders = [
     ...ordersByStatus.in_progress,
     ...ordersByStatus.ready,
-  ].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  ].sort((a, b) => new Date(a.updated_at) - new Date(b.updated_at));
 } else if (ordersByStatus.mobileFilter === 'completed') {
   // Done: newest → oldest
   mobileOrders = [...(ordersByStatus.completed || [])].sort(
-    (a, b) => new Date(b.created_at) - new Date(a.created_at)
+    (a, b) => new Date(b.updated_at) - new Date(a.updated_at)
   );
 } else {
   // New column: oldest → newest
   mobileOrders = [...(ordersByStatus[ordersByStatus.mobileFilter] || [])].sort(
-    (a, b) => new Date(a.created_at) - new Date(b.created_at)
+    (a, b) => new Date(a.updated_at) - new Date(b.updated_at)
   );
 }
 
@@ -1796,11 +1796,11 @@ colOrders =
   col.id === 'completed'
     // Done: newest → oldest
     ? [...colOrders].sort(
-        (a, b) => new Date(b.created_at) - new Date(a.created_at)
+        (a, b) => new Date(b.updated_at) - new Date(a.updated_at)
       )
     // Other columns: oldest → newest
     : [...colOrders].sort(
-        (a, b) => new Date(a.created_at) - new Date(b.created_at)
+        (a, b) => new Date(a.updated_at) - new Date(b.updated_at)
       );
 
 
@@ -2003,7 +2003,7 @@ function OrderCard({
               {isCreditOrder && <small style={{marginLeft: 8, color: '#f59e0b', fontWeight: 'bold'}}>💳 CREDIT</small>}
             </span>
             <span style={{ color:'#6b7280',fontSize:12 }}>
-              {new Date(order.created_at).toLocaleTimeString()}
+              {new Date(order.updated_at).toLocaleTimeString()}
             </span>
           </div>
 
