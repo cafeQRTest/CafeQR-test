@@ -215,7 +215,7 @@ export function buildKotText(order, restaurantProfile) {
         ? `Table ${order.table_number}`
         : orderType;
 
-    const orderDate = new Date(order.created_at);
+    const orderDate = new Date( order.created_at);
     const dateStr = orderDate.toLocaleDateString('en-IN', {
       day: '2-digit',
       month: '2-digit',
@@ -245,6 +245,7 @@ export function buildKotText(order, restaurantProfile) {
     lines.push(dashes());
 
     // === ITEMS: name + qty only ===
+      if (items.length) {
     lines.push('ITEM                     QTY');  // simple KOT header
     items.forEach(item => {
       const nameLines = wrapText(item.name || 'Item', W - 5);
@@ -259,6 +260,7 @@ export function buildKotText(order, restaurantProfile) {
         lines.push(nameLines[i]);
       }
     });
+  }
      if (removedItems.length) {
       lines.push(dashes());
       lines.push(center('*** REMOVED ITEMS ***', W));
