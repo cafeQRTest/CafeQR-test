@@ -298,10 +298,7 @@ export default function InventoryPage() {
       const items = rawItems.filter(
         (item) => item.ingredientId && Number(item.quantity) > 0
       )
-      if (items.length === 0) {
-        throw new Error('Add at least one ingredient with quantity before saving recipe.')
-      }
-
+      
       // Disallow duplicate ingredients in a single recipe
       const seen = new Set()
       for (const it of items) {
