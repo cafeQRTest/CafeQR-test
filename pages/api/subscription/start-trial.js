@@ -7,16 +7,13 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { restaurant_id } = req.body;
+  const { restaurant_id, owner_email } = req.body;      // accept owner_email
   if (!restaurant_id) {
     return res.status(400).json({ error: 'restaurant_id required' });
   }
 
   try {
     const supabase = getServerSupabase();
-
-    // 1) Ensure a restaurant row exists for this id
-    let restaurant = null;
 
     const { data: existingRestaurant, error: restError } = await supabase
       .from('restaurants')
@@ -29,18 +26,18 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Failed to fetch restaurant' });
     }
 
-    if (!existingRestaurant) {
-      // Auto‑create a minimal restaurant row.
-      // Add any extra default columns your schema requires.
+    let restaurant = existingRestaurant;
+
+    if (!restaurant) {
       const { data: created, error: createError } = await supabase
         .from('restaurants')
         .insert({
           id: restaurant_id,
-          // name: 'New restaurant',        // <- optional defaults
-          // owner_email: '<optional-email>'
+          name: 'New restaurant',                 // NEW: satisfy NOT NULL
+          owner_email: owner_email || null,       // optional
         })
         .select('id')
-        .single(); // returns the inserted row [web:80][web:87]
+        .single();
 
       if (createError) {
         console.error('[start-trial] Error creating restaurant:', createError);
