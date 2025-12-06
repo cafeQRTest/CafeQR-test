@@ -44,7 +44,7 @@ export default async function handler(req, res) {
     const { data: order, error: orderErr } = await supabase
       .from('orders')
       .select(
-        'id, status, restaurant_id, table_number, order_type, customer_name, customer_phone, payment_status, created_at, updated_at'
+        'id, status, restaurant_id, table_number, order_type, customer_name, customer_phone, payment_status, created_at, updated_at, is_credit, credit_customer_id'
       )
       .eq('id', order_id)
       .eq('restaurant_id', restaurant_id)
@@ -98,7 +98,7 @@ export default async function handler(req, res) {
     const updates = [];
     const changedItems = [];
     const removed_items = [];
-    const added_items = []; // NEW: for KOT added/increased lines
+    const added_items = []; // for KOT added/increased lines
 
     // 6a) Restore stock for fully removed items
     const removedItems = (currentItems || []).filter(
@@ -273,6 +273,16 @@ export default async function handler(req, res) {
     if (orderUpdErr) {
       return res.status(500).json({ error: 'Failed to update order totals' });
     }
+
+    // 9a) CREDIT LEDGER SYNC (delegated to helper)
+    await syncCreditLedgerForOrder({
+      supabase,
+      restaurant_id,
+      order,
+      order_id,
+      newTotals,
+      reason,
+    });
 
     // 10) FULL INVOICE SYNC (delete-all + insert-all) using invoice_items schema
     const { data: invoice, error: invErr } = await supabase
@@ -555,3 +565,48 @@ async function recalculateOrderTotals(supabase, restaurant_id, items) {
     total_amount: Number(totalInc.toFixed(2)),
   };
 }
+
+// CREDIT HELPER
+async function syncCreditLedgerForOrder({
+  supabase,
+  restaurant_id,
+  order,
+  order_id,
+  newTotals,
+  reason,
+}) {
+  try {
+    const isCreditSale =
+      order.is_credit === true ||
+      order.payment_method === 'credit';
+
+    if (!isCreditSale) return;
+    if (!order.credit_customer_id) return;
+    if (!(newTotals && Number(newTotals.total_inc_tax) > 0)) return;
+
+ await supabase
+  .from('credit_transactions')
+  .upsert(
+    {
+      restaurant_id,
+      credit_customer_id: order.credit_customer_id,
+      order_id,
+      transaction_type: 'credit',
+      amount: Number(newTotals.total_inc_tax),
+      description: `Order edited: ${reason}`,
+      transaction_date: new Date().toISOString(),
+      payment_method: null,
+      notes: `Edited order total: ₹${Number(newTotals.total_inc_tax).toFixed(2)}`,
+    },
+    {
+      onConflict: 'restaurant_id,order_id', // must match the UNIQUE constraint
+    }
+  );
+
+
+    // v_credit_customer_ledger will then recompute totals correctly from this single row per order[web:1][web:24]
+  } catch (err) {
+    console.error('Credit ledger sync failed', err);
+  }
+}
+
