@@ -132,7 +132,25 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
   const [onlineAmount, setOnlineAmount] = useState('');
   const [onlineMethod, setOnlineMethod] = useState('upi');
 
-  const total = computeOrderTotalDisplay(order);
+  // Mode info from order (paymentConfirmDialog)
+  const mode = order.mode || null; // 'collect' | 'refund' | null
+  const originalTotal = computeOrderTotalDisplay(order);
+
+  // Decide effective total to validate against
+  const effectiveTotal =
+    mode === 'collect'
+      ? Number(order.remainingAmount ?? originalTotal)
+      : originalTotal;
+
+  const alreadyPaid =
+    mode && order.alreadyPaidAmount != null
+      ? Number(order.alreadyPaidAmount)
+      : 0;
+
+  const refundAmount =
+    mode === 'refund' && order.refundAmount != null
+      ? Number(order.refundAmount)
+      : 0;
 
   const handleMethodSelect = (method) => {
     setPaymentMethod(method);
@@ -149,124 +167,234 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
     const cash = Number(cashAmount || 0);
     const online = Number(onlineAmount || 0);
     const sum = cash + online;
-    
+
     if (cash <= 0 || online <= 0) {
       alert('Both cash and online amounts must be greater than 0');
       return false;
     }
-    
-    if (Math.abs(sum - total) > 0.01) {
-      alert(`Amounts must equal ₹${total.toFixed(2)}. Currently: ₹${sum.toFixed(2)}`);
+
+    if (Math.abs(sum - effectiveTotal) > 0.01) {
+      alert(
+        `Amounts must equal ₹${effectiveTotal.toFixed(
+          2
+        )}. Currently: ₹${sum.toFixed(2)}`
+      );
       return false;
     }
-    
+
     return true;
   };
 
   const handleConfirm = () => {
     if (paymentMethod === 'mixed') {
       if (!validateMixedPayment()) return;
-      
+
       onConfirm(paymentMethod, {
         cash_amount: Number(cashAmount).toFixed(2),
         online_amount: Number(onlineAmount).toFixed(2),
         online_method: onlineMethod,
-        is_mixed: true
+        is_mixed: true,
+        // optional: include mode info if you want to treat collect / refund differently later
+        mode,
       });
     } else {
       onConfirm(paymentMethod, null);
     }
   };
 
+  const titlePrefix =
+    mode === 'collect'
+      ? 'Collect remaining payment'
+      : mode === 'refund'
+      ? 'Refund extra payment'
+      : 'Payment Confirmation';
+
   return (
-    <div style={{
-      position:'fixed',top:0,left:0,right:0,bottom:0,
-      backgroundColor:'rgba(0,0,0,0.5)',display:'flex',
-      alignItems:'center',justifyContent:'center',zIndex:1000
-    }}>
-      <div style={{ 
-        backgroundColor:'white',padding:20,borderRadius:8,
-        maxWidth:450,margin:16,maxHeight:'90vh',overflowY:'auto'
-      }}>
-        <h3 style={{ margin:'0 0 16px 0' }}>Payment Confirmation</h3>
-        <p><strong>Order #{order.id.slice(0,8)}</strong> - {getOrderTypeLabel(order)}</p>
-        <p><strong>Amount: {money(total)}</strong></p>
-        <p style={{marginBottom: 16}}><strong>How did the customer pay?</strong></p>
-        
+    <div
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1000,
+      }}
+    >
+      <div
+        style={{
+          backgroundColor: 'white',
+          padding: 20,
+          borderRadius: 8,
+          maxWidth: 450,
+          margin: 16,
+          maxHeight: '90vh',
+          overflowY: 'auto',
+        }}
+      >
+        <h3 style={{ margin: '0 0 16px 0' }}>{titlePrefix}</h3>
+        <p>
+          <strong>Order #{order.id.slice(0, 8)}</strong> - {getOrderTypeLabel(order)}
+        </p>
+
+        {/* Amount summary depending on mode */}
+        {mode ? (
+          <div style={{ marginBottom: 12, fontSize: 13 }}>
+            <div>
+              Total bill:{' '}
+              <strong>₹{(order.totalAmount ?? originalTotal).toFixed(2)}</strong>
+            </div>
+            <div>
+              Already paid:{' '}
+              <strong>₹{alreadyPaid.toFixed(2)}</strong>
+            </div>
+            {mode === 'collect' && (
+              <div style={{ marginTop: 4, color: '#16a34a', fontWeight: 600 }}>
+                Remaining to collect:{' '}
+                ₹{(order.remainingAmount ?? 0).toFixed(2)}
+              </div>
+            )}
+            {mode === 'refund' && (
+              <div style={{ marginTop: 4, color: '#b91c1c', fontWeight: 600 }}>
+                Refund to customer:{' '}
+                ₹{refundAmount.toFixed(2)}
+              </div>
+            )}
+          </div>
+        ) : (
+          <p>
+            <strong>Amount: {money(originalTotal)}</strong>
+          </p>
+        )}
+
+        <p style={{ marginBottom: 16 }}>
+          <strong>
+            {mode === 'refund'
+              ? 'How will you adjust/refund the payment?'
+              : 'How did the customer pay?'}
+          </strong>
+        </p>
+
         {/* Payment method selection */}
-        <div style={{ margin: '16px 0', display:'flex', flexDirection:'column', gap:'10px' }}>
+        <div
+          style={{
+            margin: '16px 0',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '10px',
+          }}
+        >
           {/* Cash Option */}
-          <label style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: '12px',
-            padding: '12px',
-            border: paymentMethod === 'cash' ? '2px solid #2563eb' : '1px solid #e5e7eb',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            backgroundColor: paymentMethod === 'cash' ? '#eff6ff' : 'white'
-          }}>
-            <input 
-              type="radio" 
-              value="cash" 
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              padding: '12px',
+              border:
+                paymentMethod === 'cash'
+                  ? '2px solid #2563eb'
+                  : '1px solid #e5e7eb',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              backgroundColor:
+                paymentMethod === 'cash' ? '#eff6ff' : 'white',
+            }}
+          >
+            <input
+              type="radio"
+              value="cash"
               checked={paymentMethod === 'cash'}
               onChange={(e) => handleMethodSelect(e.target.value)}
             />
-            <span>💵 Full Cash Payment</span>
+            <span>
+              💵 {mode === 'refund' ? 'Refund in Cash' : 'Full Cash Payment'}
+            </span>
           </label>
 
           {/* Online Option */}
-          <label style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: '12px',
-            padding: '12px',
-            border: paymentMethod === 'online' ? '2px solid #2563eb' : '1px solid #e5e7eb',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            backgroundColor: paymentMethod === 'online' ? '#eff6ff' : 'white'
-          }}>
-            <input 
-              type="radio" 
-              value="online" 
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              padding: '12px',
+              border:
+                paymentMethod === 'online'
+                  ? '2px solid #2563eb'
+                  : '1px solid #e5e7eb',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              backgroundColor:
+                paymentMethod === 'online' ? '#eff6ff' : 'white',
+            }}
+          >
+            <input
+              type="radio"
+              value="online"
               checked={paymentMethod === 'online'}
               onChange={(e) => handleMethodSelect(e.target.value)}
             />
-            <span>🔗 Full Online (UPI/Card)</span>
+            <span>
+              🔗{' '}
+              {mode === 'refund'
+                ? 'Refund Online (UPI/Card)'
+                : 'Full Online (UPI/Card)'}
+            </span>
           </label>
 
-          {/* Mixed Payment Option */}
-          <label style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: '12px',
-            padding: '12px',
-            border: paymentMethod === 'mixed' ? '2px solid #2563eb' : '1px solid #e5e7eb',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            backgroundColor: paymentMethod === 'mixed' ? '#eff6ff' : 'white'
-          }}>
-            <input 
-              type="radio" 
-              value="mixed" 
-              checked={paymentMethod === 'mixed'}
-              onChange={(e) => handleMethodSelect(e.target.value)}
-            />
-            <span>🔀 Mixed (Part Cash + Part Online)</span>
-          </label>
+          {/* Mixed Payment Option (only makes sense for collecting, not refund) */}
+          {mode !== 'refund' && (
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                padding: '12px',
+                border:
+                  paymentMethod === 'mixed'
+                    ? '2px solid #2563eb'
+                    : '1px solid #e5e7eb',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                backgroundColor:
+                  paymentMethod === 'mixed' ? '#eff6ff' : 'white',
+              }}
+            >
+              <input
+                type="radio"
+                value="mixed"
+                checked={paymentMethod === 'mixed'}
+                onChange={(e) => handleMethodSelect(e.target.value)}
+              />
+              <span>🔀 Mixed (Part Cash + Part Online)</span>
+            </label>
+          )}
         </div>
 
-        {/* Mixed Payment Details Form */}
-        {showMixedForm && (
-          <div style={{
-            marginTop: '16px',
-            padding: '16px',
-            backgroundColor: '#f9fafb',
-            borderRadius: '8px',
-            border: '1px solid #e5e7eb'
-          }}>
+        {/* Mixed Payment Details Form (only when collecting) */}
+        {showMixedForm && mode !== 'refund' && (
+          <div
+            style={{
+              marginTop: '16px',
+              padding: '16px',
+              backgroundColor: '#f9fafb',
+              borderRadius: '8px',
+              border: '1px solid #e5e7eb',
+            }}
+          >
             <div style={{ marginBottom: '12px' }}>
-              <label style={{ fontSize: '14px', fontWeight: '600', display: 'block', marginBottom: '6px' }}>
+              <label
+                style={{
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  display: 'block',
+                  marginBottom: '6px',
+                }}
+              >
                 Cash Amount (₹)
               </label>
               <input
@@ -275,7 +403,7 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
                 onChange={(e) => setCashAmount(e.target.value)}
                 placeholder="0.00"
                 min="0"
-                max={total}
+                max={effectiveTotal}
                 step="0.01"
                 style={{
                   width: '100%',
@@ -283,13 +411,20 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
                   border: '1px solid #d1d5db',
                   borderRadius: '6px',
                   fontSize: '14px',
-                  boxSizing: 'border-box'
+                  boxSizing: 'border-box',
                 }}
               />
             </div>
 
             <div style={{ marginBottom: '12px' }}>
-              <label style={{ fontSize: '14px', fontWeight: '600', display: 'block', marginBottom: '6px' }}>
+              <label
+                style={{
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  display: 'block',
+                  marginBottom: '6px',
+                }}
+              >
                 Online Amount (₹)
               </label>
               <input
@@ -298,7 +433,7 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
                 onChange={(e) => setOnlineAmount(e.target.value)}
                 placeholder="0.00"
                 min="0"
-                max={total}
+                max={effectiveTotal}
                 step="0.01"
                 style={{
                   width: '100%',
@@ -306,13 +441,20 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
                   border: '1px solid #d1d5db',
                   borderRadius: '6px',
                   fontSize: '14px',
-                  boxSizing: 'border-box'
+                  boxSizing: 'border-box',
                 }}
               />
             </div>
 
             <div style={{ marginBottom: '12px' }}>
-              <label style={{ fontSize: '14px', fontWeight: '600', display: 'block', marginBottom: '6px' }}>
+              <label
+                style={{
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  display: 'block',
+                  marginBottom: '6px',
+                }}
+              >
                 Online Payment Method
               </label>
               <select
@@ -324,7 +466,7 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
                   border: '1px solid #d1d5db',
                   borderRadius: '6px',
                   fontSize: '14px',
-                  boxSizing: 'border-box'
+                  boxSizing: 'border-box',
                 }}
               >
                 <option value="upi">UPI</option>
@@ -334,30 +476,562 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
               </select>
             </div>
 
-            <div style={{
-              padding: '10px 12px',
-              backgroundColor: '#eff6ff',
-              borderLeft: '4px solid #2563eb',
-              borderRadius: '4px',
-              fontSize: '13px',
-              color: '#1e40af'
-            }}>
-              <strong>Total: ₹{total.toFixed(2)}</strong><br/>
-              <strong>Split:</strong> ₹{cashAmount || '0'} (Cash) + ₹{onlineAmount || '0'} ({onlineMethod.toUpperCase()})
+            <div
+              style={{
+                padding: '10px 12px',
+                backgroundColor: '#eff6ff',
+                borderLeft: '4px solid #2563eb',
+                borderRadius: '4px',
+                fontSize: '13px',
+                color: '#1e40af',
+              }}
+            >
+              <strong>
+                Total to collect now: ₹{effectiveTotal.toFixed(2)}
+              </strong>
+              <br />
+              <strong>Split:</strong> ₹{cashAmount || '0'} (Cash) + ₹
+              {onlineAmount || '0'} ({onlineMethod.toUpperCase()})
             </div>
           </div>
         )}
 
-        <div style={{ display:'flex', gap:10, marginTop:20 }}>
-          <Button onClick={handleConfirm} variant="success" style={{flex:1}}>
-            Yes, {paymentMethod === 'mixed' ? 'Mixed' : paymentMethod === 'cash' ? 'Cash' : 'Online'} Received
+        <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+          <Button
+            onClick={handleConfirm}
+            variant="success"
+            style={{ flex: 1 }}
+          >
+            {mode === 'refund'
+              ? 'Confirm refund & complete'
+              : `Yes, ${
+                  paymentMethod === 'mixed'
+                    ? 'Mixed'
+                    : paymentMethod === 'cash'
+                    ? 'Cash'
+                    : 'Online'
+                } received`}
           </Button>
-          <Button onClick={onCancel} variant="outline" style={{flex:1}}>Cancel</Button>
+          <Button
+            onClick={onCancel}
+            variant="outline"
+            style={{ flex: 1 }}
+          >
+            Cancel
+          </Button>
         </div>
       </div>
     </div>
   );
 }
+
+function EditOrderPanel({ order, onClose, onSave }) {
+  const [originalLines] = useState(() => toDisplayItems(order)); // snapshot of original
+  const [lines, setLines] = useState(() => toDisplayItems(order));
+  const [showMenuPicker, setShowMenuPicker] = useState(false);
+  const [menuSearch, setMenuSearch] = useState('');
+  const [menuItems, setMenuItems] = useState([]);
+  const [saving, setSaving] = useState(false);
+
+  const total = lines.reduce(
+    (sum, l) => sum + (Number(l.price) || 0) * (Number(l.quantity) || 0),
+    0
+  );
+
+  const updateQty = (index, qty) => {
+    setLines((prev) => {
+      if (qty <= 0) {
+        return prev.filter((_, i) => i !== index); // 0 = delete
+      }
+      return prev.map((l, i) => (i === index ? { ...l, quantity: qty } : l));
+    });
+  };
+
+  const removeLine = (index) => {
+    setLines((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  // Normalize lines by content only (name, price, quantity) for change detection
+  const normalizeLines = (arr) =>
+    (arr || [])
+      .map((l) => ({
+        name: (l.name || '').trim().toLowerCase(),
+        quantity: Number(l.quantity) || 0,
+        price: Number(l.price) || 0,
+      }))
+      .sort((a, b) => {
+        const n = a.name.localeCompare(b.name);
+        if (n !== 0) return n;
+        const p = a.price - b.price;
+        if (p !== 0) return p;
+        return a.quantity - b.quantity;
+      });
+
+  const hasChanges = (() => {
+    const a = normalizeLines(originalLines);
+    const b = normalizeLines(lines);
+    if (a.length !== b.length) return true;
+    for (let i = 0; i < a.length; i++) {
+      if (
+        a[i].name !== b[i].name ||
+        a[i].quantity !== b[i].quantity ||
+        a[i].price !== b[i].price
+      ) {
+        return true;
+      }
+    }
+    return false;
+  })();
+
+  const handleSave = () => {
+    // guard: no lines, no real change, or already saving
+    if (lines.length === 0 || !hasChanges || saving) return;
+    setSaving(true);
+    onSave({
+      ...order,
+      lines,
+      total,
+    });
+    // parent should close/unmount panel after success
+  };
+
+  const openMenuPicker = async () => {
+    try {
+      const s = getSupabase();
+      const { data, error } = await s
+        .from('menu_items')
+        .select('id, name, price')
+        .eq('restaurant_id', order.restaurant_id);
+
+      if (error) {
+        console.error('menu_items fetch error', error);
+        return;
+      }
+
+      setMenuItems(data || []);
+      setMenuSearch('');
+      setShowMenuPicker(true);
+    } catch (e) {
+      console.error('menu_items fetch exception', e);
+    }
+  };
+
+  const addMenuItemToLines = (item) => {
+    setLines((prev) => {
+      const existingIndex = prev.findIndex(
+        (l) => l.menu_item_id === item.id || l.name === item.name
+      );
+
+      // If already exists, just increase qty
+      if (existingIndex !== -1) {
+        return prev.map((l, i) =>
+          i === existingIndex
+            ? { ...l, quantity: (Number(l.quantity) || 0) + 1 }
+            : l
+        );
+      }
+
+      // Otherwise add new line
+      return [
+        ...prev,
+        {
+          name: item.name,
+          quantity: 1,
+          price: item.price,
+          menu_item_id: item.id,
+        },
+      ];
+    });
+
+    setShowMenuPicker(false);
+  };
+
+  const filteredMenuItems = menuItems.filter((m) =>
+    m.name.toLowerCase().includes(menuSearch.toLowerCase())
+  );
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        backgroundColor: 'rgba(15,23,42,0.45)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1100,
+        padding: '16px',
+      }}
+    >
+      <div
+        style={{
+          width: '100%',
+          maxWidth: 520,
+          maxHeight: '90vh',
+          backgroundColor: '#fff',
+          borderRadius: 12,
+          boxShadow: '0 20px 40px rgba(15,23,42,0.35)',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}
+      >
+        {/* Header */}
+        <div
+          style={{
+            padding: '16px 20px',
+            borderBottom: '1px solid #e5e7eb',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 16 }}>
+              Edit Order #{order.id.slice(0, 8)}
+            </div>
+            <div style={{ fontSize: 12, color: '#6b7280' }}>
+              {getOrderTypeLabel(order)}
+            </div>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div
+          style={{
+            flex: 1,
+            overflowY: 'auto',
+            padding: '12px 16px 80px',
+          }}
+        >
+          {/* Item list */}
+          {lines.map((line, idx) => (
+            <div
+              key={idx}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                padding: '10px 0',
+                borderBottom: '1px solid #f3f4f6',
+              }}
+            >
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 14, fontWeight: 600 }}>
+                  {line.name || 'Item'}
+                </div>
+                <div style={{ fontSize: 12, color: '#6b7280' }}>
+                  ₹{Number(line.price || 0).toFixed(2)}
+                </div>
+              </div>
+
+              {/* Qty pill with icons */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  borderRadius: 999,
+                  border: '1px solid #e5e7eb',
+                  padding: '2px 8px',
+                  background: '#f9fafb',
+                }}
+              >
+                <span
+                  onClick={() =>
+                    updateQty(idx, (Number(line.quantity) || 0) - 1)
+                  }
+                  style={{
+                    width: 20,
+                    height: 20,
+                    borderRadius: '999px',
+                    backgroundColor: '#fee2e2',
+                    color: '#b91c1c',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 14,
+                    cursor: 'pointer',
+                  }}
+                  title="Decrease"
+                >
+                  −
+                </span>
+                <span
+                  style={{
+                    minWidth: 24,
+                    textAlign: 'center',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: '#111827',
+                  }}
+                >
+                  {line.quantity}
+                </span>
+                <span
+                  onClick={() =>
+                    updateQty(idx, (Number(line.quantity) || 0) + 1)
+                  }
+                  style={{
+                    width: 20,
+                    height: 20,
+                    borderRadius: '999px',
+                    backgroundColor: '#dcfce7',
+                    color: '#16a34a',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 14,
+                    cursor: 'pointer',
+                  }}
+                  title="Increase"
+                >
+                  +
+                </span>
+              </div>
+
+              {/* Delete icon */}
+              <span
+                onClick={() => removeLine(idx)}
+                style={{
+                  width: 22,
+                  height: 22,
+                  borderRadius: '999px',
+                  backgroundColor: '#fee2e2',
+                  color: '#b91c1c',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  fontSize: 13,
+                  fontWeight: 600,
+                }}
+                title="Remove item"
+              >
+                🗑
+              </span>
+            </div>
+          ))}
+
+          {/* Add item */}
+          <button
+            onClick={openMenuPicker}
+            style={{
+              marginTop: 10,
+              border: '1px dashed #9ca3af',
+              background: '#f9fafb',
+              borderRadius: 8,
+              padding: '10px 12px',
+              fontSize: 13,
+              cursor: 'pointer',
+              width: '100%',
+              color: '#4b5563',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+            }}
+          >
+            <span style={{ fontSize: 16, color: '#22c55e' }}>＋</span>
+            <span>Add item from menu</span>
+          </button>
+        </div>
+
+        {/* Footer */}
+        <div
+          style={{
+            borderTop: '1px solid #e5e7eb',
+            padding: '12px 16px',
+            backgroundColor: '#f9fafb',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              marginBottom: 8,
+              fontSize: 14,
+            }}
+          >
+            <span>Total</span>
+            <strong>₹{total.toFixed(2)}</strong>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Button
+              variant="outline"
+              style={{ flex: 1 }}
+              onClick={onClose}
+              disabled={saving}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="success"
+              style={{ flex: 1 }}
+              onClick={handleSave}
+              disabled={lines.length === 0 || !hasChanges || saving}
+            >
+              {saving ? 'Saving…' : 'Save & Reprint KOT'}
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Menu picker popup */}
+      {showMenuPicker && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15,23,42,0.55)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1200,
+            padding: '16px',
+          }}
+        >
+          <div
+            style={{
+              width: '100%',
+              maxWidth: 420,
+              maxHeight: '80vh',
+              backgroundColor: '#fff',
+              borderRadius: 12,
+              boxShadow: '0 18px 36px rgba(15,23,42,0.4)',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                padding: '12px 16px',
+                borderBottom: '1px solid #e5e7eb',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                backgroundColor: '#eff6ff',
+              }}
+            >
+              <div
+                style={{
+                  fontWeight: 600,
+                  fontSize: 14,
+                  color: '#1d4ed8',
+                }}
+              >
+                Add item from menu
+              </div>
+              <button
+                onClick={() => setShowMenuPicker(false)}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  fontSize: 18,
+                  cursor: 'pointer',
+                  color: '#6b7280',
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            <div style={{ padding: '10px 14px' }}>
+              <input
+                type="text"
+                value={menuSearch}
+                onChange={(e) => setMenuSearch(e.target.value)}
+                placeholder="Search menu items…"
+                style={{
+                  width: '100%',
+                  borderRadius: 999,
+                  border: '1px solid #d1d5db',
+                  padding: '6px 12px',
+                  fontSize: 13,
+                }}
+              />
+            </div>
+
+            <div
+              style={{
+                flex: 1,
+                overflowY: 'auto',
+                padding: '0 14px 12px',
+              }}
+            >
+              {filteredMenuItems.length === 0 ? (
+                <div
+                  style={{
+                    fontSize: 13,
+                    color: '#9ca3af',
+                    padding: '8px 0',
+                  }}
+                >
+                  No items found.
+                </div>
+              ) : (
+                filteredMenuItems.map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => addMenuItemToLines(item)}
+                    style={{
+                      width: '100%',
+                      textAlign: 'left',
+                      border: 'none',
+                      background: '#f9fafb',
+                      borderRadius: 10,
+                      padding: '8px 10px',
+                      marginBottom: 6,
+                      cursor: 'pointer',
+                      transition: 'background-color 0.12s, transform 0.08s',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = '#e0f2fe';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = '#f9fafb';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 500,
+                          color: '#111827',
+                        }}
+                      >
+                        {item.name}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 13,
+                          color: '#16a34a',
+                          fontWeight: 600,
+                        }}
+                      >
+                        ₹{Number(item.price || 0).toFixed(2)}
+                      </div>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 
 function CancelConfirmDialog({ order, onConfirm, onCancel }) {
@@ -413,6 +1087,8 @@ export default function OrdersPage() {
 
   // NEW: state for showing the print modal
   const [cancelOrderDialog, setCancelOrderDialog] = useState(null);
+  const [editingOrder, setEditingOrder] = useState(null);
+
 
   const [ordersByStatus, setOrdersByStatus] = useState({
     new: [], in_progress: [], ready: [], completed: [], mobileFilter: 'new'
@@ -644,6 +1320,54 @@ const handleCancelConfirm = async (reason) => {
 };
 const handleCancelDismiss = () => setCancelOrderDialog(null);
 
+const handleEditSave = async (edited) => {
+  try {
+    if (!restaurantId) {
+      setError('No restaurant selected');
+      return;
+    }
+
+    const resp = await fetch('/api/orders/edit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        order_id: edited.id,
+        restaurant_id: restaurantId,
+        lines: edited.lines,
+        reason: 'Order edited from dashboard',
+      }),
+    });
+
+    const data = await resp.json();
+
+    if (!resp.ok) {
+      setError(data.error || 'Failed to edit order');
+      return;
+    }
+ 
+    window.dispatchEvent(
+      new CustomEvent('auto-print-order', {
+        detail: {
+          ...data.order_for_print,
+          autoPrint: true,
+          kind: 'kot',
+        },
+      })
+    );
+
+    // Refresh & close
+    await loadOrders();
+    setEditingOrder(null);
+   
+
+  } catch (e) {
+    setError(e.message || 'Failed to save order changes');
+  }
+};
+
+
+
+
   // Fetch orders helper
   async function fetchBucket(status, page = 1) {
     if (!supabase || !restaurantId) return [];
@@ -655,12 +1379,12 @@ const handleCancelDismiss = () => setCancelOrderDialog(null);
 
     if (status === 'completed') {
       const to = page * PAGE_SIZE - 1;
-      const { data, error } = await q.order('created_at', { ascending: false }).range(0, to);
+      const { data, error } = await q.order('updated_at', { ascending: false }).range(0, to);
       if (error) throw error;
       return data;
     }
 
-    const { data, error } = await q.order('created_at', { ascending: true });
+    const { data, error } = await q.order('updated_at', { ascending: true });
     if (error) throw error;
     return data;
   }
@@ -677,13 +1401,13 @@ async function fetchBucket(status, page = 1) {
   if (status === 'completed') {
     const to = page * PAGE_SIZE - 1;
     const { data, error } = await q
-      .order('created_at', { ascending: false })
+      .order('updated_at', { ascending: false })
       .range(0, to);
     if (error) throw error;
     return data;
   }
 
-  const { data, error } = await q.order('created_at', { ascending: true });
+  const { data, error } = await q.order('updated_at', { ascending: true });
   if (error) throw error;
   return data;
 }
@@ -770,8 +1494,8 @@ useEffect(() => {
             .select('*, order_items(*, menu_items(name))')
             .eq('restaurant_id', restaurantId)
             .eq('status', 'new')
-            .gte('created_at', new Date(Date.now() - 120000).toISOString())
-            .order('created_at', { ascending: true });
+            .gte('updated_at', new Date(Date.now() - 120000).toISOString())
+            .order('updated_at', { ascending: true });
           if (data) {
             setOrdersByStatus((prev) => ({
               ...prev,
@@ -939,16 +1663,16 @@ if (ordersByStatus.mobileFilter === 'inprogress') {
   mobileOrders = [
     ...ordersByStatus.in_progress,
     ...ordersByStatus.ready,
-  ].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  ].sort((a, b) => new Date(a.updated_at) - new Date(b.updated_at));
 } else if (ordersByStatus.mobileFilter === 'completed') {
   // Done: newest → oldest
   mobileOrders = [...(ordersByStatus.completed || [])].sort(
-    (a, b) => new Date(b.created_at) - new Date(a.created_at)
+    (a, b) => new Date(b.updated_at) - new Date(a.updated_at)
   );
 } else {
   // New column: oldest → newest
   mobileOrders = [...(ordersByStatus[ordersByStatus.mobileFilter] || [])].sort(
-    (a, b) => new Date(a.created_at) - new Date(b.created_at)
+    (a, b) => new Date(a.updated_at) - new Date(b.updated_at)
   );
 }
 
@@ -1065,6 +1789,8 @@ if (ordersByStatus.mobileFilter === 'inprogress') {
 }}
 
         onCancelOrderOpen={onCancelOrderOpen}
+        onEditOrder={(order) => setEditingOrder(order)}
+
       />
     ))
   )}
@@ -1081,11 +1807,11 @@ colOrders =
   col.id === 'completed'
     // Done: newest → oldest
     ? [...colOrders].sort(
-        (a, b) => new Date(b.created_at) - new Date(a.created_at)
+        (a, b) => new Date(b.updated_at) - new Date(a.updated_at)
       )
     // Other columns: oldest → newest
     : [...colOrders].sort(
-        (a, b) => new Date(a.created_at) - new Date(b.created_at)
+        (a, b) => new Date(a.updated_at) - new Date(b.updated_at)
       );
 
 
@@ -1160,6 +1886,7 @@ colOrders =
 }}
 
                 onCancelOrderOpen={onCancelOrderOpen}
+                onEditOrder={(order) => setEditingOrder(order)}
               />
             ))
           )}
@@ -1211,6 +1938,14 @@ colOrders =
         />
       )}
 
+         {editingOrder && (
+  <EditOrderPanel
+    order={editingOrder}
+    onClose={() => setEditingOrder(null)}
+    onSave={handleEditSave}
+  />
+)}
+
 
       <style jsx>{`
 .orders-wrap { padding:12px 0 32px; }
@@ -1261,7 +1996,8 @@ function OrderCard({
   generatingInvoice,
   onPrintKot,
   onPrintBill,
-  onCancelOrderOpen
+  onCancelOrderOpen,
+  onEditOrder
 }) {
   const items = toDisplayItems(order);
   const total = computeOrderTotalDisplay(order);
@@ -1291,7 +2027,7 @@ function OrderCard({
               {isCreditOrder && <small style={{marginLeft: 8, color: '#f59e0b', fontWeight: 'bold'}}>💳 CREDIT</small>}
             </span>
             <span style={{ color:'#6b7280',fontSize:12 }}>
-              {new Date(order.created_at).toLocaleTimeString()}
+              {new Date(order.updated_at).toLocaleTimeString()}
             </span>
           </div>
 
@@ -1317,6 +2053,14 @@ function OrderCard({
     <Button size="sm" onClick={() => onChangeStatus(order.id, 'in_progress')}>
       Start
     </Button>
+     <Button
+      size="sm"
+     style={{ backgroundColor: '#eab308', color: '#fff' }}
+      onClick={() => onEditOrder(order)}
+    >
+      Edit
+    </Button>
+
     <Button
       size="sm"
       variant="danger"
@@ -1351,6 +2095,14 @@ function OrderCard({
     >
       {generatingInvoice === order.id ? 'Processing…' : 'Done'}
     </Button>
+     <Button
+      size="sm"
+     style={{ backgroundColor: '#eab308', color: '#fff' }}
+      onClick={() => onEditOrder(order)}
+    >
+      Edit
+    </Button>
+
     <Button
       size="sm"
       variant="danger"

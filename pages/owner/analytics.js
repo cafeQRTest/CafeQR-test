@@ -117,6 +117,31 @@ export default function AnalyticsPage() {
 
   const formatCurrency = (n) => `₹${Number(n).toFixed(2)}`;
 
+// inside AnalyticsPage component:
+const [aiLoading, setAiLoading] = useState(false);
+const [aiError, setAiError] = useState('');
+const [aiSuggestions, setAiSuggestions] = useState('');
+
+const fetchAiSuggestions = async () => {
+  try {
+    setAiLoading(true);
+    setAiError('');
+    const res = await fetch('/api/owner/ai-sales-insights', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ restaurantId, timeRange })
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Failed to get AI suggestions');
+    setAiSuggestions(json.suggestions);
+  } catch (e) {
+    setAiError(e.message);
+  } finally {
+    setAiLoading(false);
+  }
+};
+
+
   if (checking || restLoading) return <div style={{ padding: 24 }}>Loading…</div>;
   if (!restaurantId) return <div style={{ padding: 24 }}>No restaurant found</div>;
 
@@ -132,6 +157,14 @@ export default function AnalyticsPage() {
             <Button variant={timeRange === 'today' ? 'primary' : 'outline'} onClick={() => setTimeRange('today')}>Today</Button>
             <Button variant={timeRange === 'week' ? 'primary' : 'outline'} onClick={() => setTimeRange('week')}>7 Days</Button>
             <Button variant={timeRange === 'month' ? 'primary' : 'outline'} onClick={() => setTimeRange('month')}>30 Days</Button>
+
+<Button
+      variant="outline"
+      onClick={fetchAiSuggestions}
+      disabled={aiLoading}
+    >
+      {aiLoading ? 'Asking AI…' : 'Ask AI for ideas'}
+    </Button>
           </div>
         </div>
 
@@ -201,6 +234,30 @@ export default function AnalyticsPage() {
                 </Card>
               )}
             </div>
+
+{aiError && (
+  <Card padding="12px" style={{ marginTop: 16, borderColor: '#fecaca', background: '#fff1f2' }}>
+    <div style={{ color: '#b91c1c' }}>{aiError}</div>
+  </Card>
+)}
+
+{aiSuggestions && (
+  <Card padding="20px" style={{ marginTop: 16, maxHeight: 480, overflowY: 'auto' }}>
+    <h3 style={{ marginTop: 0 }}>
+      AI Sales Suggestions for {restaurant?.name || 'your restaurant'}
+    </h3>
+    <p style={{ color: '#6b7280', fontSize: 12, margin: '4px 0 12px' }}>
+      Period: {timeRange === 'today'
+        ? 'Today'
+        : timeRange === 'week'
+        ? 'Last 7 days'
+        : 'Last 30 days'}
+    </p>
+    <div style={{ whiteSpace: 'pre-wrap', fontSize: 14, color: '#111827', lineHeight: 1.5 }}>
+      {aiSuggestions}
+    </div>
+  </Card>
+)}
 
             <Card padding="20px" style={{ marginTop: 20 }}>
               <h3 style={{ marginTop: 0, color: '#6b7280' }}>Coming Soon</h3>

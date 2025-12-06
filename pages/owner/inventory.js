@@ -298,7 +298,7 @@ export default function InventoryPage() {
       const items = rawItems.filter(
         (item) => item.ingredientId && Number(item.quantity) > 0
       )
-      
+
       // Disallow duplicate ingredients in a single recipe
       const seen = new Set()
       for (const it of items) {
