@@ -1,5 +1,6 @@
 // components/ItemEditor.js
-import { useState, useEffect, useMemo, useRef } from "react";
+
+import { useState, useEffect, useMemo } from "react";
 import NiceSelect from "./NiceSelect";
 
 export default function ItemEditor({
@@ -29,11 +30,6 @@ export default function ItemEditor({
   const [taxRate, setTaxRate] = useState(item?.tax_rate ?? 0);
   const [isPackaged, setIsPackaged] = useState(!!item?.is_packaged_good);
   const [cessRate, setCessRate] = useState(item?.compensation_cess_rate ?? 0);
-
-  // image upload state
-  const [imagePreview, setImagePreview] = useState(item?.image_url || null);
-  const [uploadingImage, setUploadingImage] = useState(false);
-  const fileInputRef = useRef(null);
 
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
@@ -70,91 +66,23 @@ export default function ItemEditor({
     setTaxRate(item?.tax_rate ?? 0);
     setIsPackaged(!!item?.is_packaged_good);
     setCessRate(item?.compensation_cess_rate ?? 0);
-    setImagePreview(item?.image_url || null);
     setErr("");
   }, [item]);
 
   const canSubmit = useMemo(() => {
     if (!name.trim()) return false;
     if (price === "" || Number.isNaN(Number(price))) return false;
-    if (price !== "" && Number(price) === 0) return false;
+    if (price !== "" && Number(price) === 0) return false; // block zero only
     if (taxRate < 0 || cessRate < 0) return false;
+    // code is optional, so we don't require it
     return true;
   }, [name, price, taxRate, cessRate]);
-
   if (!open) return null;
-
-  // upload to Supabase Storage and return public URL
-  const uploadImageToSupabase = async (file) => {
-    if (!supabase || !restaurantId || !file) return null;
-
-    setUploadingImage(true);
-    try {
-      const ext = file.name.split(".").pop() || "jpg";
-      const fileName = `${restaurantId}/menu-items/${Date.now()}-${Math.random()
-        .toString(36)
-        .slice(2)}.${ext}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from("menu-images")
-        .upload(fileName, file, {
-          cacheControl: "3600",
-          upsert: false,
-        });
-
-      if (uploadError) throw uploadError;
-
-      const { data } = supabase.storage
-        .from("menu-images")
-        .getPublicUrl(fileName);
-
-      return data?.publicUrl || null;
-    } catch (ex) {
-      setErr(ex.message || "Image upload failed");
-      return null;
-    } finally {
-      setUploadingImage(false);
-    }
-  };
-
-  const onSelectFile = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith("image/")) {
-      setErr("Please select an image file (jpg, png, etc.)");
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      setErr("Image size must be less than 5MB");
-      return;
-    }
-
-    setErr("");
-
-    // local preview first
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      if (typeof ev.target?.result === "string") {
-        setImagePreview(ev.target.result);
-      }
-    };
-    reader.readAsDataURL(file);
-
-    // then upload to Supabase and replace with final URL
-    const url = await uploadImageToSupabase(file);
-    if (url) setImagePreview(url);
-  };
-
-  const clearImage = () => {
-    setImagePreview(null);
-  };
 
   const save = async (e) => {
     e.preventDefault();
     if (!supabase || !canSubmit) {
-      const msg =
-        "Please fill in all required details: name and a valid price greater than 0.";
+      const msg = "Please fill in all required details: name and a valid price greater than 0.";
       setErr(msg);
       onError?.(msg);
       return;
@@ -188,32 +116,25 @@ export default function ItemEditor({
         name: name.trim(),
         price: Number(price),
         category: category.trim(),
-        // ALWAYS set a real status on save so it is no longer a draft
-        status: "available",
+        status,
         veg,
         ispopular: isPopular,
         hsn: hsn.trim() || null,
         tax_rate: Number(taxRate),
         is_packaged_good: isPackaged,
         compensation_cess_rate: Number(cessRate),
-        image_url: imagePreview || null,
       };
 
       let newItem;
       if (isEdit) {
-        // existing item (including draft created from MenuPage): just update it
-        const { data, error: updErr } = await supabase
+        const { error: updErr } = await supabase
           .from("menu_items")
           .update(payload)
           .eq("id", item.id)
-          .eq("restaurant_id", restaurantId)
-          .select("*")
-          .single();
+          .eq("restaurant_id", restaurantId);
         if (updErr) throw updErr;
-        onSaved(data);
-        newItem = data;
+        onSaved({ ...item, ...payload });
       } else {
-        // normally not used now, but kept as a fallback
         const { data, error: insertErr } = await supabase
           .from("menu_items")
           .insert([payload])
@@ -224,7 +145,7 @@ export default function ItemEditor({
         onSaved(newItem);
       }
 
-      if (newItem && (!isEdit || item.status === "draft")) {
+      if (!isEdit && newItem) {
         await supabase.rpc("upsert_library_item", {
           _name: newItem.name,
           _price: newItem.price,
@@ -251,7 +172,9 @@ export default function ItemEditor({
         {err && <div style={errorStyle}>{err}</div>}
 
         <label>
-          <div style={customLabel}>Code</div>
+          <div style={customLabel}>
+            Code
+          </div>
           <input
             value={code}
             onChange={(e) => setCode(e.target.value)}
@@ -273,50 +196,6 @@ export default function ItemEditor({
           />
         </label>
 
-        {/* IMAGE UPLOAD - SMALL THUMBNAIL */}
-        <label style={{ marginTop: 10 }}>
-          <div style={customLabel}>Image</div>
-          <div style={imageRow}>
-            <button
-              type="button"
-              style={thumbButton}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              {imagePreview ? (
-                <img src={imagePreview} alt="Item" style={thumbImg} />
-              ) : (
-                <span style={thumbIcon}>📷</span>
-              )}
-            </button>
-
-            <div style={thumbTextBlock}>
-              <div style={thumbTitle}>Upload image</div>
-              <div style={thumbSubtitle}>JPG / PNG, up to 5MB</div>
-              {imagePreview && (
-                <button
-                  type="button"
-                  style={thumbClearBtn}
-                  onClick={() => clearImage()}
-                >
-                  Remove
-                </button>
-              )}
-              {uploadingImage && (
-                <div style={thumbUploading}>Uploading…</div>
-              )}
-            </div>
-
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              style={hiddenFileInput}
-              onChange={onSelectFile}
-              disabled={uploadingImage}
-            />
-          </div>
-        </label>
-
         <div style={row2}>
           <label>
             <div style={customLabel}>
@@ -328,6 +207,7 @@ export default function ItemEditor({
               value={price}
               onChange={(e) => setPrice(e.target.value)}
               required
+             // min="0.01"
               style={input}
               placeholder="Enter price"
             />
@@ -340,6 +220,7 @@ export default function ItemEditor({
                 onChange={setCategory}
                 placeholder="Select category"
                 options={[
+                  // ensure default category appears first
                   ...(cats.find((c) => c.name === "main")
                     ? [{ value: "main", label: "main" }]
                     : []),
@@ -377,45 +258,50 @@ export default function ItemEditor({
           </label>
         </div>
 
-        <div style={{ display: "flex", gap: 12 }}>
-          <div style={checkboxLabel}>
-            <input
-              type="checkbox"
-              checked={veg}
-              onChange={(e) => setVeg(e.target.checked)}
-            />
-            <span>Veg</span>
-          </div>
-          <div style={checkboxLabel}>
-            <input
-              type="checkbox"
-              checked={isPackaged}
-              onChange={(e) => setIsPackaged(e.target.checked)}
-            />
-            <span style={{ whiteSpace: "nowrap" }}>Packaged goods</span>
-          </div>
-          <div style={checkboxLabel}>
-            <input
-              type="checkbox"
-              checked={isPopular}
-              onChange={(e) => setIsPopular(e.target.checked)}
-            />
-            <span style={{ whiteSpace: "nowrap" }}>Offers</span>
-          </div>
+        {/* <hr /> */}
+        <div style={{display: "flex", gap: 12}}>
+        <div style={checkboxLabel}>
+          <input
+            type="checkbox"
+            checked={veg}
+            onChange={(e) => setVeg(e.target.checked)}
+          />
+          <span>
+          Veg
+          </span>
         </div>
-
-        <div style={{ marginTop: 12 }}>
-          <label>
-            <div style={customLabel}>HSN</div>
-            <input
-              value={hsn}
-              onChange={(e) => setHsn(e.target.value)}
-              style={input}
-              placeholder="Enter HSN code"
-            />
-          </label>
+        <div style={checkboxLabel}>
+          <input
+            type="checkbox"
+            checked={isPackaged}
+            onChange={(e) => setIsPackaged(e.target.checked)}
+          />
+          <span style={{whiteSpace:"nowrap"}}>
+          Packaged goods
+          </span>
         </div>
-
+        <div style={checkboxLabel}>
+          <input
+            type="checkbox"
+            checked={isPopular}
+            onChange={(e) => setIsPopular(e.target.checked)}
+          />
+          <span style={{whiteSpace:"nowrap"}}>
+          Offers
+          </span>
+        </div>
+        </div>
+        <div style={{ marginTop: 12}}>
+        <label>
+          <div style={customLabel}>HSN</div>
+          <input
+            value={hsn}
+            onChange={(e) => setHsn(e.target.value)}
+            style={input}
+            placeholder="Enter HSN code"
+          />
+        </label>
+        </div>
         {isPackaged && (
           <div style={row2}>
             <label>
@@ -447,14 +333,14 @@ export default function ItemEditor({
           <button
             type="button"
             onClick={onClose}
-            disabled={saving || uploadingImage}
+            disabled={saving}
             style={secondaryBtn}
           >
             Cancel
           </button>
           <button
             type="submit"
-            disabled={saving || uploadingImage || !canSubmit}
+            disabled={saving}
             style={primaryBtn}
           >
             {saving ? "Saving…" : isEdit ? "Save" : "Add"}
@@ -553,14 +439,14 @@ const overlayInner = {
   padding: 16,
   zIndex: 1100,
 };
-
 const modal = {
   background: "#ffffff",
   padding: 20,
   borderRadius: 14,
   width: "100%",
   maxWidth: 520,
-  boxShadow: "0 18px 45px rgba(15, 23, 42, 0.35)",
+  boxShadow:
+    "0 18px 45px rgba(15, 23, 42, 0.35)",
   border: "1px solid #e5e7eb",
   maxHeight: "95vh",
   overflowY: "auto",
@@ -572,10 +458,10 @@ const modalInner = {
   borderRadius: 12,
   width: "100%",
   maxWidth: 360,
-  boxShadow: "0 16px 32px rgba(15, 23, 42, 0.25)",
+  boxShadow:
+    "0 16px 32px rgba(15, 23, 42, 0.25)",
   border: "1px solid #e5e7eb",
 };
-
 const input = {
   width: "100%",
   padding: "9px 11px",
@@ -595,21 +481,18 @@ const row2 = {
   gap: 12,
   marginTop: 14,
 };
-
 const checkboxLabel = {
   display: "flex",
   alignItems: "center",
   gap: 4,
   marginTop: 12,
 };
-
 const actions = {
   display: "flex",
   justifyContent: "flex-end",
   gap: 10,
   marginTop: 20,
 };
-
 const smallBtn = {
   padding: "0 10px",
   background: "#f97316",
@@ -621,7 +504,6 @@ const smallBtn = {
   fontSize: 13,
   fontWeight: 500,
 };
-
 const primaryBtn = {
   padding: "10px 18px",
   background: "#f97316",
@@ -633,7 +515,6 @@ const primaryBtn = {
   fontSize: 14,
   boxShadow: "0 8px 18px rgba(249, 115, 22, 0.35)",
 };
-
 const secondaryBtn = {
   padding: "10px 18px",
   background: "#ffffff",
@@ -644,7 +525,6 @@ const secondaryBtn = {
   fontWeight: 500,
   fontSize: 14,
 };
-
 const errorStyle = {
   background: "#fef2f2",
   color: "#b91c1c",
@@ -654,80 +534,9 @@ const errorStyle = {
   fontSize: 13,
   border: "1px solid #fecaca",
 };
-
 const customLabel = {
   marginBottom: 6,
   fontSize: 13,
   fontWeight: 600,
   color: "#4b5563",
-};
-
-/* small thumbnail upload styles */
-
-const imageRow = {
-  display: "flex",
-  alignItems: "center",
-  gap: 10,
-  marginTop: 4,
-};
-
-const thumbButton = {
-  width: 60,
-  height: 60,
-  borderRadius: 12,
-  border: "1px solid #e5e7eb",
-  background: "#f9fafb",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  padding: 0,
-  cursor: "pointer",
-};
-
-const thumbImg = {
-  width: "100%",
-  height: "100%",
-  borderRadius: 10,
-  objectFit: "cover",
-};
-
-const thumbIcon = {
-  fontSize: 24,
-};
-
-const thumbTextBlock = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 2,
-  fontSize: 12,
-};
-
-const thumbTitle = {
-  fontWeight: 600,
-  color: "#374151",
-};
-
-const thumbSubtitle = {
-  color: "#9ca3af",
-};
-
-const thumbClearBtn = {
-  marginTop: 4,
-  alignSelf: "flex-start",
-  border: "none",
-  background: "transparent",
-  color: "#ef4444",
-  fontSize: 11,
-  cursor: "pointer",
-  padding: 0,
-};
-
-const thumbUploading = {
-  marginTop: 2,
-  fontSize: 11,
-  color: "#f97316",
-};
-
-const hiddenFileInput = {
-  display: "none",
 };

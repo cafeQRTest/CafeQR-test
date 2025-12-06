@@ -10,7 +10,6 @@ import Button from "../../components/ui/Button";
 import NiceSelect from "../../components/NiceSelect";
 import { getSupabase } from "../../services/supabase";
 import styled from "styled-components";
-
 const ToolBar = styled.div`
   display: flex;
   flex-direction: column;
@@ -161,12 +160,6 @@ export default function MenuPage() {
 
         setCategories(cats || []);
         setItems(its || []);
-
-        // NEW: if there is a draft item, reopen it automatically
-        const draft = (its || []).find((i) => i.status === "draft");
-        if (draft) {
-          setEditorItem(draft);
-        }
       } catch (e) {
         setError(e.message || "Failed to load");
       } finally {
@@ -264,32 +257,6 @@ export default function MenuPage() {
     });
   }, []);
 
-  // NEW: create a draft item row, then open editor for it
-  const handleAddNew = useCallback(async () => {
-    if (!supabase || !restaurantId) return;
-    try {
-      const { data, error } = await supabase
-        .from("menu_items")
-        .insert([
-          {
-            restaurant_id: restaurantId,
-            name: "",
-            price: 0,
-            status: "draft",
-          },
-        ])
-        .select(
-          "id, name, category, price, code_number, hsn, tax_rate, status, veg, is_packaged_good, compensation_cess_rate, ispopular"
-        )
-        .single();
-      if (error) throw error;
-      setItems((prev) => [data, ...prev]);
-      setEditorItem(data);
-    } catch (e) {
-      setError(e.message || "Failed to create draft item");
-    }
-  }, [supabase, restaurantId]);
-
   if (checking || loadingRestaurant || !restaurantId)
     return <p style={{ padding: 24 }}>Loading…</p>;
 
@@ -351,18 +318,14 @@ export default function MenuPage() {
         </div>
 
         <div className="toolbar-cta">
-          {/* CHANGED: use handleAddNew to create a draft row */}
-          <Button onClick={handleAddNew}>Add New Item</Button>
+          <Button onClick={() => setEditorItem({})}>Add New Item</Button>
           <Button onClick={() => setShowLibrary(true)}>Add from Library</Button>
           {hasSelection && (
             <>
               <Button variant="success" onClick={() => applyBulk("available")}>
                 Mark Available
               </Button>
-              <Button
-                variant="outline"
-                onClick={() => applyBulk("out_of_stock")}
-              >
+              <Button variant="outline" onClick={() => applyBulk("out_of_stock")}>
                 Mark Out of Stock
               </Button>
             </>
@@ -370,7 +333,6 @@ export default function MenuPage() {
         </div>
       </ToolBar>
 
-      {/* table section unchanged */}
       <div className="card" style={{ padding: 0 }}>
         <div className="table-scroll">
           <table className="table">
@@ -448,9 +410,7 @@ export default function MenuPage() {
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() =>
-                                toggleStatus(item.id, item.status)
-                              }
+                              onClick={() => toggleStatus(item.id, item.status)}
                             >
                               {available ? "Out" : "Avail"}
                             </Button>
@@ -498,9 +458,7 @@ export default function MenuPage() {
                       </td>
                       <td className="hide-sm">
                         {item.is_packaged_good
-                          ? Number(
-                              item.compensation_cess_rate ?? 0
-                            ).toFixed(2)
+                          ? Number(item.compensation_cess_rate ?? 0).toFixed(2)
                           : "—"}
                       </td>
                       <td className="hide-sm">
