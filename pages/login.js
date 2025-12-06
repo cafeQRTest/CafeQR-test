@@ -38,17 +38,22 @@ export default function LoginPage() {
       }
 
       // NEW: Ensure trial started on login
-      if (data?.user?.id) {
-        try {
-          await fetch('/api/subscription/start-trial', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ restaurant_id: data.user.id }),
-          })
-        } catch (e) {
-          console.error('Trial check failed:', e)
-        }
-      }
+      // After successful login
+if (data?.user?.id) {
+  try {
+    await fetch('/api/subscription/start-trial', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        restaurant_id: data.user.id,
+        owner_email: data.user.email,      // NEW
+      }),
+    });
+  } catch (e) {
+    console.error('Trial check failed:', e);
+  }
+}
+
 
       const dest = router.query?.redirect ? String(router.query.redirect) : '/owner'
       router.push(dest)
