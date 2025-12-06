@@ -34,6 +34,8 @@ export default async function handler(req, res) {
         price: Number(l.price) || 0,
         quantity: Number(l.quantity) || 1,
         hsn: l.hsn || null,
+        is_packaged_good: !!l.is_packaged_good,   // <--- ADD THIS
+
       }));
 
     if (filteredLines.length === 0) {
@@ -137,6 +139,7 @@ export default async function handler(req, res) {
             quantity: newLine.quantity,
             price: newLine.price,
             hsn: newLine.hsn,
+            is_packaged_good: !!newLine.is_packaged_good,
           });
 
           // For KOT: full qty as added
@@ -501,21 +504,26 @@ async function deductStockForItem(supabase, restaurant_id, item) {
 // TOTALS
 async function recalculateOrderTotals(supabase, restaurant_id, items) {
   if (!items || items.length === 0) {
-    return { subtotal_ex_tax: 0, total_tax: 0, total_inc_tax: 0, total_amount: 0 };
+    return {
+      subtotal_ex_tax: 0,
+      total_tax: 0,
+      total_inc_tax: 0,
+      total_amount: 0,
+    };
   }
 
-  const itemIds = [...new Set(items.map(i => i.menu_item_id).filter(Boolean))];
+  const itemIds = [...new Set(items.map((i) => i.menu_item_id).filter(Boolean))];
 
   const [{ data: profile }, { data: menuItems }] = await Promise.all([
     supabase
-      .from('restaurant_profiles')
-      .select('gst_enabled, default_tax_rate, prices_include_tax')
-      .eq('restaurant_id', restaurant_id)
+      .from("restaurant_profiles")
+      .select("gst_enabled, default_tax_rate, prices_include_tax")
+      .eq("restaurant_id", restaurant_id)
       .maybeSingle(),
     supabase
-      .from('menu_items')
-      .select('id, is_packaged_good, tax_rate')
-      .in('id', itemIds),
+      .from("menu_items")
+      .select("id, is_packaged_good, tax_rate")
+      .in("id", itemIds),
   ]);
 
   const gstEnabled = !!profile?.gst_enabled;
@@ -531,23 +539,39 @@ async function recalculateOrderTotals(supabase, restaurant_id, items) {
     const unit = Number(it.price || 0);
     if (!qty || !it.menu_item_id) continue;
 
-    const menuItem = menuItems?.find(mi => mi.id === it.menu_item_id);
+    const menuItem = menuItems?.find((mi) => mi.id === it.menu_item_id);
     const isPackaged = !!menuItem?.is_packaged_good;
-    const itemTaxRate = Number(menuItem?.tax_rate ?? 0);
+    const rawItemTax = Number(menuItem?.tax_rate);
 
-    const effectiveRate = gstEnabled
-      ? (isPackaged ? itemTaxRate : baseRate) || baseRate
-      : 0;
+    let effectiveRate;
+
+    if (isPackaged) {
+      // Packaged goods: always treat price as tax-inclusive MRP.
+      // If item.tax_rate <= 0, fall back to restaurant default_tax_rate.
+      const itemTaxRate =
+        Number.isFinite(rawItemTax) && rawItemTax > 0 ? rawItemTax : baseRate;
+      effectiveRate = itemTaxRate;
+    } else {
+      // Non-packaged: respect gst_enabled and baseRate.
+      effectiveRate = gstEnabled ? baseRate : 0;
+    }
 
     let lineEx;
     let tax;
     let lineInc;
 
-    if (isPackaged || pricesIncludeTax) {
+    if (isPackaged) {
+      // Always inclusive for packaged goods.
+      lineInc = unit * qty; // total line price stays exactly as given
+      lineEx = effectiveRate > 0 ? lineInc / (1 + effectiveRate / 100) : lineInc;
+      tax = lineInc - lineEx;
+    } else if (pricesIncludeTax) {
+      // Non-packaged but global setting says prices include tax.
       lineInc = unit * qty;
       lineEx = effectiveRate > 0 ? lineInc / (1 + effectiveRate / 100) : lineInc;
       tax = lineInc - lineEx;
     } else {
+      // Non-packaged, prices exclude tax.
       lineEx = unit * qty;
       tax = (effectiveRate / 100) * lineEx;
       lineInc = lineEx + tax;
@@ -565,6 +589,8 @@ async function recalculateOrderTotals(supabase, restaurant_id, items) {
     total_amount: Number(totalInc.toFixed(2)),
   };
 }
+
+
 
 // CREDIT HELPER
 async function syncCreditLedgerForOrder({
@@ -602,9 +628,6 @@ async function syncCreditLedgerForOrder({
       onConflict: 'restaurant_id,order_id', // must match the UNIQUE constraint
     }
   );
-
-
-    // v_credit_customer_ledger will then recompute totals correctly from this single row per order[web:1][web:24]
   } catch (err) {
     console.error('Credit ledger sync failed', err);
   }

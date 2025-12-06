@@ -30,15 +30,14 @@ export default async function handler(req, res) {
     }
 
     const { data: invoice, error: invoiceErr } = await supabase
-  .from('invoices')
-  .select('*')
-  .eq('order_id', order_id)
-  .maybeSingle()
+      .from('invoices')
+      .select('*')
+      .eq('order_id', order_id)
+      .maybeSingle()
 
     if (invoiceErr) {
       throw new Error('Failed to load invoice data')
     }
-
 
     // 2) Load restaurant + profile
     const { data: restaurant, error: restErr } = await supabase
@@ -61,13 +60,14 @@ export default async function handler(req, res) {
         invoice_date: order.created_at || new Date().toISOString(),
         customer_name: order.customer_name || null,
         customer_gstin: order.customer_gstin || null,
-        payment_method: order.payment_method || order.actual_payment_method || 'cash',
+        payment_method:
+          order.payment_method || order.actual_payment_method || 'cash',
         subtotal_ex_tax: order.subtotal_ex_tax ?? order.subtotal ?? 0,
         total_tax: order.total_tax ?? order.tax_amount ?? 0,
         total_inc_tax: order.total_inc_tax ?? order.total_amount ?? 0,
         gst_enabled: order.gst_enabled ?? profile?.gst_enabled ?? false,
         prices_include_tax: profile?.prices_include_tax ?? true,
-        mixed_payment_details: order.mixed_payment_details || null
+        mixed_payment_details: order.mixed_payment_details || null,
       },
       items: (order.order_items || []).map((it) => ({
         item_name: it.item_name || it.menu_items?.name || 'Item',
@@ -77,36 +77,48 @@ export default async function handler(req, res) {
             ? it.unit_price_ex_tax
             : it.price ?? 0,
         hsn: it.hsn ?? '',
-        tax_rate: it.tax_rate ?? profile?.default_tax_rate ?? 0
+        tax_rate: it.tax_rate ?? profile?.default_tax_rate ?? 0,
       })),
       restaurant: {
         name: restaurant.name,
         address: [
           profile?.shipping_address_line1,
           profile?.shipping_address_line2,
-          [profile?.shipping_city, profile?.shipping_state, profile?.shipping_pincode]
+          [
+            profile?.shipping_city,
+            profile?.shipping_state,
+            profile?.shipping_pincode,
+          ]
             .filter(Boolean)
-            .join(' ')
+            .join(' '),
         ]
           .filter(Boolean)
           .join(', '),
         gstin: profile?.gstin || '',
         phone: profile?.phone || '',
-        email: profile?.support_email || ''
-      }
+        email: profile?.support_email || '',
+      },
     }
 
     // 4) Generate PDF buffer in memory
-    const { buffer, filename } = await generateBillPdf(pdfPayload, restaurant.id)
+    const { buffer, filename } = await generateBillPdf(
+      pdfPayload,
+      restaurant.id
+    )
 
     // 5) Send as downloadable file
     res.setHeader('Content-Type', 'application/pdf')
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${filename}"`
+    )
     res.setHeader('Content-Length', buffer.length)
 
     return res.status(200).end(buffer)
   } catch (e) {
     console.error('Download invoice error', e)
-    return res.status(400).json({ error: e.message || 'Failed to generate invoice PDF' })
+    return res
+      .status(400)
+      .json({ error: e.message || 'Failed to generate invoice PDF' })
   }
 }

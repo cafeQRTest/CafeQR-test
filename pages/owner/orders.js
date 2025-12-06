@@ -524,7 +524,6 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
     </div>
   );
 }
-
 function EditOrderPanel({ order, onClose, onSave }) {
   const [originalLines] = useState(() => toDisplayItems(order)); // snapshot of original
   const [lines, setLines] = useState(() => toDisplayItems(order));
@@ -589,7 +588,7 @@ function EditOrderPanel({ order, onClose, onSave }) {
     setSaving(true);
     onSave({
       ...order,
-      lines,
+      lines, // lines now carry is_packaged_good where available
       total,
     });
     // parent should close/unmount panel after success
@@ -600,7 +599,7 @@ function EditOrderPanel({ order, onClose, onSave }) {
       const s = getSupabase();
       const { data, error } = await s
         .from('menu_items')
-        .select('id, name, price')
+        .select('id, name, price, is_packaged_good') // <-- include flag here
         .eq('restaurant_id', order.restaurant_id);
 
       if (error) {
@@ -622,7 +621,7 @@ function EditOrderPanel({ order, onClose, onSave }) {
         (l) => l.menu_item_id === item.id || l.name === item.name
       );
 
-      // If already exists, just increase qty
+      // If already exists, just increase qty (keep existing is_packaged_good)
       if (existingIndex !== -1) {
         return prev.map((l, i) =>
           i === existingIndex
@@ -630,8 +629,7 @@ function EditOrderPanel({ order, onClose, onSave }) {
             : l
         );
       }
-
-      // Otherwise add new line
+      // Otherwise add new line, attaching is_packaged_good
       return [
         ...prev,
         {
@@ -639,6 +637,7 @@ function EditOrderPanel({ order, onClose, onSave }) {
           quantity: 1,
           price: item.price,
           menu_item_id: item.id,
+          is_packaged_good: !!item.is_packaged_good, // <-- new field
         },
       ];
     });
@@ -1032,41 +1031,6 @@ function EditOrderPanel({ order, onClose, onSave }) {
   );
 }
 
-
-
-function CancelConfirmDialog({ order, onConfirm, onCancel }) {
-  const [reason, setReason] = useState('');
-  return (
-    <div style={{
-      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex',
-      alignItems: 'center', justifyContent: 'center', zIndex: 1000
-    }}>
-      <div style={{ backgroundColor: 'white', padding: 20, borderRadius: 8, maxWidth: 400, margin: 16 }}>
-        <h3 style={{ margin: '0 0 16px 0' }}>Cancel Order Confirmation</h3>
-        <p>Are you sure you want to cancel order #{order.id.slice(0, 8)} - Table {order.table_number}?</p>
-        <label>
-          Reason for cancellation:
-          <textarea
-            value={reason}
-            onChange={e => setReason(e.target.value)}
-            rows={3}
-            style={{ width: '100%', marginTop: 8 }}
-            placeholder="Enter cancellation reason"
-          />
-        </label>
-        <div style={{ display: 'flex', gap: 10, marginTop: 16, justifyContent: 'flex-end' }}>
-          <Button onClick={() => onConfirm(reason)} variant="danger" disabled={!reason.trim()}>
-            Confirm Cancel
-          </Button>
-          <Button onClick={onCancel} variant="outline">
-            Cancel
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 async function fetchFullOrder(supabase, orderId) {
   const { data, error } = await supabase
