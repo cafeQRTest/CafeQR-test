@@ -600,7 +600,7 @@ function EditOrderPanel({ order, onClose, onSave }) {
       const s = getSupabase();
       const { data, error } = await s
         .from('menu_items')
-        .select('id, name, price')
+        .select('id, name, price,is_packaged_good')
         .eq('restaurant_id', order.restaurant_id);
 
       if (error) {
@@ -630,7 +630,6 @@ function EditOrderPanel({ order, onClose, onSave }) {
             : l
         );
       }
-
       // Otherwise add new line
       return [
         ...prev,
@@ -639,6 +638,7 @@ function EditOrderPanel({ order, onClose, onSave }) {
           quantity: 1,
           price: item.price,
           menu_item_id: item.id,
+          is_packaged_good: !!item.is_packaged_good,
         },
       ];
     });
@@ -1546,10 +1546,6 @@ useEffect(() => {
   if (invErr) {
     console.error('Invoice fetch error in finalize:', invErr);
   }
-  //  const fullOrder = {
-  //   ...order,
-  //   invoice,
-  // };
 
   // ✅ Check PAYMENT_METHOD first for credit orders
   if (order?.payment_method === 'credit') {
@@ -1558,14 +1554,35 @@ useEffect(() => {
     return;
   }
 
-  // If invoice already exists, customer paid online - skip dialog
-  if (invoice.status == 'paid') {
+  // If invoice already exists and fully paid, skip dialog
+  if (invoice?.status === 'paid') {
     complete(order.id);
     return;
   }
 
-  // No invoice = counter payment - show payment confirmation dialog
-  setPaymentConfirmDialog(order);
+  // Calculate payment status
+  const orderTotal = computeOrderTotalDisplay(order);
+  const paidAmount = Number(invoice?.paid_amount || 0);
+  const remainingAmount = orderTotal - paidAmount;
+  const refundAmount = paidAmount > orderTotal ? paidAmount - orderTotal : 0;
+
+  // Determine mode
+  let mode = null;
+  if (remainingAmount > 0.01) {
+    mode = 'collect'; // Need to collect remaining payment
+  } else if (refundAmount > 0.01) {
+    mode = 'refund'; // Need to refund excess payment
+  }
+
+  // Show payment confirmation dialog with calculated amounts
+  setPaymentConfirmDialog({
+    ...order,
+    mode,
+    totalAmount: orderTotal,
+    alreadyPaidAmount: paidAmount,
+    remainingAmount: remainingAmount > 0 ? remainingAmount : 0,
+    refundAmount,
+  });
 };
 
 // Updated handler - receives payment method AND mixed details

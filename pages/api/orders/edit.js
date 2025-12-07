@@ -11,11 +11,71 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+const supabase = supabaseUrl && supabaseKey
+  ? createClient(supabaseUrl, supabaseKey)
+  : null;
+
+// Helper: per-line tax breakdown (uses same rules as recalculateOrderTotals)
+function calcLineBreakdown({ qty, unit, menuItem, profile }) {
+  const gstEnabled = !!profile?.gst_enabled;
+  const baseRate = Number(profile?.default_tax_rate ?? 5);
+  const pricesIncludeTax = profile?.prices_include_tax ?? true;
+
+  const isPackaged = !!menuItem?.is_packaged_good;
+  const rawItemTax = Number(menuItem?.tax_rate);
+
+  let effectiveRate;
+
+  if (isPackaged) {
+    // Packaged goods: price is always tax-inclusive MRP.
+    const itemTaxRate =
+      Number.isFinite(rawItemTax) && rawItemTax > 0 ? rawItemTax : baseRate;
+    effectiveRate = itemTaxRate;
+  } else {
+    // Non-packaged: respect gst_enabled and baseRate.
+    effectiveRate = gstEnabled ? baseRate : 0;
+  }
+
+  let lineEx;
+  let tax;
+  let lineInc;
+
+  if (isPackaged) {
+    // Always inclusive for packaged goods.
+    lineInc = unit * qty; // total line price stays exactly as given
+    lineEx = effectiveRate > 0 ? lineInc / (1 + effectiveRate / 100) : lineInc;
+    tax = lineInc - lineEx;
+  } else if (pricesIncludeTax) {
+    // Non-packaged but global setting says prices include tax.
+    lineInc = unit * qty;
+    lineEx = effectiveRate > 0 ? lineInc / (1 + effectiveRate / 100) : lineInc;
+    tax = lineInc - lineEx;
+  } else {
+    // Non-packaged, prices exclude tax.
+    lineEx = unit * qty;
+    tax = (effectiveRate / 100) * lineEx;
+    lineInc = lineEx + tax;
+  }
+
+  const unitEx = qty ? lineEx / qty : 0;
+  const unitInc = qty ? lineInc / qty : 0;
+  const unitTax = qty ? tax / qty : 0;
+
+  return {
+    unit_price_ex_tax: Number(unitEx.toFixed(2)),
+    unit_tax_amount: Number(unitTax.toFixed(2)),
+    unit_price_inc_tax: Number(unitInc.toFixed(2)),
+    tax_rate: Number(effectiveRate.toFixed(2)),
+    // line_total_ex_tax: Number(lineEx.toFixed(2)),
+    // line_total_inc_tax: Number(lineInc.toFixed(2)),
+  };
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-  if (!supabaseUrl || !supabaseKey) return res.status(500).json({ error: 'Server config error' });
-
-  const supabase = createClient(supabaseUrl, supabaseKey);
+  if (!supabaseUrl || !supabaseKey || !supabase) {
+    return res.status(500).json({ error: 'Server config error' });
+  }
 
   try {
     const { order_id, restaurant_id, lines, reason = 'Order edited from dashboard' } = req.body || {};
@@ -27,15 +87,14 @@ export default async function handler(req, res) {
 
     // 2) Normalize incoming lines (frontend sends full state)
     const filteredLines = lines
-      .filter(l => l && Number(l.quantity) > 0 && (l.menu_item_id || l.name))
-      .map(l => ({
+      .filter((l) => l && Number(l.quantity) > 0 && (l.menu_item_id || l.name))
+      .map((l) => ({
         menu_item_id: l.menu_item_id || null,
         name: l.name || 'Item',
         price: Number(l.price) || 0,
         quantity: Number(l.quantity) || 1,
         hsn: l.hsn || null,
-        is_packaged_good: !!l.is_packaged_good,   // <--- ADD THIS
-
+        is_packaged_good: !!l.is_packaged_good,
       }));
 
     if (filteredLines.length === 0) {
@@ -72,15 +131,15 @@ export default async function handler(req, res) {
 
     const currentMap = new Map(
       (currentItems || [])
-        .filter(i => i.menu_item_id)
-        .map(i => [i.menu_item_id, i])
+        .filter((i) => i.menu_item_id)
+        .map((i) => [i.menu_item_id, i])
     );
 
     // 5) Resolve missing menu_item_id from existing lines by name
     for (const line of filteredLines) {
       if (!line.menu_item_id && line.name && currentItems?.length) {
         const found = currentItems.find(
-          oi => (oi.item_name || '').toLowerCase() === line.name.toLowerCase()
+          (oi) => (oi.item_name || '').toLowerCase() === line.name.toLowerCase()
         );
         if (found) {
           line.menu_item_id = found.menu_item_id;
@@ -88,12 +147,27 @@ export default async function handler(req, res) {
       }
     }
 
-    const validLines = filteredLines.filter(l => l.menu_item_id);
+    const validLines = filteredLines.filter((l) => l.menu_item_id);
     if (validLines.length === 0) {
       return res.status(400).json({ error: 'No valid menu_item_id in lines' });
     }
 
-    const newMap = new Map(validLines.map(l => [l.menu_item_id, l]));
+    const newMap = new Map(validLines.map((l) => [l.menu_item_id, l]));
+
+    // Preload profile + menuItems for breakdown
+    const itemIds = [...new Set(validLines.map((l) => l.menu_item_id).filter(Boolean))];
+
+    const [{ data: profile }, { data: menuItems }] = await Promise.all([
+      supabase
+        .from('restaurant_profiles')
+        .select('gst_enabled, default_tax_rate, prices_include_tax')
+        .eq('restaurant_id', restaurant_id)
+        .maybeSingle(),
+      supabase
+        .from('menu_items')
+        .select('id, is_packaged_good, tax_rate')
+        .in('id', itemIds),
+    ]);
 
     // 6) Prepare collections
     const inserts = [];
@@ -104,13 +178,12 @@ export default async function handler(req, res) {
 
     // 6a) Restore stock for fully removed items
     const removedItems = (currentItems || []).filter(
-      item => item.menu_item_id && !newMap.has(item.menu_item_id)
+      (item) => item.menu_item_id && !newMap.has(item.menu_item_id)
     );
 
     if (removedItems.length > 0) {
       await restoreStockForItems(supabase, restaurant_id, removedItems);
 
-      // record fully removed items
       for (const ri of removedItems) {
         removed_items.push({
           menu_item_id: ri.menu_item_id,
@@ -129,9 +202,38 @@ export default async function handler(req, res) {
     await Promise.all(
       Array.from(newMap.entries()).map(async ([menuItemId, newLine]) => {
         const current = currentMap.get(menuItemId);
+        const menuItem = menuItems?.find((mi) => mi.id === menuItemId) || null;
+
+        // Fix: Packaged goods must always use MRP from menu_items, not frontend-provided price
+        const globalInclusive = profile?.prices_include_tax ?? true;
+        
+
+        // CRITICAL FIX: For packaged goods, always use the price from menu_items (MRP)
+        if (menuItem?.is_packaged_good) {
+          // Fetch the actual menu item price (MRP)
+          const { data: menuItemData } = await supabase
+            .from('menu_items')
+            .select('price')
+            .eq('id', menuItemId)
+            .single();
+          
+          if (menuItemData && menuItemData.price) {
+            const correctPrice = Number(menuItemData.price);
+            if (Math.abs(newLine.price - correctPrice) > 0.01) {
+              newLine.price = correctPrice;
+            }
+          }
+        }
 
         if (!current) {
           // NEW item → full qty
+          const breakdown = calcLineBreakdown({
+            qty: newLine.quantity,
+            unit: newLine.price,
+            menuItem,
+            profile,
+          });
+
           inserts.push({
             order_id,
             menu_item_id: menuItemId,
@@ -140,6 +242,7 @@ export default async function handler(req, res) {
             price: newLine.price,
             hsn: newLine.hsn,
             is_packaged_good: !!newLine.is_packaged_good,
+            ...breakdown,
           });
 
           // For KOT: full qty as added
@@ -158,41 +261,50 @@ export default async function handler(req, res) {
           changedItems.push({
             menu_item_id: menuItemId,
             name: newLine.name,
-            quantity: newLine.quantity, // full qty for brand new item
+            quantity: newLine.quantity,
             price: newLine.price,
             hsn: newLine.hsn,
             action: 'ADDED',
+            is_packaged_good: !!newLine.is_packaged_good,
           });
 
           await deductStockForItem(supabase, restaurant_id, newLine);
-        } else if (current.quantity !== newLine.quantity) {
+        } else if (current.quantity !== newLine.quantity || current.price !== newLine.price) {
           // CHANGED item
+          const breakdown = calcLineBreakdown({
+            qty: newLine.quantity,
+            unit: newLine.price,
+            menuItem,
+            profile,
+          });
+
           updates.push({
             id: current.id,
             quantity: newLine.quantity,
             price: newLine.price,
             item_name: newLine.name,
             hsn: newLine.hsn,
+            is_packaged_good: !!newLine.is_packaged_good,
+            ...breakdown,
           });
 
           const qtyDiff = newLine.quantity - current.quantity;
 
           if (qtyDiff !== 0) {
-            // keep full change history
             changedItems.push({
               menu_item_id: menuItemId,
               name: newLine.name,
-              quantity: Math.abs(qtyDiff), // delta
+              quantity: Math.abs(qtyDiff),
               price: newLine.price,
               hsn: newLine.hsn,
               action: qtyDiff > 0 ? 'INCREASED' : 'DECREASED',
               old_qty: current.quantity,
               new_qty: newLine.quantity,
+              is_packaged_good: !!newLine.is_packaged_good,
             });
           }
 
           if (qtyDiff > 0) {
-            // positive delta → added for KOT
             added_items.push({
               menu_item_id: menuItemId,
               name: newLine.name,
@@ -243,7 +355,7 @@ export default async function handler(req, res) {
     }
 
     if (removedItems.length > 0) {
-      const removedIds = removedItems.map(i => i.id);
+      const removedIds = removedItems.map((i) => i.id);
       const { error } = await supabase.from('order_items').delete().in('id', removedIds);
       if (error) return res.status(500).json({ error: 'Failed to delete order items' });
     }
@@ -268,7 +380,6 @@ export default async function handler(req, res) {
         total_tax: newTotals.total_tax,
         total_inc_tax: newTotals.total_inc_tax,
         total_amount: newTotals.total_amount,
-        // updated_at handled by DB trigger
       })
       .eq('id', order_id)
       .eq('restaurant_id', restaurant_id);
@@ -277,7 +388,7 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Failed to update order totals' });
     }
 
-    // 9a) CREDIT LEDGER SYNC (delegated to helper)
+    // 9a) CREDIT LEDGER SYNC
     await syncCreditLedgerForOrder({
       supabase,
       restaurant_id,
@@ -287,7 +398,7 @@ export default async function handler(req, res) {
       reason,
     });
 
-    // 10) FULL INVOICE SYNC (delete-all + insert-all) using invoice_items schema
+    // 10) FULL INVOICE SYNC (delete-all + insert-all)
     const { data: invoice, error: invErr } = await supabase
       .from('invoices')
       .select('id')
@@ -297,12 +408,25 @@ export default async function handler(req, res) {
 
     if (invoice && !invErr) {
       // 10.1 update invoice header totals
+      // Load invoice to check gst_enabled
+      const { data: invoiceData } = await supabase
+        .from('invoices')
+        .select('gst_enabled')
+        .eq('id', invoice.id)
+        .single();
+      
+      const gstEnabled = invoiceData?.gst_enabled ?? false;
+      const halfTax = gstEnabled ? newTotals.total_tax / 2 : 0;
+      
       await supabase
         .from('invoices')
         .update({
           subtotal_ex_tax: newTotals.subtotal_ex_tax,
           total_tax: newTotals.total_tax,
           total_inc_tax: newTotals.total_inc_tax,
+          cgst: halfTax,
+          sgst: halfTax,
+          igst: 0,
         })
         .eq('id', invoice.id);
 
@@ -313,7 +437,7 @@ export default async function handler(req, res) {
         .eq('invoice_id', invoice.id);
 
       if (existingInvItems?.length) {
-        const ids = existingInvItems.map(i => i.id);
+        const ids = existingInvItems.map((i) => i.id);
         await supabase.from('invoice_items').delete().in('id', ids);
       }
 
@@ -365,19 +489,18 @@ export default async function handler(req, res) {
           .insert(invoiceRows);
 
         if (invInsertErr) {
-          // Non-fatal for now: order + invoice header are correct
           console.error('invoice_items insert failed', invInsertErr);
         }
       }
     }
 
-    // 11) Build order_for_print (same as create, plus changed_items)
+    // 11) Build order_for_print
     const { data: finalOrderItems } = await supabase
       .from('order_items')
       .select('menu_item_id, item_name, quantity, price, hsn')
       .eq('order_id', order_id);
 
-    const preparedItems = (finalOrderItems || []).map(oi => ({
+    const preparedItems = (finalOrderItems || []).map((oi) => ({
       ...oi,
       name: oi.item_name,
     }));
@@ -400,16 +523,11 @@ export default async function handler(req, res) {
         status: 'new',
         removed_items,
         created_at: order.updated_at || order.created_at,
-
-        // KOT should use only added/increased items
-        items: added_items.map(ai => ({
+        items: added_items.map((ai) => ({
           ...ai,
           name: ai.name || ai.item_name,
         })),
-
-        // keep full change history if ever needed on client
         changed_items: changedItems,
-
         is_edited: true,
         edit_reason: reason,
       },
@@ -434,7 +552,7 @@ async function restoreStockForItems(supabase, restaurant_id, items) {
     if (!recipe?.recipe_items?.length) continue;
 
     await Promise.all(
-      recipe.recipe_items.map(async ri => {
+      recipe.recipe_items.map(async (ri) => {
         const { data: ing } = await supabase
           .from('ingredients')
           .select('id, current_stock')
@@ -479,7 +597,7 @@ async function deductStockForItem(supabase, restaurant_id, item) {
   if (!recipe?.recipe_items?.length) return;
 
   await Promise.all(
-    recipe.recipe_items.map(async ri => {
+    recipe.recipe_items.map(async (ri) => {
       const { data: ing } = await supabase
         .from('ingredients')
         .select('id, current_stock')
@@ -501,7 +619,7 @@ async function deductStockForItem(supabase, restaurant_id, item) {
   );
 }
 
-// TOTALS
+// TOTALS (unchanged core logic)
 async function recalculateOrderTotals(supabase, restaurant_id, items) {
   if (!items || items.length === 0) {
     return {
@@ -516,14 +634,14 @@ async function recalculateOrderTotals(supabase, restaurant_id, items) {
 
   const [{ data: profile }, { data: menuItems }] = await Promise.all([
     supabase
-      .from("restaurant_profiles")
-      .select("gst_enabled, default_tax_rate, prices_include_tax")
-      .eq("restaurant_id", restaurant_id)
+      .from('restaurant_profiles')
+      .select('gst_enabled, default_tax_rate, prices_include_tax')
+      .eq('restaurant_id', restaurant_id)
       .maybeSingle(),
     supabase
-      .from("menu_items")
-      .select("id, is_packaged_good, tax_rate")
-      .in("id", itemIds),
+      .from('menu_items')
+      .select('id, is_packaged_good, tax_rate')
+      .in('id', itemIds),
   ]);
 
   const gstEnabled = !!profile?.gst_enabled;
@@ -546,13 +664,10 @@ async function recalculateOrderTotals(supabase, restaurant_id, items) {
     let effectiveRate;
 
     if (isPackaged) {
-      // Packaged goods: always treat price as tax-inclusive MRP.
-      // If item.tax_rate <= 0, fall back to restaurant default_tax_rate.
       const itemTaxRate =
         Number.isFinite(rawItemTax) && rawItemTax > 0 ? rawItemTax : baseRate;
       effectiveRate = itemTaxRate;
     } else {
-      // Non-packaged: respect gst_enabled and baseRate.
       effectiveRate = gstEnabled ? baseRate : 0;
     }
 
@@ -561,17 +676,14 @@ async function recalculateOrderTotals(supabase, restaurant_id, items) {
     let lineInc;
 
     if (isPackaged) {
-      // Always inclusive for packaged goods.
-      lineInc = unit * qty; // total line price stays exactly as given
+      lineInc = unit * qty;
       lineEx = effectiveRate > 0 ? lineInc / (1 + effectiveRate / 100) : lineInc;
       tax = lineInc - lineEx;
     } else if (pricesIncludeTax) {
-      // Non-packaged but global setting says prices include tax.
       lineInc = unit * qty;
       lineEx = effectiveRate > 0 ? lineInc / (1 + effectiveRate / 100) : lineInc;
       tax = lineInc - lineEx;
     } else {
-      // Non-packaged, prices exclude tax.
       lineEx = unit * qty;
       tax = (effectiveRate / 100) * lineEx;
       lineInc = lineEx + tax;
@@ -589,8 +701,6 @@ async function recalculateOrderTotals(supabase, restaurant_id, items) {
     total_amount: Number(totalInc.toFixed(2)),
   };
 }
-
-
 
 // CREDIT HELPER
 async function syncCreditLedgerForOrder({
@@ -610,26 +720,25 @@ async function syncCreditLedgerForOrder({
     if (!order.credit_customer_id) return;
     if (!(newTotals && Number(newTotals.total_inc_tax) > 0)) return;
 
- await supabase
-  .from('credit_transactions')
-  .upsert(
-    {
-      restaurant_id,
-      credit_customer_id: order.credit_customer_id,
-      order_id,
-      transaction_type: 'credit',
-      amount: Number(newTotals.total_inc_tax),
-      description: `Order edited: ${reason}`,
-      transaction_date: new Date().toISOString(),
-      payment_method: null,
-      notes: `Edited order total: ₹${Number(newTotals.total_inc_tax).toFixed(2)}`,
-    },
-    {
-      onConflict: 'restaurant_id,order_id', // must match the UNIQUE constraint
-    }
-  );
+    await supabase
+      .from('credit_transactions')
+      .upsert(
+        {
+          restaurant_id,
+          credit_customer_id: order.credit_customer_id,
+          order_id,
+          transaction_type: 'credit',
+          amount: Number(newTotals.total_inc_tax),
+          description: `Order edited: ${reason}`,
+          transaction_date: new Date().toISOString(),
+          payment_method: null,
+          notes: `Edited order total: ₹${Number(newTotals.total_inc_tax).toFixed(2)}`,
+        },
+        {
+          onConflict: 'restaurant_id,order_id',
+        }
+      );
   } catch (err) {
     console.error('Credit ledger sync failed', err);
   }
 }
-
