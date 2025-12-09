@@ -186,7 +186,55 @@ export default function BillingPage() {
     }
   };
 
- 
+   const exportHsnSummary = async () => {
+    if (!restaurant?.id) return;
+
+    const qs = new URLSearchParams({
+      from,
+      to,
+      restaurant_id: restaurant.id,
+    }).toString();
+
+    const relUrl = `/api/reports/gst-hsn-summary?${qs}`;
+
+    // Web / desktop: direct download
+    if (!Capacitor.isNativePlatform()) {
+      window.location.href = relUrl;
+      return;
+    }
+
+    try {
+      // In Capacitor WebView we fetch and then share the file
+      const res = await fetch(relUrl);
+      if (!res.ok) throw new Error('Failed to generate HSN summary CSV');
+      const csv = await res.text();
+
+      const fileName = `GST_HSN_Summary_${from}_to_${to}.csv`;
+      const path = `CafeQR/${fileName}`;
+
+      await Filesystem.writeFile({
+        directory: Directory.Documents,
+        path,
+        data: csv,
+        encoding: 'utf8',
+      });
+
+      const { uri } = await Filesystem.getUri({
+        directory: Directory.Documents,
+        path,
+      });
+
+      await Share.share({
+        title: fileName,
+        text: 'Cafe QR GST HSN summary CSV export',
+        url: uri,
+      });
+    } catch (e) {
+      console.error('HSN summary CSV export failed', e);
+      alert(e.message || 'Failed to export HSN summary CSV');
+    }
+  };
+
   const handleViewInvoice = async (invoice) => {
   if (!invoice?.order_id) {
     alert('Missing order id for this invoice')
@@ -336,14 +384,44 @@ export default function BillingPage() {
       <Card padding={16} style={{ marginBottom: '16px' }}>
         <h3 style={{ marginTop: 0, marginBottom: '12px', fontSize: '14px' }}>📥 Export Reports</h3>
         <div className="export-buttons">
-          <Button onClick={() => exportCSV('sales')} variant="primary" disabled={loading || stats.total_invoices === 0}>📊 Export Sales CSV</Button>
-          <Button onClick={() => exportCSV('credit')} variant="outline" disabled={loading || stats.credit_sales === 0}>📋 Export Credit CSV</Button>
-          <Button onClick={() => exportCSV('all')} variant="outline" disabled={loading || stats.total_invoices === 0}>📄 Export All CSV</Button>
+          <Button
+            onClick={() => exportCSV('sales')}
+            variant="primary"
+            disabled={loading || stats.total_invoices === 0}
+          >
+            📊 Export Sales CSV
+          </Button>
+
+          <Button
+            onClick={() => exportCSV('credit')}
+            variant="primary"
+            disabled={loading || stats.credit_sales === 0}
+          >
+            📋 Export Credit CSV
+          </Button>
+
+          <Button
+            onClick={() => exportCSV('all')}
+            variant="primary"
+            disabled={loading || stats.total_invoices === 0}
+          >
+            📄 Export All CSV
+          </Button>
+
+          {/* NEW: HSN-wise GST summary */}
+          <Button
+            onClick={exportHsnSummary}
+            variant="primary"
+            disabled={loading || stats.total_invoices === 0}
+          >
+            🧾 Export HSN Summary CSV
+          </Button>
         </div>
         <p style={{ marginTop: '10px', fontSize: '11px', color: '#6b7280', margin: '8px 0 0 0' }}>
           💡 <strong>Tip:</strong> Payment column shows Cash, UPI, Card, Online, Credit, or Mixed (with split) based on the invoice record. 
         </p>
       </Card>
+
 
       <Card padding={16}>
         <h3 style={{ marginTop: 0, marginBottom: '12px', fontSize: '16px' }}>
