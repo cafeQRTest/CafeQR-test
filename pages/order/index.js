@@ -1,10 +1,10 @@
-// pages/order/index.js
-
 import { useRouter } from 'next/router'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { getSupabase } from '../../services/supabase'
 import AlertRestaurantButton from '../../components/AlertRestaurantButton'
+import MenuItemCard from '../../components/MenuItemCard'
+import HorizontalScrollRow from '../../components/HorizontalScrollRow'
 
 export default function OrderPage() {
   const router = useRouter()
@@ -166,7 +166,7 @@ export default function OrderPage() {
 
         const { data: menu, error: menuErr } = await supabase
           .from('menu_items')
-          .select('id, name, price, description, category, veg, status, is_packaged_good, ispopular')
+          .select('id, name, price, description, category, veg, status, is_packaged_good, ispopular, image_url')
           .eq('restaurant_id', restaurantId)
           .order('category', { ascending: true })
           .order('name', { ascending: true })
@@ -547,150 +547,25 @@ export default function OrderPage() {
         )}
 
         {Object.entries(groupedItems).map(([category, items]) => (
-          <section key={category} style={{ background: '#fff', marginBottom: 8 }}>
-            <h2 style={{ margin: 0, padding: '16px 20px 8px', fontSize: 18, fontWeight: 600 }}>
-              {category} ({items.length} items)
-            </h2>
-
-            {items.map((item) => {
-              const quantity = getItemQuantity(item.id)
-              const isAvailable = !item.status || item.status === 'available'
-              return (
-                <div
-                  key={item.id}
-                  style={{
-                    display: 'flex',
-                    gap: 16,
-                    padding: 20,
-                    borderBottom: '1px solid #f3f4f6',
-                    opacity: isAvailable ? 1 : 0.6
-                  }}
-                >
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
-                      {item.popular && (
-                        <span
-                          style={{
-                            padding: '2px 8px',
-                            borderRadius: 12,
-                            fontSize: 12,
-                            background: '#fef3c7',
-                            color: '#b45309'
-                          }}
-                        >
-                          🔥 Offers
-                        </span>
-                      )}
-                      {!isAvailable && (
-                        <span
-                          style={{
-                            padding: '2px 8px',
-                            borderRadius: 12,
-                            fontSize: 12,
-                            background: '#fee2e2',
-                            color: '#b91c1c'
-                          }}
-                        >
-                          Out of stock
-                        </span>
-                      )}
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                      <span style={{ fontSize: 12 }}>{item.veg ? '🟢' : '🔺'}</span>
-                      <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>{item.name}</h3>
-                    </div>
-
-                    {item.description && (
-                      <p style={{ margin: '0 0 10px 0', color: '#6b7280', fontSize: 13, lineHeight: 1.5 }}>
-                        {item.description}
-                      </p>
-                    )}
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: 16, fontWeight: 700 }}>
-                        ₹{Number(item.price).toFixed(2)}
-                      </span>
-
-                      {quantity > 0 ? (
-                        <div
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            background: brandColor,
-                            borderRadius: 6,
-                            overflow: 'hidden'
-                          }}
-                        >
-                          <button
-                            onClick={() => updateCartItem(item.id, quantity - 1)}
-                            style={{
-                              background: 'none',
-                              border: 'none',
-                              color: '#fff',
-                              width: 32,
-                              height: 32,
-                              cursor: 'pointer',
-                              fontWeight: 600
-                            }}
-                          >
-                            -
-                          </button>
-                          <span
-                            style={{
-                              background: '#fff',
-                              color: brandColor,
-                              minWidth: 32,
-                              height: 32,
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontWeight: 600
-                            }}
-                          >
-                            {quantity}
-                          </span>
-                          <button
-                            onClick={() => {
-                              if (!isAvailable) return
-                              updateCartItem(item.id, quantity + 1)
-                            }}
-                            disabled={!isAvailable}
-                            style={{
-                              background: 'none',
-                              border: 'none',
-                              color: '#fff',
-                              width: 32,
-                              height: 32,
-                              cursor: isAvailable ? 'pointer' : 'not-allowed',
-                              fontWeight: 600
-                            }}
-                          >
-                            +
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => addToCart(item)}
-                          disabled={!isAvailable}
-                          style={{
-                            background: isAvailable ? brandColor : '#9ca3af',
-                            color: '#fff',
-                            border: 'none',
-                            padding: '8px 16px',
-                            borderRadius: 6,
-                            fontWeight: 500,
-                            cursor: isAvailable ? 'pointer' : 'not-allowed'
-                          }}
-                        >
-                          Add to cart
-                        </button>
-                      )}
-                    </div>
+          <section key={category} style={{ background: '#fff', marginBottom: 8, paddingBottom: 1 }}>
+            <HorizontalScrollRow
+              title={category}
+              count={items.length}
+              items={items}
+              renderItem={(item) => {
+                const quantity = getItemQuantity(item.id)
+                return (
+                  <div style={{ minWidth: '240px', maxWidth: '240px' }}>
+                    <MenuItemCard
+                      item={item}
+                      quantity={quantity}
+                      onAdd={() => addToCart(item)}
+                      onRemove={() => updateCartItem(item.id, quantity - 1)}
+                    />
                   </div>
-                </div>
-              )
-            })}
+                )
+              }}
+            />
           </section>
         ))}
       </div>

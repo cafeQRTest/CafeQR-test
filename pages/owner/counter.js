@@ -5,6 +5,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRequireAuth } from '../../lib/useRequireAuth';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { getSupabase } from '../../services/supabase';
+import MenuItemCard from '../../components/MenuItemCard';
+import { useAlert } from '../../context/AlertContext';
+import HorizontalScrollRow from '../../components/HorizontalScrollRow';
 
 // -------------------------------
 // Inline Payment Confirm Dialog
@@ -283,7 +286,7 @@ const [orderMode, setOrderMode] = useState('settle');
       try {
         const { data: menu, error: menuErr } = await supabase
           .from('menu_items')
-          .select('id,name,price,category,veg,status,hsn,tax_rate,is_packaged_good,code_number')
+          .select('id,name,price,category,veg,status,hsn,tax_rate,is_packaged_good,code_number,image_url')
           .eq('restaurant_id', restaurantId)
           .order('category')
           .order('name');
@@ -959,57 +962,31 @@ window.dispatchEvent(
 
       <main className="counter-main-mobile-like">
         <section className="counter-menu-items">
-          {groupedItems.map(([cat, items]) => (
-            <div key={cat} className="counter-category">
-              <h2 className="counter-category-title">{cat} ({items.length})</h2>
-              <div className="counter-category-grid">
-                {items.map((item) => {
-                  const qty = cart.find((c) => c.id === item.id)?.quantity || 0;
-                  const avail = !item.status || item.status === 'available';
-                  return (
-                    <div key={item.id} className={`counter-item-card${!avail ? ' item-out' : ''}`}>
-                      <div className="counter-item-info">
-                        <span>{item.veg ? '🟢' : '🔺'}</span>
-                        <div>
-                          <h3>{item.name}{item.code_number && <small>[{item.code_number}]</small>}</h3>
-                          <div>₹{item.price.toFixed(2)}</div>
-                        </div>
-                      </div>
-                      <div className="counter-item-actions">
-  {qty > 0 ? (
-    <div className="counter-cart-qty">
-      <button
-        onClick={() => updateCartItem(item.id, qty - 1)}
-        style={{ background: THEME.main, color: '#fff' }}
-      >
-        -
-      </button>
-      <div>{qty}</div>
-      <button
-        onClick={() => updateCartItem(item.id, qty + 1)}
-        disabled={!avail}
-        style={{ background: THEME.main, color: '#fff' }}
-      >
-        +
-      </button>
-    </div>
-  ) : (
-    <button
-      onClick={() => addToCart(item)}
-      disabled={!avail}
-      className="btn"
-      style={{ background: THEME.main, borderColor: THEME.main }}
-    >
-      Add
-    </button>
-  )}
-</div>
 
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+
+          {groupedItems.map(([cat, items]) => (
+            <HorizontalScrollRow
+              key={cat}
+              title={cat}
+              count={items.length}
+              items={items}
+              renderItem={(item) => {
+                const qty = cart.find((c) => c.id === item.id)?.quantity || 0;
+                return (
+                  <div style={{ minWidth: '200px', maxWidth: '200px' }}>
+                    <MenuItemCard
+                      item={item}
+                      quantity={qty}
+                      onAdd={() => addToCart(item)}
+                      onRemove={() => {
+                        const current = cart.find((c) => c.id === item.id)?.quantity || 0;
+                        updateCartItem(item.id, current - 1);
+                      }}
+                    />
+                  </div>
+                );
+              }}
+            />
           ))}
         </section>
       </main>

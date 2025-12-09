@@ -5,6 +5,7 @@ import Layout from '../components/Layout'
 import KotPrint from '../components/KotPrint'
 import { RestaurantProvider } from '../context/RestaurantContext'
 import { SubscriptionProvider, useSubscription } from '../context/SubscriptionContext'
+import { AlertProvider } from '../context/AlertContext'
 import { useRouter } from 'next/router'
 import { useEffect, useState } from 'react'
 import { Capacitor } from '@capacitor/core'
@@ -276,19 +277,21 @@ function MyApp({ Component, pageProps }) {
 
   return (
     <RestaurantProvider>
-      <SubscriptionProvider>
-        <GlobalSubscriptionGate>
-          <Layout
-            title={pageProps.title}
-            showSidebar={isOwner}
-            hideChrome={isCustomer}
-            showCustomerHeader={isCustomer}
-          >
-            <Component {...pageProps} />
-          </Layout>
-          <AppPrintOrchestrator />
-        </GlobalSubscriptionGate>
-      </SubscriptionProvider>
+      <AlertProvider>
+        <SubscriptionProvider>
+          <GlobalSubscriptionGate>
+            <Layout
+              title={pageProps.title}
+              showSidebar={isOwner}
+              hideChrome={isCustomer}
+              showCustomerHeader={isCustomer}
+            >
+              <Component {...pageProps} />
+            </Layout>
+            <AppPrintOrchestrator />
+          </GlobalSubscriptionGate>
+        </SubscriptionProvider>
+      </AlertProvider>
     </RestaurantProvider>
   )
 }

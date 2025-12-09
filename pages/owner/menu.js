@@ -1,6 +1,6 @@
 //pages/owner/menu
 
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useRequireAuth } from "../../lib/useRequireAuth";
 import { useRestaurant } from "../../context/RestaurantContext";
 import Alert from "../../components/Alert";
@@ -9,6 +9,7 @@ import LibraryPicker from "../../components/LibraryPicker";
 import Button from "../../components/ui/Button";
 import NiceSelect from "../../components/NiceSelect";
 import { getSupabase } from "../../services/supabase";
+import { useAlert } from "../../context/AlertContext";
 import styled from "styled-components";
 const ToolBar = styled.div`
   display: flex;
@@ -116,13 +117,46 @@ const ToolBar = styled.div`
   }
 `;
 
+import { useRouter } from "next/router";
+
 export default function MenuPage() {
+  const router = useRouter();
   const supabase = getSupabase();
+  const { showConfirm } = useAlert();
   const { checking } = useRequireAuth(supabase);
   const { restaurant, loading: loadingRestaurant } = useRestaurant();
-  const [items, setItems] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [cachedRestId] = useState(() => {
+    if (typeof window !== 'undefined') {
+       return localStorage.getItem('last_active_restaurant') || "";
+    }
+    return "";
+  });
+
+  const restaurantId = restaurant?.id || cachedRestId;
+
+  const [items, setItems] = useState(() => {
+    if (typeof window !== 'undefined' && restaurantId) {
+      const saved = localStorage.getItem(`menu_items_${restaurantId}`);
+      try { return saved ? JSON.parse(saved) : []; } catch(e) {}
+    }
+    return [];
+  });
+  const [categories, setCategories] = useState(() => {
+    if (typeof window !== 'undefined' && restaurantId) {
+      const saved = localStorage.getItem(`categories_${restaurantId}`);
+      try { return saved ? JSON.parse(saved) : []; } catch(e) {}
+    }
+    return [];
+  });
+  
+  // Use cached data to determine initial loading state
+  const [loading, setLoading] = useState(() => {
+    if (typeof window !== 'undefined' && restaurantId) {
+       return !localStorage.getItem(`menu_items_${restaurantId}`);
+    }
+    return true;
+  });
+
   const [error, setError] = useState("");
   const [filterText, setFilterText] = useState("");
   const [filterCategory, setFilterCategory] = useState("all");
@@ -131,14 +165,80 @@ export default function MenuPage() {
   const [selected, setSelected] = useState(new Set());
   const [editorItem, setEditorItem] = useState(null);
   const [showLibrary, setShowLibrary] = useState(false);
+  const [viewImage, setViewImage] = useState(null);
 
-  const restaurantId = restaurant?.id || "";
+  // Persist restaurant ID when known
+  useEffect(() => {
+    if (restaurant?.id) {
+      localStorage.setItem('last_active_restaurant', restaurant.id);
+    }
+  }, [restaurant]);
+
+  // 0. Load from Cache immediately when restaurantId is known
+  useEffect(() => {
+    if (!restaurantId) return;
+    
+    try {
+      const cachedItems = localStorage.getItem(`menu_items_${restaurantId}`);
+      if (cachedItems) {
+        const parsed = JSON.parse(cachedItems);
+        if (parsed?.length) {
+          setItems(parsed);
+          setLoading(false); // Instant load!
+        }
+      }
+
+      const cachedCats = localStorage.getItem(`categories_${restaurantId}`);
+      if (cachedCats) {
+        const parsed = JSON.parse(cachedCats);
+        if (parsed?.length) setCategories(parsed);
+      }
+    } catch(e) {
+      console.error("Cache load failed", e);
+    }
+  }, [restaurantId]);
+
+  // 1. Check URL on load (and when items load) to restore editor state
+  useEffect(() => {
+    if (!router.isReady) return;
+
+    const { edit } = router.query;
+    if (edit === 'new') {
+      if (!editorItem) setEditorItem({});
+    } else if (edit && items.length > 0) {
+      const found = items.find(i => i.id === edit);
+      if (found && (!editorItem || editorItem.id !== found.id)) {
+        setEditorItem(found);
+      }
+    }
+  }, [router.isReady, router.query, loading, items]);
+
+  // 2. Helper to open editor and update URL
+  const openEditor = (item) => {
+    setEditorItem(item || {});
+    const val = item?.id || 'new';
+    router.push({
+      pathname: router.pathname,
+      query: { ...router.query, edit: val }
+    }, undefined, { shallow: true });
+  };
+
+  // 3. Helper to close editor and clear URL
+  const closeEditor = () => {
+    setEditorItem(null);
+    const { edit, ...rest } = router.query;
+    router.push({
+      pathname: router.pathname,
+      query: rest
+    }, undefined, { shallow: true });
+  };
+
+  const dataLoadedRef = useRef(false);
 
   useEffect(() => {
     if (checking || loadingRestaurant || !restaurantId || !supabase) return;
-
+    
     const load = async () => {
-      setLoading(true);
       setError("");
       try {
         const { data: cats, error: catsErr } = await supabase
@@ -151,15 +251,24 @@ export default function MenuPage() {
         const { data: its, error: itsErr } = await supabase
           .from("menu_items")
           .select(
-            "id, name, category, price, code_number, hsn, tax_rate, status, veg, is_packaged_good, compensation_cess_rate, ispopular"
+            "id, name, category, price, code_number, hsn, tax_rate, status, veg, is_packaged_good, compensation_cess_rate, ispopular, image_url"
           )
           .eq("restaurant_id", restaurantId)
           .order("category", { ascending: true })
           .order("name", { ascending: true });
         if (itsErr) throw itsErr;
 
-        setCategories(cats || []);
-        setItems(its || []);
+        const newCats = cats || [];
+        const newItems = its || [];
+
+        setCategories(newCats);
+        setItems(newItems);
+        
+        // Cache to localStorage
+        localStorage.setItem(`categories_${restaurantId}`, JSON.stringify(newCats));
+        localStorage.setItem(`menu_items_${restaurantId}`, JSON.stringify(newItems));
+        
+        dataLoadedRef.current = true;
       } catch (e) {
         setError(e.message || "Failed to load");
       } finally {
@@ -257,7 +366,8 @@ export default function MenuPage() {
     });
   }, []);
 
-  if (checking || loadingRestaurant || !restaurantId)
+  const isInitialLoad = (checking || loadingRestaurant || !restaurantId) && items.length === 0;
+  if (isInitialLoad)
     return <p style={{ padding: 24 }}>Loading…</p>;
 
   return (
@@ -318,7 +428,7 @@ export default function MenuPage() {
         </div>
 
         <div className="toolbar-cta">
-          <Button onClick={() => setEditorItem({})}>Add New Item</Button>
+          <Button onClick={() => openEditor({})}>Add New Item</Button>
           <Button onClick={() => setShowLibrary(true)}>Add from Library</Button>
           {hasSelection && (
             <>
@@ -354,6 +464,7 @@ export default function MenuPage() {
                 <th className="hide-sm">Cess %</th>
                 <th className="hide-sm">Type</th>
                 <th>Status</th>
+                <th>Image</th>
                 <th className="hide-mobile">Actions</th>
               </tr>
             </thead>
@@ -403,7 +514,7 @@ export default function MenuPage() {
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => setEditorItem(item)}
+                              onClick={() => openEditor(item)}
                             >
                               Edit
                             </Button>
@@ -418,7 +529,8 @@ export default function MenuPage() {
                               size="sm"
                               variant="outline"
                               onClick={async () => {
-                                if (!confirm("Delete?")) return;
+                                const ok = await showConfirm("Are you sure you want to delete this item?");
+                                if (!ok) return;
                                 try {
                                   if (!supabase)
                                     throw new Error("Client not ready");
@@ -479,6 +591,28 @@ export default function MenuPage() {
                           {available ? "Available" : "Out of Stock"}
                         </span>
                       </td>
+                      <td>
+                        {item.image_url ? (
+                          <div 
+                            onClick={() => setViewImage(item.image_url)}
+                            style={{ 
+                              width: 40, height: 40, 
+                              overflow: 'hidden', borderRadius: 6, 
+                              cursor: 'pointer', border: '1px solid #ddd',
+                              background: '#fff'
+                            }}
+                            title="Click to view"
+                          >
+                            <img 
+                              src={item.image_url} 
+                              alt="" 
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                            />
+                          </div>
+                        ) : (
+                          <div style={{ width: 40, height: 40, background: '#f9fafb', borderRadius: 6, border: '1px dashed #e5e7eb' }} />
+                        )}
+                      </td>
                       <td className="hide-mobile">
                         <div
                           className="row"
@@ -498,7 +632,7 @@ export default function MenuPage() {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => setEditorItem(item)}
+                            onClick={() => openEditor(item)}
                           >
                             Edit
                           </Button>
@@ -506,7 +640,8 @@ export default function MenuPage() {
                             size="sm"
                             variant="outline"
                             onClick={async () => {
-                              if (!confirm("Delete?")) return;
+                              const ok = await showConfirm("Are you sure you want to delete this item?");
+                              if (!ok) return;
                               try {
                                 if (!supabase)
                                   throw new Error("Client not ready");
@@ -538,7 +673,7 @@ export default function MenuPage() {
 
       <ItemEditor
         open={!!editorItem}
-        onClose={() => setEditorItem(null)}
+        onClose={closeEditor}
         item={editorItem}
         restaurantId={restaurantId}
         supabase={supabase}
@@ -553,6 +688,40 @@ export default function MenuPage() {
           if (rows?.length) setItems((prev) => [...rows, ...prev]);
         }}
       />
+      
+      {viewImage && (
+        <div 
+          onClick={() => setViewImage(null)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.85)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20
+          }} 
+        >
+          <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
+            <button 
+              onClick={() => setViewImage(null)}
+              style={{
+                position: 'absolute', top: -15, right: -15, 
+                background: 'white', border: 'none', borderRadius: '50%', 
+                width: 32, height: 32, cursor: 'pointer', fontSize: 18,
+                boxShadow: '0 2px 10px rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}
+            >
+              ✕
+            </button>
+            <img 
+              src={viewImage} 
+              alt="Item Preview" 
+              style={{ 
+                maxWidth: '90vw', maxHeight: '90vh', 
+                borderRadius: 8, 
+                boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
+                display: 'block' 
+              }} 
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

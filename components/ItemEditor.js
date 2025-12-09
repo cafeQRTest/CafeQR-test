@@ -1,7 +1,9 @@
 // components/ItemEditor.js
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import NiceSelect from "./NiceSelect";
+
+const STORAGE_KEY = 'itemEditorDraft';
 
 export default function ItemEditor({
   supabase,
@@ -13,6 +15,7 @@ export default function ItemEditor({
   onError,
 }) {
   const isEdit = !!item?.id;
+  const hasInitialized = useRef(false);
 
   const [cats, setCats] = useState([]);
   const [loadingCats, setLoadingCats] = useState(false);
@@ -30,6 +33,9 @@ export default function ItemEditor({
   const [taxRate, setTaxRate] = useState(item?.tax_rate ?? 0);
   const [isPackaged, setIsPackaged] = useState(!!item?.is_packaged_good);
   const [cessRate, setCessRate] = useState(item?.compensation_cess_rate ?? 0);
+  const [imageUrl, setImageUrl] = useState(item?.image_url || "");
+  const [imageFile, setImageFile] = useState(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
@@ -52,22 +58,192 @@ export default function ItemEditor({
       });
   }, [open, restaurantId, supabase]);
 
+  // Initialize form data when modal opens
   useEffect(() => {
-    setCode(item?.code_number || "");
-    setName(item?.name || "");
-    setPrice(
-      item?.price !== undefined && item?.price !== null ? item.price : ""
-    );
-    setCategory(item?.category || "main");
-    setStatus(item?.status || "available");
-    setVeg(item?.veg ?? true);
-    setIsPopular(!!item?.ispopular);
-    setHsn(item?.hsn || "");
-    setTaxRate(item?.tax_rate ?? 0);
-    setIsPackaged(!!item?.is_packaged_good);
-    setCessRate(item?.compensation_cess_rate ?? 0);
-    setErr("");
-  }, [item]);
+    if (open && !hasInitialized.current) {
+      // Try to restore from sessionStorage
+      const saved = sessionStorage.getItem(STORAGE_KEY);
+      let restored = false;
+
+      if (saved) {
+        try {
+          const data = JSON.parse(saved);
+          // Only restore if the saved draft matches the current item ID
+          const currentId = item?.id || null;
+          const savedId = data.id || null;
+
+          if (currentId === savedId) {
+            setCode(data.code || "");
+            setName(data.name || "");
+            setPrice(data.price !== undefined ? data.price : "");
+            setCategory(data.category || "main");
+            setStatus(data.status || "available");
+            setVeg(data.veg ?? true);
+            setIsPopular(!!data.isPopular);
+            setHsn(data.hsn || "");
+            setTaxRate(data.taxRate ?? 0);
+            setIsPackaged(!!data.isPackaged);
+            setCessRate(data.cessRate ?? 0);
+            setImageUrl(data.imageUrl || "");
+            restored = true;
+          }
+        } catch (e) {
+          console.error('Failed to restore form data:', e);
+        }
+      } 
+      
+      if (!restored) {
+        // No saved data or ID mismatch - initialize from item prop
+        setCode(item?.code_number || "");
+        setName(item?.name || "");
+        setPrice(item?.price !== undefined && item?.price !== null ? item.price : "");
+        setCategory(item?.category || "main");
+        setStatus(item?.status || "available");
+        setVeg(item?.veg ?? true);
+        setIsPopular(!!item?.ispopular);
+        setHsn(item?.hsn || "");
+        setTaxRate(item?.tax_rate ?? 0);
+        setIsPackaged(!!item?.is_packaged_good);
+        setCessRate(item?.compensation_cess_rate ?? 0);
+        setImageUrl(item?.image_url || "");
+      }
+      setErr("");
+      hasInitialized.current = true;
+    } else if (!open) {
+      hasInitialized.current = false;
+    }
+  }, [open, item]);
+
+  // Save form data to sessionStorage whenever it changes
+  useEffect(() => {
+    if (open && hasInitialized.current) {
+      const formData = {
+        id: item?.id || null,
+        code, name, price, category, status, veg, isPopular,
+        hsn, taxRate, isPackaged, cessRate, imageUrl
+      };
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(formData));
+    }
+  }, [open, item, code, name, price, category, status, veg, isPopular, hsn, taxRate, isPackaged, cessRate, imageUrl]);
+
+  const clearDraft = () => {
+    sessionStorage.removeItem(STORAGE_KEY);
+  };
+
+  const compressImage = async (file) => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const objectUrl = URL.createObjectURL(file);
+      
+      img.onload = () => {
+        URL.revokeObjectURL(objectUrl); // Clean up memory immediately
+        
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        
+        // Resize to max 800px (prevent memory spikes)
+        const MAX_SIZE = 800;
+        if (width > height) {
+          if (width > MAX_SIZE) {
+            height *= MAX_SIZE / width;
+            width = MAX_SIZE;
+          }
+        } else {
+          if (height > MAX_SIZE) {
+            width *= MAX_SIZE / height;
+            height = MAX_SIZE;
+          }
+        }
+        
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        
+        // Better scaling quality
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        // Compress to JPEG with 0.7 quality
+        canvas.toBlob((blob) => {
+          if (!blob) {
+            reject(new Error("Compression failed"));
+            return;
+          }
+          const compressedFile = new File([blob], file.name.replace(/\.[^/.]+$/, ".jpg"), {
+            type: "image/jpeg",
+            lastModified: Date.now(),
+          });
+          resolve(compressedFile);
+        }, 'image/jpeg', 0.7);
+      };
+      
+      img.onerror = (e) => {
+        URL.revokeObjectURL(objectUrl);
+        reject(e);
+      };
+      
+      img.src = objectUrl;
+    });
+  };
+
+  const uploadImage = async (file) => {
+    if (!file || !supabase) return null;
+    
+    setUploadingImage(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      // Always store as jpg since we compress to it, or keep original ext if logic varies
+      const fileName = `${restaurantId}/${Date.now()}.jpg`; 
+      
+      const { data, error } = await supabase.storage
+        .from('menu-items')
+        .upload(fileName, file);
+
+      if (error) throw error;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('menu-items')
+        .getPublicUrl(fileName);
+
+      return publicUrl;
+    } catch (error) {
+      console.error('Image upload error:', error);
+      setErr('Failed to upload image: ' + error.message);
+      return null;
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const handleImageChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 10 * 1024 * 1024) { 
+        setErr("Image size should be less than 10MB");
+        return;
+      }
+      
+      setUploadingImage(true);
+      try {
+        // Upload immediately (Skip compression to prevent crashes)
+        const publicUrl = await uploadImage(file);
+        
+        if (publicUrl) {
+          setImageUrl(publicUrl);
+          setImageFile(null); 
+        }
+      } catch (err) {
+        console.error(err);
+        setErr("Failed to upload image");
+      } finally {
+        setUploadingImage(false);
+        // Reset input so same file can be selected again if needed
+        e.target.value = '';
+      }
+    }
+  };
 
   const canSubmit = useMemo(() => {
     if (!name.trim()) return false;
@@ -123,6 +299,7 @@ export default function ItemEditor({
         tax_rate: Number(taxRate),
         is_packaged_good: isPackaged,
         compensation_cess_rate: Number(cessRate),
+        image_url: imageUrl || null,
       };
 
       let newItem;
@@ -156,6 +333,7 @@ export default function ItemEditor({
         });
       }
 
+      clearDraft();
       onClose();
     } catch (ex) {
       setErr(ex.message || "Failed to save");
@@ -163,6 +341,11 @@ export default function ItemEditor({
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleClose = () => {
+    clearDraft();
+    onClose();
   };
 
   return (
@@ -195,6 +378,62 @@ export default function ItemEditor({
             placeholder="Enter product name"
           />
         </label>
+
+        {/* Small Image Upload Section */}
+        <div style={{ marginTop: 14 }}>
+          <div style={customLabel}>Image</div>
+          <div style={imageUploadContainer}>
+            {uploadingImage ? (
+              <div style={uploadPlaceholder}>
+                <div className="spinner" style={{ 
+                  border: '3px solid #f3f3f3', 
+                  borderTop: '3px solid #652ae2', 
+                  borderRadius: '50%', 
+                  width: 24, 
+                  height: 24, 
+                  animation: 'spin 1s linear infinite',
+                  marginBottom: 8 
+                }} />
+                <span style={{ fontSize: 13, color: '#652ae2', fontWeight: 500 }}>Uploading...</span>
+                <style>{`
+                  @keyframes spin {
+                    0% { transform: rotate(0deg); }
+                    100% { transform: rotate(360deg); }
+                  }
+                `}</style>
+              </div>
+            ) : imageUrl ? (
+              <div style={imagePreviewWrapper}>
+                <img src={imageUrl} alt="Preview" style={{ ...imagePreview, maxHeight: 120 }} />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setImageUrl("");
+                    setImageFile(null);
+                  }}
+                  style={removeImageBtn}
+                  title="Remove image"
+                >
+                  ✕
+                </button>
+              </div>
+            ) : (
+              <label style={uploadLabel}>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageChange}
+                  style={{ display: 'none' }}
+                />
+                <span style={{ fontSize: 24 }}>📷</span>
+                <div style={{ textAlign: 'left' }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: '#4b5563' }}>Upload Image</div>
+                  <div style={{ fontSize: 11, color: '#9ca3af' }}>Max 10MB</div>
+                </div>
+              </label>
+            )}
+          </div>
+        </div>
 
         <div style={row2}>
           <label>
@@ -332,7 +571,7 @@ export default function ItemEditor({
         <div style={actions}>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             disabled={saving}
             style={secondaryBtn}
           >
@@ -539,4 +778,65 @@ const customLabel = {
   fontSize: 13,
   fontWeight: 600,
   color: "#4b5563",
+};
+
+const imageUploadContainer = {
+  border: "2px dashed #d1d5db",
+  borderRadius: 8,
+  padding: 4,
+  display: "flex",
+  justifyContent: "center",
+  alignItems: "center",
+  minHeight: 80, // Reduced from 120
+  backgroundColor: "#f9fafb",
+  marginTop: 4,
+};
+
+const uploadLabel = {
+  display: "flex",
+  flexDirection: "row", // Changed to row for compactness
+  alignItems: "center",
+  cursor: "pointer",
+  width: "100%",
+  padding: 10, // Reduced padding
+  gap: 12, // Added gap
+  justifyContent: "center",
+};
+
+const uploadPlaceholder = {
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  color: "#6b7280",
+};
+
+const imagePreviewWrapper = {
+  position: "relative",
+  width: "100%",
+  textAlign: "center",
+};
+
+const imagePreview = {
+  maxWidth: "100%",
+  maxHeight: 200,
+  borderRadius: 6,
+  objectFit: "contain",
+};
+
+const removeImageBtn = {
+  position: "absolute",
+  top: -10,
+  right: -10,
+  background: "#ef4444",
+  color: "white",
+  border: "none",
+  borderRadius: "50%",
+  width: 24,
+  height: 24,
+  cursor: "pointer",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontSize: 14,
+  boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
 };
