@@ -155,24 +155,22 @@ export default function BillingPage() {
     }
 
     try {
-      // In Capacitor WebView we can just fetch the same relative URL
       const res = await fetch(relUrl);
       if (!res.ok) throw new Error('Failed to generate CSV');
       const csv = await res.text();
 
       const fileName = `Billing_${type}_${from}_to_${to}.csv`;
-      const path = `CafeQR/${fileName}`;
 
       await Filesystem.writeFile({
-        directory: Directory.Documents,
-        path,
+        directory: Directory.Data,
+        path: fileName,
         data: csv,
         encoding: 'utf8',
       });
 
       const { uri } = await Filesystem.getUri({
-        directory: Directory.Documents,
-        path,
+        directory: Directory.Data,
+        path: fileName,
       });
 
       await Share.share({
@@ -186,7 +184,7 @@ export default function BillingPage() {
     }
   };
 
-   const exportHsnSummary = async () => {
+  const exportHsnSummary = async () => {
     if (!restaurant?.id) return;
 
     const qs = new URLSearchParams({
@@ -197,31 +195,28 @@ export default function BillingPage() {
 
     const relUrl = `/api/reports/gst-hsn-summary?${qs}`;
 
-    // Web / desktop: direct download
     if (!Capacitor.isNativePlatform()) {
       window.location.href = relUrl;
       return;
     }
 
     try {
-      // In Capacitor WebView we fetch and then share the file
       const res = await fetch(relUrl);
       if (!res.ok) throw new Error('Failed to generate HSN summary CSV');
       const csv = await res.text();
 
       const fileName = `GST_HSN_Summary_${from}_to_${to}.csv`;
-      const path = `CafeQR/${fileName}`;
 
       await Filesystem.writeFile({
-        directory: Directory.Documents,
-        path,
+        directory: Directory.Data,
+        path: fileName,
         data: csv,
         encoding: 'utf8',
       });
 
       const { uri } = await Filesystem.getUri({
-        directory: Directory.Documents,
-        path,
+        directory: Directory.Data,
+        path: fileName,
       });
 
       await Share.share({
