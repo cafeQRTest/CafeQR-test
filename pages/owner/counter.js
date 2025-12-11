@@ -7,6 +7,7 @@ import { useRestaurant } from '../../context/RestaurantContext';
 import { getSupabase } from '../../services/supabase';
 import MenuItemCard from '../../components/MenuItemCard';
 import MenuItemCardSimple from '../../components/MenuItemCardSimple';
+import VariantSelector from '../../components/VariantSelector';
 import { useAlert } from '../../context/AlertContext';
 import HorizontalScrollRow from '../../components/HorizontalScrollRow';
 
@@ -184,6 +185,11 @@ export default function CounterSale() {
   const [sendToKitchenEnabled, setSendToKitchenEnabled] = useState(true);
   const [enableMenuImages, setEnableMenuImages] = useState(false);
 
+  // Variant selector state
+  const [showVariantSelector, setShowVariantSelector] = useState(false);
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [showClearCartConfirm, setShowClearCartConfirm] = useState(false);
+
 
   // NEW: Order mode toggle
 const [orderMode, setOrderMode] = useState('settle');
@@ -288,13 +294,70 @@ const [orderMode, setOrderMode] = useState('settle');
       try {
         const { data: menu, error: menuErr } = await supabase
           .from('menu_items')
-          .select('id,name,price,category,veg,status,hsn,tax_rate,is_packaged_good,code_number,image_url')
+          .select(`
+            id,name,price,category,veg,status,hsn,tax_rate,is_packaged_good,code_number,image_url,has_variants,
+            menu_item_variants(
+              variant_templates(
+                id,
+                name
+              )
+            )
+          `)
           .eq('restaurant_id', restaurantId)
           .order('category')
           .order('name');
         if (menuErr) throw menuErr;
-        setMenuItems(menu || []);
-        cacheMenuIntoMap(menu || []);
+        
+        // Fetch variant pricing separately for items with variants
+        const itemsWithVariants = (menu || []).filter(item => item.has_variants);
+        const variantDataMap = new Map();
+        
+        if (itemsWithVariants.length > 0) {
+          const itemIds = itemsWithVariants.map(item => item.id);
+          const { data: variantPricing } = await supabase
+            .from('variant_pricing')
+            .select(`
+              menu_item_id,
+              price,
+              is_available,
+              variant_options(
+                id,
+                name,
+                display_order,
+                template_id
+              )
+            `)
+            .in('menu_item_id', itemIds);
+          
+          // Group by menu_item_id
+          (variantPricing || []).forEach(vp => {
+            if (!variantDataMap.has(vp.menu_item_id)) {
+              variantDataMap.set(vp.menu_item_id, []);
+            }
+            variantDataMap.get(vp.menu_item_id).push({
+              variant_id: vp.variant_options.id,
+              variant_name: vp.variant_options.name,
+              price: vp.price,
+              is_available: vp.is_available,
+              display_order: vp.variant_options.display_order
+            });
+          });
+        }
+        
+        // Transform menu data with variants
+        const transformedMenu = (menu || []).map(item => {
+          const variants = variantDataMap.get(item.id) || [];
+          const templateName = item.menu_item_variants?.[0]?.variant_templates?.name || 'Options';
+          
+          return {
+            ...item,
+            variants: variants.sort((a, b) => a.display_order - b.display_order),
+            variant_template_name: item.has_variants ? templateName : null
+          };
+        });
+        
+        setMenuItems(transformedMenu);
+        cacheMenuIntoMap(transformedMenu);
 
         // Pull tax settings for client calc
         const { data: profile, error: profErr } = await supabase
@@ -580,17 +643,52 @@ const loadCreditCustomers = async () => {
       alert('Out of stock');
       return;
     }
+    
+    // Check if item has variants
+    if (item.has_variants && item.variants?.length > 0) {
+      setSelectedItem(item);
+      setShowVariantSelector(true);
+      return;
+    }
+    
+    // No variants - add directly
+    addItemToCart(item);
+  };
+  
+  const addItemToCart = (itemWithVariant) => {
+    // Create unique cart ID
+    const cartId = itemWithVariant.selectedVariant 
+      ? `${itemWithVariant.id}_${itemWithVariant.selectedVariant.variant_id}`
+      : itemWithVariant.id;
+    
+    // Get quantity from variant selector or default to 1
+    const qtyToAdd = itemWithVariant.quantity || 1;
+    
     setCart((prev) => {
-      const ex = prev.find((c) => c.id === item.id);
+      const ex = prev.find((c) => c.cartId === cartId);
       return ex
-        ? prev.map((c) => (c.id === item.id ? { ...c, quantity: c.quantity + 1 } : c))
-        : [...prev, { ...item, quantity: 1 }];
+        ? prev.map((c) => (c.cartId === cartId ? { ...c, quantity: c.quantity + qtyToAdd } : c))
+        : [...prev, { 
+            ...itemWithVariant, 
+            cartId,
+            quantity: qtyToAdd,
+            variant_id: itemWithVariant.selectedVariant?.variant_id || null,
+            variant_name: itemWithVariant.selectedVariant?.variant_name || null,
+            price: itemWithVariant.selectedVariant?.price || itemWithVariant.price,
+            displayName: itemWithVariant.displayName || itemWithVariant.name
+          }];
     });
   };
+  
+  const handleVariantSelect = (itemWithVariant) => {
+    addItemToCart(itemWithVariant);
+    setShowVariantSelector(false);
+    setSelectedItem(null);
+  };
 
-  const updateCartItem = (id, qty) => {
-    if (qty <= 0) setCart((p) => p.filter((c) => c.id !== id));
-    else setCart((p) => p.map((c) => (c.id === id ? { ...c, quantity: qty } : c)));
+  const updateCartItem = (cartId, qty) => {
+    if (qty <= 0) setCart((p) => p.filter((c) => c.cartId !== cartId));
+    else setCart((p) => p.map((c) => (c.cartId === cartId ? { ...c, quantity: qty } : c)));
   };
 
   // Create + finalize (settle now)
@@ -1064,89 +1162,363 @@ window.dispatchEvent(
       {drawerOpen && (
         <div className="counter-drawer-overlay" onClick={() => setDrawerOpen(false)}>
           <div className="counter-drawer" onClick={(e) => e.stopPropagation()}>
-            <div className="counter-drawer-head">
-              <h3>Cart ({cartItemsCount})</h3>
-              {isCreditSale && selectedCreditCustomerId && (
-                <small style={{ color: '#f59e0b', fontWeight: 600 }}>
-                  💳 Credit Balance: ₹{(creditCustomerBalance + cartTotals.totalInc).toFixed(2)}
-                </small>
-              )}
-              <button onClick={() => setDrawerOpen(false)} className="btn btn--outline btn--sm">Close</button>
-            </div>
-            <div className="counter-drawer-body">
-              {cart.map((i) => (
-                <div key={i.id} className="counter-drawer-row">
-                  <div>
-                    <div className="drawer-name">{i.name}</div>
-                    <div className="drawer-sub">₹{i.price} × {i.quantity} = ₹{(i.price * i.quantity).toFixed(2)}</div>
-                  </div>
-                  <div className="cart-qty-controls">
-  <button
-    onClick={() => updateCartItem(i.id, i.quantity - 1)}
-    style={{
-      background: THEME.main,
-      color: '#fff',
-      border: 'none',
-      width: 32,
-      height: 32,
-      borderRadius: 6,
-      cursor: 'pointer',
-      fontWeight: 700,
-    }}
-  >
-    -
-  </button>
-  <span>{i.quantity}</span>
-  <button
-    onClick={() => updateCartItem(i.id, i.quantity + 1)}
-    style={{
-      background: THEME.main,
-      color: '#fff',
-      border: 'none',
-      width: 32,
-      height: 32,
-      borderRadius: 6,
-      cursor: 'pointer',
-      fontWeight: 700,
-    }}
-  >
-    +
-  </button>
-</div>
-
-                </div>
-              ))}
-            </div>
-            <div className="counter-drawer-foot">
-              <div className="drawer-total" style={{ display:'grid', gap:6 }}>
-                <div style={{display:'flex',justifyContent:'space-between'}}>
-                  <span>Net (ex‑tax)</span>
-                  <span>₹{cartTotals.subtotalEx.toFixed(2)}</span>
-                </div>
-                <div style={{display:'flex',justifyContent:'space-between'}}>
-                  <span>GST</span>
-                  <span>₹{cartTotals.totalTax.toFixed(2)}</span>
-                </div>
-                <div style={{display:'flex',justifyContent:'space-between',fontWeight:700}}>
-                  <span>Total</span>
-                  <span>₹{cartTotals.totalInc.toFixed(2)}</span>
-                </div>
+            {/* Enhanced Header */}
+            <div className="counter-drawer-head" style={{
+              padding: '20px 24px 16px',
+              borderBottom: '2px solid #f3f4f6',
+              background: 'linear-gradient(to bottom, #ffffff, #fafafa)',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                {/* Left Side - Close Button */}
+                <button 
+                  onClick={() => setDrawerOpen(false)} 
+                  style={{
+                    background: 'none',
+                    border: '2px solid #e5e7eb',
+                    fontSize: 24,
+                    color: '#6b7280',
+                    cursor: 'pointer',
+                    padding: 0,
+                    width: 40,
+                    height: 40,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: 8,
+                    transition: 'all 0.2s',
+                    fontWeight: 300,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.background = '#f3f4f6';
+                    e.target.style.borderColor = '#d1d5db';
+                    e.target.style.color = '#111827';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.background = 'none';
+                    e.target.style.borderColor = '#e5e7eb';
+                    e.target.style.color = '#6b7280';
+                  }}
+                >
+                  ×
+                </button>
+                
+                {/* Right Side - Clear Cart Button (only shows when cart has items) */}
+                {cart.length > 0 ? (
+                  <button
+                    onClick={() => setShowClearCartConfirm(true)}
+                    style={{
+                      marginLeft: 'auto',
+                      background: 'white',
+                      border: '1.5px solid #fecaca',
+                      color: '#dc2626',
+                      padding: '7px 14px',
+                      borderRadius: 8,
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 7,
+                    }}
+                    onMouseEnter={(e) => {
+                      e.target.style.background = '#fee2e2';
+                      e.target.style.borderColor = '#fca5a5';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.style.background = 'white';
+                      e.target.style.borderColor = '#fecaca';
+                    }}
+                  >
+                    <span style={{ fontSize: 15 }}>🗑️</span>
+                    <span>Clear Cart</span>
+                  </button>
+                ) : (
+                  <div style={{ marginLeft: 'auto' }}></div>
+                )}
               </div>
-            <button
-  onClick={completeSale}
-  disabled={processing}
-  className="btn btn--lg"
-  style={{ width: '100%', marginTop:10, background: THEME.main, borderColor: THEME.main }}
->
-                {processing
-                  ? 'Processing…'
-                  : orderMode === 'kitchen'
-                  ? `Send to Kitchen (₹${cartTotals.totalInc.toFixed(2)})`
-                  : isCreditSale
-                  ? `Credit & Settle (₹${cartTotals.totalInc.toFixed(2)})`
-                  : `Complete & Print (₹${cartTotals.totalInc.toFixed(2)})`}
-              </button>
+              
+              {/* Credit Balance Below Header if needed */}
+              {isCreditSale && selectedCreditCustomerId && (
+                <div style={{ 
+                  marginTop: 12,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  background: '#fffbeb',
+                  color: '#f59e0b', 
+                  fontWeight: 600,
+                  fontSize: 13,
+                  padding: '6px 12px',
+                  borderRadius: 8,
+                  border: '1px solid #fef3c7',
+                  width: 'fit-content',
+                }}>
+                  <span>💳</span>
+                  Credit Balance: ₹{(creditCustomerBalance + cartTotals.totalInc).toFixed(2)}
+                </div>
+              )}
             </div>
+            
+            {/* Cart Body */}
+            <div className="counter-drawer-body" style={{ 
+              padding: cart.length === 0 ? '60px 20px' : '16px',
+              flex: 1,
+              overflowY: 'auto',
+            }}>
+              {cart.length === 0 ? (
+                <div style={{ textAlign: 'center', color: '#9ca3af' }}>
+                  <div style={{ fontSize: 64, marginBottom: 16 }}>🛒</div>
+                  <div style={{ fontSize: 18, fontWeight: 600, color: '#6b7280', marginBottom: 8 }}>
+                    Your cart is empty
+                  </div>
+                  <div style={{ fontSize: 14, color: '#9ca3af' }}>
+                    Add items from the menu to get started
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {cart.map((i) => (
+                    <div 
+                      key={i.cartId || i.id} 
+                      style={{
+                        padding: '12px 14px',
+                        background: '#ffffff',
+                        border: '1px solid #e5e7eb',
+                        borderRadius: 8,
+                      }}
+                    >
+                      {/* Top Row: Name and Quantity Controls */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                        <div style={{ flex: 1, paddingRight: 8 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            {/* Veg/Non-veg indicator */}
+                            {i.veg !== undefined && (
+                              i.veg ? (
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                                  <rect x="1" y="1" width="22" height="22" stroke="#16a34a" strokeWidth="2.5" />
+                                  <circle cx="12" cy="12" r="6" fill="#16a34a" />
+                                </svg>
+                              ) : (
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                                  <rect x="1" y="1" width="22" height="22" stroke="#dc2626" strokeWidth="2.5" />
+                                  <path d="M12 6L18 16H6L12 6Z" fill="#dc2626" />
+                                </svg>
+                              )
+                            )}
+                            <div style={{ fontSize: 15, fontWeight: 600, color: '#111827', lineHeight: 1.3 }}>
+                              {i.name}
+                            </div>
+                            {/* Variant badge inline */}
+                            {i.variant_name && (
+                              <span style={{ 
+                                fontSize: 11, 
+                                fontWeight: 600, 
+                                color: THEME.main,
+                                background: THEME.soft,
+                                padding: '2px 8px',
+                                borderRadius: 4,
+                              }}>
+                                {i.variant_name}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {/* Quantity Controls - Compact */}
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 0,
+                          border: `1.5px solid ${THEME.main}`,
+                          borderRadius: 6,
+                          overflow: 'hidden',
+                          flexShrink: 0,
+                        }}>
+                          <button
+                            onClick={() => updateCartItem(i.cartId || i.id, i.quantity - 1)}
+                            style={{
+                              background: 'white',
+                              color: THEME.main,
+                              border: 'none',
+                              width: 28,
+                              height: 28,
+                              cursor: 'pointer',
+                              fontWeight: 700,
+                              fontSize: 16,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              transition: 'background 0.2s',
+                            }}
+                            onMouseEnter={(e) => e.target.style.background = THEME.soft}
+                            onMouseLeave={(e) => e.target.style.background = 'white'}
+                          >
+                            −
+                          </button>
+                          <span style={{ 
+                            minWidth: 32, 
+                            textAlign: 'center', 
+                            fontSize: 14, 
+                            fontWeight: 700,
+                            color: '#111827',
+                            background: '#fafafa',
+                            borderLeft: `1px solid ${THEME.light || '#e5e7eb'}`,
+                            borderRight: `1px solid ${THEME.light || '#e5e7eb'}`,
+                            padding: '0 6px',
+                            height: 28,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}>
+                            {i.quantity}
+                          </span>
+                          <button
+                            onClick={() => updateCartItem(i.cartId || i.id, i.quantity + 1)}
+                            style={{
+                              background: 'white',
+                              color: THEME.main,
+                              border: 'none',
+                              width: 28,
+                              height: 28,
+                              cursor: 'pointer',
+                              fontWeight: 700,
+                              fontSize: 16,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              transition: 'background 0.2s',
+                            }}
+                            onMouseEnter={(e) => e.target.style.background = THEME.soft}
+                            onMouseLeave={(e) => e.target.style.background = 'white'}
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+                      
+                      {/* Bottom Row: Pricing */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 13, color: '#6b7280' }}>
+                            ₹{i.price} × {i.quantity}
+                          </span>
+                          {profileTax.gst_enabled && !profileTax.prices_include_tax && (
+                            <span style={{
+                              fontSize: 10,
+                              fontWeight: 700,
+                              color: '#f97316',
+                              background: '#fff7ed',
+                              padding: '2px 6px',
+                              borderRadius: 4,
+                              border: '1px solid #fed7aa',
+                            }}>
+                              +GST
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 15, fontWeight: 700, color: '#111827' }}>
+                            ₹{(i.price * i.quantity).toFixed(2)}
+                          </span>
+                          {profileTax.gst_enabled && !profileTax.prices_include_tax && (
+                            <span style={{
+                              fontSize: 10,
+                              fontWeight: 700,
+                              color: '#f97316',
+                              background: '#fff7ed',
+                              padding: '2px 6px',
+                              borderRadius: 4,
+                              border: '1px solid #fed7aa',
+                            }}>
+                              +GST
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            
+            {/* Footer with Totals */}
+            {cart.length > 0 && (
+              <div className="counter-drawer-foot" style={{
+                padding: '20px',
+                borderTop: '2px solid #f3f4f6',
+                background: '#fafafa',
+              }}>
+                <div style={{ 
+                  background: '#ffffff',
+                  padding: '16px',
+                  borderRadius: 12,
+                  border: '2px solid #e5e7eb',
+                  marginBottom: 16,
+                }}>
+                  <div style={{ display: 'grid', gap: 10 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#6b7280' }}>
+                      <span>Subtotal (ex-tax)</span>
+                      <span style={{ fontWeight: 600 }}>₹{cartTotals.subtotalEx.toFixed(2)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#6b7280' }}>
+                      <span>GST</span>
+                      <span style={{ fontWeight: 600 }}>₹{cartTotals.totalTax.toFixed(2)}</span>
+                    </div>
+                    <div style={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between', 
+                      paddingTop: 10,
+                      borderTop: '2px solid #f3f4f6',
+                      fontSize: 18,
+                      fontWeight: 700,
+                      color: '#111827',
+                    }}>
+                      <span>Total</span>
+                      <span style={{ color: THEME.main }}>₹{cartTotals.totalInc.toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
+                
+                <button
+                  onClick={completeSale}
+                  disabled={processing}
+                  style={{
+                    width: '100%',
+                    padding: '16px',
+                    background: processing ? '#d1d5db' : `linear-gradient(135deg, ${THEME.main} 0%, ${THEME.dark} 100%)`,
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 12,
+                    fontSize: 16,
+                    fontWeight: 700,
+                    cursor: processing ? 'not-allowed' : 'pointer',
+                    boxShadow: processing ? 'none' : '0 4px 12px rgba(0,0,0,0.15)',
+                    transition: 'all 0.2s',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!processing) {
+                      e.target.style.transform = 'translateY(-2px)';
+                      e.target.style.boxShadow = '0 6px 16px rgba(0,0,0,0.2)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!processing) {
+                      e.target.style.transform = 'translateY(0)';
+                      e.target.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+                    }
+                  }}
+                >
+                  {processing
+                    ? '⏳ Processing…'
+                    : orderMode === 'kitchen'
+                    ? `🍳 Send to Kitchen • ₹${cartTotals.totalInc.toFixed(2)}`
+                    : isCreditSale
+                    ? `💳 Credit & Settle • ₹${cartTotals.totalInc.toFixed(2)}`
+                    : `✓ Complete & Print • ₹${cartTotals.totalInc.toFixed(2)}`}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1174,7 +1546,118 @@ window.dispatchEvent(
   />
 )}
 
-
+{/* Variant Selector Modal */}
+{showVariantSelector && selectedItem && (
+  <VariantSelector
+    item={selectedItem}
+    onSelect={handleVariantSelect}
+    onClose={() => {
+      setShowVariantSelector(false);
+      setSelectedItem(null);
+    }}
+    gstEnabled={profileTax.gst_enabled}
+    pricesIncludeTax={profileTax.prices_include_tax}
+    onCartOpen={() => setDrawerOpen(true)}
+  />
+)}{/* Clear Cart Confirmation Modal */}
+{showClearCartConfirm && (
+  <div 
+    style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      background: 'rgba(0,0,0,0.5)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 10000,
+    }}
+    onClick={() => setShowClearCartConfirm(false)}
+  >
+    <div 
+      style={{
+        background: 'white',
+        borderRadius: 16,
+        padding: '32px',
+        maxWidth: 400,
+        width: '90%',
+        boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)',
+      }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div style={{ textAlign: 'center', marginBottom: 24 }}>
+        <div style={{ fontSize: 64, marginBottom: 16 }}>⚠️</div>
+        <h3 style={{ margin: 0, marginBottom: 12, fontSize: 20, fontWeight: 700, color: '#111827' }}>
+          Clear Cart?
+        </h3>
+        <p style={{ margin: 0, fontSize: 15, color: '#6b7280', lineHeight: 1.5 }}>
+          Are you sure you want to remove all items from the cart? This action cannot be undone.
+        </p>
+      </div>
+      <div style={{ display: 'flex', gap: 12 }}>
+        <button
+          onClick={() => setShowClearCartConfirm(false)}
+          style={{
+            flex: 1,
+            padding: '12px',
+            background: 'white',
+            border: '2px solid #e5e7eb',
+            borderRadius: 10,
+            fontSize: 15,
+            fontWeight: 600,
+            color: '#374151',
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+          }}
+          onMouseEnter={(e) => {
+            e.target.style.background = '#f9fafb';
+            e.target.style.borderColor = '#d1d5db';
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.background = 'white';
+            e.target.style.borderColor = '#e5e7eb';
+          }}
+        >
+          Cancel
+        </button>
+        <button
+          onClick={() => {
+            setCart([]);
+            setShowClearCartConfirm(false);
+            setDrawerOpen(false); // Close cart drawer
+          }}
+          style={{
+            flex: 1,
+            padding: '12px',
+            background: '#dc2626',
+            border: 'none',
+            borderRadius: 10,
+            fontSize: 15,
+            fontWeight: 700,
+            color: 'white',
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+            boxShadow: '0 4px 12px rgba(220,38,38,0.3)',
+          }}
+          onMouseEnter={(e) => {
+            e.target.style.background = '#b91c1c';
+            e.target.style.transform = 'translateY(-1px)';
+            e.target.style.boxShadow = '0 6px 16px rgba(220,38,38,0.4)';
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.background = '#dc2626';
+            e.target.style.transform = 'translateY(0)';
+            e.target.style.boxShadow = '0 4px 12px rgba(220,38,38,0.3)';
+          }}
+        >
+          Clear Cart
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
           </div>
   );

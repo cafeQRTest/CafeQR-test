@@ -38,12 +38,24 @@ export default function ItemEditor({
   const [imageFile, setImageFile] = useState(null);
   const [uploadingImage, setUploadingImage] = useState(false);
 
+  // Variant-related state
+  const [hasVariants, setHasVariants] = useState(!!item?.has_variants);
+  const [variantTemplates, setVariantTemplates] = useState([]);
+  const [selectedTemplate, setSelectedTemplate] = useState(null);
+  const [variantPrices, setVariantPrices] = useState([]);
+
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
   const [showCatModal, setShowCatModal] = useState(false);
   const [newCatName, setNewCatName] = useState("");
   const [newCatErr, setNewCatErr] = useState("");
+
+  // Variant template creation modal state
+  const [showVariantModal, setShowVariantModal] = useState(false);
+  const [newVariantName, setNewVariantName] = useState("");
+  const [newVariantOptions, setNewVariantOptions] = useState([""]);
+  const [newVariantErr, setNewVariantErr] = useState("");
 
   useEffect(() => {
     if (!supabase || !open || !restaurantId) return;
@@ -58,6 +70,51 @@ export default function ItemEditor({
         if (!error) setCats(data || []);
       });
   }, [open, restaurantId, supabase]);
+
+  // Fetch variant templates
+  useEffect(() => {
+    if (!supabase || !open) return;
+    const fetchTemplates = async () => {
+      const { data } = await supabase
+        .from('variant_templates')
+        .select(`
+          *,
+          options:variant_options(*)
+        `)
+        .eq('is_active', true)
+        .order('display_order');
+      
+      setVariantTemplates(data || []);
+    };
+    fetchTemplates();
+  }, [open, supabase]);
+
+  // Load existing variants if editing
+  useEffect(() => {
+    if (!supabase || !open || !item?.id || !item?.has_variants) return;
+    
+    const fetchVariants = async () => {
+      // Get linked template
+      const { data: link } = await supabase
+        .from('menu_item_variants')
+        .select('template_id')
+        .eq('menu_item_id', item.id)
+        .maybeSingle();
+      
+      if (link) {
+        setSelectedTemplate(link.template_id);
+        
+        // Get pricing
+        const { data: pricing } = await supabase
+          .from('variant_pricing')
+          .select('*')
+          .eq('menu_item_id', item.id);
+        
+        setVariantPrices(pricing || []);
+      }
+    };
+    fetchVariants();
+  }, [open, item, supabase]);
 
   // Initialize form data when modal opens
   useEffect(() => {
@@ -86,6 +143,7 @@ export default function ItemEditor({
             setIsPackaged(!!data.isPackaged);
             setCessRate(data.cessRate ?? 0);
             setImageUrl(data.imageUrl || "");
+            setHasVariants(!!data.hasVariants);
             restored = true;
           }
         } catch (e) {
@@ -107,6 +165,7 @@ export default function ItemEditor({
         setIsPackaged(!!item?.is_packaged_good);
         setCessRate(item?.compensation_cess_rate ?? 0);
         setImageUrl(item?.image_url || "");
+        setHasVariants(!!item?.has_variants);
       }
       setErr("");
       hasInitialized.current = true;
@@ -121,11 +180,11 @@ export default function ItemEditor({
       const formData = {
         id: item?.id || null,
         code, name, price, category, status, veg, isPopular,
-        hsn, taxRate, isPackaged, cessRate, imageUrl
+        hsn, taxRate, isPackaged, cessRate, imageUrl, hasVariants
       };
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(formData));
     }
-  }, [open, item, code, name, price, category, status, veg, isPopular, hsn, taxRate, isPackaged, cessRate, imageUrl]);
+  }, [open, item, code, name, price, category, status, veg, isPopular, hsn, taxRate, isPackaged, cessRate, imageUrl, hasVariants]);
 
   const clearDraft = () => {
     sessionStorage.removeItem(STORAGE_KEY);
@@ -229,6 +288,46 @@ export default function ItemEditor({
   }, [name, price, taxRate, cessRate]);
   if (!open) return null;
 
+  const saveVariants = async (menuItemId) => {
+    if (!hasVariants || !selectedTemplate) {
+      // If variants are disabled, clear any existing variant data
+      if (item?.id) {
+        await supabase.from('menu_item_variants').delete().eq('menu_item_id', item.id);
+        await supabase.from('variant_pricing').delete().eq('menu_item_id', item.id);
+      }
+      return;
+    }
+    
+    // Link menu item to template
+    await supabase
+      .from('menu_item_variants')
+      .upsert({
+        menu_item_id: menuItemId,
+        template_id: selectedTemplate,
+        is_required: true
+      }, {
+        onConflict: 'menu_item_id'
+      });
+    
+    // Save pricing for each option
+    const template = variantTemplates.find(t => t.id === selectedTemplate);
+    if (!template?.options) return;
+    
+    const pricingData = template.options.map(option => {
+      const existing = variantPrices.find(vp => vp.option_id === option.id);
+      return {
+        menu_item_id: menuItemId,
+        option_id: option.id,
+        price: existing?.price || price, // Use variant price or base price
+        is_available: existing?.is_available ?? true
+      };
+    });
+    
+    // Delete old pricing and insert new
+    await supabase.from('variant_pricing').delete().eq('menu_item_id', menuItemId);
+    await supabase.from('variant_pricing').insert(pricingData);
+  };
+
   const save = async (e) => {
     e.preventDefault();
     
@@ -280,9 +379,10 @@ export default function ItemEditor({
         is_packaged_good: isPackaged,
         compensation_cess_rate: Number(cessRate),
         image_url: imageUrl || null,
+        has_variants: hasVariants,
       };
 
-      let newItem;
+      let savedItemId;
       if (isEdit) {
         const { error: updErr } = await supabase
           .from("menu_items")
@@ -290,6 +390,7 @@ export default function ItemEditor({
           .eq("id", item.id)
           .eq("restaurant_id", restaurantId);
         if (updErr) throw updErr;
+        savedItemId = item.id;
         onSaved({ ...item, ...payload });
       } else {
         const { data, error: insertErr } = await supabase
@@ -298,17 +399,22 @@ export default function ItemEditor({
           .select("*")
           .single();
         if (insertErr) throw insertErr;
-        newItem = data;
-        onSaved(newItem);
+        savedItemId = data.id;
+        onSaved(data);
       }
 
-      if (!isEdit && newItem) {
+      // Save variants
+      if (savedItemId) {
+        await saveVariants(savedItemId);
+      }
+
+      if (!isEdit && savedItemId) {
         await supabase.rpc("upsert_library_item", {
-          _name: newItem.name,
-          _price: newItem.price,
-          _veg: newItem.veg,
-          _desc: newItem.description,
-          _img_url: newItem.image_url,
+          _name: name.trim(),
+          _price: Number(price),
+          _veg: veg,
+          _desc: null,
+          _img_url: imageUrl || null,
           _cat_id: catId,
         });
       }
@@ -473,6 +579,15 @@ export default function ItemEditor({
 
         <div style={row2}>
           <label>
+            <div style={customLabel}>HSN</div>
+            <input
+              value={hsn}
+              onChange={(e) => setHsn(e.target.value)}
+              style={input}
+              placeholder="Enter HSN code"
+            />
+          </label>
+          <label>
             <div style={customLabel}>Status</div>
             <NiceSelect
               value={status}
@@ -518,17 +633,6 @@ export default function ItemEditor({
           </span>
         </div>
         </div>
-        <div style={{ marginTop: 12}}>
-        <label>
-          <div style={customLabel}>HSN</div>
-          <input
-            value={hsn}
-            onChange={(e) => setHsn(e.target.value)}
-            style={input}
-            placeholder="Enter HSN code"
-          />
-        </label>
-        </div>
         {isPackaged && (
           <div style={row2}>
             <label>
@@ -555,6 +659,216 @@ export default function ItemEditor({
             </label>
           </div>
         )}
+
+        {/* Variants Section */}
+        <div style={{ marginTop: 20, paddingTop: 20, borderTop: '1px solid #e5e7eb' }}>
+          <div style={checkboxLabel}>
+            <input
+              type="checkbox"
+              checked={hasVariants}
+              onChange={(e) => {
+                setHasVariants(e.target.checked);
+                if (!e.target.checked) {
+                  setSelectedTemplate(null);
+                  setVariantPrices([]);
+                }
+              }}
+            />
+            <span>
+              Is variant
+            </span>
+          </div>
+
+        {hasVariants && (
+            <div style={{ 
+              background: 'linear-gradient(to bottom, #f9fafb, #ffffff)', 
+              padding: 18, 
+              borderRadius: 12, 
+              marginTop: 14,
+              border: '1.5px solid #e5e7eb',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+            }}>
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ 
+                  ...customLabel, 
+                  marginBottom: 8
+                }}>
+                  Variant Type
+                </div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <NiceSelect
+                    value={selectedTemplate || ''}
+                    onChange={setSelectedTemplate}
+                    placeholder="Select variant type..."
+                    options={variantTemplates.map(template => ({
+                      value: template.id,
+                      label: `${template.name} (${template.options?.length} options)`
+                    }))}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewVariantName("");
+                      setNewVariantOptions([""]);
+                      setNewVariantErr("");
+                      setShowVariantModal(true);
+                    }}
+                    style={{
+                      ...smallBtn,
+                      fontSize: 16,
+                      width: 40
+                    }}
+                    title="Create new variant template"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+
+              {selectedTemplate && (
+                <div style={{ marginTop: 18 }}>
+                  <div style={{ 
+                    ...customLabel,
+                    marginBottom: 14
+                  }}>
+                    Pricing for Each Variant
+                  </div>
+                  <div style={{ 
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    gap: 10 
+                  }}>
+                    {variantTemplates
+                      .find(t => t.id === selectedTemplate)
+                      ?.options.map((option, idx) => {
+                        const variantPrice = variantPrices.find(vp => vp.option_id === option.id);
+                        return (
+                          <div 
+                            key={option.id} 
+                            style={{ 
+                              display: 'flex', 
+                              gap: 12, 
+                              alignItems: 'center',
+                              padding: '12px 14px',
+                              background: '#ffffff',
+                              borderRadius: 10,
+                              border: '1px solid #e5e7eb',
+                              transition: 'all 0.2s ease',
+                              boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.borderColor = '#d1d5db';
+                              e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.08)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.borderColor = '#e5e7eb';
+                              e.currentTarget.style.boxShadow = '0 1px 2px rgba(0,0,0,0.04)';
+                            }}
+                          >
+                            <span style={{ 
+                              flex: 1, 
+                              fontWeight: 500, 
+                              fontSize: 14,
+                              color: '#111827'
+                            }}>
+                              {option.name}
+                            </span>
+                            <div style={{ 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              gap: 8,
+                              background: '#f9fafb',
+                              padding: '6px 10px',
+                              borderRadius: 8,
+                              border: '1px solid #e5e7eb'
+                            }}>
+                              <span style={{ 
+                                fontSize: 15, 
+                                color: '#6b7280',
+                                fontWeight: 600
+                              }}>₹</span>
+                              <input
+                                type="number"
+                                placeholder="0.00"
+                                step="0.01"
+                                value={variantPrice?.price || ''}
+                                onChange={(e) => {
+                                  const newPrices = variantPrices.filter(vp => vp.option_id !== option.id);
+                                  newPrices.push({
+                                    option_id: option.id,
+                                    price: parseFloat(e.target.value) || 0,
+                                    is_available: variantPrice?.is_available ?? true
+                                  });
+                                  setVariantPrices(newPrices);
+                                }}
+                                style={{ 
+                                  width: 90, 
+                                  padding: '6px 8px', 
+                                  borderRadius: 6, 
+                                  border: 'none',
+                                  fontSize: 14,
+                                  fontWeight: 600,
+                                  outline: 'none',
+                                  backgroundColor: 'transparent',
+                                  color: '#111827'
+                                }}
+                                onFocus={(e) => {
+                                  e.target.parentElement.style.borderColor = '#652ae2';
+                                  e.target.parentElement.style.background = '#ffffff';
+                                }}
+                                onBlur={(e) => {
+                                  e.target.parentElement.style.borderColor = '#e5e7eb';
+                                  e.target.parentElement.style.background = '#f9fafb';
+                                }}
+                              />
+                            </div>
+                            <label style={{ 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              gap: 7,
+                              fontSize: 13,
+                              color: '#4b5563',
+                              cursor: 'pointer',
+                              userSelect: 'none',
+                              fontWeight: 500,
+                              padding: '4px 8px',
+                              borderRadius: 6,
+                              transition: 'background 0.15s ease'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = '#f3f4f6'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={variantPrice?.is_available ?? true}
+                                onChange={(e) => {
+                                  const newPrices = variantPrices.filter(vp => vp.option_id !== option.id);
+                                  newPrices.push({
+                                    option_id: option.id,
+                                    price: variantPrice?.price || 0,
+                                    is_available: e.target.checked
+                                  });
+                                  setVariantPrices(newPrices);
+                                }}
+                                style={{ 
+                                  width: 17, 
+                                  height: 17, 
+                                  cursor: 'pointer',
+                                  accentColor: '#f97316'
+                                }}
+                              />
+                              <span>Available</span>
+                            </label>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
 
         <div style={actions}>
           <button
@@ -639,6 +953,158 @@ export default function ItemEditor({
                 }}
               >
                 Add
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showVariantModal && (
+        <div style={overlayInner}>
+          <div style={{...modalInner, maxWidth: 480}}>
+            <h4 style={{ margin: 0, marginBottom: 8 }}>Create Variant Template</h4>
+            {newVariantErr && <div style={errorStyle}>{newVariantErr}</div>}
+            
+            <div style={{ marginBottom: 14 }}>
+              <div style={customLabel}>
+                Template Name <span style={{ color: "red" }}>*</span>
+              </div>
+              <input
+                value={newVariantName}
+                onChange={(e) => setNewVariantName(e.target.value)}
+                style={input}
+                placeholder="e.g., Size, Temperature, etc."
+              />
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ ...customLabel, marginBottom: 8 }}>
+                Variant Options <span style={{ color: "red" }}>*</span>
+              </div>
+              {newVariantOptions.map((option, idx) => (
+                <div key={idx} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                  <input
+                    value={option}
+                    onChange={(e) => {
+                      const updated = [...newVariantOptions];
+                      updated[idx] = e.target.value;
+                      setNewVariantOptions(updated);
+                    }}
+                    style={{ ...input, flex: 1 }}
+                    placeholder={`Option ${idx + 1} (e.g., Small, Medium, Large)`}
+                  />
+                  {newVariantOptions.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNewVariantOptions(newVariantOptions.filter((_, i) => i !== idx));
+                      }}
+                      style={{
+                        padding: '8px 12px',
+                        background: '#ef4444',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: 6,
+                        cursor: 'pointer',
+                        fontSize: 13
+                      }}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setNewVariantOptions([...newVariantOptions, ""])}
+                style={{
+                  padding: '8px 14px',
+                  background: '#f3f4f6',
+                  color: '#374151',
+                  border: '1px solid #d1d5db',
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  fontSize: 13,
+                  fontWeight: 500,
+                  marginTop: 4
+                }}
+              >
+                + Add Option
+              </button>
+            </div>
+
+            <div style={actions}>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowVariantModal(false);
+                  setNewVariantErr("");
+                }}
+                style={secondaryBtn}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                style={primaryBtn}
+                onClick={async () => {
+                  const name = newVariantName.trim();
+                  const options = newVariantOptions.filter(o => o.trim());
+                  
+                  if (!name) {
+                    setNewVariantErr("Please enter a template name.");
+                    return;
+                  }
+                  if (options.length < 2) {
+                    setNewVariantErr("Please add at least 2 variant options.");
+                    return;
+                  }
+                  
+                  try {
+                    if (!supabase) throw new Error("Client not ready");
+                    
+                    // Insert template
+                    const { data: template, error: templateErr } = await supabase
+                      .from("variant_templates")
+                      .insert([{
+                        name: name,
+                        is_active: true,
+                        display_order: 999
+                      }])
+                      .select("id,name")
+                      .single();
+                    
+                    if (templateErr) throw templateErr;
+                    
+                    // Insert options
+                    const optionsData = options.map((opt, idx) => ({
+                      template_id: template.id,
+                      name: opt.trim(),
+                      display_order: idx
+                    }));
+                    
+                    const { data: createdOptions, error: optionsErr } = await supabase
+                      .from("variant_options")
+                      .insert(optionsData)
+                      .select("*");
+                    
+                    if (optionsErr) throw optionsErr;
+                    
+                    // Add to templates list
+                    const newTemplate = {
+                      ...template,
+                      options: createdOptions
+                    };
+                    setVariantTemplates((prev) => [...prev, newTemplate]);
+                    setSelectedTemplate(template.id);
+                    setShowVariantModal(false);
+                    setNewVariantErr("");
+                  } catch (ex) {
+                    setNewVariantErr(ex.message || "Failed to create template");
+                  }
+                }}
+              >
+                Create
               </button>
             </div>
           </div>

@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import Button from './ui/Button'
 import NiceSelect from './NiceSelect'
 
-export default function LibraryPicker({ supabase, open, onClose, restaurantId, onAdded }) {
+export default function LibraryPicker({ supabase, open, onClose, restaurantId, onAdded, enableMenuImages }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [list, setList] = useState([])
@@ -227,8 +227,9 @@ export default function LibraryPicker({ supabase, open, onClose, restaurantId, o
                   <tr>
                     <th style={{ width: 40 }}></th>
                     <th>Name</th>
+                    {enableMenuImages && <th style={{ width: 60 }}>Image</th>}
                     <th style={{ width: 100 }}>Veg</th>
-                    <th style={{ width: 160 }}>Price</th>
+                    <th style={{ width: 140 }}>Price</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -247,7 +248,21 @@ export default function LibraryPicker({ supabase, open, onClose, restaurantId, o
                             aria-label={`Select ${it.name}`}
                           />
                         </td>
-                        <td><span className="truncate">{it.name}</span></td>
+                        <td>
+                          <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            <span className="truncate">{it.name}</span>
+                            {it.description && <span style={{ fontSize: 11, color: '#999' }} className="truncate">{it.description}</span>}
+                          </div>
+                        </td>
+                        {enableMenuImages && (
+                          <td>
+                            {it.image_url ? (
+                              <img src={it.image_url} alt="" style={{ width: 32, height: 32, borderRadius: 4, objectFit: 'cover' }} />
+                            ) : (
+                              <div style={{ width: 32, height: 32, background: '#f3f4f6', borderRadius: 4 }} />
+                            )}
+                          </td>
+                        )}
                         <td>{it.veg ? 'Veg' : 'Non-veg'}</td>
                         <td>
                           <input
@@ -257,7 +272,7 @@ export default function LibraryPicker({ supabase, open, onClose, restaurantId, o
                             value={currentPrice}
                             onChange={e => setPrice(it.id, e.target.value)}
                             disabled={!checked}
-                            style={{ width: 110, fontSize: 16 }}
+                            style={{ width: 100, fontSize: 14 }}
                             inputMode="decimal"
                           />
                         </td>

@@ -5,6 +5,8 @@ import { useRequireAuth } from "../../lib/useRequireAuth";
 import { useRestaurant } from "../../context/RestaurantContext";
 import Alert from "../../components/Alert";
 import ItemEditor from "../../components/ItemEditor";
+import CategoryManager from "../../components/CategoryManager";
+import VariantManager from "../../components/VariantManager";
 import LibraryPicker from "../../components/LibraryPicker";
 import Button from "../../components/ui/Button";
 import NiceSelect from "../../components/NiceSelect";
@@ -167,6 +169,23 @@ export default function MenuPage() {
   const [showLibrary, setShowLibrary] = useState(false);
   const [viewImage, setViewImage] = useState(null);
   const [enableMenuImages, setEnableMenuImages] = useState(false);
+  
+  const [showCategoryManager, setShowCategoryManager] = useState(false);
+  const [showVariantManager, setShowVariantManager] = useState(false);
+
+  // Helper to refresh categories after edits
+  const refreshCategories = useCallback(async () => {
+    if (!supabase || !restaurantId) return;
+    const { data } = await supabase
+      .from("categories")
+      .select("id,name")
+      .or(`is_global.eq.true,restaurant_id.eq.${restaurantId}`)
+      .order("name");
+    if (data) {
+      setCategories(data);
+      localStorage.setItem(`categories_${restaurantId}`, JSON.stringify(data));
+    }
+  }, [supabase, restaurantId]);
 
   // Persist restaurant ID when known
   useEffect(() => {
@@ -260,7 +279,7 @@ export default function MenuPage() {
         const { data: its, error: itsErr } = await supabase
           .from("menu_items")
           .select(
-            "id, name, category, price, code_number, hsn, tax_rate, status, veg, is_packaged_good, compensation_cess_rate, ispopular, image_url"
+            "id, name, category, price, code_number, hsn, tax_rate, status, veg, is_packaged_good, compensation_cess_rate, ispopular, image_url, has_variants"
           )
           .eq("restaurant_id", restaurantId)
           .order("category", { ascending: true })
@@ -439,6 +458,8 @@ export default function MenuPage() {
         <div className="toolbar-cta">
           <Button onClick={() => openEditor({})}>Add New Item</Button>
           <Button onClick={() => setShowLibrary(true)}>Add from Library</Button>
+          <Button variant="outline" onClick={() => setShowCategoryManager(true)}>Categories</Button>
+          <Button variant="outline" onClick={() => setShowVariantManager(true)}>Variants</Button>
           {hasSelection && (
             <>
               <Button variant="success" onClick={() => applyBulk("available")}>
@@ -473,6 +494,7 @@ export default function MenuPage() {
                 <th className="hide-sm">Cess %</th>
                 <th className="hide-sm">Type</th>
                 <th>Status</th>
+                <th className="hide-sm">Variants</th>
                 {enableMenuImages && <th>Image</th>}
                 <th className="hide-mobile">Actions</th>
               </tr>
@@ -480,13 +502,13 @@ export default function MenuPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={enableMenuImages ? 11 : 10} style={{ padding: 12 }}>
+                  <td colSpan={enableMenuImages ? 12 : 11} style={{ padding: 12 }}>
                     Loading…
                   </td>
                 </tr>
               ) : visible.length === 0 ? (
                 <tr>
-                  <td colSpan={enableMenuImages ? 11 : 10} style={{ padding: 12, color: "#666" }}>
+                  <td colSpan={enableMenuImages ? 12 : 11} style={{ padding: 12, color: "#666" }}>
                     No items found.
                   </td>
                 </tr>
@@ -600,6 +622,9 @@ export default function MenuPage() {
                           {available ? "Available" : "Out of Stock"}
                         </span>
                       </td>
+                      <td className="hide-sm" style={{ textAlign: 'center' }}>
+                        {item.has_variants ? '✓' : '—'}
+                      </td>
                       {enableMenuImages && (
                         <td>
                           {item.image_url ? (
@@ -696,10 +721,25 @@ export default function MenuPage() {
         onClose={() => setShowLibrary(false)}
         supabase={supabase}
         restaurantId={restaurantId}
+        enableMenuImages={enableMenuImages}
         onAdded={(rows) => {
           if (rows?.length) setItems((prev) => [...rows, ...prev]);
         }}
       />
+      
+      {showCategoryManager && (
+        <CategoryManager
+          restaurantId={restaurantId}
+          onClose={() => setShowCategoryManager(false)}
+          onSaved={refreshCategories}
+        />
+      )}
+
+      {showVariantManager && (
+        <VariantManager
+          onClose={() => setShowVariantManager(false)}
+        />
+      )}
       
       {viewImage && (
         <div 

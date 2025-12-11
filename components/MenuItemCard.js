@@ -59,7 +59,12 @@ export default function MenuItemCard({ item, quantity = 0, onAdd, onRemove, show
             )}
             <h3 style={styles.title} title={item.name}>{item.name}</h3>
           </div>
-          <span style={styles.price}>₹{Number(item.price).toFixed(2)}</span>
+          <span style={styles.price}>
+            {item.has_variants && item.variants?.length > 0 
+              ? `₹${Number(item.variants[0]?.price || item.price).toFixed(2)}+` 
+              : `₹${Number(item.price).toFixed(2)}`
+            }
+          </span>
         </div>
         
         {item.category && (
@@ -114,6 +119,8 @@ const styles = {
     flexDirection: 'column',
     transition: 'transform 0.2s, box-shadow 0.2s',
     height: '100%',
+    minHeight: '320px', // Fixed minimum height
+    maxHeight: '320px', // Fixed maximum height
   },
   imageContainer: {
     width: '100%',
@@ -172,12 +179,26 @@ const styles = {
     WebkitBoxOrient: 'vertical',
     overflow: 'hidden',
     flex: 1,
+    minHeight: '42px', // Fixed height for 2 lines (15px * 1.4 * 2)
+    maxHeight: '42px',
   },
   price: {
     fontWeight: 700,
     color: 'var(--brand)',
     fontSize: '15px',
     whiteSpace: 'nowrap',
+  },
+  variantBadge: {
+    fontSize: '11px',
+    color: 'var(--brand)',
+    background: 'var(--brand-50, #eff6ff)',
+    padding: '3px 8px',
+    borderRadius: '4px',
+    fontWeight: 600,
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 4,
   },
   category: {
     fontSize: '11px',
