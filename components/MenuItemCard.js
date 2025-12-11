@@ -119,12 +119,12 @@ const styles = {
     flexDirection: 'column',
     transition: 'transform 0.2s, box-shadow 0.2s',
     height: '100%',
-    minHeight: '320px', // Fixed minimum height
-    maxHeight: '320px', // Fixed maximum height
+    minHeight: '230px', // Less bulky
+    maxHeight: '230px', 
   },
   imageContainer: {
     width: '100%',
-    height: '140px', // More compact fixed height
+    height: '100px', // More compact
     background: 'linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%)',
     position: 'relative',
     overflow: 'hidden',
@@ -156,11 +156,11 @@ const styles = {
     backdropFilter: 'blur(4px)',
   },
   content: {
-    padding: '12px',
+    padding: '10px',
     display: 'flex',
     flexDirection: 'column',
     flex: 1,
-    gap: 8,
+    gap: 6,
   },
   header: {
     display: 'flex',
@@ -170,17 +170,17 @@ const styles = {
   },
   title: {
     margin: 0,
-    fontSize: '15px',
+    fontSize: '14px',
     fontWeight: 600,
-    lineHeight: 1.4,
+    lineHeight: 1.3,
     color: 'var(--text)',
     display: '-webkit-box',
     WebkitLineClamp: 2,
     WebkitBoxOrient: 'vertical',
     overflow: 'hidden',
     flex: 1,
-    minHeight: '42px', // Fixed height for 2 lines (15px * 1.4 * 2)
-    maxHeight: '42px',
+    minHeight: '36px', 
+    maxHeight: '36px',
   },
   price: {
     fontWeight: 700,
@@ -213,7 +213,7 @@ const styles = {
   },
   addButton: {
     width: '100%',
-    padding: '8px',
+    padding: '6px',
     background: 'var(--surface)',
     border: '1px solid var(--border)',
     borderRadius: '8px',
