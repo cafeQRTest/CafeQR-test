@@ -6,6 +6,7 @@ import { useRequireAuth } from '../../lib/useRequireAuth';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { getSupabase } from '../../services/supabase';
 import MenuItemCard from '../../components/MenuItemCard';
+import MenuItemCardSimple from '../../components/MenuItemCardSimple';
 import { useAlert } from '../../context/AlertContext';
 import HorizontalScrollRow from '../../components/HorizontalScrollRow';
 
@@ -181,6 +182,7 @@ export default function CounterSale() {
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
 
   const [sendToKitchenEnabled, setSendToKitchenEnabled] = useState(true);
+  const [enableMenuImages, setEnableMenuImages] = useState(false);
 
 
   // NEW: Order mode toggle
@@ -314,7 +316,8 @@ const [orderMode, setOrderMode] = useState('settle');
     shipping_phone,
     print_logo_bitmap,
     print_logo_cols,
-    print_logo_rows
+    print_logo_rows,
+    features_menu_images_enabled
   `)
   .eq('restaurant_id', restaurantId)
   .limit(1)
@@ -332,6 +335,7 @@ setProfileTax({
 // NEW: set credit feature flag
 setCreditFeatureEnabled(!!profile?.features_credit_enabled);
 setSendToKitchenEnabled(profile?.features_counter_send_to_kitchen_enabled !== false);
+setEnableMenuImages(!!profile?.features_menu_images_enabled);
 
 // after loading profile
 setOrderMode(
@@ -962,32 +966,87 @@ window.dispatchEvent(
 
       <main className="counter-main-mobile-like">
         <section className="counter-menu-items">
-
-
-          {groupedItems.map(([cat, items]) => (
-            <HorizontalScrollRow
-              key={cat}
-              title={cat}
-              count={items.length}
-              items={items}
-              renderItem={(item) => {
-                const qty = cart.find((c) => c.id === item.id)?.quantity || 0;
-                return (
-                  <div style={{ minWidth: '200px', maxWidth: '200px' }}>
-                    <MenuItemCard
-                      item={item}
-                      quantity={qty}
-                      onAdd={() => addToCart(item)}
-                      onRemove={() => {
-                        const current = cart.find((c) => c.id === item.id)?.quantity || 0;
-                        updateCartItem(item.id, current - 1);
-                      }}
-                    />
-                  </div>
-                );
-              }}
-            />
-          ))}
+          {enableMenuImages ? (
+            // NEW LAYOUT: HorizontalScrollRow with MenuItemCard (when images enabled)
+            groupedItems.map(([cat, items]) => (
+              <HorizontalScrollRow
+                key={cat}
+                title={cat}
+                count={items.length}
+                items={items}
+                renderItem={(item) => {
+                  const qty = cart.find((c) => c.id === item.id)?.quantity || 0;
+                  return (
+                    <div style={{ minWidth: '200px', maxWidth: '200px' }}>
+                      <MenuItemCard
+                        item={item}
+                        quantity={qty}
+                        onAdd={() => addToCart(item)}
+                        onRemove={() => {
+                          const current = cart.find((c) => c.id === item.id)?.quantity || 0;
+                          updateCartItem(item.id, current - 1);
+                        }}
+                        showImage={true}
+                      />
+                    </div>
+                  );
+                }}
+              />
+            ))
+          ) : (
+            // OLD LAYOUT: Simple grid (when images disabled)
+            groupedItems.map(([cat, items]) => (
+              <div key={cat} className="counter-category">
+                <h2 className="counter-category-title">{cat} ({items.length})</h2>
+                <div className="counter-category-grid">
+                  {items.map((item) => {
+                    const qty = cart.find((c) => c.id === item.id)?.quantity || 0;
+                    const avail = !item.status || item.status === 'available';
+                    return (
+                      <div key={item.id} className={`counter-item-card${!avail ? ' item-out' : ''}`}>
+                        <div className="counter-item-info">
+                          <span>{item.veg ? '🟢' : '🔺'}</span>
+                          <div>
+                            <h3>{item.name}{item.code_number && <small>[{item.code_number}]</small>}</h3>
+                            <div>₹{item.price.toFixed(2)}</div>
+                          </div>
+                        </div>
+                        <div className="counter-item-actions">
+                          {qty > 0 ? (
+                            <div className="counter-cart-qty">
+                              <button
+                                onClick={() => updateCartItem(item.id, qty - 1)}
+                                style={{ background: THEME.main, color: '#fff' }}
+                              >
+                                -
+                              </button>
+                              <div>{qty}</div>
+                              <button
+                                onClick={() => updateCartItem(item.id, qty + 1)}
+                                disabled={!avail}
+                                style={{ background: THEME.main, color: '#fff' }}
+                              >
+                                +
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => addToCart(item)}
+                              disabled={!avail}
+                              className="btn"
+                              style={{ background: THEME.main, borderColor: THEME.main }}
+                            >
+                              Add
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))
+          )}
         </section>
       </main>
 

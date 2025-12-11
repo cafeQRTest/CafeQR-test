@@ -13,6 +13,7 @@ export default function ItemEditor({
   restaurantId,
   onSaved,
   onError,
+  enableMenuImages, // Check enabled state
 }) {
   const isEdit = !!item?.id;
   const hasInitialized = useRef(false);
@@ -130,20 +131,19 @@ export default function ItemEditor({
     sessionStorage.removeItem(STORAGE_KEY);
   };
 
+  // Ultra-compressed COLORFUL images (MINIMUM size!)
   const compressImage = async (file) => {
     return new Promise((resolve, reject) => {
       const img = new Image();
       const objectUrl = URL.createObjectURL(file);
       
       img.onload = () => {
-        URL.revokeObjectURL(objectUrl); // Clean up memory immediately
-        
         const canvas = document.createElement('canvas');
         let width = img.width;
         let height = img.height;
         
-        // Resize to max 800px (prevent memory spikes)
-        const MAX_SIZE = 800;
+        // VERY SMALL size for minimum storage (250px max)
+        const MAX_SIZE = 250;
         if (width > height) {
           if (width > MAX_SIZE) {
             height *= MAX_SIZE / width;
@@ -160,23 +160,27 @@ export default function ItemEditor({
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         
-        // Better scaling quality
+        // Good quality scaling
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = "high";
         ctx.drawImage(img, 0, 0, width, height);
         
-        // Compress to JPEG with 0.7 quality
-        canvas.toBlob((blob) => {
-          if (!blob) {
-            reject(new Error("Compression failed"));
-            return;
+        // Try WebP first (better compression), fallback to JPEG
+        let base64;
+        try {
+          // WebP at 45% quality = MAXIMUM compression, still looks good
+          base64 = canvas.toDataURL('image/webp', 0.45);
+          if (!base64.startsWith('data:image/webp')) {
+            throw new Error('WebP not supported');
           }
-          const compressedFile = new File([blob], file.name.replace(/\.[^/.]+$/, ".jpg"), {
-            type: "image/jpeg",
-            lastModified: Date.now(),
-          });
-          resolve(compressedFile);
-        }, 'image/jpeg', 0.7);
+        } catch (e) {
+          // Fallback to JPEG at 50% quality
+          base64 = canvas.toDataURL('image/jpeg', 0.5);
+        }
+        
+        URL.revokeObjectURL(objectUrl);
+        
+        resolve(base64);
       };
       
       img.onerror = (e) => {
@@ -188,34 +192,8 @@ export default function ItemEditor({
     });
   };
 
-  const uploadImage = async (file) => {
-    if (!file || !supabase) return null;
-    
-    setUploadingImage(true);
-    try {
-      const fileExt = file.name.split('.').pop();
-      // Always store as jpg since we compress to it, or keep original ext if logic varies
-      const fileName = `${restaurantId}/${Date.now()}.jpg`; 
-      
-      const { data, error } = await supabase.storage
-        .from('menu-items')
-        .upload(fileName, file);
+  // Removed uploadImage as we are now using Base64 strings directly in the DB
 
-      if (error) throw error;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('menu-items')
-        .getPublicUrl(fileName);
-
-      return publicUrl;
-    } catch (error) {
-      console.error('Image upload error:', error);
-      setErr('Failed to upload image: ' + error.message);
-      return null;
-    } finally {
-      setUploadingImage(false);
-    }
-  };
 
   const handleImageChange = async (e) => {
     const file = e.target.files?.[0];
@@ -227,19 +205,15 @@ export default function ItemEditor({
       
       setUploadingImage(true);
       try {
-        // Upload immediately (Skip compression to prevent crashes)
-        const publicUrl = await uploadImage(file);
-        
-        if (publicUrl) {
-          setImageUrl(publicUrl);
-          setImageFile(null); 
-        }
+        // Compress and Convert to Base64
+        const base64 = await compressImage(file);
+        setImageUrl(base64);
+        setImageFile(null);
       } catch (err) {
         console.error(err);
-        setErr("Failed to upload image");
+        setErr("Failed to process image");
       } finally {
         setUploadingImage(false);
-        // Reset input so same file can be selected again if needed
         e.target.value = '';
       }
     }
@@ -257,12 +231,18 @@ export default function ItemEditor({
 
   const save = async (e) => {
     e.preventDefault();
+    
     if (!supabase || !canSubmit) {
       const msg = "Please fill in all required details: name and a valid price greater than 0.";
       setErr(msg);
       onError?.(msg);
       return;
     }
+    
+    if (saving) {
+      return; // Prevent double-click
+    }
+    
     setErr("");
     setSaving(true);
 
@@ -334,10 +314,16 @@ export default function ItemEditor({
       }
 
       clearDraft();
-      onClose();
+      
+      // Small delay to ensure parent state updates
+      setTimeout(() => {
+        onClose();
+      }, 100);
     } catch (ex) {
-      setErr(ex.message || "Failed to save");
-      onError?.(ex.message);
+      const errorMsg = ex.message || "Failed to save";
+      setErr(errorMsg);
+      onError?.(errorMsg);
+      alert(`Error saving item: ${errorMsg}`); // Show alert for visibility
     } finally {
       setSaving(false);
     }
@@ -380,60 +366,62 @@ export default function ItemEditor({
         </label>
 
         {/* Small Image Upload Section */}
-        <div style={{ marginTop: 14 }}>
-          <div style={customLabel}>Image</div>
-          <div style={imageUploadContainer}>
-            {uploadingImage ? (
-              <div style={uploadPlaceholder}>
-                <div className="spinner" style={{ 
-                  border: '3px solid #f3f3f3', 
-                  borderTop: '3px solid #652ae2', 
-                  borderRadius: '50%', 
-                  width: 24, 
-                  height: 24, 
-                  animation: 'spin 1s linear infinite',
-                  marginBottom: 8 
-                }} />
-                <span style={{ fontSize: 13, color: '#652ae2', fontWeight: 500 }}>Uploading...</span>
-                <style>{`
-                  @keyframes spin {
-                    0% { transform: rotate(0deg); }
-                    100% { transform: rotate(360deg); }
-                  }
-                `}</style>
-              </div>
-            ) : imageUrl ? (
-              <div style={imagePreviewWrapper}>
-                <img src={imageUrl} alt="Preview" style={{ ...imagePreview, maxHeight: 120 }} />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setImageUrl("");
-                    setImageFile(null);
-                  }}
-                  style={removeImageBtn}
-                  title="Remove image"
-                >
-                  ✕
-                </button>
-              </div>
-            ) : (
-              <label style={uploadLabel}>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageChange}
-                  style={{ display: 'none' }}
-                />
-                <span style={{ fontSize: 24 }}>📷</span>
-                <div style={{ textAlign: 'left' }}>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: '#4b5563' }}>Upload Image</div>
-                  <div style={{ fontSize: 11, color: '#9ca3af' }}>Max 10MB</div>
+        {enableMenuImages && (
+          <div style={{ marginTop: 14 }}>
+            <div style={customLabel}>Image</div>
+            <div style={imageUploadContainer}>
+              {uploadingImage ? (
+                <div style={uploadPlaceholder}>
+                  <div className="spinner" style={{ 
+                    border: '3px solid #f3f3f3', 
+                    borderTop: '3px solid #652ae2', 
+                    borderRadius: '50%', 
+                    width: 24, 
+                    height: 24, 
+                    animation: 'spin 1s linear infinite',
+                    marginBottom: 8 
+                  }} />
+                  <span style={{ fontSize: 13, color: '#652ae2', fontWeight: 500 }}>Uploading...</span>
+                  <style>{`
+                    @keyframes spin {
+                      0% { transform: rotate(0deg); }
+                      100% { transform: rotate(360deg); }
+                    }
+                  `}</style>
                 </div>
-              </label>
-            )}
+              ) : imageUrl ? (
+                <div style={imagePreviewWrapper}>
+                  <img src={imageUrl} alt="Preview" style={{ ...imagePreview, maxHeight: 120 }} />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setImageUrl("");
+                      setImageFile(null);
+                    }}
+                    style={removeImageBtn}
+                    title="Remove image"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <label style={uploadLabel}>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageChange}
+                    style={{ display: 'none' }}
+                  />
+                  <span style={{ fontSize: 24 }}>📷</span>
+                  <div style={{ textAlign: 'left' }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: '#4b5563' }}>Upload Image</div>
+                    <div style={{ fontSize: 11, color: '#9ca3af' }}>Max 10MB</div>
+                  </div>
+                </label>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         <div style={row2}>
           <label>
@@ -579,8 +567,12 @@ export default function ItemEditor({
           </button>
           <button
             type="submit"
-            disabled={saving}
-            style={primaryBtn}
+            disabled={saving || !canSubmit}
+            style={{
+              ...primaryBtn,
+              opacity: (!canSubmit || saving) ? 0.6 : 1,
+              cursor: (!canSubmit || saving) ? 'not-allowed' : 'pointer',
+            }}
           >
             {saving ? "Saving…" : isEdit ? "Save" : "Add"}
           </button>

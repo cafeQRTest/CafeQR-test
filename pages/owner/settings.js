@@ -223,6 +223,7 @@ export default function SettingsPage() {
     features_inventory_enabled: false,
     features_table_ordering_enabled: false,
     features_counter_send_to_kitchen_enabled: true,   // NEW
+    features_menu_images_enabled: false, // Feature flag for Menu Images
   });
 
   const [originalTables, setOriginalTables] = useState(0);
@@ -276,6 +277,7 @@ export default function SettingsPage() {
             features_table_ordering_enabled: !!sanitizedProfile.features_table_ordering_enabled,
             features_counter_send_to_kitchen_enabled:
             sanitizedProfile.features_counter_send_to_kitchen_enabled !== false, // default ON
+            features_menu_images_enabled: !!sanitizedProfile.features_menu_images_enabled,
 
           }));
           setOriginalTables(profile.tables_count || 0);
@@ -372,7 +374,8 @@ async function save(e) {
   setSaving(true);
   setError('');
   setSuccess('');
-  const startTime = Date.now();
+  const overallStartTime = Date.now(); // Fixed: Define overallStartTime
+  
   try {
     // STEP 1: Quick validation
     console.time("Validation");
@@ -480,6 +483,7 @@ async function save(e) {
       features_table_ordering_enabled: !!rest.features_table_ordering_enabled,
       features_counter_send_to_kitchen_enabled:
       rest.features_counter_send_to_kitchen_enabled !== false,
+      features_menu_images_enabled: !!rest.features_menu_images_enabled,
 
     };
 
@@ -491,11 +495,12 @@ async function save(e) {
     console.timeEnd("Validation");
 
     // STEP 4: All heavy work in background (parallel execution)
+    console.time("Total Save Function");
     Promise.all([
       // Save profile
       (async () => {
         try {
-          console.time("Supabase upsert: restaurantprofiles");
+          console.time("Supabase Upsert restaurant_profiles");
           const { error: upsertError } = await supabase
             .from('restaurant_profiles')
             .upsert(payload, { 
@@ -518,16 +523,14 @@ async function save(e) {
       // Update restaurant
       (async () => {
         try {
-          console.time("Supabase update: restaurants");
+          console.time("Supabase Update restaurants name");
           await supabase
             .from('restaurants')
             .update({ name: rest.restaurant_name })
             .eq('id', restaurant.id);
-            console.timeEnd("Supabase update: restaurants");
-
         } catch (err) {
           console.error('Restaurant update error:', err);
-        }finally {
+        } finally {
           console.timeEnd("Supabase Update restaurants name");
         }
       })(),
@@ -1180,6 +1183,19 @@ if (form.tables_count && form.tables_count > originalTables) {
     <span>Show “Send to Kitchen” option on Counter Sale</span>
   </label>
 
+  <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+    <input
+      type="checkbox"
+      checked={!!form.features_menu_images_enabled}
+      onChange={(e) =>
+        setForm(f => ({
+          ...f,
+          features_menu_images_enabled: e.target.checked,
+        }))
+      }
+    />
+    <span>Enable Menu Item Images</span>
+  </label>
 </Section>
 
 

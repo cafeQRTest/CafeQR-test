@@ -166,6 +166,7 @@ export default function MenuPage() {
   const [editorItem, setEditorItem] = useState(null);
   const [showLibrary, setShowLibrary] = useState(false);
   const [viewImage, setViewImage] = useState(null);
+  const [enableMenuImages, setEnableMenuImages] = useState(false);
 
   // Persist restaurant ID when known
   useEffect(() => {
@@ -247,6 +248,14 @@ export default function MenuPage() {
           .or(`is_global.eq.true,restaurant_id.eq.${restaurantId}`)
           .order("name");
         if (catsErr) throw catsErr;
+
+        // Fetch settings
+        const { data: prof } = await supabase
+          .from("restaurant_profiles")
+          .select("features_menu_images_enabled")
+          .eq("restaurant_id", restaurantId)
+          .maybeSingle();
+        if (prof) setEnableMenuImages(!!prof.features_menu_images_enabled);
 
         const { data: its, error: itsErr } = await supabase
           .from("menu_items")
@@ -464,20 +473,20 @@ export default function MenuPage() {
                 <th className="hide-sm">Cess %</th>
                 <th className="hide-sm">Type</th>
                 <th>Status</th>
-                <th>Image</th>
+                {enableMenuImages && <th>Image</th>}
                 <th className="hide-mobile">Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={11} style={{ padding: 12 }}>
+                  <td colSpan={enableMenuImages ? 11 : 10} style={{ padding: 12 }}>
                     Loading…
                   </td>
                 </tr>
               ) : visible.length === 0 ? (
                 <tr>
-                  <td colSpan={11} style={{ padding: 12, color: "#666" }}>
+                  <td colSpan={enableMenuImages ? 11 : 10} style={{ padding: 12, color: "#666" }}>
                     No items found.
                   </td>
                 </tr>
@@ -591,28 +600,30 @@ export default function MenuPage() {
                           {available ? "Available" : "Out of Stock"}
                         </span>
                       </td>
-                      <td>
-                        {item.image_url ? (
-                          <div 
-                            onClick={() => setViewImage(item.image_url)}
-                            style={{ 
-                              width: 40, height: 40, 
-                              overflow: 'hidden', borderRadius: 6, 
-                              cursor: 'pointer', border: '1px solid #ddd',
-                              background: '#fff'
-                            }}
-                            title="Click to view"
-                          >
-                            <img 
-                              src={item.image_url} 
-                              alt="" 
-                              style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-                            />
-                          </div>
-                        ) : (
-                          <div style={{ width: 40, height: 40, background: '#f9fafb', borderRadius: 6, border: '1px dashed #e5e7eb' }} />
-                        )}
-                      </td>
+                      {enableMenuImages && (
+                        <td>
+                          {item.image_url ? (
+                            <div 
+                              onClick={() => setViewImage(item.image_url)}
+                              style={{ 
+                                width: 40, height: 40, 
+                                overflow: 'hidden', borderRadius: 6, 
+                                cursor: 'pointer', border: '1px solid #ddd',
+                                background: '#fff'
+                              }}
+                              title="Click to view"
+                            >
+                              <img 
+                                src={item.image_url} 
+                                alt="" 
+                                style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                              />
+                            </div>
+                          ) : (
+                            <div style={{ width: 40, height: 40, background: '#f9fafb', borderRadius: 6, border: '1px dashed #e5e7eb' }} />
+                          )}
+                        </td>
+                      )}
                       <td className="hide-mobile">
                         <div
                           className="row"
@@ -678,6 +689,7 @@ export default function MenuPage() {
         restaurantId={restaurantId}
         supabase={supabase}
         onSaved={handleSaved}
+        enableMenuImages={enableMenuImages}
       />
       <LibraryPicker
         open={showLibrary}

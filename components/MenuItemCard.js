@@ -15,32 +15,50 @@ const nonVegIcon = (
   </svg>
 );
 
-export default function MenuItemCard({ item, quantity = 0, onAdd, onRemove }) {
+export default function MenuItemCard({ item, quantity = 0, onAdd, onRemove, showImage = true }) {
   const hasImage = !!item.image_url;
+  const isOutOfStock = item.status === 'out_of_stock' || item.available === false || item.is_available === false;
+
   
   return (
     <div style={styles.card}>
-      <div style={styles.imageContainer}>
-        {hasImage ? (
-          <img 
-            src={item.image_url} 
-            alt={item.name}
-            style={styles.image}
-            loading="lazy"
-          />
-        ) : (
-          <div style={styles.placeholder}>
-            <span style={{ fontSize: 32, opacity: 0.3 }}>🍽️</span>
+      {showImage && (
+        <div style={styles.imageContainer}>
+          {hasImage ? (
+            <img 
+              src={item.image_url} 
+              alt={item.name}
+              style={{ ...styles.image, ...(isOutOfStock ? styles.outOfStockImage : {}) }}
+              loading="lazy"
+              onMouseEnter={(e) => e.target.style.transform = 'scale(1.05)'}
+              onMouseLeave={(e) => e.target.style.transform = 'scale(1)'}
+            />
+          ) : (
+            <div style={styles.placeholder}>
+              <span style={{ fontSize: 32, opacity: 0.3 }}>🍽️</span>
+            </div>
+          )}
+          {isOutOfStock && (
+            <div style={styles.outOfStockOverlay}>
+              <span style={styles.outOfStockText}>OUT OF STOCK</span>
+            </div>
+          )}
+          <div style={styles.typeBadge}>
+            {item.veg ? vegIcon : nonVegIcon}
           </div>
-        )}
-        <div style={styles.typeBadge}>
-          {item.veg ? vegIcon : nonVegIcon}
         </div>
-      </div>
+      )}
       
       <div style={styles.content}>
         <div style={styles.header}>
-          <h3 style={styles.title} title={item.name}>{item.name}</h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
+            {!showImage && (
+              <div style={{ flexShrink: 0 }}>
+                {item.veg ? vegIcon : nonVegIcon}
+              </div>
+            )}
+            <h3 style={styles.title} title={item.name}>{item.name}</h3>
+          </div>
           <span style={styles.price}>₹{Number(item.price).toFixed(2)}</span>
         </div>
         
@@ -54,8 +72,9 @@ export default function MenuItemCard({ item, quantity = 0, onAdd, onRemove }) {
               style={styles.addButton}
               onClick={() => onAdd(item)}
               aria-label={`Add ${item.name}`}
+              disabled={isOutOfStock}
             >
-              ADD
+              {isOutOfStock ? 'OUT OF STOCK' : 'ADD'}
             </button>
           ) : (
             <div style={styles.counter}>
@@ -78,9 +97,11 @@ export default function MenuItemCard({ item, quantity = 0, onAdd, onRemove }) {
           )}
         </div>
       </div>
+      {isOutOfStock && <div style={{position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.4)', pointerEvents: 'none', zIndex: 5}} />}
     </div>
   );
 }
+
 
 const styles = {
   card: {
@@ -96,16 +117,17 @@ const styles = {
   },
   imageContainer: {
     width: '100%',
-    aspectRatio: '4/3',
-    background: '#f3f4f6',
+    height: '140px', // More compact fixed height
+    background: 'linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%)',
     position: 'relative',
     overflow: 'hidden',
+    borderBottom: '1px solid var(--border)',
   },
   image: {
     width: '100%',
     height: '100%',
     objectFit: 'cover',
-    transition: 'transform 0.3s',
+    transition: 'transform 0.3s ease',
   },
   placeholder: {
     width: '100%',
@@ -113,17 +135,18 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    background: '#f9fafb',
+    background: 'linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%)',
   },
   typeBadge: {
     position: 'absolute',
-    top: 8,
-    right: 8,
-    background: 'rgba(255, 255, 255, 0.9)',
-    padding: 4,
+    top: 6,
+    right: 6,
+    background: 'rgba(255, 255, 255, 0.95)',
+    padding: '3px',
     borderRadius: 4,
     display: 'flex',
-    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
+    backdropFilter: 'blur(4px)',
   },
   content: {
     padding: '12px',
@@ -207,5 +230,26 @@ const styles = {
     fontSize: '14px',
     fontWeight: 700,
     color: 'var(--brand-600)',
+  },
+  outOfStockImage: {
+    filter: 'grayscale(100%)',
+    opacity: 0.6,
+  },
+  outOfStockOverlay: {
+    position: 'absolute',
+    inset: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: 'rgba(0,0,0,0.3)',
+    zIndex: 2,
+  },
+  outOfStockText: {
+    color: '#fff',
+    background: 'rgba(0,0,0,0.6)',
+    padding: '4px 8px',
+    borderRadius: 4,
+    fontSize: 11,
+    fontWeight: 700,
   },
 };

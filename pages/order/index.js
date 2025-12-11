@@ -30,6 +30,7 @@ export default function OrderPage() {
     menuMapRef.current = m
   }
   const [justAddedItem, setJustAddedItem] = useState('')
+  const [enableMenuImages, setEnableMenuImages] = useState(false)
   const addToastTimeoutRef = useRef(null)
 
   // 🔧 Fix for "data only comes after clearing browser cache" on QR flows.
@@ -108,7 +109,7 @@ export default function OrderPage() {
 
         const { data: rest, error: restErr } = await supabase
           .from('restaurants')
-          .select('id, name, online_paused, restaurant_profiles(brand_color, phone)')
+          .select('id, name, online_paused, restaurant_profiles(brand_color, phone, features_menu_images_enabled)')
           .eq('id', restaurantId)
           .single()
         if (restErr) throw restErr
@@ -184,6 +185,7 @@ export default function OrderPage() {
           cacheMenuIntoMap(cleaned)
           setIsOutsideHours(false)
           setHoursMessage('')
+          setEnableMenuImages(!!rest.restaurant_profiles?.features_menu_images_enabled)
         }
       } catch (e) {
         if (!cancelled) setError(e.message || 'Failed to load menu')
@@ -546,28 +548,160 @@ export default function OrderPage() {
           </div>
         )}
 
-        {Object.entries(groupedItems).map(([category, items]) => (
-          <section key={category} style={{ background: '#fff', marginBottom: 8, paddingBottom: 1 }}>
-            <HorizontalScrollRow
-              title={category}
-              count={items.length}
-              items={items}
-              renderItem={(item) => {
-                const quantity = getItemQuantity(item.id)
-                return (
-                  <div style={{ minWidth: '240px', maxWidth: '240px' }}>
-                    <MenuItemCard
-                      item={item}
-                      quantity={quantity}
-                      onAdd={() => addToCart(item)}
-                      onRemove={() => updateCartItem(item.id, quantity - 1)}
-                    />
-                  </div>
-                )
-              }}
-            />
-          </section>
-        ))}
+        {enableMenuImages ? (
+          // NEW LAYOUT: HorizontalScrollRow with MenuItemCard (when images enabled)
+          Object.entries(groupedItems).map(([category, items]) => (
+            <section key={category} style={{ background: '#fff', marginBottom: 8, paddingBottom: 1 }}>
+              <HorizontalScrollRow
+                title={category}
+                count={items.length}
+                items={items}
+                renderItem={(item) => {
+                  const quantity = getItemQuantity(item.id)
+                  return (
+                    <div style={{ minWidth: '240px', maxWidth: '240px' }}>
+                      <MenuItemCard
+                        item={item}
+                        quantity={quantity}
+                        onAdd={() => addToCart(item)}
+                        onRemove={() => updateCartItem(item.id, quantity - 1)}
+                        showImage={true}
+                      />
+                    </div>
+                  )
+                }}
+              />
+            </section>
+          ))
+        ) : (
+          // OLD LAYOUT: Simple vertical list (when images disabled)
+          Object.entries(groupedItems).map(([category, items]) => (
+            <section key={category} style={{ background: '#fff', marginBottom: 8, padding: '12px 16px' }}>
+              <h3 style={{ fontSize: 16, fontWeight: 600, margin: '0 0 12px 0', color: '#111827' }}>
+                {category} ({items.length})
+              </h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {items.map((item) => {
+                  const quantity = getItemQuantity(item.id);
+                  const isOutOfStock = item.status === 'out_of_stock' || item.available === false;
+                  return (
+                    <div 
+                      key={item.id}
+                      style={{
+                        display: 'flex',
+                        gap: 12,
+                        padding: 12,
+                        border: '1px solid #e5e7eb',
+                        borderRadius: 8,
+                        background: isOutOfStock ? '#f9fafb' : '#fff',
+                      }}
+                    >
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                          <span style={{ flexShrink: 0 }}>
+                            {item.veg ? (
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                                <rect x="1" y="1" width="22" height="22" stroke="#166534" strokeWidth="2" />
+                                <circle cx="12" cy="12" r="6" fill="#166534" />
+                              </svg>
+                            ) : (
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                                <rect x="1" y="1" width="22" height="22" stroke="#991b1b" strokeWidth="2" />
+                                <path d="M12 6L18 16H6L12 6Z" fill="#991b1b" />
+                              </svg>
+                            )}
+                          </span>
+                          <h4 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: '#111827' }}>
+                            {item.name}
+                          </h4>
+                        </div>
+                        {item.category && (
+                          <div style={{ fontSize: 11, color: '#6b7280', textTransform: 'uppercase', marginBottom: 4 }}>
+                            [{item.category}]
+                          </div>
+                        )}
+                        <div style={{ fontSize: 16, fontWeight: 700, color: brandColor }}>
+                          ₹{Number(item.price).toFixed(2)}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center' }}>
+                        {quantity === 0 ? (
+                          <button
+                            onClick={() => addToCart(item)}
+                            disabled={isOutOfStock}
+                            style={{
+                              padding: '8px 16px',
+                              background: isOutOfStock ? '#e5e7eb' : brandColor,
+                              color: '#fff',
+                              border: 'none',
+                              borderRadius: 6,
+                              fontWeight: 700,
+                              fontSize: 13,
+                              cursor: isOutOfStock ? 'not-allowed' : 'pointer',
+                              opacity: isOutOfStock ? 0.6 : 1,
+                            }}
+                          >
+                            {isOutOfStock ? 'OUT OF STOCK' : 'ADD'}
+                          </button>
+                        ) : (
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 8,
+                            background: `${brandColor}10`,
+                            padding: 4,
+                            borderRadius: 6,
+                            border: `1px solid ${brandColor}`,
+                          }}>
+                            <button
+                              onClick={() => updateCartItem(item.id, quantity - 1)}
+                              style={{
+                                width: 28,
+                                height: 28,
+                                border: 'none',
+                                background: 'transparent',
+                                color: brandColor,
+                                fontWeight: 'bold',
+                                fontSize: 16,
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                              }}
+                            >
+                              −
+                            </button>
+                            <span style={{ fontSize: 14, fontWeight: 700, color: brandColor, minWidth: 20, textAlign: 'center' }}>
+                              {quantity}
+                            </span>
+                            <button
+                              onClick={() => addToCart(item)}
+                              style={{
+                                width: 28,
+                                height: 28,
+                                border: 'none',
+                                background: 'transparent',
+                                color: brandColor,
+                                fontWeight: 'bold',
+                                fontSize: 16,
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                              }}
+                            >
+                              +
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          ))
+        )}
       </div>
 
       {justAddedItem && (
