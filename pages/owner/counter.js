@@ -1149,7 +1149,7 @@ window.dispatchEvent(
                               </button>
                               <div>{qty}</div>
                               <button
-                                onClick={() => updateCartItem(item.id, qty + 1)}
+                                onClick={() => addToCart(item)}
                                 disabled={!avail}
                                 style={{ background: THEME.main, color: '#fff' }}
                               >
