@@ -1690,7 +1690,7 @@ window.dispatchEvent(
 
           <style jsx>{`
             .counter-shell { min-height: 100vh; background: #f9fafb; padding-bottom: 80px; }
-            .counter-header { background: white; border-bottom: 1px solid #e5e7eb; position: sticky; top: 0; z-index: 40; }
+            .counter-header { background: white; border-bottom: 1px solid #e5e7eb; }
             .counter-header-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; }
             .counter-title { margin: 0; font-size: 1.25rem; font-weight: 700; color: #111827; }
             .counter-cart-info { font-size: 0.875rem; font-weight: 600; color: #4b5563; background: #f3f4f6; padding: 4px 12px; borderRadius: 999px; }

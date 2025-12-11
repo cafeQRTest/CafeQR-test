@@ -718,30 +718,32 @@ export default function ItemEditor({
                       ?.options.map((option, idx) => {
                         const variantPrice = variantPrices.find(vp => vp.option_id === option.id);
                         return (
-                          <div key={option.id} className="ie-variant-row">
-                            <span className="ie-variant-name">
-                              {option.name}
-                            </span>
-                            <div className="ie-price-input-wrapper">
-                              <span className="prefix">₹</span>
-                              <input
-                                type="number"
-                                placeholder="0.00"
-                                step="0.01"
-                                value={variantPrice?.price || ''}
-                                onChange={(e) => {
-                                  const newPrices = variantPrices.filter(vp => vp.option_id !== option.id);
-                                  newPrices.push({
-                                    option_id: option.id,
-                                    price: parseFloat(e.target.value) || 0,
-                                    is_available: variantPrice?.is_available ?? true
-                                  });
-                                  setVariantPrices(newPrices);
-                                }}
-                                className="ie-price-input"
-                              />
+                          <div key={option.id} className="ie-variant-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 6 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: 12 }}>
+                              <span className="ie-variant-name" style={{ flex: 1 }}>
+                                {option.name}
+                              </span>
+                              <div className="ie-price-input-wrapper">
+                                <span className="prefix">₹</span>
+                                <input
+                                  type="number"
+                                  placeholder="0.00"
+                                  step="0.01"
+                                  value={variantPrice?.price || ''}
+                                  onChange={(e) => {
+                                    const newPrices = variantPrices.filter(vp => vp.option_id !== option.id);
+                                    newPrices.push({
+                                      option_id: option.id,
+                                      price: parseFloat(e.target.value) || 0,
+                                      is_available: variantPrice?.is_available ?? true
+                                    });
+                                    setVariantPrices(newPrices);
+                                  }}
+                                  className="ie-price-input"
+                                />
+                              </div>
                             </div>
-                            <label className="ie-avail-label">
+                            <label className="ie-avail-label" style={{ marginLeft: 0 }}>
                               <input
                                 type="checkbox"
                                 checked={variantPrice?.is_available ?? true}
