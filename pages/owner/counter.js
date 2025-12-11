@@ -8,6 +8,7 @@ import { getSupabase } from '../../services/supabase';
 import MenuItemCard from '../../components/MenuItemCard';
 import MenuItemCardSimple from '../../components/MenuItemCardSimple';
 import VariantSelector from '../../components/VariantSelector';
+import NiceSelect from '../../components/NiceSelect';
 import { useAlert } from '../../context/AlertContext';
 import HorizontalScrollRow from '../../components/HorizontalScrollRow';
 
@@ -101,9 +102,18 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false, mode 
                 <input type="number" min="0" step="0.01" value={onlineAmount} onChange={(e)=>setOnlineAmount(e.target.value)} style={{width:'100%'}} disabled={disabled}/>
               </div>
               <div><label>Online Method</label>
-                <select value={onlineMethod} onChange={(e)=>setOnlineMethod(e.target.value)} style={{width:'100%'}} disabled={disabled}>
-                  <option value="upi">UPI</option><option value="card">Card</option><option value="netbanking">Net Banking</option><option value="wallet">Wallet</option>
-                </select>
+                <div style={{marginTop: 4}}>
+                  <NiceSelect
+                    value={onlineMethod}
+                    onChange={setOnlineMethod}
+                    options={[
+                      { value: 'upi', label: 'UPI' },
+                      { value: 'card', label: 'Card' },
+                      { value: 'netbanking', label: 'Net Banking' },
+                      { value: 'wallet', label: 'Wallet' }
+                    ]}
+                  />
+                </div>
               </div>
               <div style={{background:BRAND.bgSoft,padding:8,borderLeft:`4px solid ${BRAND.orange}`,borderRadius:6,color:BRAND.text}}>
                 Total ₹{total.toFixed(2)} → ₹{cashAmount||0} + ₹{onlineAmount||0} ({onlineMethod.toUpperCase()})
@@ -397,6 +407,10 @@ setProfileTax({
 
 // NEW: set credit feature flag
 setCreditFeatureEnabled(!!profile?.features_credit_enabled);
+
+// Set tables from profile count
+const tCount = profile?.tables_count || 0;
+setTables(Array.from({ length: tCount }, (_, i) => i + 1));
 setSendToKitchenEnabled(profile?.features_counter_send_to_kitchen_enabled !== false);
 setEnableMenuImages(!!profile?.features_menu_images_enabled);
 
@@ -955,14 +969,17 @@ window.dispatchEvent(
             <>
               {!showNewCreditCustomer ? (
                 <>
-                  <select value={selectedCreditCustomerId} onChange={(e) => handleSelectCreditCustomer(e.target.value)} className="select" style={{ flex: 1 }}>
-                    <option value="">Select Credit Customer...</option>
-                    {creditCustomers.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name} ({c.phone}) - Balance: ₹{c.current_balance.toFixed(2)}
-                      </option>
-                    ))}
-                  </select>
+                  <div style={{flex: 1}}>
+                    <NiceSelect
+                      value={selectedCreditCustomerId}
+                      onChange={handleSelectCreditCustomer}
+                      placeholder="Select Credit Customer..."
+                      options={creditCustomers.map(c => ({
+                        value: c.id,
+                        label: `${c.name} (${c.phone}) - ₹${c.current_balance.toFixed(2)}`
+                      }))}
+                    />
+                  </div>
                   <button onClick={() => setShowNewCreditCustomer(true)} className="btn" style={{ padding: '8px 12px', fontSize: 12 }}>
                     + New Customer
                   </button>
@@ -979,21 +996,33 @@ window.dispatchEvent(
                   </button>
                 </>
               )}
-              <select value={orderSelect} onChange={(e) => setOrderSelect(e.target.value)} className="select">
-                <option value="">Select Type...</option>
-                <option value="parcel">Parcel</option>
-                {tables.map((n) => (<option key={n} value={`table:${n}`}>{`Table ${n}`}</option>))}
-              </select>
+              <div style={{minWidth: 160}}>
+                <NiceSelect
+                  value={orderSelect}
+                  onChange={setOrderSelect}
+                  placeholder="Select Type..."
+                  options={[
+                    { value: 'parcel', label: 'Parcel' },
+                    ...tables.map(n => ({ value: `table:${n}`, label: `Table ${n}` }))
+                  ]}
+                />
+              </div>
             </>
           ) : (
             <>
   <input type="text" placeholder="Customer name (optional)" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="input" />
   <input type="tel" placeholder="Phone (optional)" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} className="input" />
-  <select value={orderSelect} onChange={(e) => setOrderSelect(e.target.value)} className="select">
-    <option value="">Select Type...</option>
-    <option value="parcel">Parcel</option>
-    {tables.map((n) => (<option key={n} value={`table:${n}`}>{`Table ${n}`}</option>))}
-  </select>
+  <div style={{minWidth: 160}}>
+    <NiceSelect
+      value={orderSelect}
+      onChange={setOrderSelect}
+      placeholder="Select Type..."
+      options={[
+        { value: 'parcel', label: 'Parcel' },
+        ...tables.map(n => ({ value: `table:${n}`, label: `Table ${n}` }))
+      ]}
+    />
+  </div>
 </>
 
           )}
@@ -1659,6 +1688,56 @@ window.dispatchEvent(
   </div>
 )}
 
-          </div>
+          <style jsx>{`
+            .counter-shell { min-height: 100vh; background: #f9fafb; padding-bottom: 80px; }
+            .counter-header { background: white; border-bottom: 1px solid #e5e7eb; position: sticky; top: 0; z-index: 40; }
+            .counter-header-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; }
+            .counter-title { margin: 0; font-size: 1.25rem; font-weight: 700; color: #111827; }
+            .counter-cart-info { font-size: 0.875rem; font-weight: 600; color: #4b5563; background: #f3f4f6; padding: 4px 12px; borderRadius: 999px; }
+            
+            .counter-main-mobile-like { padding: 16px; max-width: 1280px; margin: 0 auto; }
+            
+            .counter-menu-items { display: flex; flex-direction: column; gap: 24px; }
+            
+            .counter-category-title { font-size: 1.125rem; font-weight: 700; color: #374151; margin: 0 0 12px 0; }
+            
+            .counter-category-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+            @media (min-width: 640px) { .counter-category-grid { grid-template-columns: repeat(3, 1fr); } }
+            @media (min-width: 1024px) { .counter-category-grid { grid-template-columns: repeat(4, 1fr); } }
+            @media (min-width: 1280px) { .counter-category-grid { grid-template-columns: repeat(5, 1fr); } }
+            
+            .counter-item-card { background: white; border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px; display: flex; flex-direction: column; justify-content: space-between; gap: 8px; height: 100%; transition: all 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+            .counter-item-card:active { transform: scale(0.98); }
+            .item-out { opacity: 0.6; pointer-events: none; filter: grayscale(1); }
+            
+            .counter-item-info { display: flex; gap: 8px; }
+            .counter-item-info h3 { margin: 0; font-size: 0.95rem; font-weight: 600; color: #111827; line-height: 1.3; }
+            .counter-item-info div { font-weight: 700; color: #374151; font-size: 0.9rem; margin-top: 2px; }
+            
+            .counter-item-actions { margin-top: auto; }
+            .counter-cart-qty { display: flex; align-items: center; justify-content: space-between; border-radius: 8px; overflow: hidden; border: 1px solid #e5e7eb; height: 36px; }
+            .counter-cart-qty button { width: 36px; height: 100%; border: none; font-size: 1.25rem; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+            .counter-cart-qty div { font-weight: 600; color: #111827; font-size: 0.95rem; }
+            
+            .counter-mobile-cart-btn { position: fixed; bottom: 16px; left: 16px; right: 16px; padding: 16px; border-radius: 12px; color: white; border: none; font-weight: 700; font-size: 1rem; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05); z-index: 50; display: flex; justify-content: center; align-items: center; gap: 8px; animation: slideUp 0.3s ease-out; }
+            @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+            
+            .counter-drawer-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; display: flex; justify-content: flex-end; backdrop-filter: blur(2px); animation: fadeIn 0.2s ease-out; }
+            .counter-drawer { width: 100%; max-width: 450px; background: #f9fafb; height: 100%; display: flex; flex-direction: column; box-shadow: -4px 0 24px rgba(0,0,0,0.15); animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+            @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
+            @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+            
+            .sales-carousel-btn { white-space: nowrap; padding: 8px 16px; border-radius: 999px; font-size: 0.875rem; font-weight: 600; border: 1px solid; cursor: pointer; transition: all 0.2s; }
+            .sales-carousel-btn.active { box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+            
+            /* Responsive Utilities */
+            @media (max-width: 640px) {
+              .counter-title { font-size: 1.125rem; }
+              .counter-cart-info { font-size: 0.75rem; }
+              .counter-main-mobile-like { padding: 12px; }
+              .counter-category-title { font-size: 1rem; margin-bottom: 8px; }
+            }
+          `}</style>
+        </div>
   );
 }

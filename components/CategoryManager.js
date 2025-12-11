@@ -93,45 +93,45 @@ export default function CategoryManager({ restaurantId, onClose, onSaved }) {
   };
 
   return (
-    <div style={styles.overlay} onClick={onClose}>
-      <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
-        <div style={styles.header}>
-          <h2 style={styles.title}>Manage Categories</h2>
-          <button style={styles.closeBtn} onClick={onClose}>&times;</button>
+    <div className="cm-overlay" onClick={onClose}>
+      <div className="cm-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="cm-header">
+          <h2 className="cm-title">Manage Categories</h2>
+          <button className="cm-close-btn" onClick={onClose}>&times;</button>
         </div>
 
-        <div style={styles.content}>
+        <div className="cm-content">
           {error && (
-            <div style={styles.error}>{error}</div>
+            <div className="cm-error">{error}</div>
           )}
 
           {/* Create New Category */}
-          <div style={styles.section}>
-            <div style={styles.label}>Create New Category</div>
-            <div style={styles.inputGroup}>
+          <div className="cm-section">
+            <div className="cm-label">Create New Category</div>
+            <div className="cm-input-group">
               <input
                 type="text"
                 placeholder="e.g. Appetizers"
                 value={newCategoryName}
                 onChange={(e) => setNewCategoryName(e.target.value)}
-                style={styles.input}
+                className="cm-input"
                 onKeyDown={(e) => e.key === 'Enter' && createCategory()}
               />
-              <button onClick={createCategory} style={styles.primaryBtn}>
+              <button onClick={createCategory} className="cm-primary-btn">
                 Add
               </button>
             </div>
           </div>
 
-          <div style={{ borderTop: '1px solid #e5e7eb', margin: '20px 0' }}></div>
+          <div className="cm-divider"></div>
 
           {/* Existing Categories */}
-          <div style={styles.section}>
-            <div style={styles.label}>Manage Existing Categories</div>
+          <div className="cm-section">
+            <div className="cm-label">Manage Existing Categories</div>
             {loading ? (
-              <div style={styles.loading}>Loading...</div>
+              <div className="cm-loading">Loading...</div>
             ) : categories.length === 0 ? (
-              <div style={styles.empty}>No categories found.</div>
+              <div className="cm-empty">No categories found.</div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <NiceSelect
@@ -154,46 +154,46 @@ export default function CategoryManager({ restaurantId, onClose, onSaved }) {
                 />
 
                 {editingCategoryId && (
-                  <div style={styles.editPanel}>
+                  <div className="cm-edit-panel">
                     {categories.find(c => c.id === editingCategoryId)?.is_global ? (
-                      <div style={styles.infoBox}>
+                      <div className="cm-info-box">
                          ℹ️ Global categories cannot be edited or deleted.
                       </div>
                     ) : (
                       <>
-                        <div style={styles.label}>Edit Name</div>
-                        <div style={styles.inputGroup}>
+                        <div className="cm-label">Edit Name</div>
+                        <div className="cm-input-group">
                           <input
                             type="text"
                             value={editName}
                             onChange={(e) => setEditName(e.target.value)}
-                            style={styles.input}
+                            className="cm-input"
                             placeholder="Category name"
                           />
                           <button
                             onClick={() => updateCategory(editingCategoryId, editName)}
-                            style={styles.secondaryBtn}
+                            className="cm-secondary-btn"
                           >
                             Save
                           </button>
                         </div>
                         
-                        <div style={{ marginTop: 16, borderTop: '1px solid #e5e7eb', paddingTop: 16 }}>
+                        <div className="cm-delete-section">
                           {deleteConfirm === editingCategoryId ? (
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fee2e2', padding: '10px 14px', borderRadius: 8 }}>
-                              <span style={{ color: '#991b1b', fontSize: 13, fontWeight: 500 }}>
+                            <div className="cm-confirm-row">
+                              <span className="cm-confirm-text">
                                 Are you sure? This cannot be undone.
                               </span>
-                              <div style={{ display: 'flex', gap: 8 }}>
+                              <div className="cm-confirm-actions">
                                 <button 
                                   onClick={() => setDeleteConfirm(null)}
-                                  style={{ ...styles.smallBtn, background: 'white', border: '1px solid #fecaca', color: '#991b1b' }}
+                                  className="cm-small-btn cm-cancel"
                                 >
                                   Cancel
                                 </button>
                                 <button 
                                   onClick={() => deleteCategory(editingCategoryId)}
-                                  style={{ ...styles.smallBtn, background: '#dc2626', color: 'white' }}
+                                  className="cm-small-btn cm-delete"
                                 >
                                   Delete
                                 </button>
@@ -203,7 +203,7 @@ export default function CategoryManager({ restaurantId, onClose, onSaved }) {
                             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                               <button
                                 onClick={() => setDeleteConfirm(editingCategoryId)}
-                                style={styles.deleteLinkBtn}
+                                className="cm-delete-link-btn"
                               >
                                 Delete Category
                               </button>
@@ -219,158 +219,91 @@ export default function CategoryManager({ restaurantId, onClose, onSaved }) {
           </div>
         </div>
       </div>
+
+      <style jsx>{`
+        .cm-overlay {
+          position: fixed; inset: 0;
+          background: rgba(15, 23, 42, 0.45);
+          display: flex; align-items: center; justify-content: center;
+          z-index: 1000; padding: 16px;
+          backdrop-filter: blur(4px);
+        }
+        .cm-modal {
+          background: white;
+          border-radius: 16px;
+          width: 100%; max-width: 500px;
+          min-height: 400px; max-height: 85vh;
+          display: flex; flex-direction: column;
+          box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        }
+        @media (max-width: 640px) {
+          .cm-modal { min-height: auto; max-height: 90vh; }
+        }
+        .cm-header {
+          padding: 16px 24px; border-bottom: 1px solid #f3f4f6;
+          display: flex; justify-content: space-between; align-items: center;
+          background: #ffffff; border-radius: 16px 16px 0 0;
+        }
+        .cm-title { margin: 0; font-size: 18px; font-weight: 700; color: #111827; }
+        .cm-close-btn {
+          background: transparent; border: none; font-size: 24px;
+          color: #9ca3af; cursor: pointer; padding: 0; line-height: 1;
+        }
+        .cm-content { padding: 24px; overflow-y: auto; flex: 1; padding-bottom: 150px; }
+        .cm-section { display: flex; flex-direction: column; gap: 12px; }
+        .cm-label { font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 4px; }
+        .cm-input-group { display: flex; gap: 10px; }
+        @media (max-width: 480px) {
+           .cm-input-group { flex-direction: column; }
+           .cm-primary-btn, .cm-secondary-btn { width: 100%; }
+        }
+        .cm-input {
+          flex: 1; padding: 10px 12px; border: 1px solid #d1d5db;
+          border-radius: 8px; font-size: 14px; outline: none; background: #f9fafb;
+        }
+        .cm-primary-btn {
+          padding: 0 16px; background: #f97316; color: white; border: none;
+          border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 14px; height: 40px;
+        }
+        .cm-secondary-btn {
+          padding: 0 16px; background: white; color: #374151; border: 1px solid #d1d5db;
+          border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 14px; height: 40px;
+        }
+        .cm-divider { border-top: 1px solid #e5e7eb; margin: 20px 0; }
+        .cm-edit-panel {
+          padding: 20px; background-color: #ffffff; border-radius: 12px;
+          border: 1px solid #e5e7eb; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        }
+        .cm-info-box {
+          font-size: 13px; color: #6b7280; background: #f9fafb;
+          padding: 12px; border-radius: 8px; font-style: italic;
+        }
+        .cm-delete-section { margin-top: 16px; border-top: 1px solid #e5e7eb; padding-top: 16px; }
+        .cm-confirm-row {
+          display: flex; align-items: center; justify-content: space-between;
+          background: #fee2e2; padding: 10px 14px; border-radius: 8px; flex-wrap: wrap; gap: 10px;
+        }
+        @media (max-width: 480px) {
+           .cm-confirm-row { justify-content: center; text-align: center; }
+        }
+        .cm-confirm-text { color: #991b1b; font-size: 13px; font-weight: 500; }
+        .cm-confirm-actions { display: flex; gap: 8px; }
+        .cm-small-btn {
+          padding: 6px 12px; border-radius: 6px; border: none;
+          font-size: 12px; font-weight: 600; cursor: pointer;
+        }
+        .cm-cancel { background: white; border: 1px solid #fecaca; color: #991b1b; }
+        .cm-delete { background: #dc2626; color: white; }
+        .cm-delete-link-btn {
+          background: none; border: none; color: #dc2626; font-size: 13px;
+          font-weight: 600; cursor: pointer; padding: 4px 8px; border-radius: 6px;
+        }
+        .cm-error {
+          background: #fef2f2; color: #b91c1c; padding: 12px; border-radius: 8px;
+          margin-bottom: 20px; font-size: 14px; border: 1px solid #fecaca;
+        }
+        .cm-loading, .cm-empty { text-align: center; padding: 20px; color: #9ca3af; font-size: 14px; }
+      `}</style>
     </div>
   );
 }
-
-const styles = {
-  overlay: {
-    position: 'fixed',
-    inset: 0,
-    background: 'rgba(15, 23, 42, 0.45)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 1000,
-    padding: 20,
-    backdropFilter: 'blur(4px)',
-  },
-  modal: {
-    background: 'white',
-    borderRadius: 16,
-    width: '100%',
-    maxWidth: 500,
-    minHeight: 500, // Enforce minimum height
-    maxHeight: '85vh',
-    display: 'flex',
-    flexDirection: 'column',
-    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-    // overflow: 'hidden', // Removed to prevent clipping if possible, though 'content' scrolls
-  },
-  header: {
-    padding: '16px 24px',
-    borderBottom: '1px solid #f3f4f6',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    background: '#ffffff',
-  },
-  title: {
-    margin: 0,
-    fontSize: 18,
-    fontWeight: 700,
-    color: '#111827',
-  },
-  closeBtn: {
-    background: 'transparent',
-    border: 'none',
-    fontSize: 24,
-    color: '#9ca3af',
-    cursor: 'pointer',
-    padding: 0,
-    lineHeight: 1,
-  },
-  content: {
-    padding: 24,
-    overflowY: 'auto',
-    flex: 1,
-    paddingBottom: 150, // Added extra padding at bottom for dropdown space
-  },
-  section: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 12,
-  },
-  label: {
-    fontSize: 13,
-    fontWeight: 600,
-    color: '#374151',
-    marginBottom: 4,
-  },
-  inputGroup: {
-    display: 'flex',
-    gap: 10,
-  },
-  input: {
-    flex: 1,
-    padding: '10px 12px',
-    border: '1px solid #d1d5db',
-    borderRadius: 8,
-    fontSize: 14,
-    outline: 'none',
-    background: '#f9fafb',
-  },
-  primaryBtn: {
-    padding: '0 16px',
-    background: '#f97316',
-    color: 'white',
-    border: 'none',
-    borderRadius: 8,
-    fontWeight: 600,
-    cursor: 'pointer',
-    fontSize: 14,
-  },
-  secondaryBtn: {
-    padding: '0 16px',
-    background: 'white',
-    color: '#374151',
-    border: '1px solid #d1d5db',
-    borderRadius: 8,
-    fontWeight: 600,
-    cursor: 'pointer',
-    fontSize: 14,
-  },
-  deleteLinkBtn: {
-    background: 'none',
-    border: 'none',
-    color: '#dc2626',
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: 'pointer',
-    padding: '4px 8px',
-    borderRadius: 6,
-  },
-  smallBtn: {
-    padding: '6px 12px',
-    borderRadius: 6,
-    border: 'none',
-    fontSize: 12,
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
-  editPanel: {
-    padding: 20,
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    border: '1px solid #e5e7eb',
-    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
-  },
-  infoBox: {
-    fontSize: 13,
-    color: '#6b7280',
-    background: '#f9fafb',
-    padding: 12,
-    borderRadius: 8,
-    fontStyle: 'italic',
-  },
-  error: {
-    background: '#fef2f2',
-    color: '#b91c1c',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 20,
-    fontSize: 14,
-    border: '1px solid #fecaca',
-  },
-  loading: {
-    textAlign: 'center',
-    padding: 20,
-    color: '#9ca3af',
-  },
-  empty: {
-    textAlign: 'center',
-    padding: 20,
-    color: '#9ca3af',
-    fontSize: 14,
-  },
-};

@@ -485,18 +485,18 @@ export default function MenuPage() {
                     onChange={toggleSelectAll}
                   />
                 </th>
-                <th>Name</th>
+                <th className="col-name">Name</th>
                 <th className="hide-sm">Code</th>
-                <th className="hide-sm">Category</th>
+                <th className="hide-sm col-cat">Category</th>
                 <th>Price</th>
                 <th className="hide-sm">HSN</th>
                 <th className="hide-md">Tax %</th>
                 <th className="hide-sm">Cess %</th>
                 <th className="hide-sm">Type</th>
-                <th>Status</th>
+                <th className="hide-sm">Status</th>
                 <th className="hide-sm">Variants</th>
                 {enableMenuImages && <th>Image</th>}
-                <th className="hide-mobile">Actions</th>
+                <th className="hide-mobile col-actions" style={{ textAlign: 'right' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -533,14 +533,20 @@ export default function MenuPage() {
                             gap: 6,
                           }}
                         >
-                          <span
+                          <div
                             style={{
                               fontWeight: 600,
-                              overflowWrap: "anywhere",
+                              overflowWrap: "break-word",
+                              display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap'
                             }}
                           >
                             {item.name}
-                          </span>
+                            {item.veg && (
+                              <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#dcfce7', color: '#166534', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                                VEG
+                              </span>
+                            )}
+                          </div>
                           <span className="only-mobile mobile-actions">
                             <Button
                               size="sm"
@@ -613,11 +619,12 @@ export default function MenuPage() {
                           {typeBadge}
                         </span>
                       </td>
-                      <td>
+                      <td className="hide-sm">
                         <span
                           className={`chip ${
                             available ? "chip--avail" : "chip--out"
                           }`}
+                          style={{ whiteSpace: 'nowrap' }}
                         >
                           {available ? "Available" : "Out of Stock"}
                         </span>
@@ -655,7 +662,7 @@ export default function MenuPage() {
                           style={{
                             justifyContent: "flex-end",
                             gap: 6,
-                            flexWrap: "wrap",
+                            flexWrap: "nowrap",
                           }}
                         >
                           <Button
@@ -774,6 +781,35 @@ export default function MenuPage() {
           </div>
         </div>
       )}
+      <style jsx>{`
+        .table th {
+          white-space: nowrap;
+          padding: 12px 10px;
+          border-bottom: 2px solid #e5e7eb;
+          color: #374151;
+          font-weight: 600;
+        }
+        .table td {
+          vertical-align: middle;
+          padding: 12px 10px;
+        }
+        .table tbody tr:hover {
+          background-color: #f9fafb;
+        }
+        
+        /* Column Widths */
+        .col-name { min-width: 160px; max-width: 240px; }
+        .col-cat { min-width: 100px; }
+        .col-actions { min-width: 130px; }
+
+        /* Mobile Responsive Overrides */
+        @media (max-width: 640px) {
+          .table th, .table td {
+            padding: 10px 8px;
+          }
+          .col-name { min-width: auto; max-width: none; }
+        }
+      `}</style>
     </div>
   );
 }

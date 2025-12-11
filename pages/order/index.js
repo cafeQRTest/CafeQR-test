@@ -321,24 +321,8 @@ export default function OrderPage() {
   }
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        background: '#f8f9fa',
-        paddingBottom: cartItemsCount > 0 ? '90px' : '0',
-        fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif'
-      }}
-    >
-      <header
-        style={{
-          padding: '1rem',
-          background: '#fff',
-          borderBottom: '1px solid #e5e7eb',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12
-        }}
-      >
+    <div className="cust-page">
+      <header className="cust-header">
         <button
           onClick={() => router.back()}
           style={{ background: 'none', border: 'none', padding: 8, cursor: 'pointer' }}
@@ -725,18 +709,8 @@ export default function OrderPage() {
 
       {cartItemsCount > 0 && (
         <div
-          style={{
-            position: 'fixed',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            background: brandColor,
-            color: '#fff',
-            padding: '12px 16px',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center'
-          }}
+          className="cust-cart-bar"
+          style={{ background: brandColor }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1 }}>
             <span>🛒</span>
@@ -763,6 +737,19 @@ export default function OrderPage() {
           </Link>
         </div>
       )}
+
+
+    <style jsx>{`
+      .cust-page { min-height: 100vh; background: #f8f9fa; font-family: system-ui, -apple-system, sans-serif; padding-bottom: 90px; }
+      @media (min-width: 768px) { .cust-page { padding-bottom: 0; max-width: 800px; margin: 0 auto; background: #fff; box-shadow: 0 0 40px rgba(0,0,0,0.05); min-height: 100vh; position: relative; } }
+      
+      .cust-header { padding: 16px; background: white; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 50; }
+      
+      .cust-cart-bar { position: fixed; bottom: 0; left: 0; right: 0; color: white; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; z-index: 100; box-shadow: 0 -4px 10px rgba(0,0,0,0.1); }
+      @media (min-width: 768px) { .cust-cart-bar { position: sticky; bottom: 20px; left: 20px; right: 20px; width: calc(100% - 40px); margin: 0 auto 20px auto; border-radius: 12px; } }
+      
+      /* Additional responsive helpers can be added here */
+    `}</style>
     </div>
-  )
+  );
 }

@@ -99,41 +99,41 @@ export default function VariantManager({ onClose, onSaved }) {
   };
 
   return (
-    <div style={styles.overlay} onClick={onClose}>
-      <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
-        <div style={styles.header}>
-          <h2 style={styles.title}>Manage Variant Templates</h2>
-          <button style={styles.closeBtn} onClick={onClose}>&times;</button>
+    <div className="vm-overlay" onClick={onClose}>
+      <div className="vm-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="vm-header">
+          <h2 className="vm-title">Manage Variant Templates</h2>
+          <button className="vm-close-btn" onClick={onClose}>&times;</button>
         </div>
 
-        <div style={styles.content}>
+        <div className="vm-content">
           {/* Create New Template */}
-          <div style={styles.section}>
-            <h3 style={styles.label}>Create New Template</h3>
-            <div style={styles.inputGroup}>
+          <div className="vm-section">
+            <h3 className="vm-label">Create New Template</h3>
+            <div className="vm-input-group">
               <input
                 type="text"
                 placeholder="e.g. Size, Spice Level"
                 value={newTemplateName}
                 onChange={(e) => setNewTemplateName(e.target.value)}
-                style={styles.input}
+                className="vm-input"
                 onKeyDown={(e) => e.key === 'Enter' && createTemplate()}
               />
-              <button onClick={createTemplate} style={styles.primaryBtn}>
+              <button onClick={createTemplate} className="vm-primary-btn">
                 Create
               </button>
             </div>
           </div>
 
-          <div style={{ borderTop: '1px solid #e5e7eb', margin: '20px 0' }}></div>
+          <div className="vm-divider"></div>
 
           {/* Existing Templates */}
-          <div style={styles.section}>
-            <h3 style={styles.label}>Manage Existing Templates</h3>
+          <div className="vm-section">
+            <h3 className="vm-label">Manage Existing Templates</h3>
             {loading ? (
-              <div style={styles.loading}>Loading...</div>
+              <div className="vm-loading">Loading...</div>
             ) : templates.length === 0 ? (
-              <div style={styles.empty}>No templates available.</div>
+              <div className="vm-empty">No templates available.</div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <NiceSelect
@@ -156,51 +156,51 @@ export default function VariantManager({ onClose, onSaved }) {
                   if (!template) return null;
                   
                   return (
-                    <div style={styles.templateCard}>
-                      <div style={styles.templateHeader}>
-                        <div style={styles.templateName}>{template.name}</div>
+                    <div className="vm-template-card">
+                      <div className="vm-template-header">
+                        <div className="vm-template-name">{template.name}</div>
                         {deleteTemplateId === template.id ? (
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fee2e2', padding: '6px 12px', borderRadius: 8, flex: 1, marginLeft: 16 }}>
-                            <span style={{ color: '#991b1b', fontSize: 13, fontWeight: 500 }}>
+                          <div className="vm-confirm-row">
+                            <span className="vm-confirm-text">
                               Are you sure? This cannot be undone.
                             </span>
-                            <div style={{ display: 'flex', gap: 8 }}>
-                              <button onClick={() => setDeleteTemplateId(null)} style={styles.cancelBtnSmall}>Cancel</button>
-                              <button onClick={() => deleteTemplate(template.id)} style={styles.confirmBtnSmall}>Delete</button>
+                            <div className="vm-confirm-actions">
+                              <button onClick={() => setDeleteTemplateId(null)} className="vm-small-btn vm-cancel">Cancel</button>
+                              <button onClick={() => deleteTemplate(template.id)} className="vm-small-btn vm-delete">Delete</button>
                             </div>
                           </div>
                         ) : (
                           <button
                             onClick={() => setDeleteTemplateId(template.id)}
-                            style={styles.deleteLinkBtn}
+                            className="vm-delete-link-btn"
                           >
                             Delete Template
                           </button>
                         )}
                       </div>
 
-                      <div style={styles.divider}></div>
+                      <div className="vm-divider-small"></div>
 
                       {/* Options List */}
-                      <div style={styles.optionsLabel}>Options</div>
-                      <div style={styles.optionsList}>
+                      <div className="vm-options-label">Options</div>
+                      <div className="vm-options-list">
                         {template.options?.length === 0 && (
-                          <div style={styles.emptyOptions}>No options added yet.</div>
+                          <div className="vm-empty-options">No options added yet.</div>
                         )}
                         {template.options?.map((option, idx) => (
-                          <div key={option.id} style={styles.optionItem}>
-                            <span style={styles.optionName}>{idx + 1}. {option.name}</span>
+                          <div key={option.id} className="vm-option-item">
+                            <span className="vm-option-name">{idx + 1}. {option.name}</span>
                             
                             {deleteOptionId === option.id ? (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fee2e2', padding: '2px 8px', borderRadius: 6 }}>
-                                <span style={{ color: '#991b1b', fontSize: 12 }}>Sure?</span>
-                                <button onClick={() => deleteOption(option.id)} style={styles.confirmBtnSmall}>Yes</button>
-                                <button onClick={() => setDeleteOptionId(null)} style={styles.cancelBtnSmall}>No</button>
+                              <div className="vm-confirm-row-small">
+                                <span className="vm-confirm-text-small">Sure?</span>
+                                <button onClick={() => deleteOption(option.id)} className="vm-tiny-btn vm-delete">Yes</button>
+                                <button onClick={() => setDeleteOptionId(null)} className="vm-tiny-btn vm-cancel">No</button>
                               </div>
                             ) : (
                               <button
                                 onClick={() => setDeleteOptionId(option.id)}
-                                style={styles.deleteOptionBtn}
+                                className="vm-delete-option-btn"
                                 title="Remove option"
                               >
                                 &times;
@@ -211,18 +211,18 @@ export default function VariantManager({ onClose, onSaved }) {
                       </div>
 
                       {/* Add Option Form */}
-                      <div style={styles.addOptionForm}>
+                      <div className="vm-add-option-form">
                         <input
                           type="text"
                           placeholder="New option name"
                           value={newOptionName}
                           onChange={(e) => setNewOptionName(e.target.value)}
-                          style={styles.inputSmall}
+                          className="vm-input-small"
                           onKeyDown={(e) => e.key === 'Enter' && addOption(template.id)}
                         />
                         <button
                           onClick={() => addOption(template.id)}
-                          style={styles.secondaryBtnSmall}
+                          className="vm-secondary-btn-small"
                         >
                           Add Option
                         </button>
@@ -235,254 +235,123 @@ export default function VariantManager({ onClose, onSaved }) {
           </div>
         </div>
       </div>
+
+      <style jsx>{`
+        .vm-overlay {
+          position: fixed; inset: 0;
+          background: rgba(15, 23, 42, 0.45);
+          display: flex; align-items: center; justify-content: center;
+          z-index: 1000; padding: 16px;
+          backdrop-filter: blur(4px);
+        }
+        .vm-modal {
+          background: white; border-radius: 16px;
+          width: 100%; max-width: 500px;
+          min-height: 500px; max-height: 85vh;
+          display: flex; flex-direction: column;
+          box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        }
+        @media (max-width: 640px) {
+          .vm-modal { min-height: auto; max-height: 90vh; }
+        }
+        .vm-header {
+          padding: 16px 24px; border-bottom: 1px solid #f3f4f6;
+          display: flex; justify-content: space-between; align-items: center;
+          background: #ffffff; border-radius: 16px 16px 0 0;
+        }
+        .vm-title { margin: 0; fontSize: 18px; fontWeight: 700; color: #111827; }
+        .vm-close-btn {
+          background: transparent; border: none; fontSize: 24px;
+          color: #9ca3af; cursor: pointer; padding: 0; line-height: 1;
+        }
+        .vm-content { padding: 24px; overflow-y: auto; flex: 1; padding-bottom: 150px; }
+        .vm-section { display: flex; flex-direction: column; gap: 12px; }
+        .vm-label { fontSize: 13px; fontWeight: 600; color: #374151; margin-bottom: 4px; }
+        .vm-input-group { display: flex; gap: 10px; }
+        @media (max-width: 480px) {
+           .vm-input-group { flex-direction: column; }
+           .vm-primary-btn { width: 100%; }
+        }
+        .vm-input {
+          flex: 1; padding: 10px 12px; border: 1px solid #d1d5db;
+          border-radius: 8px; fontSize: 14px; outline: none; background: #f9fafb;
+        }
+        .vm-input-small {
+          flex: 1; padding: 8px 10px; border: 1px solid #d1d5db;
+          border-radius: 6px; fontSize: 13px; outline: none; background: #ffffff;
+        }
+        .vm-primary-btn {
+          padding: 0 16px; background: #f97316; color: white; border: none;
+          border-radius: 8px; fontWeight: 600; cursor: pointer; fontSize: 14px; height: 40px;
+        }
+        .vm-secondary-btn-small {
+          padding: 0 12px; background: white; color: #374151; border: 1px solid #d1d5db;
+          border-radius: 6px; fontWeight: 500; cursor: pointer; fontSize: 13px; height: 35px;
+        }
+        .vm-template-card {
+          padding: 20px; background-color: #ffffff; border-radius: 12px;
+          border: 1px solid #e5e7eb; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        }
+        .vm-template-header {
+          display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;
+        }
+        .vm-template-name { fontSize: 16px; fontWeight: 600; color: #111827; }
+        .vm-delete-link-btn {
+          background: none; border: none; color: #dc2626; fontSize: 13px;
+          fontWeight: 600; cursor: pointer; padding: 4px 8px; border-radius: 6px;
+        }
+        .vm-divider { border-top: 1px solid #e5e7eb; margin: 20px 0; }
+        .vm-divider-small { height: 1px; background: #f3f4f6; margin: 12px 0; }
+        .vm-options-label {
+          fontSize: 12px; fontWeight: 600; color: #6b7280; margin-bottom: 8px;
+          text-transform: uppercase; letter-spacing: 0.05em;
+        }
+        .vm-options-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+        .vm-option-item {
+          display: flex; justify-content: space-between; align-items: center;
+          padding: 8px 12px; background: #f9fafb; border-radius: 6px;
+          font-size: 14px; border: 1px solid #f3f4f6;
+        }
+        .vm-option-name { color: #374151; fontWeight: 500; }
+        .vm-delete-option-btn {
+          background: none; border: none; color: #9ca3af; font-size: 20px;
+          cursor: pointer; line-height: 1; padding: 0 4px; display: flex;
+          align-items: center;
+        }
+        .vm-empty-options { fontSize: 13px; color: #9ca3af; font-style: italic; padding: 4px 0; }
+        .vm-add-option-form { display: flex; gap: 8px; margin-top: 8px; }
+        @media (max-width: 480px) {
+           .vm-add-option-form { flex-direction: column; }
+           .vm-secondary-btn-small { width: 100%; }
+        }
+        .vm-loading, .vm-empty { text-align: center; padding: 24px; color: #9ca3af; font-size: 14px; }
+        .vm-confirm-row {
+          display: flex; align-items: center; justify-content: space-between;
+          background: #fee2e2; padding: 6px 12px; border-radius: 8px; flex: 1;
+          margin-left: 16px; flex-wrap: wrap; gap: 8px;
+        }
+        @media (max-width: 500px) {
+           .vm-confirm-row { margin-left: 0; width: 100%; justify-content: center; text-align: center; }
+           .vm-template-header { justify-content: center; text-align: center; flex-direction: column; }
+        }
+        .vm-confirm-row-small {
+          display: flex; align-items: center; gap: 8px; background: #fee2e2;
+          padding: 2px 8px; border-radius: 6px;
+        }
+        .vm-confirm-text { color: #991b1b; fontSize: 13px; fontWeight: 500; }
+        .vm-confirm-text-small { color: #991b1b; fontSize: 12px; }
+        .vm-confirm-actions { display: flex; gap: 8px; }
+        .vm-small-btn {
+          border-radius: 6px; border: none; padding: 4px 10px;
+          font-size: 12px; cursor: pointer;
+        }
+        .vm-tiny-btn {
+          border-radius: 4px; border: none; padding: 2px 8px;
+          font-size: 11px; cursor: pointer;
+        }
+        .vm-delete { background: #dc2626; color: white; }
+        .vm-cancel { background: #e5e7eb; color: #374151; }
+      `}</style>
     </div>
   );
 }
-
-const styles = {
-  overlay: {
-    position: 'fixed',
-    inset: 0,
-    background: 'rgba(15, 23, 42, 0.45)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 1000,
-    padding: 20,
-    backdropFilter: 'blur(4px)',
-  },
-  modal: {
-    background: 'white',
-    borderRadius: 16,
-    width: '100%',
-    maxWidth: 500,
-    minHeight: 500, // Enforce minimum height
-    maxHeight: '85vh',
-    display: 'flex',
-    flexDirection: 'column',
-    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-    // overflow: 'hidden', 
-  },
-  header: {
-    padding: '16px 24px',
-    borderBottom: '1px solid #f3f4f6',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    background: '#ffffff',
-  },
-  title: {
-    margin: 0,
-    fontSize: 18,
-    fontWeight: 700,
-    color: '#111827',
-  },
-  closeBtn: {
-    background: 'transparent',
-    border: 'none',
-    fontSize: 24,
-    color: '#9ca3af',
-    cursor: 'pointer',
-    padding: 0,
-    lineHeight: 1,
-  },
-  content: {
-    padding: 24,
-    overflowY: 'auto',
-    flex: 1,
-    paddingBottom: 150, // Added extra padding at bottom for dropdown space
-  },
-  section: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 12,
-  },
-  label: {
-    fontSize: 13,
-    fontWeight: 600,
-    color: '#374151',
-    marginBottom: 4,
-  },
-  inputGroup: {
-    display: 'flex',
-    gap: 10,
-  },
-  input: {
-    flex: 1,
-    padding: '10px 12px',
-    border: '1px solid #d1d5db',
-    borderRadius: 8,
-    fontSize: 14,
-    outline: 'none',
-    background: '#f9fafb',
-  },
-  inputSmall: {
-    flex: 1,
-    padding: '8px 10px',
-    border: '1px solid #d1d5db',
-    borderRadius: 6,
-    fontSize: 13,
-    outline: 'none',
-    background: '#ffffff',
-  },
-  primaryBtn: {
-    padding: '0 16px',
-    background: '#f97316',
-    color: 'white',
-    border: 'none',
-    borderRadius: 8,
-    fontWeight: 600,
-    cursor: 'pointer',
-    fontSize: 14,
-  },
-  secondaryBtnSmall: {
-    padding: '0 12px',
-    background: 'white',
-    color: '#374151',
-    border: '1px solid #d1d5db',
-    borderRadius: 6,
-    fontWeight: 500,
-    cursor: 'pointer',
-    fontSize: 13,
-  },
-  templateCard: {
-    padding: 20,
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    border: '1px solid #e5e7eb',
-    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
-  },
-  templateHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  templateName: {
-    fontSize: 16,
-    fontWeight: 600,
-    color: '#111827',
-  },
-  deleteLinkBtn: {
-    background: 'none',
-    border: 'none',
-    color: '#dc2626',
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: 'pointer',
-    padding: '4px 8px',
-    borderRadius: 6,
-  },
-  divider: {
-    height: 1,
-    background: '#f3f4f6',
-    margin: '12px 0',
-  },
-  optionsLabel: {
-    fontSize: 12,
-    fontWeight: 600,
-    color: '#6b7280',
-    marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-  },
-  optionsList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 6,
-    marginBottom: 16,
-  },
-  optionItem: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '8px 12px',
-    background: '#f9fafb',
-    borderRadius: 6,
-    fontSize: 14,
-    border: '1px solid #f3f4f6',
-  },
-  optionName: {
-    color: '#374151',
-    fontWeight: 500,
-  },
-  deleteOptionBtn: {
-    background: 'none',
-    border: 'none',
-    color: '#9ca3af',
-    fontSize: 20,
-    cursor: 'pointer',
-    lineHeight: 1,
-    padding: '0 4px',
-    display: 'flex',
-    alignItems: 'center',
-  },
-  emptyOptions: {
-    fontSize: 13,
-    color: '#9ca3af',
-    fontStyle: 'italic',
-    padding: '4px 0',
-  },
-  addOptionForm: {
-    display: 'flex',
-    gap: 8,
-    marginTop: 8,
-  },
-  loading: {
-    textAlign: 'center',
-    padding: 24,
-    color: '#9ca3af',
-  },
-  empty: {
-    textAlign: 'center',
-    padding: 24,
-    color: '#9ca3af',
-    fontSize: 14,
-  },
-  confirmRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-  },
-  confirmRowSmall: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 4,
-  },
-  confirmBtn: {
-    background: '#dc2626',
-    color: 'white',
-    border: 'none',
-    borderRadius: 6,
-    padding: '4px 10px',
-    fontSize: 12,
-    cursor: 'pointer',
-  },
-  cancelBtn: {
-    background: '#e5e7eb',
-    color: '#374151',
-    border: 'none',
-    borderRadius: 6,
-    padding: '4px 10px',
-    fontSize: 12,
-    cursor: 'pointer',
-  },
-  confirmBtnSmall: {
-    background: '#dc2626',
-    color: 'white',
-    border: 'none',
-    borderRadius: 4,
-    padding: '2px 8px',
-    fontSize: 11,
-    cursor: 'pointer',
-  },
-  cancelBtnSmall: {
-    background: '#e5e7eb',
-    color: '#374151',
-    border: 'none',
-    borderRadius: 4,
-    padding: '2px 8px',
-    fontSize: 11,
-    cursor: 'pointer',
-  },
-};

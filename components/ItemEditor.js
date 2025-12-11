@@ -166,6 +166,9 @@ export default function ItemEditor({
         setCessRate(item?.compensation_cess_rate ?? 0);
         setImageUrl(item?.image_url || "");
         setHasVariants(!!item?.has_variants);
+        setSelectedTemplate(null);
+        setVariantPrices([]);
+        setImageFile(null);
       }
       setErr("");
       hasInitialized.current = true;
@@ -441,32 +444,32 @@ export default function ItemEditor({
   };
 
   return (
-    <div style={overlay}>
-      <form onSubmit={save} style={modal}>
-        <h3>{isEdit ? "Edit Item" : "Add Item"}</h3>
-        {err && <div style={errorStyle}>{err}</div>}
+    <div className="ie-overlay">
+      <form onSubmit={save} className="ie-modal">
+        <h3 className="ie-title">{isEdit ? "Edit Item" : "Add Item"}</h3>
+        {err && <div className="ie-error">{err}</div>}
 
         <label>
-          <div style={customLabel}>
+          <div className="ie-label">
             Code
           </div>
           <input
             value={code}
             onChange={(e) => setCode(e.target.value)}
-            style={input}
+            className="ie-input"
             placeholder="Enter product code"
           />
         </label>
 
         <label>
-          <div style={customLabel}>
+          <div className="ie-label">
             Name <span style={{ color: "red" }}>*</span>
           </div>
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
-            style={input}
+            className="ie-input"
             placeholder="Enter product name"
           />
         </label>
@@ -474,10 +477,10 @@ export default function ItemEditor({
         {/* Small Image Upload Section */}
         {enableMenuImages && (
           <div style={{ marginTop: 14 }}>
-            <div style={customLabel}>Image</div>
-            <div style={imageUploadContainer}>
+            <div className="ie-label">Image</div>
+            <div className="ie-image-upload">
               {uploadingImage ? (
-                <div style={uploadPlaceholder}>
+                <div className="ie-upload-placeholder">
                   <div className="spinner" style={{ 
                     border: '3px solid #f3f3f3', 
                     borderTop: '3px solid #652ae2', 
@@ -496,22 +499,23 @@ export default function ItemEditor({
                   `}</style>
                 </div>
               ) : imageUrl ? (
-                <div style={imagePreviewWrapper}>
-                  <img src={imageUrl} alt="Preview" style={{ ...imagePreview, maxHeight: 120 }} />
+                <div className="ie-image-preview-wrapper">
+                  <img src={imageUrl} alt="Preview" className="ie-image-preview" style={{ maxHeight: 120 }} />
                   <button
                     type="button"
                     onClick={() => {
                       setImageUrl("");
                       setImageFile(null);
                     }}
-                    style={removeImageBtn}
+                    style={{}}
+                    className="ie-remove-image-btn"
                     title="Remove image"
                   >
                     ✕
                   </button>
                 </div>
               ) : (
-                <label style={uploadLabel}>
+                <label className="ie-upload-label">
                   <input
                     type="file"
                     accept="image/*"
@@ -529,9 +533,9 @@ export default function ItemEditor({
           </div>
         )}
 
-        <div style={row2}>
+        <div className="ie-row-2">
           <label>
-            <div style={customLabel}>
+            <div className="ie-label">
               Price <span style={{ color: "red" }}>*</span>
             </div>
             <input
@@ -541,12 +545,12 @@ export default function ItemEditor({
               onChange={(e) => setPrice(e.target.value)}
               required
              // min="0.01"
-              style={input}
+              className="ie-input"
               placeholder="Enter price"
             />
           </label>
           <label>
-            <div style={customLabel}>Category</div>
+            <div className="ie-label">Category</div>
             <div style={{ display: "flex", gap: 4 }}>
               <NiceSelect
                 value={category}
@@ -569,7 +573,7 @@ export default function ItemEditor({
                   setNewCatErr("");
                   setShowCatModal(true);
                 }}
-                style={smallBtn}
+                className="ie-btn-small"
               >
                 +
               </button>
@@ -577,18 +581,18 @@ export default function ItemEditor({
           </label>
         </div>
 
-        <div style={row2}>
+        <div className="ie-row-2">
           <label>
-            <div style={customLabel}>HSN</div>
+            <div className="ie-label">HSN</div>
             <input
               value={hsn}
               onChange={(e) => setHsn(e.target.value)}
-              style={input}
+              className="ie-input"
               placeholder="Enter HSN code"
             />
           </label>
           <label>
-            <div style={customLabel}>Status</div>
+            <div className="ie-label">Status</div>
             <NiceSelect
               value={status}
               onChange={setStatus}
@@ -601,59 +605,53 @@ export default function ItemEditor({
         </div>
 
         {/* <hr /> */}
-        <div style={{display: "flex", gap: 12}}>
-        <div style={checkboxLabel}>
+        <div className="ie-checkbox-wrapper">
+        <label className="ie-checkbox-group">
           <input
             type="checkbox"
             checked={veg}
             onChange={(e) => setVeg(e.target.checked)}
           />
-          <span>
-          Veg
-          </span>
-        </div>
-        <div style={checkboxLabel}>
+          <span>Veg</span>
+        </label>
+        <label className="ie-checkbox-group">
           <input
             type="checkbox"
             checked={isPackaged}
             onChange={(e) => setIsPackaged(e.target.checked)}
           />
-          <span style={{whiteSpace:"nowrap"}}>
-          Packaged goods
-          </span>
-        </div>
-        <div style={checkboxLabel}>
+          <span style={{whiteSpace:"nowrap"}}>Packaged goods</span>
+        </label>
+        <label className="ie-checkbox-group">
           <input
             type="checkbox"
             checked={isPopular}
             onChange={(e) => setIsPopular(e.target.checked)}
           />
-          <span style={{whiteSpace:"nowrap"}}>
-          Offers
-          </span>
-        </div>
+          <span style={{whiteSpace:"nowrap"}}>Offers</span>
+        </label>
         </div>
         {isPackaged && (
-          <div style={row2}>
+          <div className="ie-row-2">
             <label>
-              <div style={customLabel}>Tax %</div>
+              <div className="ie-label">Tax %</div>
               <input
                 type="number"
                 step="0.01"
                 value={taxRate}
                 onChange={(e) => setTaxRate(e.target.value)}
-                style={input}
+                className="ie-input"
                 placeholder="Enter tax %"
               />
             </label>
             <label>
-              <div style={customLabel}>Cess %</div>
+              <div className="ie-label">Cess %</div>
               <input
                 type="number"
                 step="0.01"
                 value={cessRate}
                 onChange={(e) => setCessRate(e.target.value)}
-                style={input}
+                className="ie-input"
                 placeholder="Enter cess %"
               />
             </label>
@@ -661,8 +659,8 @@ export default function ItemEditor({
         )}
 
         {/* Variants Section */}
-        <div style={{ marginTop: 20, paddingTop: 20, borderTop: '1px solid #e5e7eb' }}>
-          <div style={checkboxLabel}>
+        <div className="ie-section-variants">
+          <div className="ie-checkbox-label">
             <input
               type="checkbox"
               checked={hasVariants}
@@ -674,25 +672,13 @@ export default function ItemEditor({
                 }
               }}
             />
-            <span>
-              Is variant
-            </span>
+            <span>Is variant</span>
           </div>
 
-        {hasVariants && (
-            <div style={{ 
-              background: 'linear-gradient(to bottom, #f9fafb, #ffffff)', 
-              padding: 18, 
-              borderRadius: 12, 
-              marginTop: 14,
-              border: '1.5px solid #e5e7eb',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
-            }}>
+          {hasVariants && (
+            <div className="ie-variant-card">
               <div style={{ marginBottom: 16 }}>
-                <div style={{ 
-                  ...customLabel, 
-                  marginBottom: 8
-                }}>
+                <div className="ie-label" style={{ marginBottom: 8 }}>
                   Variant Type
                 </div>
                 <div style={{ display: "flex", gap: 6 }}>
@@ -713,11 +699,7 @@ export default function ItemEditor({
                       setNewVariantErr("");
                       setShowVariantModal(true);
                     }}
-                    style={{
-                      ...smallBtn,
-                      fontSize: 16,
-                      width: 40
-                    }}
+                    className="ie-btn-small-add"
                     title="Create new variant template"
                   >
                     +
@@ -727,66 +709,21 @@ export default function ItemEditor({
 
               {selectedTemplate && (
                 <div style={{ marginTop: 18 }}>
-                  <div style={{ 
-                    ...customLabel,
-                    marginBottom: 14
-                  }}>
+                  <div className="ie-label" style={{ marginBottom: 14 }}>
                     Pricing for Each Variant
                   </div>
-                  <div style={{ 
-                    display: 'flex', 
-                    flexDirection: 'column', 
-                    gap: 10 
-                  }}>
+                  <div className="ie-variant-list">
                     {variantTemplates
                       .find(t => t.id === selectedTemplate)
                       ?.options.map((option, idx) => {
                         const variantPrice = variantPrices.find(vp => vp.option_id === option.id);
                         return (
-                          <div 
-                            key={option.id} 
-                            style={{ 
-                              display: 'flex', 
-                              gap: 12, 
-                              alignItems: 'center',
-                              padding: '12px 14px',
-                              background: '#ffffff',
-                              borderRadius: 10,
-                              border: '1px solid #e5e7eb',
-                              transition: 'all 0.2s ease',
-                              boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.borderColor = '#d1d5db';
-                              e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.08)';
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.borderColor = '#e5e7eb';
-                              e.currentTarget.style.boxShadow = '0 1px 2px rgba(0,0,0,0.04)';
-                            }}
-                          >
-                            <span style={{ 
-                              flex: 1, 
-                              fontWeight: 500, 
-                              fontSize: 14,
-                              color: '#111827'
-                            }}>
+                          <div key={option.id} className="ie-variant-row">
+                            <span className="ie-variant-name">
                               {option.name}
                             </span>
-                            <div style={{ 
-                              display: 'flex', 
-                              alignItems: 'center', 
-                              gap: 8,
-                              background: '#f9fafb',
-                              padding: '6px 10px',
-                              borderRadius: 8,
-                              border: '1px solid #e5e7eb'
-                            }}>
-                              <span style={{ 
-                                fontSize: 15, 
-                                color: '#6b7280',
-                                fontWeight: 600
-                              }}>₹</span>
+                            <div className="ie-price-input-wrapper">
+                              <span className="prefix">₹</span>
                               <input
                                 type="number"
                                 placeholder="0.00"
@@ -801,43 +738,10 @@ export default function ItemEditor({
                                   });
                                   setVariantPrices(newPrices);
                                 }}
-                                style={{ 
-                                  width: 90, 
-                                  padding: '6px 8px', 
-                                  borderRadius: 6, 
-                                  border: 'none',
-                                  fontSize: 14,
-                                  fontWeight: 600,
-                                  outline: 'none',
-                                  backgroundColor: 'transparent',
-                                  color: '#111827'
-                                }}
-                                onFocus={(e) => {
-                                  e.target.parentElement.style.borderColor = '#652ae2';
-                                  e.target.parentElement.style.background = '#ffffff';
-                                }}
-                                onBlur={(e) => {
-                                  e.target.parentElement.style.borderColor = '#e5e7eb';
-                                  e.target.parentElement.style.background = '#f9fafb';
-                                }}
+                                className="ie-price-input"
                               />
                             </div>
-                            <label style={{ 
-                              display: 'flex', 
-                              alignItems: 'center', 
-                              gap: 7,
-                              fontSize: 13,
-                              color: '#4b5563',
-                              cursor: 'pointer',
-                              userSelect: 'none',
-                              fontWeight: 500,
-                              padding: '4px 8px',
-                              borderRadius: 6,
-                              transition: 'background 0.15s ease'
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.background = '#f3f4f6'}
-                            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                            >
+                            <label className="ie-avail-label">
                               <input
                                 type="checkbox"
                                 checked={variantPrice?.is_available ?? true}
@@ -850,14 +754,9 @@ export default function ItemEditor({
                                   });
                                   setVariantPrices(newPrices);
                                 }}
-                                style={{ 
-                                  width: 17, 
-                                  height: 17, 
-                                  cursor: 'pointer',
-                                  accentColor: '#f97316'
-                                }}
+                                style={{ width: 17, height: 17, accentColor: '#f97316', cursor: 'pointer' }}
                               />
-                              <span>Available</span>
+                              <span style={{ fontSize: 12 }}>Enabled</span>
                             </label>
                           </div>
                         );
@@ -870,20 +769,20 @@ export default function ItemEditor({
         </div>
 
 
-        <div style={actions}>
+        <div className="ie-actions">
           <button
             type="button"
             onClick={handleClose}
             disabled={saving}
-            style={secondaryBtn}
+            className="ie-btn-secondary"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={saving || !canSubmit}
+            className="ie-btn-primary"
             style={{
-              ...primaryBtn,
               opacity: (!canSubmit || saving) ? 0.6 : 1,
               cursor: (!canSubmit || saving) ? 'not-allowed' : 'pointer',
             }}
@@ -894,35 +793,35 @@ export default function ItemEditor({
       </form>
 
       {showCatModal && (
-        <div style={overlayInner}>
-          <div style={modalInner}>
+        <div className="ie-overlay-inner">
+          <div className="ie-modal-inner">
             <h4 style={{ margin: 0, marginBottom: 8 }}>Add Category</h4>
-            {newCatErr && <div style={errorStyle}>{newCatErr}</div>}
+            {newCatErr && <div className="ie-error">{newCatErr}</div>}
             <div style={{ marginBottom: 12 }}>
-              <div style={customLabel}>
+              <div className="ie-label">
                 Category name <span style={{ color: "red" }}>*</span>
               </div>
               <input
                 value={newCatName}
                 onChange={(e) => setNewCatName(e.target.value)}
-                style={input}
+                className="ie-input"
                 placeholder="Enter category name"
               />
             </div>
-            <div style={actions}>
+            <div className="ie-actions">
               <button
                 type="button"
                 onClick={() => {
                   setShowCatModal(false);
                   setNewCatErr("");
                 }}
-                style={secondaryBtn}
+                className="ie-btn-secondary"
               >
                 Cancel
               </button>
               <button
                 type="button"
-                style={primaryBtn}
+                className="ie-btn-primary"
                 onClick={async () => {
                   const nm = newCatName.trim();
                   if (!nm) {
@@ -960,25 +859,25 @@ export default function ItemEditor({
       )}
 
       {showVariantModal && (
-        <div style={overlayInner}>
-          <div style={{...modalInner, maxWidth: 480}}>
+        <div className="ie-overlay-inner">
+          <div className="ie-modal-inner" style={{ maxWidth: 480 }}>
             <h4 style={{ margin: 0, marginBottom: 8 }}>Create Variant Template</h4>
-            {newVariantErr && <div style={errorStyle}>{newVariantErr}</div>}
+            {newVariantErr && <div className="ie-error">{newVariantErr}</div>}
             
             <div style={{ marginBottom: 14 }}>
-              <div style={customLabel}>
+              <div className="ie-label">
                 Template Name <span style={{ color: "red" }}>*</span>
               </div>
               <input
                 value={newVariantName}
                 onChange={(e) => setNewVariantName(e.target.value)}
-                style={input}
+                className="ie-input"
                 placeholder="e.g., Size, Temperature, etc."
               />
             </div>
 
             <div style={{ marginBottom: 14 }}>
-              <div style={{ ...customLabel, marginBottom: 8 }}>
+              <div className="ie-label" style={{ marginBottom: 8 }}>
                 Variant Options <span style={{ color: "red" }}>*</span>
               </div>
               {newVariantOptions.map((option, idx) => (
@@ -990,7 +889,7 @@ export default function ItemEditor({
                       updated[idx] = e.target.value;
                       setNewVariantOptions(updated);
                     }}
-                    style={{ ...input, flex: 1 }}
+                    className="ie-input" style={{ flex: 1 }}
                     placeholder={`Option ${idx + 1} (e.g., Small, Medium, Large)`}
                   />
                   {newVariantOptions.length > 1 && (
@@ -1033,20 +932,20 @@ export default function ItemEditor({
               </button>
             </div>
 
-            <div style={actions}>
+            <div className="ie-actions">
               <button
                 type="button"
                 onClick={() => {
                   setShowVariantModal(false);
                   setNewVariantErr("");
                 }}
-                style={secondaryBtn}
+                className="ie-btn-secondary"
               >
                 Cancel
               </button>
               <button
                 type="button"
-                style={primaryBtn}
+                className="ie-btn-primary"
                 onClick={async () => {
                   const name = newVariantName.trim();
                   const options = newVariantOptions.filter(o => o.trim());
@@ -1110,191 +1009,67 @@ export default function ItemEditor({
           </div>
         </div>
       )}
+
+      <style jsx>{`
+        .ie-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); display: flex; align-items: flex-start; justify-content: center; padding: 24px; z-index: 1000; overflow-y: auto; backdrop-filter: blur(2px); }
+        .ie-modal { 
+          background: #ffffff; padding: 24px; border-radius: 16px; 
+          width: 100%; max-width: 550px; 
+          box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.25); border: 1px solid #e5e7eb; margin: auto; 
+          animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+          max-height: 85vh; overflow-y: auto;
+          scrollbar-width: thin; scrollbar-color: #d1d5db transparent;
+        }
+        .ie-modal::-webkit-scrollbar { width: 6px; }
+        .ie-modal::-webkit-scrollbar-track { background: transparent; }
+        .ie-modal::-webkit-scrollbar-thumb { background-color: #d1d5db; border-radius: 20px; }
+        .ie-modal::-webkit-scrollbar-thumb:hover { background-color: #9ca3af; }
+        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .ie-title { margin: 0 0 20px 0; font-size: 1.25rem; font-weight: 700; color: #111827; }
+        .ie-row-2 { display: grid; grid-template-columns: 1fr; gap: 16px; margin-top: 16px; }
+        @media (min-width: 640px) { .ie-row-2 { grid-template-columns: 1fr 1fr; } }
+        .ie-input { width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 0.875rem; outline: none; background: #f9fafb; transition: all 0.2s; }
+        .ie-input:focus { border-color: #f97316; background: white; box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1); }
+        .ie-label { font-size: 0.875rem; font-weight: 600; color: #374151; margin-bottom: 6px; display: block; }
+        .ie-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; padding-top: 20px; border-top: 1px solid #f3f4f6; }
+        .ie-btn-primary { padding: 10px 20px; background: #f97316; color: white; border: none; border-radius: 99px; font-weight: 600; font-size: 0.875rem; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 6px -1px rgba(249, 115, 22, 0.2); }
+        .ie-btn-secondary { padding: 10px 20px; background: white; color: #4b5563; border: 1px solid #d1d5db; border-radius: 99px; font-weight: 500; font-size: 0.875rem; cursor: pointer; transition: all 0.2s; }
+        .ie-btn-small { padding: 6px 12px; background: #f97316; color: white; border: none; border-radius: 6px; font-size: 0.875rem; font-weight: 500; cursor: pointer; }
+        .ie-checkbox-wrapper { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
+        .ie-checkbox-group { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border: 1px solid #e5e7eb; border-radius: 8px; background: #f9fafb; cursor: pointer; flex: 1; min-width: 120px; }
+        .ie-checkbox-group input { width: 16px; height: 16px; accent-color: #f97316; }
+        .ie-error { background: #fef2f2; color: #b91c1c; padding: 12px; border-radius: 8px; margin-bottom: 20px; font-size: 0.875rem; border: 1px solid #fecaca; }
+        
+        /* Inner Modal */
+        .ie-overlay-inner { position: fixed; inset: 0; background: rgba(0,0,0,0.2); z-index: 1100; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(1px); }
+        .ie-modal-inner { background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 360px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); border: 1px solid #e5e7eb; }
+        
+        /* Image Upload */
+        .ie-image-upload { border: 2px dashed #d1d5db; border-radius: 8px; padding: 4px; display: flex; justify-content: center; align-items: center; min-height: 80px; background-color: #f9fafb; margin-top: 4px; }
+        .ie-upload-placeholder { display: flex; flex-direction: column; align-items: center; color: #6b7280; }
+        .ie-image-preview-wrapper { position: relative; width: 100%; text-align: center; }
+        .ie-image-preview { max-width: 100%; max-height: 200px; border-radius: 6px; object-fit: contain; }
+        .ie-remove-image-btn { position: absolute; top: -10px; right: -10px; background: #ef4444; color: white; border: none; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .ie-upload-label { display: flex; flex-direction: row; align-items: center; cursor: pointer; width: 100%; padding: 10px; gap: 12px; justify-content: center; }
+
+        /* Variants Section */
+        .ie-section-variants { margin-top: 20px; padding-top: 20px; border-top: 1px solid #e5e7eb; }
+        .ie-checkbox-label { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 0.95rem; color: #111827; cursor: pointer; }
+        .ie-checkbox-label input { width: 18px; height: 18px; accent-color: #f97316; }
+        .ie-variant-card { background: linear-gradient(to bottom, #f9fafb, #ffffff); padding: 18px; border-radius: 12px; margin-top: 14px; border: 1.5px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .ie-btn-small-add { width: 40px; height: 38px; border-radius: 6px; border: none; background: #f97316; color: white; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+        .ie-btn-small-add:hover { background: #ea580c; }
+        .ie-variant-list { display: flex; flex-direction: column; gap: 10px; }
+        .ie-variant-row { display: flex; gap: 12px; align-items: center; padding: 12px 14px; background: #ffffff; border-radius: 10px; border: 1px solid #e5e7eb; transition: all 0.2s ease; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+        .ie-variant-row:hover { border-color: #d1d5db; box-shadow: 0 2px 4px rgba(0,0,0,0.08); }
+        .ie-variant-name { flex: 1; font-weight: 500; font-size: 14px; color: #111827; }
+        .ie-price-input-wrapper { display: flex; align-items: center; gap: 8px; background: #f9fafb; padding: 6px 10px; border-radius: 8px; border: 1px solid #e5e7eb; transition: all 0.2s; }
+        .ie-price-input-wrapper:focus-within { border-color: #652ae2; background: white; }
+        .ie-price-input-wrapper .prefix { font-size: 15px; color: #6b7280; font-weight: 600; }
+        .ie-price-input { width: 90px; padding: 6px 8px; border-radius: 6px; border: none; font-size: 14px; font-weight: 600; outline: none; background: transparent; color: #111827; }
+        .ie-avail-label { display: flex; align-items: center; gap: 7px; font-size: 13px; color: #4b5563; cursor: pointer; user-select: none; font-weight: 500; padding: 4px 8px; border-radius: 6px; transition: background 0.15s ease; }
+        .ie-avail-label:hover { background: #f3f4f6; }
+      `}</style>
     </div>
   );
 }
-
-const overlay = {
-  position: "fixed",
-  inset: 0,
-  background: "rgba(15, 23, 42, 0.45)",
-  display: "flex",
-  alignItems: "flex-start",
-  justifyContent: "center",
-  padding: 24,
-  zIndex: 1000,
-  overflowY: "auto",
-};
-
-const overlayInner = {
-  position: "fixed",
-  inset: 0,
-  background: "rgba(15, 23, 42, 0.12)",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  padding: 16,
-  zIndex: 1100,
-};
-const modal = {
-  background: "#ffffff",
-  padding: 20,
-  borderRadius: 14,
-  width: "100%",
-  maxWidth: 520,
-  boxShadow:
-    "0 18px 45px rgba(15, 23, 42, 0.35)",
-  border: "1px solid #e5e7eb",
-  maxHeight: "95vh",
-  overflowY: "auto",
-};
-
-const modalInner = {
-  background: "#ffffff",
-  padding: 16,
-  borderRadius: 12,
-  width: "100%",
-  maxWidth: 360,
-  boxShadow:
-    "0 16px 32px rgba(15, 23, 42, 0.25)",
-  border: "1px solid #e5e7eb",
-};
-const input = {
-  width: "100%",
-  padding: "9px 11px",
-  border: "1px solid #d1d5db",
-  borderRadius: 8,
-  height: "40px",
-  fontSize: 14,
-  outline: "none",
-  transition: "border-color 0.15s ease, box-shadow 0.15s ease",
-  boxShadow: "0 0 0 1px transparent",
-  backgroundColor: "#f9fafb",
-};
-
-const row2 = {
-  display: "grid",
-  gridTemplateColumns: "1fr 1fr",
-  gap: 12,
-  marginTop: 14,
-};
-const checkboxLabel = {
-  display: "flex",
-  alignItems: "center",
-  gap: 4,
-  marginTop: 12,
-};
-const actions = {
-  display: "flex",
-  justifyContent: "flex-end",
-  gap: 10,
-  marginTop: 20,
-};
-const smallBtn = {
-  padding: "0 10px",
-  background: "#f97316",
-  color: "#fff",
-  border: "none",
-  borderRadius: 999,
-  cursor: "pointer",
-  height: "40px",
-  fontSize: 13,
-  fontWeight: 500,
-};
-const primaryBtn = {
-  padding: "10px 18px",
-  background: "#f97316",
-  color: "#fff",
-  border: "none",
-  borderRadius: 999,
-  cursor: "pointer",
-  fontWeight: 600,
-  fontSize: 14,
-  boxShadow: "0 8px 18px rgba(249, 115, 22, 0.35)",
-};
-const secondaryBtn = {
-  padding: "10px 18px",
-  background: "#ffffff",
-  color: "#4b5563",
-  border: "1px solid #e5e7eb",
-  borderRadius: 999,
-  cursor: "pointer",
-  fontWeight: 500,
-  fontSize: 14,
-};
-const errorStyle = {
-  background: "#fef2f2",
-  color: "#b91c1c",
-  padding: 10,
-  borderRadius: 10,
-  marginBottom: 14,
-  fontSize: 13,
-  border: "1px solid #fecaca",
-};
-const customLabel = {
-  marginBottom: 6,
-  fontSize: 13,
-  fontWeight: 600,
-  color: "#4b5563",
-};
-
-const imageUploadContainer = {
-  border: "2px dashed #d1d5db",
-  borderRadius: 8,
-  padding: 4,
-  display: "flex",
-  justifyContent: "center",
-  alignItems: "center",
-  minHeight: 80, // Reduced from 120
-  backgroundColor: "#f9fafb",
-  marginTop: 4,
-};
-
-const uploadLabel = {
-  display: "flex",
-  flexDirection: "row", // Changed to row for compactness
-  alignItems: "center",
-  cursor: "pointer",
-  width: "100%",
-  padding: 10, // Reduced padding
-  gap: 12, // Added gap
-  justifyContent: "center",
-};
-
-const uploadPlaceholder = {
-  display: "flex",
-  flexDirection: "column",
-  alignItems: "center",
-  color: "#6b7280",
-};
-
-const imagePreviewWrapper = {
-  position: "relative",
-  width: "100%",
-  textAlign: "center",
-};
-
-const imagePreview = {
-  maxWidth: "100%",
-  maxHeight: 200,
-  borderRadius: 6,
-  objectFit: "contain",
-};
-
-const removeImageBtn = {
-  position: "absolute",
-  top: -10,
-  right: -10,
-  background: "#ef4444",
-  color: "white",
-  border: "none",
-  borderRadius: "50%",
-  width: 24,
-  height: 24,
-  cursor: "pointer",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  fontSize: 14,
-  boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
-};
