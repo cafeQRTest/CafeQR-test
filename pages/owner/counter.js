@@ -1587,6 +1587,7 @@ window.dispatchEvent(
     gstEnabled={profileTax.gst_enabled}
     pricesIncludeTax={profileTax.prices_include_tax}
     onCartOpen={() => setDrawerOpen(true)}
+    showImage={enableMenuImages}
   />
 )}{/* Clear Cart Confirmation Modal */}
 {showClearCartConfirm && (

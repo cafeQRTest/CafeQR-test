@@ -4,7 +4,7 @@
 import React, { useState } from 'react';
 import styled from 'styled-components';
 
-export default function VariantSelector({ item, onSelect, onClose, gstEnabled = false, pricesIncludeTax = true, onCartOpen }) {
+export default function VariantSelector({ item, onSelect, onClose, gstEnabled = false, pricesIncludeTax = true, onCartOpen, showImage = true }) {
   // Track quantity for each variant (key: variant_id, value: quantity)
   const [variantQuantities, setVariantQuantities] = useState({});
 
@@ -88,7 +88,7 @@ export default function VariantSelector({ item, onSelect, onClose, gstEnabled = 
         <Header>
           <HeaderTop>
             <ItemInfo>
-              {item.image_url && (
+              {showImage && item.image_url && (
                 <ItemImageWrapper>
                   <ItemImage src={item.image_url} alt={item.name} />
                 </ItemImageWrapper>
