@@ -162,14 +162,14 @@ export default function BillingPage() {
       const fileName = `Billing_${type}_${from}_to_${to}.csv`;
 
       await Filesystem.writeFile({
-        directory: Directory.Data,
+        directory: Directory.Cache,
         path: fileName,
         data: csv,
         encoding: 'utf8',
       });
 
       const { uri } = await Filesystem.getUri({
-        directory: Directory.Data,
+        directory: Directory.Cache,
         path: fileName,
       });
 
@@ -208,14 +208,14 @@ export default function BillingPage() {
       const fileName = `GST_HSN_Summary_${from}_to_${to}.csv`;
 
       await Filesystem.writeFile({
-        directory: Directory.Data,
+        directory: Directory.Cache,
         path: fileName,
         data: csv,
         encoding: 'utf8',
       });
 
       const { uri } = await Filesystem.getUri({
-        directory: Directory.Data,
+        directory: Directory.Cache,
         path: fileName,
       });
 
