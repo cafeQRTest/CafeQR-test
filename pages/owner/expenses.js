@@ -59,12 +59,14 @@ const [editingExpense, setEditingExpense] = useState(null);
 const [paymentProfit, setPaymentProfit] = useState([]);
 
 
+
   const handleExportCSV = () => {
     try {
       const ok = exportExpensesToCSV({
         range,
         summary,
-        expenses
+        expenses,
+        paymentProfit,
       });
       if (!ok) {
         alert('❌ CSV export failed');
