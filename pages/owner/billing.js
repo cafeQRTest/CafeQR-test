@@ -139,96 +139,100 @@ export default function BillingPage() {
   }, [restaurant?.id, from, to, reportType, supabase]);
 
   const exportCSV = async (type) => {
-    if (!restaurant?.id) return;
-    const qs = new URLSearchParams({
-      from,
-      to,
-      restaurant_id: restaurant.id,
-      report_type: type,
-    }).toString();
-    const relUrl = `/api/reports/sales?${qs}`;
+  if (!restaurant?.id) return;
 
-    // Web / desktop: keep existing behavior
-    if (!Capacitor.isNativePlatform()) {
-      window.location.href = relUrl;
-      return;
-    }
+  const qs = new URLSearchParams({
+    from,
+    to,
+    restaurant_id: restaurant.id,
+    report_type: type,
+  }).toString();
+  const relUrl = `/api/reports/sales?${qs}`;
 
-    try {
-      const res = await fetch(relUrl);
-      if (!res.ok) throw new Error('Failed to generate CSV');
-      const csv = await res.text();
+  // Web: existing download behavior
+  if (!Capacitor.isNativePlatform()) {
+    window.location.href = relUrl;
+    return;
+  }
 
-      const fileName = `Billing_${type}_${from}_to_${to}.csv`;
+  try {
+    const res = await fetch(relUrl);
+    if (!res.ok) throw new Error('Failed to generate CSV');
+    const csv = await res.text();
 
-      await Filesystem.writeFile({
-        directory: Directory.Cache,
-        path: fileName,
-        data: csv,
-        encoding: 'utf8',
-      });
+    const fileName = `Billing_${type}_${from}_to_${to}.csv`;
 
-      const { uri } = await Filesystem.getUri({
-        directory: Directory.Cache,
-        path: fileName,
-      });
+    await Filesystem.writeFile({
+      directory: Directory.Cache,
+      path: fileName,
+      data: csv,
+      encoding: 'utf8',
+    });
 
-      await Share.share({
-        title: fileName,
-        text: 'Cafe QR billing CSV export',
-        url: uri,
-      });
-    } catch (e) {
-      console.error('Billing CSV export failed', e);
-      alert(e.message || 'Failed to export CSV');
-    }
-  };
+    const { uri } = await Filesystem.getUri({
+      directory: Directory.Cache,
+      path: fileName,
+    });
 
-  const exportHsnSummary = async () => {
-    if (!restaurant?.id) return;
+    await Share.share({
+      title: fileName,
+      text: 'Cafe QR billing CSV export',
+      url: uri,               // share the CSV file
+      dialogTitle: 'Share billing CSV',
+    });
+  } catch (e) {
+    console.error('Billing CSV export failed', e);
+    alert(e.message || 'Failed to export CSV');
+  }
+};
 
-    const qs = new URLSearchParams({
-      from,
-      to,
-      restaurant_id: restaurant.id,
-    }).toString();
+const exportHsnSummary = async () => {
+  if (!restaurant?.id) return;
 
-    const relUrl = `/api/reports/gst-hsn-summary?${qs}`;
+  const qs = new URLSearchParams({
+    from,
+    to,
+    restaurant_id: restaurant.id,
+  }).toString();
 
-    if (!Capacitor.isNativePlatform()) {
-      window.location.href = relUrl;
-      return;
-    }
+  const relUrl = `/api/reports/gst-hsn-summary?${qs}`;
 
-    try {
-      const res = await fetch(relUrl);
-      if (!res.ok) throw new Error('Failed to generate HSN summary CSV');
-      const csv = await res.text();
+  if (!Capacitor.isNativePlatform()) {
+    window.location.href = relUrl;
+    return;
+  }
 
-      const fileName = `GST_HSN_Summary_${from}_to_${to}.csv`;
+  try {
+    const res = await fetch(relUrl);
+    if (!res.ok) throw new Error('Failed to generate HSN summary CSV');
+    const csv = await res.text();
 
-      await Filesystem.writeFile({
-        directory: Directory.Cache,
-        path: fileName,
-        data: csv,
-        encoding: 'utf8',
-      });
+    const fileName = `GST_HSN_Summary_${from}_to_${to}.csv`;
 
-      const { uri } = await Filesystem.getUri({
-        directory: Directory.Cache,
-        path: fileName,
-      });
+    await Filesystem.writeFile({
+      directory: Directory.Cache,
+      path: fileName,
+      data: csv,
+      encoding: 'utf8',
+    });
 
-      await Share.share({
-        title: fileName,
-        text: 'Cafe QR GST HSN summary CSV export',
-        url: uri,
-      });
-    } catch (e) {
-      console.error('HSN summary CSV export failed', e);
-      alert(e.message || 'Failed to export HSN summary CSV');
-    }
-  };
+    const { uri } = await Filesystem.getUri({
+      directory: Directory.Cache,
+      path: fileName,
+    });
+
+    await Share.share({
+      title: fileName,
+      text: 'Cafe QR GST HSN summary CSV export',
+      url: uri,
+      dialogTitle: 'Share billing CSV',
+    });
+  } catch (e) {
+    console.error('HSN summary CSV export failed', e);
+    alert(e.message || 'Failed to export HSN summary CSV');
+  }
+};
+
 
   const handleViewInvoice = async (invoice) => {
   if (!invoice?.order_id) {
