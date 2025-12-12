@@ -1,10 +1,15 @@
-// utils/exportSalesReport.js
+//utils/exportSalesReport.js
+
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 
 async function saveAndShare({ contents, fileName, mime = 'text/plain' }) {
-  if (!Capacitor.isNativePlatform()) {
+  const isNative =
+    Capacitor.isNativePlatform && Capacitor.isNativePlatform();
+
+  // Web / desktop: current behaviour (download)
+  if (!isNative) {
     const blob = new Blob([contents], { type: `${mime};charset=utf-8;` });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -18,26 +23,35 @@ async function saveAndShare({ contents, fileName, mime = 'text/plain' }) {
     return true;
   }
 
+  // Native (Android / iOS): write to app cache and share via FileProvider
   try {
-    const path = `CafeQR/${fileName}`;
+    // Just the file name, no extra folders
     await Filesystem.writeFile({
-      directory: Directory.Documents,
-      path,
+      directory: Directory.Cache,
+      path: fileName,
       data: contents,
       encoding: 'utf8',
     });
-    const { uri } = await Filesystem.getUri({ directory: Directory.Documents, path });
+
+    const { uri } = await Filesystem.getUri({
+      directory: Directory.Cache,
+      path: fileName,
+    });
+
     await Share.share({
       title: fileName,
       text: 'Cafe QR sales export',
-      url: uri,
+      url: uri,                 // same pattern as Billing exports
+      dialogTitle: 'Share sales report',
     });
+
     return true;
   } catch (err) {
     console.error('Native sales export failed', err);
     return false;
   }
 }
+
 
 export const exportSalesReportToCSV = ({
   range,
