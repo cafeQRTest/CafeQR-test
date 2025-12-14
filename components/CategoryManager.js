@@ -77,6 +77,29 @@ export default function CategoryManager({ restaurantId, onClose, onSaved }) {
 
   const deleteCategory = async (id) => {
     setError('');
+    
+    // Find category name to check usage
+    const category = categories.find(c => c.id === id);
+    if (!category) return;
+
+    // Check usage in menu_items
+    const { count, error: usageErr } = await supabase
+      .from('menu_items')
+      .select('*', { count: 'exact', head: true })
+      .eq('restaurant_id', restaurantId)
+      .eq('category', category.name);
+    
+    if (usageErr) {
+      setError('Failed to check category usage');
+      return;
+    }
+
+    if (count > 0) {
+      setError(`Cannot delete: This category is used by ${count} products.`);
+      setDeleteConfirm(null);
+      return;
+    }
+
     const { error: deleteError } = await supabase
       .from('categories')
       .delete()

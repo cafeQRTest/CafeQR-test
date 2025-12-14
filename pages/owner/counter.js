@@ -811,8 +811,9 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
     else if (orderSelect && orderSelect.startsWith('table:')) table_number = orderSelect.split(':')[1] || null;
 
     const items = cart.map((i) => ({
-      id: i.id, name: i.name, price: i.price, quantity: i.quantity,
-      hsn: i.hsn, tax_rate: i.tax_rate, is_packaged_good: i.is_packaged_good, code_number: i.code_number
+      id: i.id, name: i.displayName || i.name, price: i.price, quantity: i.quantity,
+      hsn: i.hsn, tax_rate: i.tax_rate, is_packaged_good: i.is_packaged_good, code_number: i.code_number,
+      variant_id: i.variant_id || null, variant_name: i.variant_name || null
     }));
 
     const isCredit = isCreditSale;

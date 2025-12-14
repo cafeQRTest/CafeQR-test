@@ -16,6 +16,7 @@ export default function VariantManager({ onClose, onSaved }) {
   // Confirmation states
   const [deleteTemplateId, setDeleteTemplateId] = useState(null);
   const [deleteOptionId, setDeleteOptionId] = useState(null);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     fetchTemplates();
@@ -23,41 +24,75 @@ export default function VariantManager({ onClose, onSaved }) {
 
   const fetchTemplates = async () => {
     setLoading(true);
-    const { data, error } = await supabase
+    setError('');
+    // Only fetch active templates
+    const { data, err } = await supabase
       .from('variant_templates')
       .select(`
         *,
         options:variant_options(*)
       `)
+      .eq('is_active', true)
       .order('display_order');
     
-    if (!error) {
-      setTemplates(data || []);
+    if (!err) {
+      // Filter active options and sort
+      const activeData = (data || []).map(t => ({
+        ...t,
+        options: (t.options || [])
+            .filter(o => o.is_active)
+            .sort((a, b) => a.display_order - b.display_order)
+      }));
+      setTemplates(activeData);
     }
     setLoading(false);
   };
 
   const createTemplate = async () => {
     if (!newTemplateName.trim()) return;
+    setError('');
     
     const { error } = await supabase
       .from('variant_templates')
       .insert({
         name: newTemplateName.trim(),
-        display_order: templates.length
+        display_order: templates.length,
+        is_active: true
       });
     
     if (!error) {
       setNewTemplateName('');
       fetchTemplates();
       onSaved?.();
+    } else {
+      setError('Failed to create template');
     }
   };
 
   const deleteTemplate = async (id) => {
+    setError('');
+    
+    // Check if currently used by any active Menu Item
+    const { count, error: checkError } = await supabase
+      .from('menu_item_variants')
+      .select('*', { count: 'exact', head: true })
+      .eq('template_id', id);
+
+    if (checkError) {
+      setError('Error checking usage');
+      return;
+    }
+
+    if (count > 0) {
+      setError(`Cannot delete: This variant type is currently used by ${count} products. Please remove it from those products first.`);
+      setDeleteTemplateId(null);
+      return;
+    }
+
+    // Soft delete: set is_active = false
     const { error } = await supabase
       .from('variant_templates')
-      .delete()
+      .update({ is_active: false })
       .eq('id', id);
     
     if (!error) {
@@ -65,11 +100,14 @@ export default function VariantManager({ onClose, onSaved }) {
       setDeleteTemplateId(null);
       fetchTemplates();
       onSaved?.();
+    } else {
+      setError(error.message);
     }
   };
 
   const addOption = async (templateId) => {
     if (!newOptionName.trim()) return;
+    setError('');
     
     const template = templates.find(t => t.id === templateId);
     const { error } = await supabase
@@ -77,24 +115,44 @@ export default function VariantManager({ onClose, onSaved }) {
       .insert({
         template_id: templateId,
         name: newOptionName.trim(),
-        display_order: template?.options?.length || 0
+        display_order: template?.options?.length || 0,
+        is_active: true
       });
     
     if (!error) {
       setNewOptionName('');
       fetchTemplates();
+    } else {
+      setError('Failed to add option');
     }
   };
 
   const deleteOption = async (optionId) => {
+    setError('');
+    
+    // Check if currently used by any active Menu Item Pricing
+    const { count: pricingCount, error: checkError } = await supabase
+       .from('variant_pricing')
+       .select('*', { count: 'exact', head: true })
+       .eq('option_id', optionId);
+
+    if (pricingCount > 0) {
+        setError(`Cannot delete: This option is currently used by ${pricingCount} products. Please remove it from those products first.`);
+        setDeleteOptionId(null);
+        return;
+    }
+
+    // Soft delete: set is_active = false
     const { error } = await supabase
       .from('variant_options')
-      .delete()
+      .update({ is_active: false })
       .eq('id', optionId);
     
     if (!error) {
       setDeleteOptionId(null);
       fetchTemplates();
+    } else {
+       setError(error.message);
     }
   };
 
@@ -107,6 +165,8 @@ export default function VariantManager({ onClose, onSaved }) {
         </div>
 
         <div className="vm-content">
+          {error && <div className="vm-error">{error}</div>}
+          
           {/* Create New Template */}
           <div className="vm-section">
             <h3 className="vm-label">Create New Template</h3>
@@ -149,6 +209,7 @@ export default function VariantManager({ onClose, onSaved }) {
                     value: t.id,
                     label: `${t.name} (${t.options?.length || 0} options)`
                   }))}
+                  maxHeight={300}
                 />
 
                 {editingTemplate && (() => {
@@ -247,12 +308,12 @@ export default function VariantManager({ onClose, onSaved }) {
         .vm-modal {
           background: white; border-radius: 16px;
           width: 100%; max-width: 500px;
-          min-height: 500px; max-height: 85vh;
+          min-height: 600px; max-height: 95vh;
           display: flex; flex-direction: column;
           box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
         }
         @media (max-width: 640px) {
-          .vm-modal { min-height: auto; max-height: 90vh; }
+          .vm-modal { min-height: auto; max-height: 95vh; }
         }
         .vm-header {
           padding: 16px 24px; border-bottom: 1px solid #f3f4f6;
@@ -264,7 +325,7 @@ export default function VariantManager({ onClose, onSaved }) {
           background: transparent; border: none; fontSize: 24px;
           color: #9ca3af; cursor: pointer; padding: 0; line-height: 1;
         }
-        .vm-content { padding: 24px; overflow-y: auto; flex: 1; padding-bottom: 150px; }
+        .vm-content { padding: 24px; overflow-y: auto; flex: 1; padding-bottom: 300px; }
         .vm-section { display: flex; flex-direction: column; gap: 12px; }
         .vm-label { fontSize: 13px; fontWeight: 600; color: #374151; margin-bottom: 4px; }
         .vm-input-group { display: flex; gap: 10px; }
@@ -351,6 +412,10 @@ export default function VariantManager({ onClose, onSaved }) {
         }
         .vm-delete { background: #dc2626; color: white; }
         .vm-cancel { background: #e5e7eb; color: #374151; }
+        .vm-error {
+          background: #fef2f2; color: #b91c1c; padding: 12px; border-radius: 8px;
+          margin-bottom: 20px; font-size: 14px; border: 1px solid #fecaca;
+        }
       `}</style>
     </div>
   );

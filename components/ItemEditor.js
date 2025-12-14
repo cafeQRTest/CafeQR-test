@@ -71,50 +71,70 @@ export default function ItemEditor({
       });
   }, [open, restaurantId, supabase]);
 
-  // Fetch variant templates
-  useEffect(() => {
-    if (!supabase || !open) return;
-    const fetchTemplates = async () => {
-      const { data } = await supabase
-        .from('variant_templates')
-        .select(`
-          *,
-          options:variant_options(*)
-        `)
-        .eq('is_active', true)
-        .order('display_order');
-      
-      setVariantTemplates(data || []);
-    };
-    fetchTemplates();
-  }, [open, supabase]);
-
   // Load existing variants if editing
   useEffect(() => {
-    if (!supabase || !open || !item?.id || !item?.has_variants) return;
+    if (!supabase || !open || !item?.id) return;
     
     const fetchVariants = async () => {
       // Get linked template
-      const { data: link } = await supabase
+      const { data: link, error: linkError } = await supabase
         .from('menu_item_variants')
         .select('template_id')
         .eq('menu_item_id', item.id)
         .maybeSingle();
       
+      if (linkError) console.error('Error fetching variant link:', linkError);
+
       if (link) {
+        // We found a link, so this is definitely a variant item
+        setHasVariants(true);
         setSelectedTemplate(link.template_id);
         
         // Get pricing
-        const { data: pricing } = await supabase
+        const { data: pricing, error: pricingError } = await supabase
           .from('variant_pricing')
           .select('*')
           .eq('menu_item_id', item.id);
+        
+        if (pricingError) console.error('Error fetching variant pricing:', pricingError);
         
         setVariantPrices(pricing || []);
       }
     };
     fetchVariants();
-  }, [open, item, supabase]);
+  }, [open, item?.id, supabase]);
+
+  // Fetch variant templates
+  useEffect(() => {
+    if (!supabase || !open) return;
+    const fetchTemplates = async () => {
+      // Fetch templates with their options, ensuring correct order
+      const { data, error } = await supabase
+        .from('variant_templates')
+        .select(`
+          id, name, display_order, description, is_active,
+          options:variant_options (
+            id, name, display_order, is_active
+          )
+        `)
+        .eq('is_active', true)
+        .order('display_order');
+      
+      if (error) {
+        console.error('Error fetching templates:', error);
+      } else {
+        // Sort options client-side and filter inactive ones
+        const sortedData = (data || []).map(t => ({
+            ...t,
+            options: (t.options || [])
+              .filter(o => o.is_active !== false)
+              .sort((a, b) => a.display_order - b.display_order)
+        }));
+        setVariantTemplates(sortedData);
+      }
+    };
+    fetchTemplates();
+  }, [open, supabase]);
 
   // Initialize form data when modal opens
   useEffect(() => {
@@ -144,6 +164,11 @@ export default function ItemEditor({
             setCessRate(data.cessRate ?? 0);
             setImageUrl(data.imageUrl || "");
             setHasVariants(!!data.hasVariants);
+            
+            // Restore variant state
+            setSelectedTemplate(data.selectedTemplate || null);
+            setVariantPrices(data.variantPrices || []);
+            
             restored = true;
           }
         } catch (e) {
@@ -183,11 +208,12 @@ export default function ItemEditor({
       const formData = {
         id: item?.id || null,
         code, name, price, category, status, veg, isPopular,
-        hsn, taxRate, isPackaged, cessRate, imageUrl, hasVariants
+        hsn, taxRate, isPackaged, cessRate, imageUrl, hasVariants,
+        selectedTemplate, variantPrices
       };
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(formData));
     }
-  }, [open, item, code, name, price, category, status, veg, isPopular, hsn, taxRate, isPackaged, cessRate, imageUrl, hasVariants]);
+  }, [open, item, code, name, price, category, status, veg, isPopular, hsn, taxRate, isPackaged, cessRate, imageUrl, hasVariants, selectedTemplate, variantPrices]);
 
   const clearDraft = () => {
     sessionStorage.removeItem(STORAGE_KEY);
@@ -286,31 +312,32 @@ export default function ItemEditor({
     if (price === "" || Number.isNaN(Number(price))) return false;
     if (price !== "" && Number(price) === 0) return false; // block zero only
     if (taxRate < 0 || cessRate < 0) return false;
-    // code is optional, so we don't require it
+    if (hasVariants && !selectedTemplate) return false; // Require template if variants enabled
     return true;
-  }, [name, price, taxRate, cessRate]);
+  }, [name, price, taxRate, cessRate, hasVariants, selectedTemplate]);
   if (!open) return null;
 
   const saveVariants = async (menuItemId) => {
+    // Always clean up existing variant links to ensure 1:1 relationship
+    // This fixes issues where multiple templates could be accidentally linked
+    await supabase.from('menu_item_variants').delete().eq('menu_item_id', menuItemId);
+
     if (!hasVariants || !selectedTemplate) {
-      // If variants are disabled, clear any existing variant data
-      if (item?.id) {
-        await supabase.from('menu_item_variants').delete().eq('menu_item_id', item.id);
-        await supabase.from('variant_pricing').delete().eq('menu_item_id', item.id);
-      }
+      // If variants are disabled, also clear pricing (already done by above delete for link? no, pricing is separate table)
+      await supabase.from('variant_pricing').delete().eq('menu_item_id', menuItemId);
       return;
     }
     
     // Link menu item to template
-    await supabase
+    const { error: linkErr } = await supabase
       .from('menu_item_variants')
-      .upsert({
+      .insert({
         menu_item_id: menuItemId,
         template_id: selectedTemplate,
         is_required: true
-      }, {
-        onConflict: 'menu_item_id'
       });
+      
+    if (linkErr) throw linkErr;
     
     // Save pricing for each option
     const template = variantTemplates.find(t => t.id === selectedTemplate);
@@ -444,8 +471,12 @@ export default function ItemEditor({
   };
 
   return (
-    <div className="ie-overlay">
-      <form onSubmit={save} className="ie-modal">
+    <div className="ie-overlay" onClick={handleClose}>
+      <form 
+        onSubmit={save} 
+        className="ie-modal" 
+        onClick={(e) => e.stopPropagation()}
+      >
         <h3 className="ie-title">{isEdit ? "Edit Item" : "Add Item"}</h3>
         {err && <div className="ie-error">{err}</div>}
 
@@ -620,7 +651,7 @@ export default function ItemEditor({
             checked={isPackaged}
             onChange={(e) => setIsPackaged(e.target.checked)}
           />
-          <span style={{whiteSpace:"nowrap"}}>Packaged goods</span>
+          <span>Packaged Good</span>
         </label>
         <label className="ie-checkbox-group">
           <input
@@ -666,9 +697,10 @@ export default function ItemEditor({
               checked={hasVariants}
               onChange={(e) => {
                 setHasVariants(e.target.checked);
+                // Don't clear state immediately on uncheck, to allow re-checking to restore context
                 if (!e.target.checked) {
-                  setSelectedTemplate(null);
-                  setVariantPrices([]);
+                   // We keep the internal state so if they re-check it, it's still there.
+                   // It will only be wiped from DB on Save.
                 }
               }}
             />
@@ -729,12 +761,16 @@ export default function ItemEditor({
                                   type="number"
                                   placeholder="0.00"
                                   step="0.01"
-                                  value={variantPrice?.price || ''}
+                                  min="0"
+                                  value={variantPrice?.price ?? ''}
                                   onChange={(e) => {
+                                    const valStr = e.target.value;
+                                    if (valStr !== '' && parseFloat(valStr) < 0) return;
+
                                     const newPrices = variantPrices.filter(vp => vp.option_id !== option.id);
                                     newPrices.push({
                                       option_id: option.id,
-                                      price: parseFloat(e.target.value) || 0,
+                                      price: valStr === '' ? 0 : (parseFloat(valStr) || 0),
                                       is_available: variantPrice?.is_available ?? true
                                     });
                                     setVariantPrices(newPrices);
@@ -1038,7 +1074,7 @@ export default function ItemEditor({
         .ie-btn-secondary { padding: 10px 20px; background: white; color: #4b5563; border: 1px solid #d1d5db; border-radius: 99px; font-weight: 500; font-size: 0.875rem; cursor: pointer; transition: all 0.2s; }
         .ie-btn-small { padding: 6px 12px; background: #f97316; color: white; border: none; border-radius: 6px; font-size: 0.875rem; font-weight: 500; cursor: pointer; }
         .ie-checkbox-wrapper { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
-        .ie-checkbox-group { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border: 1px solid #e5e7eb; border-radius: 8px; background: #f9fafb; cursor: pointer; flex: 1; min-width: 120px; }
+        .ie-checkbox-group { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border: 1px solid #e5e7eb; border-radius: 8px; background: #f9fafb; cursor: pointer; flex: auto; min-width: 120px; }
         .ie-checkbox-group input { width: 16px; height: 16px; accent-color: #f97316; }
         .ie-error { background: #fef2f2; color: #b91c1c; padding: 12px; border-radius: 8px; margin-bottom: 20px; font-size: 0.875rem; border: 1px solid #fecaca; }
         

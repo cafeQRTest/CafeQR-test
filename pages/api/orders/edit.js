@@ -95,6 +95,8 @@ export default async function handler(req, res) {
         quantity: Number(l.quantity) || 1,
         hsn: l.hsn || null,
         is_packaged_good: !!l.is_packaged_good,
+        variant_option_id: l.variant_id || l.variant_option_id || null,
+        variant_name: l.variant_name || null,
       }));
 
     if (filteredLines.length === 0) {
@@ -122,20 +124,24 @@ export default async function handler(req, res) {
     // 4) Load current order_items
     const { data: currentItems, error: itemsErr } = await supabase
       .from('order_items')
-      .select('id, menu_item_id, quantity, price, item_name, hsn, is_packaged_good')
+      .select('id, menu_item_id, quantity, price, item_name, hsn, is_packaged_good, variant_option_id')
       .eq('order_id', order_id);
 
     if (itemsErr) {
       return res.status(500).json({ error: 'Failed to load order items' });
     }
 
-    const currentMap = new Map(
-      (currentItems || [])
-        .filter((i) => i.menu_item_id)
-        .map((i) => [i.menu_item_id, i])
-    );
+    // Helper for composite keys
+    const getCompKey = (mid, vid) => `${mid}_${vid || 'null'}`;
 
-    // 5) Resolve missing menu_item_id from existing lines by name
+    const currentMap = new Map();
+    (currentItems || []).forEach((i) => {
+      if (i.menu_item_id) {
+        currentMap.set(getCompKey(i.menu_item_id, i.variant_option_id), i);
+      }
+    });
+
+    // 5) Resolve missing menu_item_id from existing lines by name (fallback)
     for (const line of filteredLines) {
       if (!line.menu_item_id && line.name && currentItems?.length) {
         const found = currentItems.find(
@@ -143,6 +149,8 @@ export default async function handler(req, res) {
         );
         if (found) {
           line.menu_item_id = found.menu_item_id;
+          // Also adopt variant info if matching by name? Risky, but better than nothing.
+          if (!line.variant_option_id) line.variant_option_id = found.variant_option_id;
         }
       }
     }
@@ -152,7 +160,10 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'No valid menu_item_id in lines' });
     }
 
-    const newMap = new Map(validLines.map((l) => [l.menu_item_id, l]));
+    const newMap = new Map();
+    validLines.forEach((l) => {
+      newMap.set(getCompKey(l.menu_item_id, l.variant_option_id), l);
+    });
 
     // Preload profile + menuItems for breakdown
     const itemIds = [...new Set(validLines.map((l) => l.menu_item_id).filter(Boolean))];
@@ -174,11 +185,11 @@ export default async function handler(req, res) {
     const updates = [];
     const changedItems = [];
     const removed_items = [];
-    const added_items = []; // for KOT added/increased lines
+    const added_items = []; 
 
     // 6a) Restore stock for fully removed items
     const removedItems = (currentItems || []).filter(
-      (item) => item.menu_item_id && !newMap.has(item.menu_item_id)
+      (item) => item.menu_item_id && !newMap.has(getCompKey(item.menu_item_id, item.variant_option_id))
     );
 
     if (removedItems.length > 0) {
@@ -200,14 +211,14 @@ export default async function handler(req, res) {
 
     // 7) Apply delta for new/changed items (with KOT delta quantity)
     await Promise.all(
-      Array.from(newMap.entries()).map(async ([menuItemId, newLine]) => {
-        const current = currentMap.get(menuItemId);
+      Array.from(newMap.entries()).map(async ([compKey, newLine]) => {
+        const current = currentMap.get(compKey);
+        const menuItemId = newLine.menu_item_id;
         const menuItem = menuItems?.find((mi) => mi.id === menuItemId) || null;
 
         // Fix: Packaged goods must always use MRP from menu_items, not frontend-provided price
         const globalInclusive = profile?.prices_include_tax ?? true;
         
-
         // CRITICAL FIX: For packaged goods, always use the price from menu_items (MRP)
         if (menuItem?.is_packaged_good) {
           // Fetch the actual menu item price (MRP)
@@ -242,6 +253,8 @@ export default async function handler(req, res) {
             price: newLine.price,
             hsn: newLine.hsn,
             is_packaged_good: !!newLine.is_packaged_good,
+            variant_option_id: newLine.variant_option_id,
+            variant_name: newLine.variant_name,
             ...breakdown,
           });
 
@@ -255,6 +268,7 @@ export default async function handler(req, res) {
             action: 'ADDED_FULL',
             old_qty: 0,
             new_qty: newLine.quantity,
+            variant_name: newLine.variant_name,
           });
 
           // For internal tracking (stock/invoice)
@@ -266,6 +280,7 @@ export default async function handler(req, res) {
             hsn: newLine.hsn,
             action: 'ADDED',
             is_packaged_good: !!newLine.is_packaged_good,
+            variant_name: newLine.variant_name,
           });
 
           await deductStockForItem(supabase, restaurant_id, newLine);
@@ -285,6 +300,8 @@ export default async function handler(req, res) {
             item_name: newLine.name,
             hsn: newLine.hsn,
             is_packaged_good: !!newLine.is_packaged_good,
+            variant_option_id: newLine.variant_option_id,
+            variant_name: newLine.variant_name,
             ...breakdown,
           });
 

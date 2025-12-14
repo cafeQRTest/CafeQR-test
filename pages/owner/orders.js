@@ -10,6 +10,7 @@ import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import { subscribeOwnerDevice } from '../../helpers/subscribePush';
 import { downloadInvoicePdf } from '../../lib/downloadInvoicePdf'
+import VariantSelector from '../../components/VariantSelector'
 
 
 // Constants
@@ -112,12 +113,16 @@ function computeOrderTotalDisplay(order) {
 }
 
 function toDisplayItems(order) {
-  if (Array.isArray(order.items)) return order.items;
+  if (Array.isArray(order.items) && order.items.length > 0) return order.items;
   if (Array.isArray(order.order_items)) {
     return order.order_items.map((oi) => ({
-      name: oi.menu_items?.name || oi.item_name || 'Item',
+      menu_item_id: oi.menu_item_id,
+      name: oi.item_name || oi.menu_items?.name || 'Item',
       quantity: oi.quantity,
       price: oi.price,
+      is_packaged_good: oi.is_packaged_good,
+      variant_id: oi.variant_option_id || null,
+      variant_name: oi.variant_name || null,
     }));
   }
   return [];
@@ -532,6 +537,8 @@ function EditOrderPanel({ order, onClose, onSave }) {
   const [menuSearch, setMenuSearch] = useState('');
   const [menuItems, setMenuItems] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [showVariantSelector, setShowVariantSelector] = useState(false);
+  const [selectedItemForVariant, setSelectedItemForVariant] = useState(null);
 
   const total = lines.reduce(
     (sum, l) => sum + (Number(l.price) || 0) * (Number(l.quantity) || 0),
@@ -556,12 +563,15 @@ function EditOrderPanel({ order, onClose, onSave }) {
     (arr || [])
       .map((l) => ({
         name: (l.name || '').trim().toLowerCase(),
+        variant_id: l.variant_id || null,
         quantity: Number(l.quantity) || 0,
         price: Number(l.price) || 0,
       }))
       .sort((a, b) => {
         const n = a.name.localeCompare(b.name);
         if (n !== 0) return n;
+        const v = (a.variant_id || '').localeCompare(b.variant_id || '');
+        if (v !== 0) return v;
         const p = a.price - b.price;
         if (p !== 0) return p;
         return a.quantity - b.quantity;
@@ -575,7 +585,8 @@ function EditOrderPanel({ order, onClose, onSave }) {
       if (
         a[i].name !== b[i].name ||
         a[i].quantity !== b[i].quantity ||
-        a[i].price !== b[i].price
+        a[i].price !== b[i].price ||
+        a[i].variant_id !== b[i].variant_id
       ) {
         return true;
       }
@@ -598,17 +609,82 @@ function EditOrderPanel({ order, onClose, onSave }) {
   const openMenuPicker = async () => {
     try {
       const s = getSupabase();
-      const { data, error } = await s
+      
+      // 1. Fetch menu items with variant template info
+      const { data: menu, error } = await s
         .from('menu_items')
-        .select('id, name, price,is_packaged_good')
+        .select(`
+          id, name, price, is_packaged_good, has_variants,
+          menu_item_variants (
+            variant_templates (
+              id,
+              name
+            )
+          )
+        `)
         .eq('restaurant_id', order.restaurant_id);
 
       if (error) {
         console.error('menu_items fetch error', error);
         return;
       }
+      
+      // 2. Fetch variant pricing/options for items that have them
+      const itemsWithVariants = (menu || []).filter(item => item.has_variants);
+      const variantDataMap = new Map();
+      
+      if (itemsWithVariants.length > 0) {
+        const itemIds = itemsWithVariants.map(item => item.id);
+        const { data: variantPricing, error: vpError } = await s
+          .from('variant_pricing')
+          .select(`
+            menu_item_id,
+            price,
+            is_available,
+            variant_options(
+              id,
+              name,
+              display_order,
+              template_id
+            )
+          `)
+          .in('menu_item_id', itemIds);
+          
+         if (vpError) {
+             console.error('variant_pricing fetch error', vpError);
+         } else {
+            // Group by menu_item_id
+            (variantPricing || []).forEach(vp => {
+              if (!variantDataMap.has(vp.menu_item_id)) {
+                variantDataMap.set(vp.menu_item_id, []);
+              }
+              // Guard against missing variant_options relation
+              if (vp.variant_options) {
+                  variantDataMap.get(vp.menu_item_id).push({
+                    variant_id: vp.variant_options.id,
+                    variant_name: vp.variant_options.name,
+                    price: vp.price,
+                    is_available: vp.is_available,
+                    display_order: vp.variant_options.display_order
+                  });
+              }
+            });
+         }
+      }
 
-      setMenuItems(data || []);
+      // 3. Attach variants to items
+      const finalItems = (menu || []).map(item => {
+          const variants = variantDataMap.get(item.id) || [];
+          const templateName = item.menu_item_variants?.[0]?.variant_templates?.name || 'Options';
+          
+          return {
+            ...item,
+            variants: variants.sort((a, b) => a.display_order - b.display_order),
+            variant_template_name: item.has_variants ? templateName : null
+          };
+      });
+
+      setMenuItems(finalItems);
       setMenuSearch('');
       setShowMenuPicker(true);
     } catch (e) {
@@ -617,9 +693,13 @@ function EditOrderPanel({ order, onClose, onSave }) {
   };
 
   const addMenuItemToLines = (item) => {
+    const variantId = item.selectedVariant?.variant_id || item.variant_id || null;
+    const finalName = item.displayName || item.name;
+    const finalPrice = item.selectedVariant?.price || item.price;
+    
     setLines((prev) => {
       const existingIndex = prev.findIndex(
-        (l) => l.menu_item_id === item.id || l.name === item.name
+        (l) => l.menu_item_id === item.id && l.variant_id === variantId
       );
 
       // If already exists, just increase qty
@@ -634,17 +714,33 @@ function EditOrderPanel({ order, onClose, onSave }) {
       return [
         ...prev,
         {
-          name: item.name,
+          name: finalName,
           quantity: 1,
-          price: item.price,
+          price: finalPrice,
           menu_item_id: item.id,
           is_packaged_good: !!item.is_packaged_good,
+          variant_id: variantId,
         },
       ];
     });
 
     setShowMenuPicker(false);
   };
+
+  const handleItemClick = (item) => {
+      if (item.has_variants) {
+          setSelectedItemForVariant(item);
+          setShowVariantSelector(true);
+      } else {
+          addMenuItemToLines(item);
+      }
+  }
+
+  const handleVariantSelect = (itemWithVariant) => {
+      addMenuItemToLines(itemWithVariant);
+      setShowVariantSelector(false);
+      setSelectedItemForVariant(null);
+  }
 
   const filteredMenuItems = menuItems.filter((m) =>
     m.name.toLowerCase().includes(menuSearch.toLowerCase())
@@ -974,7 +1070,7 @@ function EditOrderPanel({ order, onClose, onSave }) {
                 filteredMenuItems.map((item) => (
                   <button
                     key={item.id}
-                    onClick={() => addMenuItemToLines(item)}
+                    onClick={() => handleItemClick(item)}
                     style={{
                       width: '100%',
                       textAlign: 'left',
@@ -1027,6 +1123,21 @@ function EditOrderPanel({ order, onClose, onSave }) {
             </div>
           </div>
         </div>
+      )}
+
+      {showVariantSelector && selectedItemForVariant && (
+        <VariantSelector
+            item={selectedItemForVariant}
+            onSelect={handleVariantSelect}
+            onClose={() => {
+                setShowVariantSelector(false);
+                setSelectedItemForVariant(null);
+            }}
+            gstEnabled={true} // Defaults for admin
+            pricesIncludeTax={false} // Defaults for admin
+            showImage={false}
+            zIndex={1300}
+        />
       )}
     </div>
   );

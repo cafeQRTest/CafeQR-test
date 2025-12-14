@@ -5,6 +5,8 @@ import { getSupabase } from '../../services/supabase'
 import AlertRestaurantButton from '../../components/AlertRestaurantButton'
 import MenuItemCard from '../../components/MenuItemCard'
 import HorizontalScrollRow from '../../components/HorizontalScrollRow'
+import VariantSelector from '../../components/VariantSelector'
+import VariantEditModal from '../../components/VariantEditModal'
 
 export default function OrderPage() {
   const router = useRouter()
@@ -32,6 +34,11 @@ export default function OrderPage() {
   const [justAddedItem, setJustAddedItem] = useState('')
   const [enableMenuImages, setEnableMenuImages] = useState(false)
   const addToastTimeoutRef = useRef(null)
+
+  // Variant state
+  const [showVariantSelector, setShowVariantSelector] = useState(false)
+  const [selectedItem, setSelectedItem] = useState(null)
+  const [editingVariantItem, setEditingVariantItem] = useState(null)
 
   // 🔧 Fix for "data only comes after clearing browser cache" on QR flows.
   // When a customer opens the QR menu, aggressively clear any old
@@ -167,17 +174,61 @@ export default function OrderPage() {
 
         const { data: menu, error: menuErr } = await supabase
           .from('menu_items')
-          .select('id, name, price, description, category, veg, status, is_packaged_good, ispopular, image_url')
+          .select(`
+            id, name, price, description, category, veg, status, is_packaged_good, ispopular, image_url, has_variants,
+            menu_item_variants(
+              variant_templates(id, name)
+            )
+          `)
           .eq('restaurant_id', restaurantId)
           .order('category', { ascending: true })
           .order('name', { ascending: true })
+        
         if (menuErr) throw menuErr
 
-      const cleaned = (menu || []).map((item) => ({
-          ...item,
-          rating: Number((3.8 + Math.random() * 1.0).toFixed(1)),
-          popular: !!item.ispopular
-        }))
+        // Fetch variant pricing for variant items
+        const itemsWithVariants = (menu || []).filter(item => item.has_variants)
+        const variantDataMap = new Map()
+        
+        if (itemsWithVariants.length > 0) {
+          const itemIds = itemsWithVariants.map(i => i.id)
+          const { data: vpData } = await supabase
+            .from('variant_pricing')
+            .select(`
+              menu_item_id, price, is_available,
+              variant_options(id, name, display_order, template_id)
+            `)
+            .in('menu_item_id', itemIds)
+            
+          (vpData || []).forEach(vp => {
+            if (!variantDataMap.has(vp.menu_item_id)) {
+              variantDataMap.set(vp.menu_item_id, [])
+            }
+            if (vp.variant_options) {
+              variantDataMap.get(vp.menu_item_id).push({
+                variant_id: vp.variant_options.id,
+                variant_name: vp.variant_options.name,
+                price: vp.price,
+                is_available: vp.is_available,
+                display_order: vp.variant_options.display_order
+              })
+            }
+          })
+        }
+
+        const transformedMenu = (menu || []).map(item => {
+          const variants = variantDataMap.get(item.id) || []
+          const templateName = item.menu_item_variants?.[0]?.variant_templates?.name || 'Options'
+          return {
+            ...item,
+            variants: variants.sort((a, b) => a.display_order - b.display_order),
+            variant_template_name: item.has_variants ? templateName : null,
+            rating: Number((3.8 + Math.random() * 1.0).toFixed(1)),
+            popular: !!item.ispopular
+          }
+        })
+
+      const cleaned = transformedMenu
 
         if (!cancelled) {
           setRestaurant(rest)
@@ -242,14 +293,61 @@ export default function OrderPage() {
     return () => { supabase.removeChannel(channel) }
   }, [restaurantId, supabase])
   
+  // Handle adding variant from modal
+  const handleVariantAdd = (variantItem) => {
+    // variantItem already has quantity, price, selectedVariant
+    setCart(prev => {
+      // Logic for variants: treat as distinct based on variant_id
+      // Check if this exact variant is already in cart
+      const existingIdx = prev.findIndex(c => c.id === variantItem.id && c.selectedVariant?.variant_id === variantItem.selectedVariant?.variant_id)
+      
+      if (existingIdx >= 0) {
+         const copy = [...prev]
+         copy[existingIdx].quantity += variantItem.quantity
+         return copy
+      }
+      return [...prev, variantItem]
+    })
+    
+    // Feedback
+    const name = variantItem.displayName || variantItem.name
+    setJustAddedItem(name)
+    if (addToastTimeoutRef.current) clearTimeout(addToastTimeoutRef.current)
+    addToastTimeoutRef.current = setTimeout(() => setJustAddedItem(''), 1500)
+  }
+
+  // Handle updates from Edit Modal (deep match)
+  const handleVariantEditUpdate = (targetItem, quantity) => {
+    const isMatch = (c) => {
+      if (c.id !== targetItem.id) return false;
+      if (targetItem.selectedVariant) {
+        return c.selectedVariant?.variant_id === targetItem.selectedVariant?.variant_id;
+      }
+      return !c.selectedVariant;
+    };
+
+    if (quantity === 0) {
+      setCart(prev => prev.filter(c => !isMatch(c)));
+    } else {
+      setCart(prev => prev.map(c => isMatch(c) ? { ...c, quantity } : c));
+    }
+  }
+
   const addToCart = (item) => {
     if (item.status && item.status !== 'available') {
       alert('This item is currently out of stock.')
       return
     }
+
+    if (item.has_variants) {
+      setSelectedItem(item)
+      setShowVariantSelector(true)
+      return
+    }
+
     setCart(prev => {
-      const existing = prev.find(c => c.id === item.id)
-      if (existing) return prev.map(c => c.id === item.id ? { ...c, quantity: c.quantity + 1 } : c)
+      const existing = prev.find(c => c.id === item.id && !c.selectedVariant)
+      if (existing) return prev.map(c => c.id === item.id && !c.selectedVariant ? { ...c, quantity: c.quantity + 1 } : c)
       return [...prev, { ...item, quantity: 1 }]
     })
 
@@ -269,7 +367,11 @@ export default function OrderPage() {
     else setCart(prev => prev.map(c => c.id === itemId ? { ...c, quantity } : c))
   }
 
-  const getItemQuantity = (itemId) => cart.find(c => c.id === itemId)?.quantity || 0
+  const getItemQuantity = (itemId) => {
+    // If exact variant matching needed, we'd need variantId. 
+    // Here we return TOTAL quantity of that item (all variants summed)
+    return cart.filter(c => c.id === itemId).reduce((sum, c) => sum + (c.quantity || 1), 0)
+  }
 
   const filteredItems = useMemo(() => {
     const q = (searchQuery || '').toLowerCase()
@@ -541,14 +643,20 @@ export default function OrderPage() {
                 count={items.length}
                 items={items}
                 renderItem={(item) => {
-                  const quantity = getItemQuantity(item.id)
+                  const totalQty = getItemQuantity(item.id)
+                  // For variants, we force "ADD" state (qty=0) but show badge
+                  const passQty = item.has_variants ? 0 : totalQty
+                  const badge = item.has_variants ? totalQty : 0
+                  
                   return (
                     <div style={{ minWidth: '240px', maxWidth: '240px' }}>
                       <MenuItemCard
                         item={item}
-                        quantity={quantity}
+                        quantity={passQty}
+                        badge={badge}
                         onAdd={() => addToCart(item)}
-                        onRemove={() => updateCartItem(item.id, quantity - 1)}
+                        onRemove={() => updateCartItem(item.id, passQty - 1)}
+                        onEdit={item.has_variants ? () => setEditingVariantItem(item) : undefined}
                         showImage={true}
                       />
                     </div>
@@ -566,8 +674,13 @@ export default function OrderPage() {
               </h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {items.map((item) => {
-                  const quantity = getItemQuantity(item.id);
+                  const totalQty = getItemQuantity(item.id);
                   const isOutOfStock = item.status === 'out_of_stock' || item.available === false;
+                  
+                  // Logic for manual list rendering (No-Image mode)
+                  // If variant, show simple Add button that opens popup
+                  const showStepper = !item.has_variants && totalQty > 0;
+                  
                   return (
                     <div 
                       key={item.id}
@@ -609,7 +722,7 @@ export default function OrderPage() {
                         </div>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center' }}>
-                        {quantity === 0 ? (
+                        {isOutOfStock || !showStepper ? (
                           <button
                             onClick={() => addToCart(item)}
                             disabled={isOutOfStock}
@@ -626,6 +739,11 @@ export default function OrderPage() {
                             }}
                           >
                             {isOutOfStock ? 'OUT OF STOCK' : 'ADD'}
+                            {item.has_variants && totalQty > 0 && (
+                                <span style={{marginLeft: 6, fontSize: 11, background: '#f97316', color: 'white', padding: '1px 6px', borderRadius: 99}}>
+                                  {totalQty}
+                                </span>
+                            )}
                           </button>
                         ) : (
                           <div style={{
@@ -638,7 +756,7 @@ export default function OrderPage() {
                             border: `1px solid ${brandColor}`,
                           }}>
                             <button
-                              onClick={() => updateCartItem(item.id, quantity - 1)}
+                              onClick={() => updateCartItem(item.id, totalQty - 1)}
                               style={{
                                 width: 28,
                                 height: 28,
@@ -656,7 +774,7 @@ export default function OrderPage() {
                               −
                             </button>
                             <span style={{ fontSize: 14, fontWeight: 700, color: brandColor, minWidth: 20, textAlign: 'center' }}>
-                              {quantity}
+                              {totalQty}
                             </span>
                             <button
                               onClick={() => addToCart(item)}
@@ -738,6 +856,27 @@ export default function OrderPage() {
         </div>
       )}
 
+
+      {showVariantSelector && selectedItem && (
+        <VariantSelector
+          item={selectedItem}
+          onSelect={handleVariantAdd}
+          onClose={() => setShowVariantSelector(false)}
+          showImage={enableMenuImages}
+          gstEnabled={false} 
+          pricesIncludeTax={true}
+        />
+      )}
+
+      {editingVariantItem && (
+        <VariantEditModal
+          item={editingVariantItem}
+          cartItems={cart.filter(c => c.id === editingVariantItem.id)}
+          onUpdate={handleVariantEditUpdate}
+          onClose={() => setEditingVariantItem(null)}
+          themeColor={brandColor}
+        />
+      )}
 
     <style jsx>{`
       .cust-page { min-height: 100vh; background: #f8f9fa; font-family: system-ui, -apple-system, sans-serif; padding-bottom: 90px; }

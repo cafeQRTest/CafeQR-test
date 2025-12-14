@@ -15,7 +15,7 @@ const nonVegIcon = (
   </svg>
 );
 
-export default function MenuItemCard({ item, quantity = 0, onAdd, onRemove, showImage = true }) {
+export default function MenuItemCard({ item, quantity = 0, onAdd, onRemove, showImage = true, badge = 0, onEdit }) {
   const hasImage = !!item.image_url;
   const isOutOfStock = item.status === 'out_of_stock' || item.available === false || item.is_available === false;
 
@@ -73,14 +73,48 @@ export default function MenuItemCard({ item, quantity = 0, onAdd, onRemove, show
         
         <div style={styles.actions}>
           {quantity === 0 ? (
-            <button 
-              style={styles.addButton}
-              onClick={() => onAdd(item)}
-              aria-label={`Add ${item.name}`}
-              disabled={isOutOfStock}
-            >
-              {isOutOfStock ? 'OUT OF STOCK' : 'ADD'}
-            </button>
+            <div style={{ display: 'flex', gap: 6, width: '100%' }}>
+              {!isOutOfStock && onEdit && badge > 0 && (
+                 <button
+                   onClick={(e) => { e.stopPropagation(); onEdit(item); }}
+                   style={{
+                     flex: 1,
+                     padding: '6px',
+                     background: 'var(--brand-50)',
+                     border: '1px solid var(--brand)',
+                     borderRadius: '8px',
+                     color: 'var(--brand)',
+                     fontWeight: 700,
+                     fontSize: '13px',
+                     cursor: 'pointer',
+                     whiteSpace: 'nowrap'
+                   }}
+                 >
+                   {badge} Added ✎
+                 </button>
+              )}
+              <button 
+                style={{ ...styles.addButton, flex: 1 }}
+                onClick={() => onAdd(item)}
+                aria-label={`Add ${item.name}`}
+                disabled={isOutOfStock}
+              >
+                {isOutOfStock ? 'OUT OF STOCK' : (onEdit && badge > 0 ? '+ ADD' : 'ADD')}
+                {!onEdit && !isOutOfStock && badge > 0 && (
+                  <span style={{
+                    marginLeft: 6, 
+                    fontSize: 10, 
+                    background: 'var(--brand)', 
+                    color: 'white', 
+                    padding: '2px 6px', 
+                    borderRadius: 99,
+                    verticalAlign: 'text-bottom'
+                  }}>
+                    {badge}
+                  </span>
+                )}
+              </button>
+            </div>
           ) : (
             <div style={styles.counter}>
               <button 

@@ -4,7 +4,7 @@
 import React, { useState } from 'react';
 import styled from 'styled-components';
 
-export default function VariantSelector({ item, onSelect, onClose, gstEnabled = false, pricesIncludeTax = true, onCartOpen, showImage = true }) {
+export default function VariantSelector({ item, onSelect, onClose, gstEnabled = false, pricesIncludeTax = true, onCartOpen, showImage = true, zIndex }) {
   // Track quantity for each variant (key: variant_id, value: quantity)
   const [variantQuantities, setVariantQuantities] = useState({});
 
@@ -78,11 +78,11 @@ export default function VariantSelector({ item, onSelect, onClose, gstEnabled = 
     </svg>
   );
 
-  const showGstIndicator = gstEnabled && !pricesIncludeTax;
+  const showGstIndicator = gstEnabled && !pricesIncludeTax && !item.is_packaged_good;
   const gstSuffix = showGstIndicator ? ' +GST' : '';
 
   return (
-    <Overlay onClick={onClose}>
+    <Overlay onClick={onClose} zIndex={zIndex}>
       <Modal onClick={(e) => e.stopPropagation()}>
         {/* Enhanced Header with Item Details */}
         <Header>
@@ -240,7 +240,7 @@ const Overlay = styled.div`
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: ${props => props.zIndex || 1000};
   padding: 20px;
   animation: fadeIn 0.2s ease;
   
@@ -367,6 +367,7 @@ const TemplateTitleRow = styled.div`
   align-items: center;
   padding: 12px 0 0 0;
   border-top: 1px solid #f3f4f6;
+  display: none; /* Hidden as per original, or keep it if it was there? Original didn't show it in usage */
 `;
 
 const TemplateTitle = styled.h3`
@@ -534,7 +535,7 @@ const VariantName = styled.div`
   font-size: 15px;
   font-weight: 600;
   color: #111827;
-`;
+  `;
 
 const PriceRow = styled.div`
   display: flex;

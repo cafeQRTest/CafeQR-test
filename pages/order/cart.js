@@ -103,17 +103,28 @@ export default function CartSummary() {
     }
   };
 
-  const updateQuantity = (itemId, quantity) => {
+  const updateQuantity = (targetItem, quantity) => {
+    const isMatch = (c) => {
+      // Basic ID match
+      if (c.id !== targetItem.id) return false;
+      // Variant match
+      if (targetItem.selectedVariant) {
+        return c.selectedVariant?.variant_id === targetItem.selectedVariant?.variant_id;
+      }
+      // Non-variant match
+      return !c.selectedVariant;
+    };
+
     if (quantity === 0) {
       setCart((prev) => {
-        const next = prev.filter((c) => c.id !== itemId);
+        const next = prev.filter((c) => !isMatch(c));
         persistCart(next);
         return next;
       });
     } else {
       setCart((prev) => {
         const next = prev.map((c) =>
-          c.id === itemId ? { ...c, quantity } : c
+          isMatch(c) ? { ...c, quantity } : c
         );
         persistCart(next);
         return next;
@@ -338,7 +349,7 @@ export default function CartSummary() {
                   {item.veg ? "🟢" : "🔺"}
                 </span>
                 <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 500 }}>
-                  {item.name}
+                  {item.displayName || item.name}
                 </h3>
               </div>
               <div
@@ -355,7 +366,7 @@ export default function CartSummary() {
               </div>
               <button
                 type="button"
-                onClick={() => updateQuantity(item.id, 0)}
+                onClick={() => updateQuantity(item, 0)}
                 style={{
                   marginTop: "4px",
                   padding: "4px 0",
@@ -381,7 +392,7 @@ export default function CartSummary() {
               }}
             >
               <button
-                onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                onClick={() => updateQuantity(item, item.quantity - 1)}
                 style={{
                   background: "#fff",
                   border: "none",
@@ -408,7 +419,7 @@ export default function CartSummary() {
                 {item.quantity}
               </span>
               <button
-                onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                onClick={() => updateQuantity(item, item.quantity + 1)}
                 style={{
                   background: "#fff",
                   border: "none",

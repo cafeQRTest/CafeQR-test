@@ -9,6 +9,7 @@ import CategoryManager from "../../components/CategoryManager";
 import VariantManager from "../../components/VariantManager";
 import LibraryPicker from "../../components/LibraryPicker";
 import Button from "../../components/ui/Button";
+import MenuImageImport from "../../components/MenuImageImport";
 import NiceSelect from "../../components/NiceSelect";
 import { getSupabase } from "../../services/supabase";
 import { useAlert } from "../../context/AlertContext";
@@ -172,6 +173,7 @@ export default function MenuPage() {
   
   const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [showVariantManager, setShowVariantManager] = useState(false);
+  const [showImageImport, setShowImageImport] = useState(false);
 
   // Helper to refresh categories after edits
   const refreshCategories = useCallback(async () => {
@@ -457,6 +459,7 @@ export default function MenuPage() {
 
         <div className="toolbar-cta">
           <Button onClick={() => openEditor({})}>Add New Item</Button>
+          <Button onClick={() => setShowImageImport(true)}>Import from Image</Button>
           <Button onClick={() => setShowLibrary(true)}>Add from Library</Button>
           <Button variant="outline" onClick={() => setShowCategoryManager(true)}>Categories</Button>
           <Button variant="outline" onClick={() => setShowVariantManager(true)}>Variants</Button>
@@ -810,6 +813,19 @@ export default function MenuPage() {
           .col-name { min-width: auto; max-width: none; }
         }
       `}</style>
+      {showImageImport && (
+        <MenuImageImport
+          restaurantId={restaurantId}
+          existingItems={items}
+          onClose={() => setShowImageImport(false)}
+          onImported={(newItems) => {
+            if (newItems && newItems.length) {
+              setItems(prev => [...newItems, ...prev]);
+              // Also refresh cache/categories if implicit
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
