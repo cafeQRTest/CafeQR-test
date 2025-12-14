@@ -11,6 +11,8 @@ import VariantSelector from '../../components/VariantSelector';
 import NiceSelect from '../../components/NiceSelect';
 import { useAlert } from '../../context/AlertContext';
 import HorizontalScrollRow from '../../components/HorizontalScrollRow';
+import { round2, normalizeQty, formatQty2 } from '../../lib/qty'; // adjust path
+
 
 // -------------------------------
 // Inline Payment Confirm Dialog
@@ -162,6 +164,45 @@ export default function CounterSale() {
 // inside CounterSale
   const [printProfile, setPrintProfile] = useState(null);
 
+// CounterSale component (pages/owner/counter.js)
+const [qtyDrafts, setQtyDrafts] = useState({}); // cartId -> string
+
+const setDraft = (cartId, v) =>
+  setQtyDrafts((prev) => ({ ...prev, [cartId]: v }));
+
+const clearDraft = (cartId) =>
+  setQtyDrafts((prev) => {
+    const next = { ...prev };
+    delete next[cartId];
+    return next;
+  });
+
+const updateCartItem = (cartId, qty) => {
+  const q = round2(qty);
+  if (!Number.isFinite(q) || q <= 0) {
+    setCart((p) => p.filter((c) => c.cartId !== cartId));
+    clearDraft(cartId);
+    return;
+  }
+  setCart((p) => p.map((c) => (c.cartId === cartId ? { ...c, quantity: q } : c)));
+  clearDraft(cartId);
+};
+
+const commitQtyDraft = (cartId, raw) => {
+  const q = normalizeQty(raw, { allowZero: true }); // allow 0 => remove line
+  if (q === 0) return updateCartItem(cartId, 0);
+  if (q === null) {
+    clearDraft(cartId); // revert UI
+    return;
+  }
+  return updateCartItem(cartId, q);
+};
+
+const getDraftOrQtyNumber = (cartId, fallbackQty) => {
+  const parsed = normalizeQty(qtyDrafts[cartId], { allowZero: true });
+  if (parsed === null) return Number(fallbackQty || 0);
+  return parsed;
+};
 
 
   const [tables, setTables] = useState([]);
@@ -700,10 +741,6 @@ const loadCreditCustomers = async () => {
     setSelectedItem(null);
   };
 
-  const updateCartItem = (cartId, qty) => {
-    if (qty <= 0) setCart((p) => p.filter((c) => c.cartId !== cartId));
-    else setCart((p) => p.map((c) => (c.cartId === cartId ? { ...c, quantity: qty } : c)));
-  };
 
   // Create + finalize (settle now)
 // inside pages/owner/counter.js
@@ -720,7 +757,7 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
     id: i.id,
     name: i.name,
     price: i.price,
-    quantity: i.quantity,
+    quantity: round2(i.quantity), // important
     hsn: i.hsn,
     tax_rate: i.tax_rate,
     is_packaged_good: i.is_packaged_good,
@@ -811,7 +848,7 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
     else if (orderSelect && orderSelect.startsWith('table:')) table_number = orderSelect.split(':')[1] || null;
 
     const items = cart.map((i) => ({
-      id: i.id, name: i.displayName || i.name, price: i.price, quantity: i.quantity,
+      id: i.id, name: i.displayName || i.name, price: i.price, quantity: round2(i.quantity),
       hsn: i.hsn, tax_rate: i.tax_rate, is_packaged_good: i.is_packaged_good, code_number: i.code_number,
       variant_id: i.variant_id || null, variant_name: i.variant_name || null
     }));
@@ -1102,23 +1139,39 @@ window.dispatchEvent(
                 title={cat}
                 count={items.length}
                 items={items}
-                renderItem={(item) => {
-                  const qty = cart.find((c) => c.id === item.id)?.quantity || 0;
-                  return (
-                    <div style={{ minWidth: '200px', maxWidth: '200px' }}>
-                      <MenuItemCard
-                        item={item}
-                        quantity={qty}
-                        onAdd={() => addToCart(item)}
-                        onRemove={() => {
-                          const current = cart.find((c) => c.id === item.id)?.quantity || 0;
-                          updateCartItem(item.id, current - 1);
-                        }}
-                        showImage={true}
-                      />
-                    </div>
-                  );
-                }}
+renderItem={(item) => {
+  const qty = cart.find((c) => c.id === item.id)?.quantity || 0;
+
+  const handleQuantityChange = (it, q) => {
+    // Only safe for non-variant items because cartId differs for variants
+    const cartId = it.id;
+    if (q <= 0) return updateCartItem(cartId, 0);
+
+    const exists = cart.some((c) => c.cartId === cartId);
+    if (exists) updateCartItem(cartId, q);
+    else addItemToCart({ ...it, quantity: q });
+  };
+
+const isVariantItem = !!item.hasvariants && (item.variants?.length || 0) > 0;
+
+
+  return (
+    <div style={{ minWidth: '200px', maxWidth: '200px' }}>
+      <MenuItemCard
+  item={item}
+  quantity={isVariantItem ? 0 : qty}
+  onAdd={() => addToCart(item)}
+  onRemove={() => {
+          const current = cart.find((c) => c.id === item.id)?.quantity || 0;
+          updateCartItem(item.id, current - 1);
+        }}
+  onQuantityChange={isVariantItem ? undefined : handleQuantityChange}
+  showImage={true}      />
+    </div>
+  );
+}}
+
+
               />
             ))
           ) : (
@@ -1142,21 +1195,46 @@ window.dispatchEvent(
                         <div className="counter-item-actions">
                           {qty > 0 ? (
                             <div className="counter-cart-qty">
-                              <button
-                                onClick={() => updateCartItem(item.id, qty - 1)}
-                                style={{ background: THEME.main, color: '#fff' }}
-                              >
-                                -
-                              </button>
-                              <div>{qty}</div>
-                              <button
-                                onClick={() => addToCart(item)}
-                                disabled={!avail}
-                                style={{ background: THEME.main, color: '#fff' }}
-                              >
-                                +
-                              </button>
-                            </div>
+  <button
+    onClick={() => updateCartItem(item.id, qty - 1)}
+    style={{ background: THEME.main, color: '#fff' }}
+    type="button"
+  >
+    -
+  </button>
+
+  <input
+    value={qtyDrafts[item.id] ?? formatQty2(qty)}
+    inputMode="decimal"
+    // keep it text so browser doesn't fight decimals/step
+    type="text"
+    onChange={(e) => setDraft(item.id, e.target.value)}
+    onBlur={(e) => commitQtyDraft(item.id, e.target.value)}
+    onKeyDown={(e) => {
+      if (e.key === 'Enter') e.currentTarget.blur();
+      if (e.key === 'Escape') clearDraft(item.id);
+    }}
+    style={{
+      width: 56,
+      textAlign: 'center',
+      border: '1px solid #e5e7eb',
+      borderLeft: 'none',
+      borderRight: 'none',
+      height: 32,
+      outline: 'none',
+    }}
+  />
+
+  <button
+    onClick={() => addToCart(item)}
+    disabled={!avail}
+    style={{ background: THEME.main, color: '#fff' }}
+    type="button"
+  >
+    +
+  </button>
+</div>
+
                           ) : (
                             <button
                               onClick={() => addToCart(item)}
@@ -1366,7 +1444,11 @@ window.dispatchEvent(
                           flexShrink: 0,
                         }}>
                           <button
-                            onClick={() => updateCartItem(i.cartId || i.id, i.quantity - 1)}
+onClick={() => {
+  const id = i.cartId || i.id;
+  const base = getDraftOrQtyNumber(id, i.quantity);
+  updateCartItem(id, base - 1);
+}}
                             style={{
                               background: 'white',
                               color: THEME.main,
@@ -1404,7 +1486,11 @@ window.dispatchEvent(
                             {i.quantity}
                           </span>
                           <button
-                            onClick={() => updateCartItem(i.cartId || i.id, i.quantity + 1)}
+onClick={() => {
+  const id = i.cartId || i.id;
+  const base = getDraftOrQtyNumber(id, i.quantity);
+  updateCartItem(id, base + 1);
+}}
                             style={{
                               background: 'white',
                               color: THEME.main,

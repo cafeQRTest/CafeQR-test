@@ -162,7 +162,7 @@ export default async function handler(req, res) {
           'Item Name': line.item_name,
           HSN: line.hsn || '',
           'Tax Rate %': Number(line.tax_rate || 0).toFixed(2),
-          Qty: qty,
+          Qty: Number(qty).toFixed(2),
           'Unit Rate (Ex Tax)': unitRateEx.toFixed(2),
           'Line Taxable Value': lineTaxable.toFixed(2),
           'CGST Amt': cgstAmt.toFixed(2),

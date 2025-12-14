@@ -11,7 +11,7 @@ import Card from '../../components/ui/Card';
 import { subscribeOwnerDevice } from '../../helpers/subscribePush';
 import { downloadInvoicePdf } from '../../lib/downloadInvoicePdf'
 import VariantSelector from '../../components/VariantSelector'
-
+import { round2 } from '../../lib/qty'
 
 // Constants
 const STATUSES = ['new','in_progress','ready','completed'];
@@ -62,7 +62,7 @@ async function restoreStockForOrder(supabase, restaurantId, orderItems) {
     }
 
     for (const ri of recipe.recipe_items) {
-      const addBack = Number(ri.quantity) * Number(oi.quantity);
+      const addBack = round2(Number(ri.quantity) * Number(oi.quantity));
       console.log('[STOCK RESTORE] Restoring ingredient:', { ingredient_id: ri.ingredient_id, addBack });
       
       // Get current stock
@@ -79,7 +79,7 @@ async function restoreStockForOrder(supabase, restaurantId, orderItems) {
       }
 
       const oldStock = Number(ing.current_stock || 0);
-      const newStock = oldStock + addBack;
+      const newStock = round2(oldStock + addBack);
       console.log('[STOCK RESTORE] Updating stock for', ing.name, ':', oldStock, '→', newStock);
       
       const { error: updateErr } = await supabase

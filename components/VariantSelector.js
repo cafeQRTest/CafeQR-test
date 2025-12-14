@@ -8,6 +8,42 @@ export default function VariantSelector({ item, onSelect, onClose, gstEnabled = 
   // Track quantity for each variant (key: variant_id, value: quantity)
   const [variantQuantities, setVariantQuantities] = useState({});
 
+  const quantityStep = 1;      // change if you want button step like 0.25, etc.
+const decimalPlaces = 2;
+const minQuantity = 0;
+const maxQuantity = 99;
+
+const [variantQtyDrafts, setVariantQtyDrafts] = useState({}); // variantId -> string
+
+const clampQty = (n) => {
+  if (!Number.isFinite(n)) return minQuantity;
+  let v = Math.max(minQuantity, Math.min(maxQuantity, n));
+  return Number(v.toFixed(decimalPlaces));
+};
+
+const getDisplayQty = (variantId) => {
+  if (variantQtyDrafts[variantId] !== undefined) return variantQtyDrafts[variantId];
+  const q = variantQuantities[variantId] || 0;
+  return q > 0 ? String(q) : '';
+};
+
+const setQtyNumber = (variantId, qty) => {
+  const q = clampQty(qty);
+  setVariantQuantities(prev => {
+    if (q <= 0) {
+      const { [variantId]: _, ...rest } = prev;
+      return rest;
+    }
+    return { ...prev, [variantId]: q };
+  });
+};
+
+const bumpQty = (variantId, dir) => {
+  const current = variantQuantities[variantId] || 0;
+  setQtyNumber(variantId, current + dir * quantityStep);
+};
+
+
   const variants = item.variants || [];
   const hasVariants = variants.length > 0;
 
@@ -162,18 +198,46 @@ export default function VariantSelector({ item, onSelect, onClose, gstEnabled = 
                   {!isDisabled && isSelected && (
                     <VariantRightSection onClick={(e) => e.stopPropagation()}>
                       <QuantityControls>
-                        <QuantityButton 
-                          onClick={() => updateVariantQuantity(variant.variant_id, -1)}
-                        >
-                          −
-                        </QuantityButton>
-                        <QuantityDisplay>{quantity}</QuantityDisplay>
-                        <QuantityButton 
-                          onClick={() => updateVariantQuantity(variant.variant_id, 1)}
-                          disabled={quantity >= 99}
-                        >
-                          +
-                        </QuantityButton>
+                        <QuantityButton onClick={() => bumpQty(variant.variant_id, -1)}>−</QuantityButton>
+
+<input
+  type="text"
+  inputMode="decimal"
+  value={getDisplayQty(variant.variant_id)}
+  onChange={(e) => {
+    const raw = e.target.value.replace(',', '.');
+    if (raw === '' || /^\d*\.?\d*$/.test(raw)) {
+      setVariantQtyDrafts(prev => ({ ...prev, [variant.variant_id]: raw }));
+    }
+  }}
+  onBlur={() => {
+    const raw = variantQtyDrafts[variant.variant_id];
+    if (raw === undefined) return;
+    if (raw === '') {
+      setQtyNumber(variant.variant_id, 0);
+    } else {
+      const parsed = parseFloat(raw);
+      if (Number.isFinite(parsed)) setQtyNumber(variant.variant_id, parsed);
+    }
+    setVariantQtyDrafts(prev => {
+      const { [variant.variant_id]: _, ...rest } = prev;
+      return rest;
+    });
+  }}
+  onKeyDown={(e) => {
+    if (e.key === 'Enter') e.currentTarget.blur();
+    if (e.key === 'Escape') {
+      setVariantQtyDrafts(prev => {
+        const { [variant.variant_id]: _, ...rest } = prev;
+        return rest;
+      });
+      e.currentTarget.blur();
+    }
+  }}
+  style={{ width: 56, textAlign: 'center' }}
+/>
+                        <QuantityButton onClick={() => bumpQty(variant.variant_id, +1)}>+</QuantityButton>
+
                       </QuantityControls>
                     </VariantRightSection>
                   )}

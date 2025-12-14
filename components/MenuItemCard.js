@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Button from './ui/Button';
 
 const vegIcon = (
@@ -15,23 +15,154 @@ const nonVegIcon = (
   </svg>
 );
 
-export default function MenuItemCard({ item, quantity = 0, onAdd, onRemove, showImage = true, badge = 0, onEdit }) {
+export default function MenuItemCard({
+  item,
+  quantity = 0,
+  onAdd,
+  onRemove,
+  showImage = true,
+  badge = 0,
+  onEdit,
+  // NEW: direct quantity setter, preferred for decimals
+  onQuantityChange,
+  // NEW: constraints
+  quantityStep = 1,
+  minQuantity = 0,
+  maxQuantity = 999,
+  decimalPlaces = 2
+}) {
   const hasImage = !!item.image_url;
-  const isOutOfStock = item.status === 'out_of_stock' || item.available === false || item.is_available === false;
+  const isOutOfStock =
+    item.status === 'out_of_stock' ||
+    item.available === false ||
+    item.is_available === false;
 
-  
+  const isVariantItem =
+    !!(item.hasvariants || item.has_variants) && (item.variants?.length || 0) > 0;
+
+  // Local string state for the input so user can type freely
+  const [qtyInput, setQtyInput] = useState(
+    quantity > 0 ? String(quantity) : ''
+  );
+
+  // Sync input if parent quantity changes (cart updates, etc.)
+  useEffect(() => {
+    setQtyInput(quantity > 0 ? String(quantity) : '');
+  }, [quantity]);
+
+  // Helper to enforce min/max and rounding
+  const clampQuantity = (rawValue) => {
+    if (Number.isNaN(rawValue)) return minQuantity;
+
+    let value = rawValue;
+
+    // Enforce min/max
+    value = Math.max(minQuantity, Math.min(maxQuantity, value));
+
+    // Round to required decimal places only
+    return Number(value.toFixed(decimalPlaces));
+  };
+
+
+  const handleQtyInputChange = (e) => {
+    const raw = e.target.value.replace(',', '.');
+
+    // Allow empty (user clearing field) and partial numbers like "0."
+    if (raw === '') {
+      setQtyInput('');
+      return;
+    }
+
+    // Only allow digits and a single decimal point
+    if (!/^\d*\.?\d*$/.test(raw)) {
+      return;
+    }
+
+    setQtyInput(raw);
+  };
+
+  const commitQtyFromInput = () => {
+    if (qtyInput === '') {
+      // Treat empty as 0
+      if (onQuantityChange) {
+        onQuantityChange(item, 0);
+      } else if (quantity > 0 && onRemove) {
+        // Backwards compatibility
+        onRemove(item);
+      }
+      return;
+    }
+
+    const parsed = parseFloat(qtyInput);
+    if (Number.isNaN(parsed)) {
+      // Reset to last known quantity from parent
+      setQtyInput(quantity > 0 ? String(quantity) : '');
+      return;
+    }
+
+    const finalQty = clampQuantity(parsed);
+    setQtyInput(String(finalQty));
+
+    if (onQuantityChange) {
+      onQuantityChange(item, finalQty);
+    } else {
+        // Fallback or do nothing
+    }
+  };
+
+  const handleIncrease = () => {
+    if (isOutOfStock) return;
+
+    if (onQuantityChange) {
+      const base = quantity || 0;
+      const next = clampQuantity(base + quantityStep);
+      onQuantityChange(item, next);
+    } else if (onAdd) {
+      onAdd(item);
+    }
+  };
+
+  const handleDecrease = () => {
+    if (isOutOfStock) return;
+
+    if (onQuantityChange) {
+      const base = quantity || 0;
+      const next = clampQuantity(base - quantityStep);
+      onQuantityChange(item, next);
+    } else if (onRemove) {
+      onRemove(item);
+    }
+  };
+
+  const handleInitialAdd = () => {
+    if (isOutOfStock) return;
+
+    if (onQuantityChange) {
+      const start =
+        quantityStep > 0
+          ? clampQuantity(Math.max(minQuantity, quantityStep))
+          : clampQuantity(Math.max(minQuantity, 1));
+      onQuantityChange(item, start);
+    } else if (onAdd) {
+      onAdd(item);
+    }
+  };
+
   return (
     <div style={styles.card}>
       {showImage && (
         <div style={styles.imageContainer}>
           {hasImage ? (
-            <img 
-              src={item.image_url} 
+            <img
+              src={item.image_url}
               alt={item.name}
-              style={{ ...styles.image, ...(isOutOfStock ? styles.outOfStockImage : {}) }}
+              style={{
+                ...styles.image,
+                ...(isOutOfStock ? styles.outOfStockImage : {}),
+              }}
               loading="lazy"
-              onMouseEnter={(e) => e.target.style.transform = 'scale(1.05)'}
-              onMouseLeave={(e) => e.target.style.transform = 'scale(1)'}
+              onMouseEnter={(e) => (e.target.style.transform = 'scale(1.05)')}
+              onMouseLeave={(e) => (e.target.style.transform = 'scale(1)')}
             />
           ) : (
             <div style={styles.placeholder}>
@@ -48,31 +179,42 @@ export default function MenuItemCard({ item, quantity = 0, onAdd, onRemove, show
           </div>
         </div>
       )}
-      
+
       <div style={styles.content}>
         <div style={styles.header}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
+          <div
+            style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}
+          >
             {!showImage && (
               <div style={{ flexShrink: 0 }}>
                 {item.veg ? vegIcon : nonVegIcon}
               </div>
             )}
-            <h3 style={styles.title} title={item.name}>{item.name}</h3>
+            <h3 style={styles.title} title={item.name}>
+              {item.name}
+            </h3>
           </div>
           <span style={styles.price}>
-            {item.has_variants && item.variants?.length > 0 
-              ? `₹${Number(item.variants[0]?.price || item.price).toFixed(2)}+` 
-              : `₹${Number(item.price).toFixed(2)}`
-            }
+            {item.has_variants && item.variants?.length > 0
+              ? `₹${Number(item.variants[0]?.price || item.price).toFixed(
+                  2
+                )}+`
+              : `₹${Number(item.price).toFixed(2)}`}
           </span>
         </div>
-        
-        {item.category && (
-          <div style={styles.category}>{item.category}</div>
-        )}
-        
+
+        {item.category && <div style={styles.category}>{item.category}</div>}
+
         <div style={styles.actions}>
-          {quantity === 0 ? (
+          {isVariantItem ? (
+            <button
+              style={styles.addButton}
+              onClick={() => !isOutOfStock && onAdd?.(item)}
+              disabled={isOutOfStock}
+            >
+              {isOutOfStock ? 'OUT OF STOCK' : 'ADD'}
+            </button>
+          ) : quantity <= 0 ? (
             <div style={{ display: 'flex', gap: 6, width: '100%' }}>
               {!isOutOfStock && onEdit && badge > 0 && (
                  <button
@@ -93,20 +235,20 @@ export default function MenuItemCard({ item, quantity = 0, onAdd, onRemove, show
                    {badge} Added ✎
                  </button>
               )}
-              <button 
+              <button
                 style={{ ...styles.addButton, flex: 1 }}
-                onClick={() => onAdd(item)}
+                onClick={handleInitialAdd}
                 aria-label={`Add ${item.name}`}
                 disabled={isOutOfStock}
               >
                 {isOutOfStock ? 'OUT OF STOCK' : (onEdit && badge > 0 ? '+ ADD' : 'ADD')}
                 {!onEdit && !isOutOfStock && badge > 0 && (
                   <span style={{
-                    marginLeft: 6, 
-                    fontSize: 10, 
-                    background: 'var(--brand)', 
-                    color: 'white', 
-                    padding: '2px 6px', 
+                    marginLeft: 6,
+                    fontSize: 10,
+                    background: 'var(--brand)',
+                    color: 'white',
+                    padding: '2px 6px',
                     borderRadius: 99,
                     verticalAlign: 'text-bottom'
                   }}>
@@ -117,18 +259,34 @@ export default function MenuItemCard({ item, quantity = 0, onAdd, onRemove, show
             </div>
           ) : (
             <div style={styles.counter}>
-              <button 
-                style={styles.counterBtn} 
-                onClick={() => onRemove(item)}
+              <button
+                style={styles.counterBtn}
+                onClick={handleDecrease}
                 aria-label="Decrease quantity"
+                disabled={isOutOfStock}
               >
                 −
               </button>
-              <span style={styles.count}>{quantity}</span>
-              <button 
-                style={styles.counterBtn} 
-                onClick={() => onAdd(item)}
+              <input
+                type="text"
+                inputMode="decimal"
+                value={qtyInput}
+                onChange={handleQtyInputChange}
+                onBlur={commitQtyFromInput}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') e.currentTarget.blur();
+                  if (e.key === 'Escape') {
+                    setQtyInput(quantity > 0 ? String(quantity) : '');
+                    e.currentTarget.blur();
+                  }
+                }}
+                style={styles.countInput}
+              />
+              <button
+                style={styles.counterBtn}
+                onClick={handleIncrease}
                 aria-label="Increase quantity"
+                disabled={isOutOfStock}
               >
                 +
               </button>
@@ -136,11 +294,20 @@ export default function MenuItemCard({ item, quantity = 0, onAdd, onRemove, show
           )}
         </div>
       </div>
-      {isOutOfStock && <div style={{position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.4)', pointerEvents: 'none', zIndex: 5}} />}
+      {isOutOfStock && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'rgba(255,255,255,0.4)',
+            pointerEvents: 'none',
+            zIndex: 5,
+          }}
+        />
+      )}
     </div>
   );
 }
-
 
 const styles = {
   card: {
@@ -153,12 +320,13 @@ const styles = {
     flexDirection: 'column',
     transition: 'transform 0.2s, box-shadow 0.2s',
     height: '100%',
-    minHeight: '230px', // Less bulky
-    maxHeight: '230px', 
+    minHeight: '230px',
+    maxHeight: '230px',
+    position: 'relative',
   },
   imageContainer: {
     width: '100%',
-    height: '100px', // More compact
+    height: '100px',
     background: 'linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%)',
     position: 'relative',
     overflow: 'hidden',
@@ -213,7 +381,7 @@ const styles = {
     WebkitBoxOrient: 'vertical',
     overflow: 'hidden',
     flex: 1,
-    minHeight: '36px', 
+    minHeight: '36px',
     maxHeight: '36px',
   },
   price: {
@@ -281,10 +449,15 @@ const styles = {
     cursor: 'pointer',
     padding: 0,
   },
-  count: {
+  countInput: {
+    width: '52px',
+    textAlign: 'center',
+    border: 'none',
+    background: 'transparent',
     fontSize: '14px',
     fontWeight: 700,
     color: 'var(--brand-600)',
+    outline: 'none',
   },
   outOfStockImage: {
     filter: 'grayscale(100%)',
