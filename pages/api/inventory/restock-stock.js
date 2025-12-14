@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-
+import { round2, normalizeQty } from '../../../lib/qty' // IMPORTANT: correct path
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -17,9 +17,11 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { menu_item_id, quantity, restaurant_id } = req.body
-    if (!menu_item_id || !quantity || !restaurant_id) {
-      return res.status(400).json({ error: 'Missing required fields' })
+    const { menu_item_id, quantity, restaurant_id } = req.body || {}
+
+    const orderQty = normalizeQty(quantity) // >0 and rounded to 2dp
+    if (!menu_item_id || !restaurant_id || orderQty === null) {
+      return res.status(400).json({ error: 'Missing/invalid fields' })
     }
 
     // Skip packaged goods
@@ -27,7 +29,8 @@ export default async function handler(req, res) {
       .from('menu_items')
       .select('is_packaged_good')
       .eq('id', menu_item_id)
-      .single()
+      .eq('restaurant_id', restaurant_id)
+      .maybeSingle()
 
     if (menuErr || !menuItem) {
       return res.status(200).json({ success: true, message: 'Menu item not found, nothing to restock' })
@@ -42,36 +45,31 @@ export default async function handler(req, res) {
       .select('id, recipe_items(ingredient_id, quantity)')
       .eq('menu_item_id', menu_item_id)
       .eq('restaurant_id', restaurant_id)
-      .single()
+      .maybeSingle()
 
-    if (recipeErr || !recipe) {
+    if (recipeErr || !recipe?.recipe_items?.length) {
       return res.status(200).json({ success: true, message: 'No recipe found, nothing to restock' })
     }
 
-    const recipeItems = recipe.recipe_items || []
+    // Build adjustments and apply atomically via RPC
+    const adjustments = recipe.recipe_items
+      .map(ri => {
+        const addAmount = round2(Number(ri.quantity) * Number(orderQty))
+        if (!Number.isFinite(addAmount) || addAmount <= 0) return null
+        return { ingredient_id: ri.ingredient_id, delta: addAmount }
+      })
+      .filter(Boolean)
 
-    // Restock all ingredients
-    for (const recipeItem of recipeItems) {
-      const addAmount = Number(recipeItem.quantity) * Number(quantity)
-      if (!addAmount || Number.isNaN(addAmount)) continue
-
-      // fetch current
-      const { data: ingredient } = await supabase
-        .from('ingredients')
-        .select('current_stock')
-        .eq('id', recipeItem.ingredient_id)
-        .eq('restaurant_id', restaurant_id)
-        .single()
-
-      const current = ingredient?.current_stock ?? 0
-      const newStock = current + addAmount
-
-      await supabase
-        .from('ingredients')
-        .update({ current_stock: newStock })
-        .eq('id', recipeItem.ingredient_id)
-        .eq('restaurant_id', restaurant_id)
+    if (!adjustments.length) {
+      return res.status(200).json({ success: true, message: 'Nothing to restock' })
     }
+
+    const { error: rpcErr } = await supabase.rpc('apply_stock_adjustments', {
+      p_restaurant_id: restaurant_id,
+      p_adjustments: adjustments
+    })
+
+    if (rpcErr) return res.status(400).json({ error: rpcErr.message })
 
     return res.status(200).json({ success: true, message: 'Stock restored successfully' })
   } catch (e) {

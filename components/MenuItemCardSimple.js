@@ -1,5 +1,4 @@
-// Simple menu item card (old layout - used when images are disabled)
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 const vegIcon = (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
@@ -15,52 +14,159 @@ const nonVegIcon = (
   </svg>
 );
 
-export default function MenuItemCardSimple({ item, quantity = 0, onAdd, onRemove }) {
-  const isOutOfStock = item.status === 'out_of_stock' || item.available === false || item.is_available === false;
+export default function MenuItemCardSimple({
+  item,
+  quantity = 0,
+  onAdd,
+  onRemove,
+  onQuantityChange,
+  quantityStep = 1,
+  minQuantity = 0,
+  maxQuantity = 999,
+  decimalPlaces = 2,
+}) {
+  const isOutOfStock =
+    item.status === 'out_of_stock' ||
+    item.available === false ||
+    item.is_available === false;
+
+  const [qtyInput, setQtyInput] = useState(
+    quantity > 0 ? String(quantity) : ''
+  );
+
+  useEffect(() => {
+    setQtyInput(quantity > 0 ? String(quantity) : '');
+  }, [quantity]);
+
+  const clampQuantity = (rawValue) => {
+  if (Number.isNaN(rawValue)) return minQuantity;
+
+  let value = rawValue;
+  value = Math.max(minQuantity, Math.min(maxQuantity, value));
+
+  // Round to required decimal places only (NO step snapping)
+  return Number(value.toFixed(decimalPlaces));
+};
+
+
+  const handleQtyInputChange = (e) => {
+    const raw = e.target.value.replace(',', '.');
+    if (raw === '') {
+      setQtyInput('');
+      return;
+    }
+    if (!/^\d*\.?\d*$/.test(raw)) return;
+    setQtyInput(raw);
+  };
+
+  const commitQtyFromInput = () => {
+    if (qtyInput === '') {
+      if (onQuantityChange) {
+        onQuantityChange(item, 0);
+      } else if (quantity > 0 && onRemove) {
+        onRemove(item);
+      }
+      return;
+    }
+
+    const parsed = parseFloat(qtyInput);
+    if (Number.isNaN(parsed)) {
+      setQtyInput(quantity > 0 ? String(quantity) : '');
+      return;
+    }
+
+    const finalQty = clampQuantity(parsed);
+    setQtyInput(String(finalQty));
+    if (onQuantityChange) {
+      onQuantityChange(item, finalQty);
+    }
+  };
+
+  const handleIncrease = () => {
+    if (isOutOfStock) return;
+    if (onQuantityChange) {
+      const base = quantity || 0;
+      const next = clampQuantity(base + quantityStep);
+      onQuantityChange(item, next);
+    } else if (onAdd) {
+      onAdd(item);
+    }
+  };
+
+  const handleDecrease = () => {
+    if (isOutOfStock) return;
+    if (onQuantityChange) {
+      const base = quantity || 0;
+      const next = clampQuantity(base - quantityStep);
+      onQuantityChange(item, next);
+    } else if (onRemove) {
+      onRemove(item);
+    }
+  };
+
+  const handleInitialAdd = () => {
+    if (isOutOfStock) return;
+    if (onQuantityChange) {
+      const start =
+        quantityStep > 0
+          ? clampQuantity(Math.max(minQuantity, quantityStep))
+          : clampQuantity(Math.max(minQuantity, 1));
+      onQuantityChange(item, start);
+    } else if (onAdd) {
+      onAdd(item);
+    }
+  };
 
   return (
     <div style={styles.card}>
       <div style={styles.header}>
         <div style={styles.iconAndName}>
-          <div style={styles.icon}>
-            {item.veg ? vegIcon : nonVegIcon}
-          </div>
+          <div style={styles.icon}>{item.veg ? vegIcon : nonVegIcon}</div>
           <h3 style={styles.name}>{item.name}</h3>
         </div>
         {item.category && (
           <div style={styles.category}>[{item.category}]</div>
         )}
       </div>
-      
+
       <div style={styles.priceRow}>
         <span style={styles.price}>₹{Number(item.price).toFixed(2)}</span>
       </div>
-      
+
       <div style={styles.actions}>
-        {quantity === 0 ? (
-          <button 
+        {quantity <= 0 ? (
+          <button
             style={{
               ...styles.addButton,
-              ...(isOutOfStock ? styles.disabledButton : {})
+              ...(isOutOfStock ? styles.disabledButton : {}),
             }}
-            onClick={() => !isOutOfStock && onAdd(item)}
+            onClick={handleInitialAdd}
             disabled={isOutOfStock}
           >
             {isOutOfStock ? 'Out of Stock' : 'Add'}
           </button>
         ) : (
           <div style={styles.counter}>
-            <button 
-              style={styles.counterBtn} 
-              onClick={() => onRemove(item)}
-            >
+            <button style={styles.counterBtn} onClick={handleDecrease}>
               −
             </button>
-            <span style={styles.count}>{quantity}</span>
-            <button 
-              style={styles.counterBtn} 
-              onClick={() => onAdd(item)}
-            >
+<input
+  type="text"
+  inputMode="decimal"
+  value={qtyInput}
+  onChange={handleQtyInputChange}
+  onBlur={commitQtyFromInput}
+  onKeyDown={(e) => {
+    if (e.key === 'Enter') e.currentTarget.blur();
+    if (e.key === 'Escape') {
+      setQtyInput(quantity > 0 ? String(quantity) : '');
+      e.currentTarget.blur();
+    }
+  }}
+  style={styles.countInput}
+/>
+
+            <button style={styles.counterBtn} onClick={handleIncrease}>
               +
             </button>
           </div>
@@ -160,9 +266,14 @@ const styles = {
     cursor: 'pointer',
     padding: 0,
   },
-  count: {
+  countInput: {
+    width: '52px',
+    textAlign: 'center',
+    border: 'none',
+    background: 'transparent',
     fontSize: '14px',
     fontWeight: 700,
     color: '#f97316',
+    outline: 'none',
   },
 };
