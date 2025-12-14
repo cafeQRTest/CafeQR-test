@@ -92,10 +92,10 @@ const bumpQty = (variantId, dir) => {
     
     onClose();
     
-    // Open cart drawer after adding
-    if (onCartOpen) {
-      setTimeout(() => onCartOpen(), 100);
-    }
+    // Open cart drawer optional
+    // if (onCartOpen) {
+    //   setTimeout(() => onCartOpen(), 100);
+    // }
   };
 
   if (!hasVariants) {
