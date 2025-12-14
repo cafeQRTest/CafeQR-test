@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRequireAuth } from '../../lib/useRequireAuth';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { getSupabase } from '../../services/supabase';
+import NiceSelect from '../../components/NiceSelect';
 
 // -------------------------------
 // Inline Payment Confirm Dialog
@@ -318,6 +319,11 @@ const [orderMode, setOrderMode] = useState('settle');
   .maybeSingle();
 
 setPrintProfile(profile || null);
+
+// Populate tables for dropdown
+if (profile?.tables_count) {
+  setTables(Array.from({ length: profile.tables_count }, (_, i) => i + 1));
+}
 
 setProfileTax({
   gst_enabled: !!profile?.gst_enabled,
@@ -874,21 +880,29 @@ window.dispatchEvent(
                   </button>
                 </>
               )}
-              <select value={orderSelect} onChange={(e) => setOrderSelect(e.target.value)} className="select">
-                <option value="">Select Type...</option>
-                <option value="parcel">Parcel</option>
-                {tables.map((n) => (<option key={n} value={`table:${n}`}>{`Table ${n}`}</option>))}
-              </select>
+              <NiceSelect
+  value={orderSelect}
+  onChange={setOrderSelect}
+  placeholder="Select Type..."
+  options={[
+    { value: 'parcel', label: 'Parcel' },
+    ...tables.map(n => ({ value: `table:${n}`, label: `Table ${n}` }))
+  ]}
+/>
             </>
           ) : (
             <>
   <input type="text" placeholder="Customer name (optional)" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="input" />
   <input type="tel" placeholder="Phone (optional)" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} className="input" />
-  <select value={orderSelect} onChange={(e) => setOrderSelect(e.target.value)} className="select">
-    <option value="">Select Type...</option>
-    <option value="parcel">Parcel</option>
-    {tables.map((n) => (<option key={n} value={`table:${n}`}>{`Table ${n}`}</option>))}
-  </select>
+<NiceSelect
+      value={orderSelect}
+      onChange={setOrderSelect}
+      placeholder="Select Type..."
+      options={[
+        { value: 'parcel', label: 'Parcel' },
+        ...tables.map(n => ({ value: `table:${n}`, label: `Table ${n}` }))
+      ]}
+    />
 </>
 
           )}
