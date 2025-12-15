@@ -1,3 +1,4 @@
+//components/MenuImageImport.js
 
 import React, { useState } from 'react';
 import styled from 'styled-components';
@@ -110,58 +111,57 @@ export default function MenuImageImport({ onClose, onImported, restaurantId, exi
     }
   };
 
-  const handleAnalyze = async () => {
-    if (!file) return;
-    setAnalyzing(true);
-    setError('');
+const handleAnalyze = async () => {
+  if (!file) return;
+  setAnalyzing(true);
+  setError('');
 
-    try {
-      // 1. Convert to Base64
-      const base64 = await new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result);
-        reader.readAsDataURL(file);
-      });
+  try {
+    const base64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
 
-      // 2. Call API
-      const res = await fetch('/api/ai/parse-menu', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: base64 })
-      });
+    const res = await fetch('/api/ai/parse-menu', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: base64 })
+    });
 
-      if (!res.ok) {
-        const txt = await res.text();
-        throw new Error(txt || 'Failed to analyze image');
-      }
+    const jsonOrText = await res.text();
+    if (!res.ok) throw new Error(jsonOrText || 'Failed to analyze image');
 
-      const data = await res.json();
-      if (Array.isArray(data.items)) {
-        // Check for duplicates
-        const normalizedExisting = new Set(existingItems.map(i => (i.name || '').toLowerCase().trim()));
-        
-        const processed = data.items.map(i => {
-          const isDupe = normalizedExisting.has((i.name || '').toLowerCase().trim());
-          return { 
-            ...i, 
-            selected: !isDupe, // Uncheck if duplicate by default
-            isDupe 
-          };
-        });
+    const data = JSON.parse(jsonOrText);
+    if (!Array.isArray(data.items)) throw new Error("Invalid response format: items[] missing");
 
-        setParsedItems(processed);
-        setStep('review');
-      } else {
-        throw new Error('Invalid response format');
-      }
+    const normalizedExisting = new Set(
+      existingItems.map(i => (i.name || '').toLowerCase().trim())
+    );
 
-    } catch (e) {
-      console.error(e);
-      setError(e.message || 'Error parsing image. Please try again.');
-    } finally {
-      setAnalyzing(false);
-    }
-  };
+    const processed = data.items.map(i => {
+      const name = (i.name || '').trim();
+      const isDupe = normalizedExisting.has(name.toLowerCase());
+      return {
+        ...i,
+        name,
+        price: Number(i.price) || 0,
+        variants: Array.isArray(i.variants) ? i.variants : [],
+        selected: !isDupe,
+        isDupe,
+      };
+    });
+
+    setParsedItems(processed);
+    setStep("review");
+  } catch (e) {
+    console.error(e);
+    setError(e.message || 'Error parsing image. Please try again.');
+  } finally {
+    setAnalyzing(false);
+  }
+};
 
   const handleItemChange = (index, field, value) => {
     const updated = [...parsedItems];
@@ -173,48 +173,32 @@ export default function MenuImageImport({ onClose, onImported, restaurantId, exi
     setParsedItems(parsedItems.filter((_, i) => i !== index));
   };
 
-  const handleImport = async () => {
-    setUploading(true);
-    setError('');
-    const supabase = getSupabase();
+const handleImport = async () => {
+  setUploading(true);
+  setError('');
 
-    try {
-      // Filter valid items
-      const toImport = parsedItems.filter(i => i.selected && i.name && i.price);
-      
-      if (toImport.length === 0) {
-        throw new Error('No items selected to import');
-      }
+  try {
+    const toImport = parsedItems.filter(i => i.selected && i.name);
 
-      const rows = toImport.map(i => ({
-        restaurant_id: restaurantId,
-        name: i.name,
-        price: parseFloat(i.price) || 0,
-        category: i.category || 'Others',
-        veg: !!i.veg,
-        description: i.description || ''
-      }));
+    if (toImport.length === 0) throw new Error('No items selected to import');
 
-      // Store image history (Optional, per user request "history of upload")
-      // We might not have a table for this yet, so maybe skip or just log.
-      // Ideally we'd upload the image to storage and create a log entry.
-      // For now, let's just create the menu items.
+    const res = await fetch('/api/owner/import-menu-items', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ restaurantId, items: toImport }),
+    });
 
-      const { data, error: itemErr } = await supabase
-        .from('menu_items')
-        .insert(rows)
-        .select();
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Import failed');
 
-      if (itemErr) throw itemErr;
-
-      onImported(data);
-      onClose();
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setUploading(false);
-    }
-  };
+    onImported(json.inserted || []);
+    onClose();
+  } catch (e) {
+    setError(e.message || 'Import failed');
+  } finally {
+    setUploading(false);
+  }
+};
 
   return (
     <Overlay onClick={onClose}>
