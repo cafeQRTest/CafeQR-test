@@ -1270,7 +1270,14 @@ function PaxEditDialog({ order, onSave, onClose }) {
             type="number"
             autoFocus
             value={val}
-            onChange={e => setVal(e.target.value)}
+            onChange={e => {
+              const v = e.target.value;
+              if (v === '') setVal('');
+              else {
+                const n = parseInt(v, 10);
+                if (n > 0) setVal(n);
+              }
+            }}
             style={{ 
                 width: '100%', padding: '10px', fontSize: 16, 
                 border: '1px solid #d1d5db', borderRadius: 8,

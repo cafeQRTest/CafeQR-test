@@ -1593,7 +1593,14 @@ onClick={() => {
                     min="1"
                     placeholder="No. of Customers (Optional)"
                     value={numberOfCustomers}
-                    onChange={(e) => setNumberOfCustomers(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '') setNumberOfCustomers('');
+                      else {
+                        const num = parseInt(val, 10);
+                        if (num > 0) setNumberOfCustomers(num);
+                      }
+                    }}
                     className="input"
                     style={{ background: '#fff', border: '1px solid #d1d5db' }}
                   />
