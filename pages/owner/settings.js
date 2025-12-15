@@ -743,7 +743,7 @@ export default function SettingsPage() {
               >
                  <FeatureIcon active={form.features_counter_send_to_kitchen_enabled}>🍳</FeatureIcon>
                  <FeatureText>
-                    <FeatureTitle>Kitchen KDS</FeatureTitle>
+                    <FeatureTitle>Send to Kitchen</FeatureTitle>
                     <FeatureDesc>Forward orders to kitchen</FeatureDesc>
                  </FeatureText>
                  <Switch checked={form.features_counter_send_to_kitchen_enabled} />
