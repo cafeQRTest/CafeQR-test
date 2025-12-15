@@ -86,6 +86,8 @@ export default async function handler(req, res) {
     }
 
     // 2) Normalize incoming lines (frontend sends full state)
+    console.log('[DEBUG_EDIT_API] Received lines:', JSON.stringify(lines.map(l => ({ name: l.name, price: l.price, vid: l.variant_id })), null, 2));
+
     const filteredLines = lines
       .filter((l) => l && Number(l.quantity) > 0 && (l.menu_item_id || l.name))
       .map((l) => ({
@@ -137,7 +139,10 @@ export default async function handler(req, res) {
     const currentMap = new Map();
     (currentItems || []).forEach((i) => {
       if (i.menu_item_id) {
-        currentMap.set(getCompKey(i.menu_item_id, i.variant_option_id), i);
+        const key = getCompKey(i.menu_item_id, i.variant_option_id);
+        const existing = currentMap.get(key) || [];
+        existing.push(i);
+        currentMap.set(key, existing);
       }
     });
 
@@ -168,7 +173,7 @@ export default async function handler(req, res) {
     // Preload profile + menuItems for breakdown
     const itemIds = [...new Set(validLines.map((l) => l.menu_item_id).filter(Boolean))];
 
-    const [{ data: profile }, { data: menuItems }] = await Promise.all([
+    const [{ data: profile }, { data: menuItems }, { data: variantPricing }] = await Promise.all([
       supabase
         .from('restaurant_profiles')
         .select('gst_enabled, default_tax_rate, prices_include_tax')
@@ -178,7 +183,19 @@ export default async function handler(req, res) {
         .from('menu_items')
         .select('id, is_packaged_good, tax_rate')
         .in('id', itemIds),
+      supabase
+        .from('variant_pricing')
+        .select('menu_item_id, price, variant_options!inner(id)')
+        .in('menu_item_id', itemIds),
     ]);
+
+    // Build Variant Price Map: "menuItemId_variantId" -> price
+    const variantPriceMap = new Map();
+    (variantPricing || []).forEach(vp => {
+      if (vp.menu_item_id && vp.variant_options?.id) {
+        variantPriceMap.set(`${vp.menu_item_id}_${vp.variant_options.id}`, Number(vp.price));
+      }
+    });
 
     // 6) Prepare collections
     const inserts = [];
@@ -210,17 +227,33 @@ export default async function handler(req, res) {
     }
 
     // 7) Apply delta for new/changed items (with KOT delta quantity)
+    const duplicatesToRemove = [];
+
     await Promise.all(
       Array.from(newMap.entries()).map(async ([compKey, newLine]) => {
-        const current = currentMap.get(compKey);
+        const currentList = currentMap.get(compKey) || [];
+        const current = currentList[0]; // Primary item to retain/update
+        const extraCopies = currentList.slice(1); // Duplicates to remove
+
+        if (extraCopies.length > 0) {
+          duplicatesToRemove.push(...extraCopies);
+        }
         const menuItemId = newLine.menu_item_id;
         const menuItem = menuItems?.find((mi) => mi.id === menuItemId) || null;
 
         // Fix: Packaged goods must always use MRP from menu_items, not frontend-provided price
         const globalInclusive = profile?.prices_include_tax ?? true;
         
-        // CRITICAL FIX: For packaged goods, always use the price from menu_items (MRP)
-        if (menuItem?.is_packaged_good) {
+        // ENFORCE VARIANT PRICING (Server-side Authority)
+        // If this item has a variant, ignore frontend price and use DB price
+        if (newLine.variant_option_id) {
+          const vKey = `${menuItemId}_${newLine.variant_option_id}`;
+          const dbPrice = variantPriceMap.get(vKey);
+          if (dbPrice !== undefined) {
+            newLine.price = dbPrice; // Override with correct DB price
+          }
+        } else if (menuItem?.is_packaged_good) {
+          // Fix: Packaged goods must always use MRP from menu_items, not frontend-provided price
           // Fetch the actual menu item price (MRP)
           const { data: menuItemData } = await supabase
             .from('menu_items')
@@ -229,10 +262,7 @@ export default async function handler(req, res) {
             .single();
           
           if (menuItemData && menuItemData.price) {
-            const correctPrice = Number(menuItemData.price);
-            if (Math.abs(newLine.price - correctPrice) > 0.01) {
-              newLine.price = correctPrice;
-            }
+            newLine.price = Number(menuItemData.price);
           }
         }
 
@@ -367,6 +397,7 @@ export default async function handler(req, res) {
     }
 
     if (updates.length > 0) {
+      console.log('[DEBUG_EDIT_API] Updates payload:', JSON.stringify(updates.map(u => ({ id: u.id, price: u.price })), null, 2));
       const { error } = await supabase.from('order_items').upsert(updates, { onConflict: 'id' });
       if (error) return res.status(500).json({ error: 'Failed to update order items' });
     }
@@ -375,6 +406,17 @@ export default async function handler(req, res) {
       const removedIds = removedItems.map((i) => i.id);
       const { error } = await supabase.from('order_items').delete().in('id', removedIds);
       if (error) return res.status(500).json({ error: 'Failed to delete order items' });
+    }
+
+    // Handle duplicates found during merge
+    if (duplicatesToRemove.length > 0) {
+      // Restore stock for these duplicates since they are effectively being "removed" 
+      // (the new quantity calculation handles the net change against the single 'current' item)
+      await restoreStockForItems(supabase, restaurant_id, duplicatesToRemove);
+      
+      const dupIds = duplicatesToRemove.map((i) => i.id);
+      const { error } = await supabase.from('order_items').delete().in('id', dupIds);
+      if (error) console.error('Failed to delete duplicate match items', error);
     }
 
     // 9) Re-read current order_items and recalc totals from true state

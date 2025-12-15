@@ -78,7 +78,8 @@ const bumpQty = (variantId, dir) => {
 
     // Add each selected variant with its quantity to cart
     selectedVariants.forEach(([variantId, qty]) => {
-      const variant = variants.find(v => v.variant_id === variantId);
+      // Robust lookup using String comparison
+      const variant = variants.find(v => String(v.variant_id) === String(variantId));
       if (variant) {
         onSelect({
           ...item,
@@ -114,7 +115,10 @@ const bumpQty = (variantId, dir) => {
     </svg>
   );
 
-  const showGstIndicator = gstEnabled && !pricesIncludeTax && !item.is_packaged_good;
+  // GST Label Logic:
+  // 1. If Packaged Good -> NEVER show +GST (always inclusive/hidden).
+  // 2. If Not Packaged -> Show ONLY if GST enabled AND Prices Exclude Tax.
+  const showGstIndicator = !item.is_packaged_good && gstEnabled && !pricesIncludeTax;
   const gstSuffix = showGstIndicator ? ' +GST' : '';
 
   return (
@@ -188,6 +192,7 @@ const bumpQty = (variantId, dir) => {
                         <VariantPrice disabled={isDisabled}>
                           ₹{variant.price?.toFixed(2)}
                         </VariantPrice>
+                        {/* Only show GST label if global flag allows AND item is NOT packaged */}
                         {showGstIndicator && !isDisabled && (
                           <GstLabel>+GST</GstLabel>
                         )}

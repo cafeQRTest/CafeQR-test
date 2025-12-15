@@ -217,6 +217,7 @@ const getDraftOrQtyNumber = (cartId, fallbackQty) => {
 
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [numberOfCustomers, setNumberOfCustomers] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('cash');
 
   // Credit mode
@@ -772,6 +773,7 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
     table_number,
     customer_name: customerName.trim() || null,
     customer_phone: customerPhone.trim() || null,
+    number_of_customers: numberOfCustomers ? Number(numberOfCustomers) : null,
     payment_method: isCredit ? 'credit' : finalPaymentMethod,
     payment_status: isCredit ? 'pending' : 'completed',
     status: finalizeNow ? 'completed' : 'new',
@@ -832,7 +834,7 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
 
   // clear UI, reload credit customers as you already do...
 
-    setCart([]); setCustomerName(''); setCustomerPhone(''); setPaymentMethod('cash');
+    setCart([]); setCustomerName(''); setCustomerPhone(''); setNumberOfCustomers(''); setPaymentMethod('cash');
     setOrderSelect(''); setIsCreditSale(false); setSelectedCreditCustomerId(''); setCreditCustomerBalance(0);
     setDrawerOpen(false); setShowPaymentDialog(false);
     await loadCreditCustomers();
@@ -861,6 +863,7 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
       table_number,
       customer_name: customerName.trim() || null,
       customer_phone: customerPhone.trim() || null,
+      number_of_customers: numberOfCustomers ? Number(numberOfCustomers) : null,
       payment_method: isCredit ? 'credit' : 'none',
       payment_status: 'pending',
       items,
@@ -898,7 +901,7 @@ window.dispatchEvent(
   })
 );
 
-    setCart([]); setCustomerName(''); setCustomerPhone(''); setPaymentMethod('cash');
+    setCart([]); setCustomerName(''); setCustomerPhone(''); setNumberOfCustomers(''); setPaymentMethod('cash');
     setOrderSelect(''); setIsCreditSale(false); setSelectedCreditCustomerId(''); setCreditCustomerBalance(0);
     setDrawerOpen(false);
     setSuccess('✅ Order sent to kitchen');
@@ -1001,6 +1004,24 @@ window.dispatchEvent(
     </div>
   )}
 </div>
+
+
+
+
+      
+      {/* Additional Inputs Row (No. of Customers) */}
+      <div style={{ padding: '0 12px 8px', display: 'flex', gap: 12, alignItems: 'center' }}>
+          <div style={{ flex: 1,  maxWidth: 200 }}>
+             <input
+              type="number"
+              min="1"
+              placeholder="No. of Customers"
+              value={numberOfCustomers}
+              onChange={(e) => setNumberOfCustomers(e.target.value)}
+              className="input"
+            />
+          </div>
+      </div>
 
         <div className="counter-inputs-row">
           {isCreditSale ? (
@@ -1565,6 +1586,19 @@ onClick={() => {
                 borderTop: '2px solid #f3f4f6',
                 background: '#fafafa',
               }}>
+                {/* No. of Customers Input in Cart Footer */}
+                <div style={{ marginBottom: 12 }}>
+                   <input
+                    type="number"
+                    min="1"
+                    placeholder="No. of Customers (Optional)"
+                    value={numberOfCustomers}
+                    onChange={(e) => setNumberOfCustomers(e.target.value)}
+                    className="input"
+                    style={{ background: '#fff', border: '1px solid #d1d5db' }}
+                  />
+                </div>
+
                 <div style={{ 
                   background: '#ffffff',
                   padding: '16px',

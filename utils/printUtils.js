@@ -547,6 +547,9 @@ export function buildReceiptText(order, bill, restaurantProfile) {
       lines.push(`Invoice: ${invoiceNo}`);
     }
     lines.push(`Order Type: ${orderType}`);
+    if (order?.number_of_customers) {
+      lines.push(`No. of Customers: ${order.number_of_customers}`);
+    }
     lines.push(dashes());
 
     // ITEMS

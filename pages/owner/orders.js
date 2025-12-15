@@ -113,7 +113,12 @@ function computeOrderTotalDisplay(order) {
 }
 
 function toDisplayItems(order) {
-  if (Array.isArray(order.items) && order.items.length > 0) return order.items;
+  if (Array.isArray(order.items) && order.items.length > 0) {
+    return order.items.map((item) => ({
+      ...item,
+      menu_item_id: item.menu_item_id || item.id,
+    }));
+  }
   if (Array.isArray(order.order_items)) {
     return order.order_items.map((oi) => ({
       menu_item_id: oi.menu_item_id,
@@ -695,18 +700,53 @@ function EditOrderPanel({ order, onClose, onSave }) {
   const addMenuItemToLines = (item) => {
     const variantId = item.selectedVariant?.variant_id || item.variant_id || null;
     const finalName = item.displayName || item.name;
-    const finalPrice = item.selectedVariant?.price || item.price;
+    
+    // Robust Pricing Logic:
+    // 1. Start with the price passed on the item (which might be variant price from Selector)
+    let finalPrice = item.price; 
+    
+    // 2. If valid variant selected, ensure we use its price
+    if (item.selectedVariant) {
+        const vp = item.selectedVariant.price;
+        // Accept 0 as valid price, but reject null/undefined
+        if (vp !== undefined && vp !== null) {
+             finalPrice = Number(vp);
+        }
+    }
+    
+    // 3. Fallback: If price is missing/invalid (e.g. from bad spread), look up original Base Price
+    if (finalPrice === undefined || finalPrice === null || Number.isNaN(finalPrice)) {
+        const originalBase = menuItems.find(mi => String(mi.id) === String(item.id || item.menu_item_id));
+        finalPrice = Number(originalBase?.price || 0);
+    } else {
+        finalPrice = Number(finalPrice);
+    }
+    
+    const qtyToAdd = Number(item.quantity) || 1;
     
     setLines((prev) => {
-      const existingIndex = prev.findIndex(
-        (l) => l.menu_item_id === item.id && l.variant_id === variantId
-      );
+      const existingIndex = prev.findIndex((l) => {
+        const sameItem = String(l.menu_item_id) === String(item.id);
+        const sameVariant = String(l.variant_id || '') === String(variantId || '');
+        const sameName = (l.name || '').trim().toLowerCase() === (finalName || '').trim().toLowerCase();
+        
+        // Match if (Same ID AND Same Variant) OR (Same Name)
+        // This covers cases where ID might have changed but it's the same product name
+        return (sameItem && sameVariant) || sameName;
+      });
 
-      // If already exists, just increase qty
+      // If already exists, just increase qty and update details to latest
       if (existingIndex !== -1) {
         return prev.map((l, i) =>
           i === existingIndex
-            ? { ...l, quantity: (Number(l.quantity) || 0) + 1 }
+            ? { 
+                ...l, 
+                quantity: (Number(l.quantity) || 0) + qtyToAdd,
+                price: finalPrice, 
+                variant_id: variantId || l.variant_id,
+                menu_item_id: item.id, // Update ID to current
+                name: finalName // Update name formatting if needed
+              }
             : l
         );
       }
@@ -715,7 +755,7 @@ function EditOrderPanel({ order, onClose, onSave }) {
         ...prev,
         {
           name: finalName,
-          quantity: 1,
+          quantity: qtyToAdd,
           price: finalPrice,
           menu_item_id: item.id,
           is_packaged_good: !!item.is_packaged_good,
@@ -741,6 +781,40 @@ function EditOrderPanel({ order, onClose, onSave }) {
       setShowVariantSelector(false);
       setSelectedItemForVariant(null);
   }
+
+  // Refetch/Sync prices with current menu when menuItems loads
+  // This fixes the issue where an edited order might have stale/incorrect base prices (e.g. 1000 instead of 2000)
+  useEffect(() => {
+    if (menuItems.length > 0 && lines.length > 0) {
+      setLines(prevLines => {
+        return prevLines.map(line => {
+          // Find matching menu item
+          const menuItem = menuItems.find(m => String(m.id) === String(line.menu_item_id || line.id));
+          if (!menuItem) return line;
+
+          // If line has a variant, find updated variant price
+          if (line.variant_id) {
+             const variant = menuItem.variants?.find(v => String(v.variant_id) === String(line.variant_id));
+             if (variant && variant.price !== undefined && variant.price !== null) {
+               // Only update if price is different to avoid unnecessary renders/changes
+               if (Number(line.price) !== Number(variant.price)) {
+                 return { ...line, price: Number(variant.price) };
+               }
+             }
+          } else {
+             // No variant - update to base price
+             if (menuItem.price !== undefined && menuItem.price !== null) {
+                if (Number(line.price) !== Number(menuItem.price)) {
+                  return { ...line, price: Number(menuItem.price) };
+                }
+             }
+          }
+          return line;
+        });
+      });
+    }
+  }, [menuItems]); // Run when menu items are fetched
+
 
   const filteredMenuItems = menuItems.filter((m) =>
     m.name.toLowerCase().includes(menuSearch.toLowerCase())
@@ -2153,6 +2227,7 @@ function OrderCard({
             <span style={{ marginLeft:8 }}>
               <small>{getOrderTypeLabel(order)}</small>
               {isCreditOrder && <small style={{marginLeft: 8, color: '#f59e0b', fontWeight: 'bold'}}>💳 CREDIT</small>}
+              {order.number_of_customers && <small style={{marginLeft: 8}}>👥 {order.number_of_customers}</small>}
             </span>
             <span style={{ color:'#6b7280',fontSize:12 }}>
               {new Date(order.updated_at).toLocaleTimeString()}
