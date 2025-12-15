@@ -2,48 +2,47 @@
 export const runtime = "edge";
 
 /**
- * Attempts to parse JSON. If it fails, tries to "repair" common LLM JSON errors
- * like missing commas between array items or unclosed arrays.
+ * Attempts to parse JSON. If it fails, tries to "repair" common LLM JSON errors.
  */
 function safeJsonParse(text) {
-  // 1. Try standard extract (find first '{' and last '}')
   let cleanText = text.trim();
   const start = cleanText.indexOf("{");
   const end = cleanText.lastIndexOf("}");
   
   if (start !== -1 && end !== -1 && end > start) {
     cleanText = cleanText.slice(start, end + 1);
-  } else {
-    // If no curly braces found, it might be just an array or raw text?
-    // Let's assume the model tried to output the object.
   }
 
   try {
     return JSON.parse(cleanText);
   } catch (e1) {
-    // 2. Repair: Fix missing commas between objects "}{" -> "},{"
+    // Repair: Fix missing commas "}{" -> "},{"
     let repaired = cleanText.replace(/}\s*{/g, "},{");
-    
-    // Repair: Fix trailing commas before closing brackets ",}" -> "}"
+    // Repair: Fix trailing commas ",}" -> "}"
     repaired = repaired.replace(/,\s*}/g, "}");
     repaired = repaired.replace(/,\s*]/g, "]");
 
     try {
       return JSON.parse(repaired);
     } catch (e2) {
-      // 3. Last ditch: formatting cuts off? try to close array/obj if it looks truncated
-      // This is a naive attempt for simple cut-offs
+      // Last ditch: try to close array/obj if truncated
       if (!repaired.endsWith("}")) repaired += "}";
       if (!repaired.endsWith("]")) repaired += "]";
-      
       try {
         return JSON.parse(repaired);
       } catch (e3) {
-        console.error("JSON Parse failed even after repair:", e1.message);
         throw new Error(`Failed to parse JSON response: ${e1.message}`);
       }
     }
   }
+}
+
+function getRandomApiKey() {
+  // Supports single key or comma-separated list: "KEY1,KEY2,KEY3"
+  const keysEnv = process.env.GEMINI_API_KEY || "";
+  const keys = keysEnv.split(",").map(k => k.trim()).filter(Boolean);
+  if (keys.length === 0) return null;
+  return keys[Math.floor(Math.random() * keys.length)];
 }
 
 export default async function handler(req) {
@@ -63,7 +62,7 @@ export default async function handler(req) {
       });
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = getRandomApiKey();
     if (!apiKey) {
       return new Response(
         JSON.stringify({ message: "GEMINI_API_KEY not configured" }),
@@ -132,7 +131,7 @@ Rules:
       ],
       generationConfig: {
         temperature: 0.1,
-        maxOutputTokens: 8192, // INCREASED to prevent cut-off mid-JSON
+        maxOutputTokens: 8192,
         response_mime_type: "application/json",
       },
     };
@@ -145,6 +144,13 @@ Rules:
 
     if (!resp.ok) {
       const details = await resp.text();
+      // If 429 Resource Exhausted, return helpful message
+      if (resp.status === 429) {
+         return new Response(JSON.stringify({ message: "Daily quota exceeded. Try again later or add more API keys.", details }), {
+            status: 429,
+            headers: { "Content-Type": "application/json" },
+         });
+      }
       return new Response(JSON.stringify({ message: "Gemini error", details }), {
         status: 500,
         headers: { "Content-Type": "application/json" },
@@ -154,7 +160,6 @@ Rules:
     const raw = await resp.json();
     const text = raw?.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
-    // Use our safe parser
     const parsed = safeJsonParse(text);
 
     // Normalize result
