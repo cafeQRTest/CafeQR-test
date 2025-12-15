@@ -293,12 +293,37 @@ export default async function handler(req, res) {
           if (!item.id || !item.quantity) continue;
 
           try {
-            const { data: recipe, error: recipeErr } = await supabase
+            // Find specific recipe for this variant, or fall back to base recipe
+            let recipeQuery = supabase
               .from('recipes')
-              .select('id, recipe_items(ingredient_id, quantity)')
+              .select('id, variant_option_id, recipe_items(ingredient_id, quantity)')
               .eq('menu_item_id', item.id)
               .eq('restaurant_id', restaurant_id)
-              .maybeSingle();
+            
+            // Note: We can't easily do "try variant, else base" in one query without a robust helper or stored proc.
+            // But we can fetch potentially both and pick the best one in JS.
+            // Since we only expect max 2 rows (one for variant, one for base), this is cheap.
+            
+            const { data: potentialRecipes, error: recipeErr } = await recipeQuery;
+            
+            if (recipeErr) throw recipeErr;
+            
+            // Logic: 
+            // 1. If item has variant_id, look for recipe with that variant_option_id
+            // 2. If not found (or item has no variant), try finding one with variant_option_id IS NULL (base)
+            
+            const targetVariantId = item.variant_id || null;
+            let recipe = potentialRecipes?.find(r => r.variant_option_id === targetVariantId);
+            
+            if (!recipe && targetVariantId) {
+               // Fallback to base if specific variant recipe missing
+               recipe = potentialRecipes?.find(r => r.variant_option_id === null);
+            }
+            // If still no recipe (and didn't have variant, or no base found), try just the first one if flexible? 
+            // No, strictly follow base. If no base, then no recipe.
+            if (!recipe && !targetVariantId && potentialRecipes?.length > 0) {
+               recipe = potentialRecipes.find(r => r.variant_option_id === null);
+            }
 
             if (
               recipeErr ||

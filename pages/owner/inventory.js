@@ -75,7 +75,7 @@ export default function InventoryPage() {
   const [error, setError] = useState('')
   const [editingIngredient, setEditingIngredient] = useState(null)
   const [ingredientForm, setIngredientForm] = useState({ name: '', unit: '', current_stock: 0, reorder_threshold: 0 })
-  const [recipeForm, setRecipeForm] = useState({ menuItemId: '', items: [] })
+  const [recipeForm, setRecipeForm] = useState({ menuItemId: '', variantId: null, items: [] })
   const [showRecipeEditor, setShowRecipeEditor] = useState(false)
   const [activeTab, setActiveTab] = useState('ingredients') // 'ingredients' or 'recipes'
   const [ingredientDialog, setIngredientDialog] = useState(null) // null, 'add', or ingredient id for edit
@@ -92,15 +92,32 @@ export default function InventoryPage() {
     setLoading(true)
     Promise.all([
       supabase.from('ingredients').select('*').eq('restaurant_id', restaurantId),
-      supabase.from('recipes').select('id,menu_item_id,recipe_items(*,ingredients(name,unit))').eq('restaurant_id', restaurantId),
-      supabase.from('menu_items').select('id,name,is_packaged_good').eq('restaurant_id', restaurantId).eq('is_packaged_good', false)
-    ]).then(([ingRes, recRes, menuRes]) => {
+      supabase.from('recipes').select('id,menu_item_id,variant_option_id,recipe_items(*,ingredients(name,unit))').eq('restaurant_id', restaurantId),
+      supabase.from('menu_items').select('id,name,is_packaged_good').eq('restaurant_id', restaurantId)
+    ]).then(async ([ingRes, recRes, menuRes]) => {
       if (ingRes.error || recRes.error || menuRes.error) {
         setError(ingRes.error?.message || recRes.error?.message || menuRes.error?.message)
       } else {
         setIngredients(ingRes.data || [])
         setRecipes(recRes.data || [])
-        setMenuItems(menuRes.data || [])
+        
+        let items = menuRes.data || []
+        // Fetch variants for these items
+        if (items.length > 0) {
+          const ids = items.map(i => i.id)
+          const { data: vData } = await supabase
+            .from('menu_items_with_variants')
+            .select('id, has_variants, variants')
+            .in('id', ids)
+          
+          if (vData) {
+            items = items.map(i => {
+              const enriched = vData.find(v => v.id === i.id)
+              return enriched ? { ...i, ...enriched } : i
+            })
+          }
+        }
+        setMenuItems(items)
       }
       setLoading(false)
     })
@@ -221,28 +238,87 @@ export default function InventoryPage() {
     })
   }
 
-  const openRecipe = (menuItem, recipe) => {
+  const openRecipe = (menuItem, recipeInput = null) => {
     setShowRecipeEditor(true)
     setRecipeFormError('')
     setSelectedMenuItem(menuItem || null)
-    if (recipe) {
+    
+    // Default to base recipe (variantId = null) if no specific recipe passed
+    // But if we passed a recipe object, use its variant_option_id
+    const targetVariantId = recipeInput?.variant_option_id || null
+    
+    // If no recipeInput passed, try to find the base recipe
+    let recipe = recipeInput
+    let cloneFrom = null
+
+    if (!recipe && menuItem) {
+       // Check for exact base recipe match
+       recipe = recipes.find(r => r.menu_item_id === menuItem.id && r.variant_option_id === targetVariantId)
+    }
+
+    // If still no recipe found for this specific target, find something to clone from
+    if (!recipe && menuItem) {
+       // 1. Try Base Recipe
+       cloneFrom = recipes.find(r => r.menu_item_id === menuItem.id && r.variant_option_id === null)
+       // 2. If no base, try ANY recipe for this item
+       if (!cloneFrom) {
+         cloneFrom = recipes.find(r => r.menu_item_id === menuItem.id)
+       }
+    }
+
+    loadRecipeForm(menuItem?.id, targetVariantId, recipe, cloneFrom)
+  }
+
+  const loadRecipeForm = (menuItemId, variantId, recipe, cloneFrom = null) => {
+     if (recipe) {
       setRecipeForm({
-        menuItemId: menuItem?.id || recipe.menu_item_id,
+        menuItemId: menuItemId || recipe.menu_item_id,
+        variantId: variantId, 
         items: (recipe.recipe_items || []).map((ri, i) => ({
           _key: `${ri.ingredient_id || 'ri'}-${i}`,
           ingredientId: ri.ingredient_id,
           quantity: Number(ri.quantity) || 0,
         })),
       })
+    } else if (cloneFrom) {
+      // PRE-FILL from cloned recipe
+      // Just copy the ingredients and quantities, but this is a NEW recipe state (no ID yet)
+      setRecipeForm({
+        menuItemId: menuItemId,
+        variantId: variantId || null, 
+        items: (cloneFrom.recipe_items || []).map((ri, i) => ({
+          _key: `clone-${ri.ingredient_id}-${i}-${Date.now()}`, 
+          ingredientId: ri.ingredient_id,
+          quantity: Number(ri.quantity) || 0,
+        })),
+      })
     } else {
-      setRecipeForm({ menuItemId: menuItem?.id || '', items: [] })
+      setRecipeForm({ menuItemId: menuItemId || '', variantId: variantId || null, items: [] })
     }
+  }
+
+  const handleVariantChange = (variantId) => {
+     const targetId = variantId || null
+     
+     // Find existing recipe for this variant
+     const recipe = recipes.find(r => r.menu_item_id === selectedMenuItem?.id && r.variant_option_id === targetId)
+     
+     let cloneFrom = null
+     if (!recipe) {
+        // Find best clone match
+        cloneFrom = recipes.find(r => r.menu_item_id === selectedMenuItem?.id && r.variant_option_id === null) // Base
+        if (!cloneFrom) {
+            cloneFrom = recipes.find(r => r.menu_item_id === selectedMenuItem?.id) // Any
+        }
+     }
+     
+     loadRecipeForm(selectedMenuItem?.id, targetId, recipe, cloneFrom)
   }
 
   const handleCloseRecipeEditor = () => {
     setShowRecipeEditor(false)
     setSelectedMenuItem(null)
-    setRecipeForm({ menuItemId: '', items: [] })
+    setRecipeForm({ menuItemId: '', variantId: null, items: [] })
     setRecipeFormError('')
   }
 
@@ -310,6 +386,7 @@ export default function InventoryPage() {
 
       const payload = {
         menu_item_id: recipeForm.menuItemId,
+        variant_option_id: recipeForm.variantId || null,
         items,
       }
       if (!payload.menu_item_id) {
@@ -317,19 +394,31 @@ export default function InventoryPage() {
       }
       // Ensure a recipe row exists (avoid on_conflict upsert)
       let recipeId
-      const { data: existingRows, error: existErr } = await supabase
+      let query = supabase
         .from('recipes')
         .select('id')
         .eq('menu_item_id', payload.menu_item_id)
         .eq('restaurant_id', restaurantId)
-        .limit(1)
+        
+      if (payload.variant_option_id) {
+        query = query.eq('variant_option_id', payload.variant_option_id)
+      } else {
+        query = query.is('variant_option_id', null)
+      }
+      
+      const { data: existingRows, error: existErr } = await query.limit(1)
+      
       if (existErr) throw existErr
       if (existingRows && existingRows.length > 0) {
         recipeId = existingRows[0].id
       } else {
         const { data: inserted, error: insertErr } = await supabase
           .from('recipes')
-          .insert([{ menu_item_id: payload.menu_item_id, restaurant_id: restaurantId }])
+          .insert([{ 
+             menu_item_id: payload.menu_item_id, 
+             restaurant_id: restaurantId,
+             variant_option_id: payload.variant_option_id
+          }])
           .select('id')
           .single()
         if (insertErr) throw insertErr
@@ -349,11 +438,14 @@ export default function InventoryPage() {
 
       // Optimistically update UI for this menu item
       setRecipes((prev) => {
-        const idx = prev.findIndex((r) => r.menu_item_id === payload.menu_item_id)
+        // Remove existing for this item+variant
+        const filtered = prev.filter(r => !(r.menu_item_id === payload.menu_item_id && r.variant_option_id === (payload.variant_option_id || null)))
+        
         const ingMap = new Map(ingredients.map((i) => [i.id, i]))
         const recipeObj = {
           id: recipeId,
           menu_item_id: payload.menu_item_id,
+          variant_option_id: payload.variant_option_id || null,
           recipe_items: payload.items.map((it) => ({
             ingredient_id: it.ingredientId,
             quantity: Number(it.quantity),
@@ -362,22 +454,19 @@ export default function InventoryPage() {
               : null,
           })),
         }
-        if (idx === -1) return [...prev, recipeObj]
-        const copy = [...prev]
-        copy[idx] = recipeObj
-        return copy
+        return [...filtered, recipeObj]
       })
 
       // Close modal immediately after successful write
       setShowRecipeEditor(false)
       setSelectedMenuItem(null)
-      setRecipeForm({ menuItemId: '', items: [] })
+      setRecipeForm({ menuItemId: '', variantId: null, items: [] })
 
       // Background refresh (non-blocking)
       try {
         const { data: recipesData, error: recipesError } = await supabase
           .from('recipes')
-          .select('id,menu_item_id,recipe_items(*,ingredients(name,unit))')
+          .select('id,menu_item_id,variant_option_id,recipe_items(*,ingredients(name,unit))')
           .eq('restaurant_id', restaurantId)
         if (!recipesError) setRecipes(recipesData || [])
       } catch {}
@@ -509,30 +598,65 @@ export default function InventoryPage() {
           ) : (
             <RecipesGrid>
               {filteredMenuItems.map((menuItem) => {
-                const recipe = recipes.find((r) => r.menu_item_id === menuItem.id)
+                // Find all recipes for this item
+                const itemRecipes = recipes.filter((r) => r.menu_item_id === menuItem.id)
+                // Use default recipe for preview, or first one
+                const defaultRecipe = itemRecipes.find(r => !r.variant_option_id) || itemRecipes[0]
+                
+                const recipeCount = itemRecipes.length
+                const hasVariants = menuItem.has_variants && menuItem.variants?.length > 0
+
                 return (
                   <RecipeCard key={menuItem.id}>
                     <RecipeCardHeader>
-                      <RecipeTitle>{menuItem.name}</RecipeTitle>
+                      <RecipeTitle>
+                        {menuItem.name}
+                        {hasVariants && (
+                          <span style={{ fontSize: '0.7em', fontWeight: 'normal', color: '#666', marginLeft: 8, background: '#e5e7eb', padding: '2px 6px', borderRadius: 4 }}>
+                            {menuItem.variants.length} Variants
+                          </span>
+                        )}
+                        {menuItem.is_packaged_good && (
+                          <span style={{ fontSize: '0.7em', fontWeight: 'normal', color: '#166534', marginLeft: 8, background: '#dcfce7', padding: '2px 6px', borderRadius: 4 }}>
+                            Packaged
+                          </span>
+                        )}
+                      </RecipeTitle>
                     </RecipeCardHeader>
                     <RecipeContent>
-                      {recipe?.recipe_items?.length ? (
+                      {defaultRecipe?.recipe_items?.length ? (
                         <IngredientsList>
-                          {recipe.recipe_items.map((ri) => (
+                          {recipeCount > 1 && (
+                             <div style={{ fontSize: '0.8rem', color: '#666', marginBottom: 4, fontStyle: 'italic' }}>
+                               Default Recipe:
+                             </div>
+                          )}
+                          {defaultRecipe.recipe_items.map((ri) => (
                             <IngredientItem key={`${ri.ingredient_id}-${ri.quantity}`}>
                               <span>{ri.quantity}×</span>
                               <span>{ri.ingredients?.name || '–'}</span>
                               <span className="unit">({ri.ingredients?.unit})</span>
                             </IngredientItem>
                           ))}
+                          {recipeCount > 1 && (
+                            <div style={{ marginTop: 8, fontSize: '0.8rem', color: '#3b82f6' }}>
+                              + {recipeCount - 1} other variant recipe(s)
+                            </div>
+                          )}
                         </IngredientsList>
                       ) : (
-                        <NoRecipe>No ingredients assigned yet</NoRecipe>
+                        <NoRecipe>
+                          {recipeCount > 0 ? (
+                            <span>{recipeCount} variant recipe(s) configured.<br/>(No default recipe)</span>
+                          ) : (
+                            'No ingredients assigned yet'
+                          )}
+                        </NoRecipe>
                       )}
                     </RecipeContent>
                     <RecipeActions>
-                      <RecipeButton onClick={() => openRecipe(menuItem, recipe)}>
-                        ✎ {recipe ? 'Edit' : 'Add'} Recipe
+                      <RecipeButton onClick={() => openRecipe(menuItem, defaultRecipe)}>
+                        ✎ Manage Recipes
                       </RecipeButton>
                     </RecipeActions>
                   </RecipeCard>
@@ -642,9 +766,33 @@ export default function InventoryPage() {
           >
             <h3>{selectedMenuItem ? `Recipe for ${selectedMenuItem.name}` : 'Edit Recipe'}</h3>
             {selectedMenuItem ? (
-              <div className="form-row" style={{ marginBottom: 8 }}>
-                <strong style={{ marginRight: 6 }}>Menu Item:</strong>
-                <span>{selectedMenuItem.name}</span>
+              <div style={{ marginBottom: 16 }}>
+                <div className="form-row" style={{ marginBottom: 8 }}>
+                  <strong style={{ marginRight: 6 }}>Menu Item:</strong>
+                  <span>{selectedMenuItem.name}</span>
+                </div>
+                
+                {selectedMenuItem.has_variants && selectedMenuItem.variants && (
+                   <div className="form-row" style={{ maxWidth: 320 }}>
+                     <FormLabel>Select Variant:</FormLabel>
+                     <NiceSelect
+                       value={recipeForm.variantId || ""}
+                       onChange={(val) => handleVariantChange(val || null)}
+                       placeholder="Base Recipe (Default)"
+                       options={[
+                         { value: "", label: "Base Recipe (Default)" },
+                         ...selectedMenuItem.variants.map(v => {
+                           const hasCustom = recipes.some(r => r.menu_item_id === selectedMenuItem.id && r.variant_option_id === v.variant_id)
+                           const suffix = hasCustom ? " (Custom)" : " (Uses Base)"
+                           return {
+                             value: v.variant_id,
+                             label: `${v.variant_name} (${v.template_name})${suffix}`
+                           }
+                         })
+                       ]}
+                     />
+                   </div>
+                )}
               </div>
             ) : (
               <div style={{ maxWidth: 320 }}>

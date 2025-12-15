@@ -32,6 +32,10 @@ const PageContainer = styled.div`
   background-color: #f8fafc;
   min-height: 100vh;
   animation: ${fadeInUp} 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  
+  @media (max-width: 640px) {
+    padding: 24px 16px 100px;
+  }
 `;
 
 const Header = styled.header`
@@ -122,8 +126,14 @@ const SectionTitle = styled.h2`
 const SectionBody = styled.div`
   padding: 36px;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 36px;
+
+  @media (max-width: 640px) {
+    grid-template-columns: 1fr;
+    padding: 24px;
+    gap: 24px;
+  }
 `;
 
 const FormField = styled.div`

@@ -17,6 +17,7 @@ export default async function handler(req, res) {
         .select(`
           id,
           menu_item_id,
+          variant_option_id,
           recipe_items ( id, ingredient_id, quantity, ingredients ( name, unit ) )
         `)
         .eq('restaurant_id', restaurant_id)
@@ -25,22 +26,39 @@ export default async function handler(req, res) {
     }
 
     if (method === 'POST') {
-      const { menu_item_id, items } = req.body
-      // Upsert recipe
-      const { data: rec, error: recErr } = await supabase
-        .from('recipes')
-        .upsert({ restaurant_id, menu_item_id }, { onConflict: ['restaurant_id','menu_item_id'] })
-        .select('id')
-        .single()
-      if (recErr) throw recErr
+      const { menu_item_id, variant_option_id, items } = req.body
+      
+      // Determine what to match on for existing recipe
+      let matchQuery = supabase.from('recipes').select('id').eq('restaurant_id', restaurant_id).eq('menu_item_id', menu_item_id)
+      if (variant_option_id) {
+        matchQuery = matchQuery.eq('variant_option_id', variant_option_id)
+      } else {
+        matchQuery = matchQuery.is('variant_option_id', null)
+      }
+      
+      const { data: existing } = await matchQuery.maybeSingle()
+      let recipeId = existing?.id
+
+      if (!recipeId) {
+        // Create new
+        const { data: newVal, error: insErr } = await supabase
+          .from('recipes')
+          .insert({ restaurant_id, menu_item_id, variant_option_id: variant_option_id || null })
+          .select('id')
+          .single()
+        if (insErr) throw insErr
+        recipeId = newVal.id
+      }
 
       // Delete old items, insert new
-      await supabase.from('recipe_items').delete().eq('recipe_id', rec.id)
-      const itemsToInsert = items.map(i => ({ recipe_id: rec.id, ingredient_id: i.ingredient_id, quantity: i.quantity }))
-      const { error: itemsErr } = await supabase.from('recipe_items').insert(itemsToInsert)
-      if (itemsErr) throw itemsErr
+      await supabase.from('recipe_items').delete().eq('recipe_id', recipeId)
+      if (items && items.length > 0) {
+        const itemsToInsert = items.map(i => ({ recipe_id: recipeId, ingredient_id: i.ingredient_id, quantity: i.quantity }))
+        const { error: itemsErr } = await supabase.from('recipe_items').insert(itemsToInsert)
+        if (itemsErr) throw itemsErr
+      }
 
-      return res.status(200).json({ recipe_id: rec.id })
+      return res.status(200).json({ recipe_id: recipeId })
     }
 
     res.setHeader('Allow', ['GET','POST'])

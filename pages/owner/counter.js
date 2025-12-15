@@ -756,13 +756,15 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
 
   const items = cart.map((i) => ({
     id: i.id,
-    name: i.name,
+    name: i.displayName || i.name, // consistent with kitchen order
     price: i.price,
-    quantity: round2(i.quantity), // important
+    quantity: round2(i.quantity),
     hsn: i.hsn,
     tax_rate: i.tax_rate,
     is_packaged_good: i.is_packaged_good,
     code_number: i.code_number,
+    variant_id: i.variant_id || null,
+    variant_name: i.variant_name || null,
   }));
 
   const isCredit = isCreditSale;

@@ -47,18 +47,41 @@ async function restoreStockForOrder(supabase, restaurantId, orderItems) {
     }
 
     // Fetch recipe for this menu item
-    const { data: recipe, error: recipeErr } = await supabase
+    // Fetch recipe for this menu item
+    // We need to handle variants if present
+    
+    // Attempt to find specific recipe for variant, else base
+    let recipeQuery = supabase
       .from('recipes')
-      .select('id, recipe_items(ingredient_id, quantity)')
+      .select('id, variant_option_id, recipe_items(ingredient_id, quantity)')
       .eq('menu_item_id', oi.menu_item_id)
       .eq('restaurant_id', restaurantId)
-      .maybeSingle();
+
+    const { data: potentialRecipes, error: recipeErr } = await recipeQuery
     
-    console.log('[STOCK RESTORE] Recipe fetch result:', { recipe, error: recipeErr });
+    console.log('[STOCK RESTORE] Recipe fetch result:', { potentialRecipes, error: recipeErr })
     
-    if (recipeErr || !recipe?.recipe_items?.length) {
-      console.log('[STOCK RESTORE] No recipe found or error');
-      continue;
+    if (recipeErr || !potentialRecipes?.length) {
+      console.log('[STOCK RESTORE] No recipes found or error')
+      continue
+    }
+
+    const targetVariantId = oi.variant_option_id || null
+    let recipe = potentialRecipes.find(r => r.variant_option_id === targetVariantId)
+    
+    // Fallback to base
+    if (!recipe && targetVariantId) {
+      recipe = potentialRecipes.find(r => r.variant_option_id === null)
+    }
+    // If absolutely no match found (and no base), maybe pick first? Or behave strictly?
+    // Let's behave strictly - if no base and no variant recipe, then no ingredients deducted.
+    if (!recipe && !targetVariantId && potentialRecipes.length > 0) {
+        recipe = potentialRecipes.find(r => r.variant_option_id === null)
+    }
+
+    if (!recipe?.recipe_items?.length) {
+       console.log('[STOCK RESTORE] No recipe items found for matched recipe')
+       continue
     }
 
     for (const ri of recipe.recipe_items) {

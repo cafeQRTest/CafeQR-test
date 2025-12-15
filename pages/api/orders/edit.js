@@ -601,12 +601,19 @@ async function restoreStockForItems(supabase, restaurant_id, items) {
   for (const oi of items) {
     if (!oi.menu_item_id || !oi.quantity || oi.is_packaged_good) continue;
 
-    const { data: recipe } = await supabase
+    // Find recipe (Variant > Base)
+    const { data: potentialRecipes } = await supabase
       .from('recipes')
-      .select('recipe_items(ingredient_id, quantity)')
+      .select('variant_option_id, recipe_items(ingredient_id, quantity)')
       .eq('menu_item_id', oi.menu_item_id)
-      .eq('restaurant_id', restaurant_id)
-      .maybeSingle();
+      .eq('restaurant_id', restaurant_id);
+
+    if (!potentialRecipes?.length) continue;
+
+    const targetVariantId = oi.variant_option_id || null;
+    let recipe = potentialRecipes.find(r => r.variant_option_id === targetVariantId);
+    if (!recipe && targetVariantId) recipe = potentialRecipes.find(r => r.variant_option_id === null); // Fallback
+    if (!recipe && !targetVariantId) recipe = potentialRecipes.find(r => r.variant_option_id === null); // Strict base
 
     if (!recipe?.recipe_items?.length) continue;
 
@@ -646,12 +653,19 @@ async function deductStockForItem(supabase, restaurant_id, item) {
 
   if (!menuItem || menuItem.is_packaged_good) return;
 
-  const { data: recipe } = await supabase
+  // Find recipe (Variant > Base)
+  const { data: potentialRecipes } = await supabase
     .from('recipes')
-    .select('recipe_items(ingredient_id, quantity)')
+    .select('variant_option_id, recipe_items(ingredient_id, quantity)')
     .eq('menu_item_id', item.menu_item_id)
-    .eq('restaurant_id', restaurant_id)
-    .maybeSingle();
+    .eq('restaurant_id', restaurant_id);
+
+  if (!potentialRecipes?.length) return;
+
+  const targetVariantId = item.variant_option_id || null;
+  let recipe = potentialRecipes.find(r => r.variant_option_id === targetVariantId);
+  if (!recipe && targetVariantId) recipe = potentialRecipes.find(r => r.variant_option_id === null); // Fallback
+  if (!recipe && !targetVariantId) recipe = potentialRecipes.find(r => r.variant_option_id === null); // Strict base
 
   if (!recipe?.recipe_items?.length) return;
 
