@@ -1540,7 +1540,7 @@ onClick={() => {
                           <span style={{ fontSize: 13, color: '#6b7280' }}>
                             ₹{i.price} × {i.quantity}
                           </span>
-                          {profileTax.gst_enabled && !profileTax.prices_include_tax && (
+                          {profileTax.gst_enabled && !profileTax.prices_include_tax && !i.is_packaged_good && (
                             <span style={{
                               fontSize: 10,
                               fontWeight: 700,
@@ -1558,7 +1558,7 @@ onClick={() => {
                           <span style={{ fontSize: 15, fontWeight: 700, color: '#111827' }}>
                             ₹{(i.price * i.quantity).toFixed(2)}
                           </span>
-                          {profileTax.gst_enabled && !profileTax.prices_include_tax && (
+                          {profileTax.gst_enabled && !profileTax.prices_include_tax && !i.is_packaged_good && (
                             <span style={{
                               fontSize: 10,
                               fontWeight: 700,

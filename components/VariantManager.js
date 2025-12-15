@@ -10,8 +10,15 @@ export default function VariantManager({ onClose, onSaved }) {
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editingTemplate, setEditingTemplate] = useState(null);
-  const [newTemplateName, setNewTemplateName] = useState('');
   const [newOptionName, setNewOptionName] = useState('');
+  
+  // Create Form State
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [createName, setCreateName] = useState('');
+  const [createOptions, setCreateOptions] = useState(['', '']);
+  const [createError, setCreateError] = useState('');
+  
+  // Confirmation states
   
   // Confirmation states
   const [deleteTemplateId, setDeleteTemplateId] = useState(null);
@@ -48,25 +55,68 @@ export default function VariantManager({ onClose, onSaved }) {
     setLoading(false);
   };
 
-  const createTemplate = async () => {
-    if (!newTemplateName.trim()) return;
-    setError('');
+  const handleCreateFullTemplate = async () => {
+    // 1. Validate
+    if (!createName.trim()) {
+      setCreateError('Please enter a template name.');
+      return;
+    }
     
-    const { error } = await supabase
+    // Check for empty options
+    if (createOptions.some(o => !o.trim())) {
+      setCreateError('Please fill in all option fields.');
+      return;
+    }
+    
+    // Check minimum count
+    if (createOptions.length < 2) {
+      setCreateError('Please add at least 2 options.');
+      return;
+    }
+    
+    setCreateError('');
+    
+    // 2. Insert Template
+    const { data: tmpl, error: tmplErr } = await supabase
       .from('variant_templates')
       .insert({
-        name: newTemplateName.trim(),
-        display_order: templates.length,
+        name: createName.trim(),
+        display_order: templates.length, // approximate order
         is_active: true
-      });
-    
-    if (!error) {
-      setNewTemplateName('');
-      fetchTemplates();
-      onSaved?.();
-    } else {
-      setError('Failed to create template');
+      })
+      .select('id')
+      .single();
+      
+    if (tmplErr) {
+      setCreateError('Failed to create template: ' + tmplErr.message);
+      return;
     }
+    
+    // 3. Insert Options
+    const optionsPayload = createOptions.map((opt, idx) => ({
+      template_id: tmpl.id,
+      name: opt.trim(),
+      display_order: idx,
+      is_active: true
+    }));
+    
+    const { error: optErr } = await supabase
+      .from('variant_options')
+      .insert(optionsPayload);
+      
+    if (optErr) {
+      setCreateError('Template created but options failed: ' + optErr.message);
+      // Ideally rollback or notify, but for now we just show error
+      fetchTemplates();
+      return;
+    }
+    
+    // 4. Success
+    setCreateName('');
+    setCreateOptions(['', '']);
+    setShowCreateForm(false);
+    fetchTemplates();
+    onSaved?.();
   };
 
   const deleteTemplate = async (id) => {
@@ -160,36 +210,93 @@ export default function VariantManager({ onClose, onSaved }) {
     <div className="vm-overlay" onClick={onClose}>
       <div className="vm-modal" onClick={(e) => e.stopPropagation()}>
         <div className="vm-header">
-          <h2 className="vm-title">Manage Variant Templates</h2>
+          <h2 className="vm-title">Manage Variants</h2>
           <button className="vm-close-btn" onClick={onClose}>&times;</button>
         </div>
 
         <div className="vm-content">
           {error && <div className="vm-error">{error}</div>}
           
-          {/* Create New Template */}
+          {/* Create New Variant */}
           <div className="vm-section">
-            <h3 className="vm-label">Create New Template</h3>
-            <div className="vm-input-group">
-              <input
-                type="text"
-                placeholder="e.g. Size, Spice Level"
-                value={newTemplateName}
-                onChange={(e) => setNewTemplateName(e.target.value)}
-                className="vm-input"
-                onKeyDown={(e) => e.key === 'Enter' && createTemplate()}
-              />
-              <button onClick={createTemplate} className="vm-primary-btn">
-                Create
+            <h3 className="vm-label">Create New Variant</h3>
+            {!showCreateForm ? (
+              <button 
+                onClick={() => {
+                   setShowCreateForm(true);
+                   setCreateName('');
+                   setCreateOptions(['', '']);
+                   setCreateError('');
+                }} 
+                className="vm-primary-btn"
+                style={{ width: '100%' }}
+              >
+                + Create New Variant Type
               </button>
-            </div>
+            ) : (
+              <div className="vm-create-card">
+                {createError && <div className="vm-error-small">{createError}</div>}
+                
+                <div style={{ marginBottom: 12 }}>
+                  <label className="vm-label-small">Variant Name <span style={{color:'red'}}>*</span></label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Size"
+                    value={createName}
+                    onChange={(e) => setCreateName(e.target.value)}
+                    className="vm-input"
+                  />
+                </div>
+
+                <div style={{ marginBottom: 12 }}>
+                  <label className="vm-label-small">Options (min 2) <span style={{color:'red'}}>*</span></label>
+                  <div className="vm-options-stack">
+                    {createOptions.map((opt, idx) => (
+                      <div key={idx} style={{ display: 'flex', gap: 8 }}>
+                         <input
+                           value={opt}
+                           onChange={(e) => {
+                             const copy = [...createOptions];
+                             copy[idx] = e.target.value;
+                             setCreateOptions(copy);
+                           }}
+                           className="vm-input-small"
+                           placeholder={`Option ${idx + 1}`}
+                         />
+                         {createOptions.length > 2 && (
+                           <button 
+                             onClick={() => setCreateOptions(createOptions.filter((_, i) => i !== idx))}
+                             className="vm-tiny-btn vm-delete"
+                             style={{ width: 24, fontSize: 14 }}
+                           >
+                             &times;
+                           </button>
+                         )}
+                      </div>
+                    ))}
+                  </div>
+                  <button 
+                    onClick={() => setCreateOptions([...createOptions, ''])}
+                    className="vm-secondary-btn-small"
+                    style={{ marginTop: 8, width: '100%' }}
+                  >
+                    + Add Option
+                  </button>
+                </div>
+
+                <div className="vm-create-actions">
+                  <button onClick={() => setShowCreateForm(false)} className="vm-secondary-btn-small">Cancel</button>
+                  <button onClick={handleCreateFullTemplate} className="vm-primary-btn" style={{flex:1}}>Create</button>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="vm-divider"></div>
 
-          {/* Existing Templates */}
+          {/* Existing Variants */}
           <div className="vm-section">
-            <h3 className="vm-label">Manage Existing Templates</h3>
+            <h3 className="vm-label">Manage Existing Variants</h3>
             {loading ? (
               <div className="vm-loading">Loading...</div>
             ) : templates.length === 0 ? (
@@ -416,6 +523,17 @@ export default function VariantManager({ onClose, onSaved }) {
           background: #fef2f2; color: #b91c1c; padding: 12px; border-radius: 8px;
           margin-bottom: 20px; font-size: 14px; border: 1px solid #fecaca;
         }
+        .vm-error-small {
+          background: #fee2e2; color: #b91c1c; padding: 8px 12px; border-radius: 6px;
+          margin-bottom: 12px; fontSize: 13px; border: 1px solid #fecaca;
+        }
+        .vm-label-small { fontSize: 12px; fontWeight: 600; color: #4b5563; margin-bottom: 4px; display: block; }
+        .vm-create-card {
+          padding: 16px; background: #fff; border: 1px solid #e5e7eb;
+          border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+        }
+        .vm-options-stack { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+        .vm-create-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
       `}</style>
     </div>
   );

@@ -477,8 +477,11 @@ export default function ItemEditor({
         className="ie-modal" 
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="ie-title">{isEdit ? "Edit Item" : "Add Item"}</h3>
-        {err && <div className="ie-error">{err}</div>}
+        <div className="ie-header-area">
+          <h3 className="ie-title">{isEdit ? "Edit Item" : "Add Item"}</h3>
+        </div>
+        <div className="ie-scroll-content">
+          {err && <div className="ie-error">{err}</div>}
 
         <label>
           <div className="ie-label">
@@ -696,9 +699,18 @@ export default function ItemEditor({
               type="checkbox"
               checked={hasVariants}
               onChange={(e) => {
-                setHasVariants(e.target.checked);
+                const checked = e.target.checked;
+                setHasVariants(checked);
+                if (checked && variantTemplates.length === 0) {
+                   // Auto-open creation modal if no templates exist
+                   setNewVariantName("");
+                   setNewVariantOptions([""]);
+                   setNewVariantErr("");
+                   setShowVariantModal(true);
+                }
+                
                 // Don't clear state immediately on uncheck, to allow re-checking to restore context
-                if (!e.target.checked) {
+                if (!checked) {
                    // We keep the internal state so if they re-check it, it's still there.
                    // It will only be wiped from DB on Save.
                 }
@@ -807,6 +819,8 @@ export default function ItemEditor({
         </div>
 
 
+        </div>
+
         <div className="ie-actions">
           <button
             type="button"
@@ -831,7 +845,7 @@ export default function ItemEditor({
       </form>
 
       {showCatModal && (
-        <div className="ie-overlay-inner">
+        <div className="ie-overlay-inner" onClick={(e) => e.stopPropagation()}>
           <div className="ie-modal-inner">
             <h4 style={{ margin: 0, marginBottom: 8 }}>Add Category</h4>
             {newCatErr && <div className="ie-error">{newCatErr}</div>}
@@ -897,7 +911,7 @@ export default function ItemEditor({
       )}
 
       {showVariantModal && (
-        <div className="ie-overlay-inner">
+        <div className="ie-overlay-inner" onClick={(e) => e.stopPropagation()}>
           <div className="ie-modal-inner" style={{ maxWidth: 480 }}>
             <h4 style={{ margin: 0, marginBottom: 8 }}>Create Variant Template</h4>
             {newVariantErr && <div className="ie-error">{newVariantErr}</div>}
@@ -985,8 +999,14 @@ export default function ItemEditor({
                 type="button"
                 className="ie-btn-primary"
                 onClick={async () => {
+                  // Validate no empty options
+                  if (newVariantOptions.some(o => !o.trim())) {
+                    setNewVariantErr("Please fill all option fields.");
+                    return;
+                  }
+
                   const name = newVariantName.trim();
-                  const options = newVariantOptions.filter(o => o.trim());
+                  const options = newVariantOptions.map(o => o.trim());
                   
                   if (!name) {
                     setNewVariantErr("Please enter a template name.");
@@ -1051,33 +1071,49 @@ export default function ItemEditor({
       <style jsx>{`
         .ie-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); display: flex; align-items: flex-start; justify-content: center; padding: 24px; z-index: 1000; overflow-y: auto; backdrop-filter: blur(2px); }
         .ie-modal { 
-          background: #ffffff; padding: 24px; border-radius: 16px; 
+          background: #ffffff; padding: 0; border-radius: 16px; 
           width: 100%; max-width: 550px; 
           box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.25); border: 1px solid #e5e7eb; margin: auto; 
           animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-          max-height: 85vh; overflow-y: auto;
+          max-height: 90vh; overflow-y: auto;
+          display: flex; flex-direction: column;
           scrollbar-width: thin; scrollbar-color: #d1d5db transparent;
         }
         .ie-modal::-webkit-scrollbar { width: 6px; }
         .ie-modal::-webkit-scrollbar-track { background: transparent; }
         .ie-modal::-webkit-scrollbar-thumb { background-color: #d1d5db; border-radius: 20px; }
         .ie-modal::-webkit-scrollbar-thumb:hover { background-color: #9ca3af; }
+
+        .ie-header-area { padding: 24px 24px 0 24px; }
+        .ie-title { margin: 0 0 16px 0; font-size: 1.25rem; font-weight: 700; color: #111827; }
+        .ie-scroll-content { 
+          padding: 0 24px 24px 24px; 
+        }
+        
+        /* Actions now sticky bottom */
+        .ie-actions { 
+          padding: 20px 24px 24px 24px; border-top: 1px solid #f3f4f6; 
+          display: flex; justify-content: flex-end; gap: 12px; background: white; flex-shrink: 0;
+        }
+
+        .ie-checkbox-group { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border: 1px solid #e5e7eb; border-radius: 8px; background: #f9fafb; cursor: pointer; flex: auto; min-width: 120px; }
+        .ie-checkbox-group input { width: 16px; height: 16px; accent-color: #f97316; }
+        .ie-error { background: #fef2f2; color: #b91c1c; padding: 12px; border-radius: 8px; margin-bottom: 20px; font-size: 0.875rem; border: 1px solid #fecaca; }
+        
+        .ie-variant-list { display: flex; flex-direction: column; gap: 10px; }
+
         @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-        .ie-title { margin: 0 0 20px 0; font-size: 1.25rem; font-weight: 700; color: #111827; }
         .ie-row-2 { display: grid; grid-template-columns: 1fr; gap: 16px; margin-top: 16px; }
         @media (min-width: 640px) { .ie-row-2 { grid-template-columns: 1fr 1fr; } }
         .ie-input { width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 0.875rem; outline: none; background: #f9fafb; transition: all 0.2s; }
         .ie-input:focus { border-color: #f97316; background: white; box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1); }
         .ie-label { font-size: 0.875rem; font-weight: 600; color: #374151; margin-bottom: 6px; display: block; }
-        .ie-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; padding-top: 20px; border-top: 1px solid #f3f4f6; }
+
         .ie-btn-primary { padding: 10px 20px; background: #f97316; color: white; border: none; border-radius: 99px; font-weight: 600; font-size: 0.875rem; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 6px -1px rgba(249, 115, 22, 0.2); }
         .ie-btn-secondary { padding: 10px 20px; background: white; color: #4b5563; border: 1px solid #d1d5db; border-radius: 99px; font-weight: 500; font-size: 0.875rem; cursor: pointer; transition: all 0.2s; }
         .ie-btn-small { padding: 6px 12px; background: #f97316; color: white; border: none; border-radius: 6px; font-size: 0.875rem; font-weight: 500; cursor: pointer; }
         .ie-checkbox-wrapper { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
-        .ie-checkbox-group { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border: 1px solid #e5e7eb; border-radius: 8px; background: #f9fafb; cursor: pointer; flex: auto; min-width: 120px; }
-        .ie-checkbox-group input { width: 16px; height: 16px; accent-color: #f97316; }
-        .ie-error { background: #fef2f2; color: #b91c1c; padding: 12px; border-radius: 8px; margin-bottom: 20px; font-size: 0.875rem; border: 1px solid #fecaca; }
-        
+
         /* Inner Modal */
         .ie-overlay-inner { position: fixed; inset: 0; background: rgba(0,0,0,0.2); z-index: 1100; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(1px); }
         .ie-modal-inner { background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 360px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); border: 1px solid #e5e7eb; }
@@ -1097,7 +1133,11 @@ export default function ItemEditor({
         .ie-variant-card { background: linear-gradient(to bottom, #f9fafb, #ffffff); padding: 18px; border-radius: 12px; margin-top: 14px; border: 1.5px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
         .ie-btn-small-add { width: 40px; height: 38px; border-radius: 6px; border: none; background: #f97316; color: white; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
         .ie-btn-small-add:hover { background: #ea580c; }
-        .ie-variant-list { display: flex; flex-direction: column; gap: 10px; }
+        .ie-variant-list { display: flex; flex-direction: column; gap: 10px; max-height: 300px; overflow-y: auto; padding-right: 4px; }
+        /* Custom scrollbar for variant list */
+        .ie-variant-list::-webkit-scrollbar { width: 4px; }
+        .ie-variant-list::-webkit-scrollbar-track { background: transparent; }
+        .ie-variant-list::-webkit-scrollbar-thumb { background-color: #d1d5db; border-radius: 20px; }
         .ie-variant-row { display: flex; gap: 12px; align-items: center; padding: 12px 14px; background: #ffffff; border-radius: 10px; border: 1px solid #e5e7eb; transition: all 0.2s ease; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
         .ie-variant-row:hover { border-color: #d1d5db; box-shadow: 0 2px 4px rgba(0,0,0,0.08); }
         .ie-variant-name { flex: 1; font-weight: 500; font-size: 14px; color: #111827; }
