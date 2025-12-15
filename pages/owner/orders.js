@@ -1253,6 +1253,39 @@ function CancelConfirmDialog({ order, onConfirm, onCancel }) {
   );
 }
 
+function PaxEditDialog({ order, onSave, onClose }) {
+  const [val, setVal] = useState(order.number_of_customers || '');
+  return (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+      backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex',
+      alignItems: 'center', justifyContent: 'center', zIndex: 1100
+    }}>
+      <div style={{ backgroundColor: 'white', padding: 24, borderRadius: 12, width: 300, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}>
+        <h3 style={{ margin: '0 0 16px 0', fontSize: 18 }}>Update Pax</h3>
+        <p style={{ margin: '0 0 12px 0', color: '#6b7280', fontSize: 14 }}>
+            Enter number of customers for Table {order.table_number || 'Counter'}:
+        </p>
+        <input 
+            type="number"
+            autoFocus
+            value={val}
+            onChange={e => setVal(e.target.value)}
+            style={{ 
+                width: '100%', padding: '10px', fontSize: 16, 
+                border: '1px solid #d1d5db', borderRadius: 8,
+                marginBottom: 20
+            }}
+        />
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <Button onClick={onClose} variant="outline">Cancel</Button>
+          <Button onClick={() => onSave(val)} variant="primary">Save</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 async function fetchFullOrder(supabase, orderId) {
   const { data, error } = await supabase
     .from('orders')
@@ -1273,6 +1306,7 @@ export default function OrdersPage() {
   // NEW: state for showing the print modal
   const [cancelOrderDialog, setCancelOrderDialog] = useState(null);
   const [editingOrder, setEditingOrder] = useState(null);
+  const [paxEditOrder, setPaxEditOrder] = useState(null);
 
 
   const [ordersByStatus, setOrdersByStatus] = useState({
@@ -1714,6 +1748,18 @@ useEffect(() => {
     }
   }
 
+  async function updateCustomerCount(id, val) {
+    if (!supabase || !restaurantId) return;
+    const count = parseInt(val, 10);
+    if (isNaN(count)) return;
+    try {
+      await supabase.from('orders').update({ number_of_customers: count }).eq('id', id).eq('restaurant_id', restaurantId);
+      loadOrders();
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
   const finalize = async (order) => {
 
 
@@ -1992,7 +2038,7 @@ if (ordersByStatus.mobileFilter === 'inprogress') {
 
         onCancelOrderOpen={onCancelOrderOpen}
         onEditOrder={(order) => setEditingOrder(order)}
-
+        onEditPax={(order) => setPaxEditOrder(order)}
       />
     ))
   )}
@@ -2089,6 +2135,7 @@ colOrders =
 
                 onCancelOrderOpen={onCancelOrderOpen}
                 onEditOrder={(order) => setEditingOrder(order)}
+                onEditPax={(order) => setPaxEditOrder(order)}
               />
             ))
           )}
@@ -2148,6 +2195,17 @@ colOrders =
   />
 )}
 
+{paxEditOrder && (
+    <PaxEditDialog 
+        order={paxEditOrder}
+        onClose={() => setPaxEditOrder(null)}
+        onSave={(val) => {
+            updateCustomerCount(paxEditOrder.id, val);
+            setPaxEditOrder(null);
+        }}
+    />
+)}
+
 
       <style jsx>{`
 .orders-wrap { padding:12px 0 32px; }
@@ -2199,10 +2257,13 @@ function OrderCard({
   onPrintKot,
   onPrintBill,
   onCancelOrderOpen,
-  onEditOrder
+  onEditOrder,
+  onEditPax
 }) {
   const items = toDisplayItems(order);
   const total = computeOrderTotalDisplay(order);
+
+  // Removed local state for editingPax
 
   const isCreditOrder = order?.is_credit && order?.credit_customer_id;
   const pm = String(order.payment_method || '').toLowerCase();
@@ -2227,7 +2288,18 @@ function OrderCard({
             <span style={{ marginLeft:8 }}>
               <small>{getOrderTypeLabel(order)}</small>
               {isCreditOrder && <small style={{marginLeft: 8, color: '#f59e0b', fontWeight: 'bold'}}>💳 CREDIT</small>}
-              {order.number_of_customers && <small style={{marginLeft: 8}}>👥 {order.number_of_customers}</small>}
+              {order.number_of_customers && (
+                 <small 
+                   style={{marginLeft: 8, cursor: 'pointer'}} 
+                   title="Edit Pax"
+                   onClick={(e) => {
+                     e.stopPropagation();
+                     onEditPax && onEditPax(order);
+                   }}
+                 >
+                   👥 {order.number_of_customers}
+                 </small>
+              )}
             </span>
             <span style={{ color:'#6b7280',fontSize:12 }}>
               {new Date(order.updated_at).toLocaleTimeString()}
