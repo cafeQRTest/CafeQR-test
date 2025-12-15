@@ -1,14 +1,18 @@
 // pages/api/ai/parse-menu.js
-export const runtime = "edge";
 
-/**
- * Attempts to parse JSON. If it fails, tries to "repair" common LLM JSON errors.
- */
+// IMPORTANT: remove edge runtime
+// export const runtime = "edge";
+
+export const config = {
+  // increase if needed; requires plan support, but still helps on most deployments
+  maxDuration: 60,
+};
+
 function safeJsonParse(text) {
   let cleanText = text.trim();
   const start = cleanText.indexOf("{");
   const end = cleanText.lastIndexOf("}");
-  
+
   if (start !== -1 && end !== -1 && end > start) {
     cleanText = cleanText.slice(start, end + 1);
   }
@@ -16,9 +20,7 @@ function safeJsonParse(text) {
   try {
     return JSON.parse(cleanText);
   } catch (e1) {
-    // Repair: Fix missing commas "}{" -> "},{"
     let repaired = cleanText.replace(/}\s*{/g, "},{");
-    // Repair: Fix trailing commas ",}" -> "}"
     repaired = repaired.replace(/,\s*}/g, "}");
     repaired = repaired.replace(/,\s*]/g, "]");
 
@@ -36,59 +38,34 @@ function safeJsonParse(text) {
   }
 }
 
-/**
- * Reads keys from env, splits by comma, and shuffles them slightly
- * to ensure we don't always hammer Key #1 first.
- */
 function getApiKeys() {
-  // Use GEMINI_API_KEYS (plural) for the list, fallback to singular if needed
   const keysEnv = process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY || "";
   const keys = keysEnv.split(",").map(k => k.trim()).filter(Boolean);
-  
-  // Fisher-Yates shuffle to randomize order for load balancing
-  // (We want to try all keys, but in random order)
+
+  // shuffle
   for (let i = keys.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [keys[i], keys[j]] = [keys[j], keys[i]];
   }
-  
+
   return keys;
 }
 
-export default async function handler(req) {
-  if (req.method !== "POST") {
-    return new Response(JSON.stringify({ message: "Method not allowed" }), {
-      status: 405,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
+export default async function handler(req, res) {
+  if (req.method !== "POST") return res.status(405).json({ message: "Method not allowed" });
 
   try {
-    const { image } = await req.json();
-    if (!image || typeof image !== "string") {
-      return new Response(JSON.stringify({ message: "No image provided" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
+    const { image } = req.body || {};
+    if (!image || typeof image !== "string") return res.status(400).json({ message: "No image provided" });
 
     const match = image.match(/^data:(.+);base64,(.*)$/);
-    if (!match) {
-      return new Response(
-        JSON.stringify({ message: "Invalid image format. Expected data URL." }),
-        { status: 400, headers: { "Content-Type": "application/json" } }
-      );
-    }
+    if (!match) return res.status(400).json({ message: "Invalid image format. Expected data URL." });
+
     const mimeType = match[1];
     const base64Data = match[2];
 
     const apiKeys = getApiKeys();
-    if (apiKeys.length === 0) {
-      return new Response(
-        JSON.stringify({ message: "GEMINI_API_KEYS not configured" }),
-        { status: 500, headers: { "Content-Type": "application/json" } }
-      );
-    }
+    if (apiKeys.length === 0) return res.status(500).json({ message: "GEMINI_API_KEYS not configured" });
 
     const prompt = `
 Extract menu items from this menu image.
@@ -125,9 +102,7 @@ Rules:
 - veg=true if green dot/symbol visible.
 `;
 
-    // Try keys sequentially until one works or all fail
     let lastError = null;
-    let successResponse = null;
 
     for (const key of apiKeys) {
       try {
@@ -159,26 +134,21 @@ Rules:
         });
 
         if (resp.status === 429) {
-          console.warn(`Key ${key.slice(0, 5)}... rate limited. Retrying next key.`);
           lastError = { status: 429, message: "Rate limit exceeded" };
-          continue; // Try next key
+          continue;
         }
 
         if (!resp.ok) {
           const txt = await resp.text();
-          console.error(`Key ${key.slice(0, 5)}... failed with ${resp.status}: ${txt}`);
           lastError = { status: resp.status, message: txt };
-          // If it's a 5xx error, maybe retry? For now, we assume broken keys/requests shouldn't retry indefinitely unless it's 429
-          // But to be safe, let's continue to next key for any 5xx server error too
-          if (resp.status >= 500) continue; 
-          break; // Don't retry client errors (400, 401, etc)
+          if (resp.status >= 500) continue;
+          break;
         }
 
         const raw = await resp.json();
         const text = raw?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-        const parsed = safeJsonParse(text); // This might throw if invalid JSON
+        const parsed = safeJsonParse(text);
 
-        // Normalize result
         const items = Array.isArray(parsed.items) ? parsed.items : [];
         const normalized = {
           items: items.map((i) => ({
@@ -191,37 +161,18 @@ Rules:
           })),
         };
 
-        successResponse = normalized;
-        break; // Success! Stop loop
-
+        return res.status(200).json(normalized);
       } catch (err) {
-        console.error(`Key ${key.slice(0, 5)}... error:`, err);
         lastError = { status: 500, message: err.message };
-        // Continue to next key on fetch/network/parse error
+        continue;
       }
     }
 
-    if (successResponse) {
-      return new Response(JSON.stringify(successResponse), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    // If we exhausted all keys
-    const finalStatus = lastError?.status || 500;
-    const finalMsg = lastError?.message || "All API keys failed or were rate limited.";
-    
-    return new Response(JSON.stringify({ message: "Gemini error", details: finalMsg }), {
-      status: finalStatus,
-      headers: { "Content-Type": "application/json" },
+    return res.status(lastError?.status || 500).json({
+      message: "Gemini error",
+      details: lastError?.message || "All API keys failed or were rate limited.",
     });
-
   } catch (e) {
-    console.error("Critical Parse Error:", e);
-    return new Response(
-      JSON.stringify({ message: e.message || "Failed to parse image" }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
-    );
+    return res.status(500).json({ message: e.message || "Failed to parse image" });
   }
 }
