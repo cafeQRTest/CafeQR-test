@@ -242,6 +242,9 @@ export function buildKotText(order, restaurantProfile) {
     lines.push(`${dateStr} ${timeStr}`);
     lines.push(`Order: #${orderId}`);
     lines.push(`For: ${tableLabel}`);
+    if (order.number_of_customers) {
+      lines.push(`No. of Customers: ${order.number_of_customers}`);
+    }
     lines.push(dashes());
 
     // === ITEMS: name + qty only ===
