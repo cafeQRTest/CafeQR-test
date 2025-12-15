@@ -880,6 +880,14 @@ export default function ItemEditor({
                     setNewCatErr("Please enter a category name.");
                     return;
                   }
+                  
+                  // DUPLICATE CHECK
+                  const exists = cats.some(c => c.name.toLowerCase() === nm.toLowerCase());
+                  if (exists) {
+                    setNewCatErr("Category with this name already exists.");
+                    return;
+                  }
+
                   try {
                     if (!supabase) throw new Error("Client not ready");
                     const { data, error } = await supabase

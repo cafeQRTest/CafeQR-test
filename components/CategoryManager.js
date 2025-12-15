@@ -37,13 +37,21 @@ export default function CategoryManager({ restaurantId, onClose, onSaved }) {
   };
 
   const createCategory = async () => {
-    if (!newCategoryName.trim()) return;
+    const rawName = newCategoryName.trim();
+    if (!rawName) return;
     setError('');
+
+    // Duplicate Check
+    const exists = categories.some(c => c.name.toLowerCase() === rawName.toLowerCase());
+    if (exists) {
+        setError(`Category "${rawName}" already exists.`);
+        return;
+    }
     
     const { error: createError } = await supabase
       .from('categories')
       .insert({
-        name: newCategoryName.trim(),
+        name: rawName,
         is_global: false,
         restaurant_id: restaurantId
       });
@@ -58,20 +66,46 @@ export default function CategoryManager({ restaurantId, onClose, onSaved }) {
   };
 
   const updateCategory = async (id, newName) => {
-    if (!newName.trim()) return;
+    const rawName = newName.trim();
+    if (!rawName) return;
     setError('');
+
+    // Duplicate Check
+    const exists = categories.some(c => c.name.toLowerCase() === rawName.toLowerCase() && c.id !== id);
+    if (exists) {
+        setError(`Category "${rawName}" already exists.`);
+        return;
+    }
+
+    // Get old name first
+    const oldCat = categories.find(c => c.id === id);
+    if (!oldCat) return;
     
+    // 1. Update Category Table
     const { error: updateError } = await supabase
       .from('categories')
-      .update({ name: newName.trim() })
+      .update({ name: rawName })
       .eq('id', id);
     
     if (updateError) {
       setError(updateError.message);
+      return;
+    }
+
+    // 2. Cascade Update to Menu Items (since they rely on name string)
+    // We update all items where category == oldCat.name
+    const { error: cascadeError } = await supabase
+      .from('menu_items')
+      .update({ category: rawName })
+      .eq('category', oldCat.name)
+      .eq('restaurant_id', restaurantId);
+
+    if (cascadeError) {
+       setError("Category renamed, but failed to update linked products: " + cascadeError.message);
     } else {
-      // Don't close editing, just feedback
-      fetchCategories();
-      onSaved?.();
+       // Refresh
+       fetchCategories();
+       onSaved?.();
     }
   };
 

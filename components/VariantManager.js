@@ -55,11 +55,22 @@ export default function VariantManager({ onClose, onSaved }) {
     setLoading(false);
   };
 
+  // Renaming State
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
+
   const handleCreateFullTemplate = async () => {
     // 1. Validate
     if (!createName.trim()) {
       setCreateError('Please enter a template name.');
       return;
+    }
+    
+    // Duplicate Check
+    const exists = templates.some(t => t.name.toLowerCase() === createName.trim().toLowerCase());
+    if (exists) {
+        setCreateError(`Variant template "${createName.trim()}" already exists.`);
+        return;
     }
     
     // Check for empty options
@@ -117,6 +128,32 @@ export default function VariantManager({ onClose, onSaved }) {
     setShowCreateForm(false);
     fetchTemplates();
     onSaved?.();
+  };
+
+  const updateTemplateName = async (id, newName) => {
+      const rawName = newName.trim();
+      if (!rawName) return;
+      setError('');
+
+      // Duplicate Check
+      const exists = templates.some(t => t.name.toLowerCase() === rawName.toLowerCase() && t.id !== id);
+      if (exists) {
+          setError(`Variant template "${rawName}" already exists.`);
+          return;
+      }
+
+      const { error: updErr } = await supabase
+        .from('variant_templates')
+        .update({ name: rawName })
+        .eq('id', id);
+
+      if (updErr) {
+          setError(updErr.message);
+      } else {
+          setIsRenaming(false);
+          fetchTemplates();
+          onSaved?.();
+      }
   };
 
   const deleteTemplate = async (id) => {
@@ -326,7 +363,33 @@ export default function VariantManager({ onClose, onSaved }) {
                   return (
                     <div className="vm-template-card">
                       <div className="vm-template-header">
-                        <div className="vm-template-name">{template.name}</div>
+                        {isRenaming ? (
+                            <div style={{display:'flex', gap:8, alignItems:'center', flex:1}}>
+                                <input 
+                                    value={renameValue}
+                                    onChange={(e) => setRenameValue(e.target.value)}
+                                    className="vm-input-small"
+                                    autoFocus
+                                />
+                                <button onClick={() => updateTemplateName(template.id, renameValue)} className="vm-primary-btn" style={{height:34, fontSize:13, padding:'0 12px'}}>Save</button>
+                                <button onClick={() => setIsRenaming(false)} className="vm-secondary-btn-small">Cancel</button>
+                            </div>
+                        ) : (
+                            <div style={{display:'flex', alignItems:'center', gap:10}}>
+                                <div className="vm-template-name">{template.name}</div>
+                                <button 
+                                    onClick={() => {
+                                        setRenameValue(template.name);
+                                        setIsRenaming(true);
+                                    }}
+                                    className="vm-edit-link-btn"
+                                    title="Rename Template"
+                                >
+                                    ✎
+                                </button>
+                            </div>
+                        )}
+
                         {deleteTemplateId === template.id ? (
                           <div className="vm-confirm-row">
                             <span className="vm-confirm-text">
@@ -338,12 +401,14 @@ export default function VariantManager({ onClose, onSaved }) {
                             </div>
                           </div>
                         ) : (
-                          <button
-                            onClick={() => setDeleteTemplateId(template.id)}
-                            className="vm-delete-link-btn"
-                          >
-                            Delete Template
-                          </button>
+                          !isRenaming && (
+                              <button
+                                onClick={() => setDeleteTemplateId(template.id)}
+                                className="vm-delete-link-btn"
+                              >
+                                Delete Template
+                              </button>
+                          )
                         )}
                       </div>
 
@@ -467,6 +532,10 @@ export default function VariantManager({ onClose, onSaved }) {
         .vm-delete-link-btn {
           background: none; border: none; color: #dc2626; fontSize: 13px;
           fontWeight: 600; cursor: pointer; padding: 4px 8px; border-radius: 6px;
+        }
+        .vm-edit-link-btn {
+          background: none; border: none; color: #3b82f6; fontSize: 16px;
+          cursor: pointer; padding: 0 4px; border-radius: 4px;
         }
         .vm-divider { border-top: 1px solid #e5e7eb; margin: 20px 0; }
         .vm-divider-small { height: 1px; background: #f3f4f6; margin: 12px 0; }
