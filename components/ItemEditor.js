@@ -1117,7 +1117,7 @@ if (dupe?.id) {
         .ie-header-area { padding: 24px 24px 0 24px; }
         .ie-title { margin: 0 0 16px 0; font-size: 1.25rem; font-weight: 700; color: #111827; }
         .ie-scroll-content { 
-          padding: 0 24px 24px 24px; 
+          padding: 0 24px 160px 24px; 
         }
         
         /* Actions now sticky bottom */

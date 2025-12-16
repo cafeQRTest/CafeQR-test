@@ -497,7 +497,7 @@ export default function VariantManager({ onClose, onSaved }) {
           background: transparent; border: none; fontSize: 24px;
           color: #9ca3af; cursor: pointer; padding: 0; line-height: 1;
         }
-        .vm-content { padding: 24px; overflow-y: auto; flex: 1; padding-bottom: 300px; }
+        .vm-content { padding: 24px; overflow-y: auto; flex: 1; padding-bottom: 450px; }
         .vm-section { display: flex; flex-direction: column; gap: 12px; }
         .vm-label { fontSize: 13px; fontWeight: 600; color: #374151; margin-bottom: 4px; }
         .vm-input-group { display: flex; gap: 10px; }

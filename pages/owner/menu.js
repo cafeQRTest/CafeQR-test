@@ -175,17 +175,35 @@ export default function MenuPage() {
   const [showVariantManager, setShowVariantManager] = useState(false);
   const [showImageImport, setShowImageImport] = useState(false);
 
-  // Helper to refresh categories after edits
+  // Helper to refresh categories and items after edits
   const refreshCategories = useCallback(async () => {
     if (!supabase || !restaurantId) return;
-    const { data } = await supabase
+    
+    // 1. Refresh Categories
+    const { data: catData } = await supabase
       .from("categories")
       .select("id,name")
       .or(`is_global.eq.true,restaurant_id.eq.${restaurantId}`)
       .order("name");
-    if (data) {
-      setCategories(data);
-      localStorage.setItem(`categories_${restaurantId}`, JSON.stringify(data));
+    
+    if (catData) {
+      setCategories(catData);
+      localStorage.setItem(`categories_${restaurantId}`, JSON.stringify(catData));
+    }
+
+    // 2. Refresh Items (to reflect any category name changes)
+    const { data: itemData } = await supabase
+      .from("menu_items")
+      .select(
+        "id, name, category, price, code_number, hsn, tax_rate, status, veg, is_packaged_good, compensation_cess_rate, ispopular, image_url, has_variants"
+      )
+      .eq("restaurant_id", restaurantId)
+      .order("category", { ascending: true })
+      .order("name", { ascending: true });
+
+    if (itemData) {
+      setItems(itemData);
+      localStorage.setItem(`menu_items_${restaurantId}`, JSON.stringify(itemData));
     }
   }, [supabase, restaurantId]);
 
