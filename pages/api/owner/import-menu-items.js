@@ -11,15 +11,73 @@ function safeNumber(n) {
   return Number.isFinite(x) ? x : 0;
 }
 
+function cleanCategoryName(name) {
+  const nm = (name || "").trim();
+  return nm || "main";
+}
+
+async function ensureCategory(restaurantId, rawName) {
+  const nm = cleanCategoryName(rawName);
+
+  // Try restaurant category
+  let { data: cat, error: selErr } = await supabaseAdmin
+    .from("categories")
+    .select("id,name,is_global,restaurant_id")
+    .eq("restaurant_id", restaurantId)
+    .eq("name", nm)
+    .maybeSingle();
+
+  if (selErr) throw selErr;
+  if (cat) return cat;
+
+  // Try global category
+  const { data: globalCat, error: gErr } = await supabaseAdmin
+    .from("categories")
+    .select("id,name,is_global,restaurant_id")
+    .eq("is_global", true)
+    .eq("name", nm)
+    .maybeSingle();
+
+  if (gErr) throw gErr;
+  if (globalCat) return globalCat;
+
+  // Create restaurant category
+  const { data: newCat, error: insErr } = await supabaseAdmin
+    .from("categories")
+    .insert([{
+      name: nm,
+      is_global: false,
+      restaurant_id: restaurantId,
+    }])
+    .select("id,name,is_global,restaurant_id")
+    .single();
+
+  if (insErr) throw insErr;
+  return newCat;
+}
+
+// Case-insensitive exact match using ilike (no wildcards) [web:377]
+async function findExistingMenuItemId(restaurantId, itemName) {
+  const nm = (itemName || "").trim();
+  if (!nm) return null;
+
+  const { data, error } = await supabaseAdmin
+    .from("menu_items")
+    .select("id")
+    .eq("restaurant_id", restaurantId)
+    .ilike("name", nm) // exact match if nm has no % or _
+    .maybeSingle();
+
+  if (error) throw error;
+  return data?.id || null;
+}
+
 async function upsertTemplate(name) {
   const clean = (name || "Options").trim() || "Options";
 
   const { data, error } = await supabaseAdmin
     .from("variant_templates")
-    .upsert(
-      [{ name: clean, is_active: true }],
-      { onConflict: "name" }
-    )
+    .upsert([{ name: clean, is_active: true }], { onConflict: "name" })
     .select("id,name")
     .single();
 
@@ -38,17 +96,13 @@ async function upsertOptions(templateId, optionNames) {
     display_order: idx,
   }));
 
-  // This requires UNIQUE constraint on (template_id, name) in DB
+  // Requires UNIQUE index/constraint on (template_id, name) for ON CONFLICT to work. [web:268][web:278]
   const { data, error } = await supabaseAdmin
     .from("variant_options")
-    .upsert(rows, { onConflict: "template_id,name" }) 
+    .upsert(rows, { onConflict: "template_id,name" })
     .select("id,name");
 
-  if (error) {
-    console.error("Error upserting options:", error);
-    throw error;
-  }
-
+  if (error) throw error;
   return new Map((data || []).map(o => [o.name, o.id]));
 }
 
@@ -62,10 +116,29 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Missing items[]" });
     }
 
+    // Deduplicate within the same import payload (client may send repeats)
+    const seen = new Set(); // key: lower(name)
     const insertedItems = [];
+    const skippedDuplicates = [];
 
-    // Process sequentially to avoid race conditions
     for (const it of items) {
+      const name = (it?.name || "").trim();
+      if (!name) continue;
+
+      const key = name.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      // Ensure category row exists (so ItemEditor dropdown can show it)
+      const cat = await ensureCategory(restaurantId, it.category);
+
+      // DEDUPE against DB: skip if already exists for this restaurant
+      const existingId = await findExistingMenuItemId(restaurantId, name);
+      if (existingId) {
+        skippedDuplicates.push({ name, existingId });
+        continue;
+      }
+
       const variants = Array.isArray(it.variants) ? it.variants : [];
       const hasVariants = variants.length > 0;
 
@@ -80,13 +153,14 @@ export default async function handler(req, res) {
         .from("menu_items")
         .insert([{
           restaurant_id: restaurantId,
-          name: (it.name || "").trim(),
-          category: (it.category || "Others").trim(),
+          name,
+          category: cat.name, // store canonical name that exists in `categories`
           price: basePrice,
           veg: !!it.veg,
           description: (it.description || "").trim(),
           has_variants: hasVariants,
           status: "available",
+          is_available: true,
         }])
         .select("id,name,category,price,has_variants")
         .single();
@@ -97,14 +171,9 @@ export default async function handler(req, res) {
       // 2) Insert variants
       if (!hasVariants) continue;
 
-      // Clean up previous variants if re-importing (optional safety)
-      // await supabaseAdmin.from("variant_pricing").delete().eq("menu_item_id", menuItem.id);
-      // await supabaseAdmin.from("menu_item_variants").delete().eq("menu_item_id", menuItem.id);
-
       for (const v of variants) {
         const tpl = await upsertTemplate(v.template);
 
-        // Link template to menu item
         const { error: linkErr } = await supabaseAdmin
           .from("menu_item_variants")
           .insert([{
@@ -115,17 +184,15 @@ export default async function handler(req, res) {
 
         if (linkErr) throw linkErr;
 
-        // Create options
         const opts = Array.isArray(v.options) ? v.options : [];
         const optionNames = opts.map(o => (o.name || "").trim()).filter(Boolean);
         const optionIdMap = await upsertOptions(tpl.id, optionNames);
 
-        // Link prices
         const pricingRows = opts
           .map(o => {
             const optName = (o.name || "").trim();
             const optionId = optionIdMap.get(optName);
-            if(!optionId) return null;
+            if (!optionId) return null;
             return {
               menu_item_id: menuItem.id,
               option_id: optionId,
@@ -144,7 +211,11 @@ export default async function handler(req, res) {
       }
     }
 
-    return res.status(200).json({ ok: true, inserted: insertedItems });
+    return res.status(200).json({
+      ok: true,
+      inserted: insertedItems,
+      skippedDuplicates,
+    });
   } catch (e) {
     console.error("Import Error:", e);
     return res.status(500).json({ error: e.message || "Import failed" });

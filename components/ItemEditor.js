@@ -51,6 +51,21 @@ export default function ItemEditor({
   const [newCatName, setNewCatName] = useState("");
   const [newCatErr, setNewCatErr] = useState("");
 
+  const findDuplicate = async (nm) => {
+  const q = supabase
+    .from("menu_items")
+    .select("id,name")
+    .eq("restaurant_id", restaurantId)
+    .ilike("name", nm.trim()); // exact match if no %/_ [web:377]
+
+  // If editing, ignore self
+  if (isEdit) q.neq("id", item.id);
+
+  const { data, error } = await q.maybeSingle();
+  if (error) throw error;
+  return data; // null or {id,name}
+};
+
   // Variant template creation modal state
   const [showVariantModal, setShowVariantModal] = useState(false);
   const [newVariantName, setNewVariantName] = useState("");
@@ -376,6 +391,13 @@ export default function ItemEditor({
     setSaving(true);
 
     try {
+
+// Dedupe check
+const dupe = await findDuplicate(name);
+if (dupe?.id) {
+  throw new Error(`Item "${name.trim()}" already exists in your menu.`);
+}
+
       // ensure category
       let catId = cats.find((c) => c.name === category)?.id;
       if (!catId) {
