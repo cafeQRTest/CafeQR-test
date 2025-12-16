@@ -4,8 +4,12 @@
 // export const runtime = "edge";
 
 export const config = {
-  // increase if needed; requires plan support, but still helps on most deployments
   maxDuration: 60,
+  api: {
+    bodyParser: {
+      sizeLimit: "6mb", // adjust if needed
+    },
+  },
 };
 
 function safeJsonParse(text) {
@@ -52,6 +56,9 @@ function getApiKeys() {
 }
 
 export default async function handler(req, res) {
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const jitter = (ms) => ms + Math.floor(Math.random() * 200);
+
   if (req.method !== "POST") return res.status(405).json({ message: "Method not allowed" });
 
   try {
@@ -105,6 +112,8 @@ Rules:
     let lastError = null;
 
     for (const key of apiKeys) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+
       try {
         const url =
           "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" +
@@ -128,29 +137,27 @@ Rules:
         };
 
         const controller = new AbortController();
-const t = setTimeout(() => controller.abort(), 45_000); // 45s hard stop
+      const t = setTimeout(() => controller.abort(), 25_000); // shorter per attempt
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      clearTimeout(t);
 
-const resp = await fetch(url, {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify(body),
-  signal: controller.signal,
-});
+      if (resp.status === 429 || resp.status === 503) {
+        lastError = { status: resp.status, message: await resp.text() };
+        await sleep(jitter(800 * (attempt + 1))); // backoff
+        continue; // retry (then next key)
+      }
 
-clearTimeout(t);
-
-
-        if (resp.status === 429) {
-          lastError = { status: 429, message: "Rate limit exceeded" };
-          continue;
-        }
-
-        if (!resp.ok) {
-          const txt = await resp.text();
-          lastError = { status: resp.status, message: txt };
-          if (resp.status >= 500) continue;
-          break;
-        }
+      if (!resp.ok) {
+        const txt = await resp.text();
+        lastError = { status: resp.status, message: txt };
+        if (resp.status >= 500) continue;
+        break;
+      }
 
         const raw = await resp.json();
         const text = raw?.candidates?.[0]?.content?.parts?.[0]?.text || "";
@@ -169,12 +176,13 @@ clearTimeout(t);
         };
 
         return res.status(200).json(normalized);
-      } catch (err) {
-        lastError = { status: 500, message: err.message };
-        continue;
-      }
+    } catch (err) {
+      lastError = { status: 500, message: err.message };
+      await sleep(jitter(600));
+      continue;
     }
-
+  }
+}
     return res.status(lastError?.status || 500).json({
       message: "Gemini error",
       details: lastError?.message || "All API keys failed or were rate limited.",
