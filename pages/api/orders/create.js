@@ -243,7 +243,7 @@ export default async function handler(req, res) {
       await InvoiceService.createInvoiceFromOrder(order.id, null);
       const { data: invoiceData } = await supabase
         .from('invoices')
-        .select('id, invoice_no')
+        .select('id, invoice_no, bill_no')
         .eq('order_id', order.id)
         .single();
 
@@ -263,6 +263,7 @@ export default async function handler(req, res) {
       order_id: order.id,
       invoice_id: invoice.id,
       invoice_no: invoice.invoice_no,
+      bill_no: invoice.bill_no,
       order_number: order.id.slice(0, 8).toUpperCase(),
       order_for_print: {
         id: order.id,
@@ -281,6 +282,7 @@ export default async function handler(req, res) {
         payment_status,
         status: finalStatus,
         invoice_no: invoice.invoice_no,
+        bill_no: invoice.bill_no,
         created_at: order.created_at,
       },
     };

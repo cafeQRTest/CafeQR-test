@@ -821,6 +821,7 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
       subtotal: cartTotals.subtotalEx,
       tax_total: cartTotals.totalTax,
       invoice_no: result.invoice_no || null,
+      bill_no: result.bill_no || null,
     },
   };
 
