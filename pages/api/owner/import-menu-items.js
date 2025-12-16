@@ -1,4 +1,3 @@
-// pages/api/owner/import-menu-items.js
 import { createClient } from "@supabase/supabase-js";
 
 const supabaseAdmin = createClient(
@@ -56,7 +55,6 @@ async function ensureCategory(restaurantId, rawName) {
   return newCat;
 }
 
-// Case-insensitive exact match using ilike (no wildcards) [web:377]
 async function findExistingMenuItemId(restaurantId, itemName) {
   const nm = (itemName || "").trim();
   if (!nm) return null;
@@ -65,7 +63,7 @@ async function findExistingMenuItemId(restaurantId, itemName) {
     .from("menu_items")
     .select("id")
     .eq("restaurant_id", restaurantId)
-    .ilike("name", nm) // exact match if nm has no % or _
+    .ilike("name", nm)
     .maybeSingle();
 
   if (error) throw error;
@@ -96,7 +94,6 @@ async function upsertOptions(templateId, optionNames) {
     display_order: idx,
   }));
 
-  // Requires UNIQUE index/constraint on (template_id, name) for ON CONFLICT to work. [web:268][web:278]
   const { data, error } = await supabaseAdmin
     .from("variant_options")
     .upsert(rows, { onConflict: "template_id,name" })
@@ -112,12 +109,9 @@ export default async function handler(req, res) {
   try {
     const { restaurantId, items } = req.body || {};
     if (!restaurantId) return res.status(400).json({ error: "Missing restaurantId" });
-    if (!Array.isArray(items) || items.length === 0) {
-      return res.status(400).json({ error: "Missing items[]" });
-    }
+    if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ error: "Missing items[]" });
 
-    // Deduplicate within the same import payload (client may send repeats)
-    const seen = new Set(); // key: lower(name)
+    const seen = new Set();
     const insertedItems = [];
     const skippedDuplicates = [];
 
@@ -129,10 +123,8 @@ export default async function handler(req, res) {
       if (seen.has(key)) continue;
       seen.add(key);
 
-      // Ensure category row exists (so ItemEditor dropdown can show it)
       const cat = await ensureCategory(restaurantId, it.category);
 
-      // DEDUPE against DB: skip if already exists for this restaurant
       const existingId = await findExistingMenuItemId(restaurantId, name);
       if (existingId) {
         skippedDuplicates.push({ name, existingId });
@@ -148,13 +140,12 @@ export default async function handler(req, res) {
         basePrice = allPrices.length ? Math.min(...allPrices) : 0;
       }
 
-      // 1) Insert menu item
       const { data: menuItem, error: insErr } = await supabaseAdmin
         .from("menu_items")
         .insert([{
           restaurant_id: restaurantId,
           name,
-          category: cat.name, // store canonical name that exists in `categories`
+          category: cat.name,
           price: basePrice,
           veg: !!it.veg,
           description: (it.description || "").trim(),
@@ -165,10 +156,17 @@ export default async function handler(req, res) {
         .select("id,name,category,price,has_variants")
         .single();
 
-      if (insErr) throw insErr;
+      if (insErr) {
+        // unique_violation in Postgres is SQLSTATE 23505 [web:450]
+        if (insErr.code === "23505") {
+          skippedDuplicates.push({ name, existingId: "db_unique" });
+          continue;
+        }
+        throw insErr;
+      }
+
       insertedItems.push(menuItem);
 
-      // 2) Insert variants
       if (!hasVariants) continue;
 
       for (const v of variants) {
@@ -181,7 +179,6 @@ export default async function handler(req, res) {
             template_id: tpl.id,
             is_required: v.required !== false,
           }]);
-
         if (linkErr) throw linkErr;
 
         const opts = Array.isArray(v.options) ? v.options : [];
@@ -211,11 +208,7 @@ export default async function handler(req, res) {
       }
     }
 
-    return res.status(200).json({
-      ok: true,
-      inserted: insertedItems,
-      skippedDuplicates,
-    });
+    return res.status(200).json({ ok: true, inserted: insertedItems, skippedDuplicates });
   } catch (e) {
     console.error("Import Error:", e);
     return res.status(500).json({ error: e.message || "Import failed" });

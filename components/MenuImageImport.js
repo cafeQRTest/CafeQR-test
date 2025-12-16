@@ -1,384 +1,201 @@
-//components/MenuImageImport.js
-
-import React, { useState } from 'react';
-import styled from 'styled-components';
-import { getSupabase } from '../services/supabase';
-import Button from './ui/Button';
-import NiceSelect from './NiceSelect';
+import React, { useState } from "react";
+import styled from "styled-components";
+import Button from "./ui/Button"; 
 
 const Overlay = styled.div`
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 9999;
-  padding: 16px;
+  position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5);
+  display: flex; align-items: center; justify-content: center; z-index: 9999;
 `;
-
 const Modal = styled.div`
-  background: white;
-  width: 100%;
-  max-width: 900px;
-  max-height: 90vh;
-  border-radius: 12px;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  background: white; width: 90%; max-width: 900px; max-height: 90vh;
+  border-radius: 12px; display: flex; flex-direction: column; overflow: hidden;
 `;
-
-const Header = styled.div`
-  padding: 16px 24px;
-  border-bottom: 1px solid #e5e7eb;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-
-  h3 {
-    margin: 0;
-    font-size: 1.25rem;
-    font-weight: 600;
-  }
-`;
-
 const Content = styled.div`
-  flex: 1;
-  overflow-y: auto;
-  padding: 24px;
+  flex: 1; overflow-y: auto; padding: 24px;
 `;
-
+const Header = styled.div`
+  padding: 16px 24px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between;
+  h3 { margin: 0; font-size: 1.2rem; }
+`;
 const Footer = styled.div`
-  padding: 16px 24px;
-  border-top: 1px solid #e5e7eb;
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
+  padding: 16px 24px; border-top: 1px solid #eee; display: flex; justify-content: flex-end; gap: 10px;
 `;
-
-const ImagePreview = styled.img`
-  max-width: 100%;
-  max-height: 300px;
-  border-radius: 8px;
-  margin-bottom: 16px;
-  object-fit: contain;
-  background: #f3f4f6;
+const PreviewImg = styled.img`
+  max-width: 100%; height: 200px; object-fit: contain; background: #f0f0f0; border-radius: 8px;
 `;
-
 const Table = styled.table`
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 16px;
-
-  th, td {
-    padding: 12px;
-    border-bottom: 1px solid #e5e7eb;
-    text-align: left;
-    font-size: 14px;
-  }
-
-  th {
-    background: #f9fafb;
-    font-weight: 600;
-    color: #374151;
-  }
-
-  input, select {
-    width: 100%;
-    padding: 6px;
-    border: 1px solid #d1d5db;
-    border-radius: 4px;
-  }
+  width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px;
+  th { text-align: left; background: #f9f9f9; padding: 8px; }
+  td { border-bottom: 1px solid #eee; padding: 8px; vertical-align: top; }
+  input { width: 100%; padding: 4px; border: 1px solid #ddd; border-radius: 4px; }
 `;
+
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+// Compress image to ~900px to speed up AI
+async function compressImage(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (e) => {
+      const img = new Image();
+      img.src = e.target.result;
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        const MAX_DIM = 900;
+        let w = img.width;
+        let h = img.height;
+        if (w > h) { if (w > MAX_DIM) { h *= MAX_DIM / w; w = MAX_DIM; } } 
+        else { if (h > MAX_DIM) { w *= MAX_DIM / h; h = MAX_DIM; } }
+        canvas.width = w; canvas.height = h;
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL("image/jpeg", 0.6));
+      };
+      img.onerror = reject;
+    };
+    reader.onerror = reject;
+  });
+}
 
 export default function MenuImageImport({ onClose, onImported, restaurantId, existingItems = [] }) {
   const [file, setFile] = useState(null);
-  const [previewUrl, setPreviewUrl] = useState(null);
-  const [analyzing, setAnalyzing] = useState(false);
-  const [parsedItems, setParsedItems] = useState([]);
-  const [step, setStep] = useState('upload'); // upload, review
-  const [error, setError] = useState('');
-  const [uploading, setUploading] = useState(false);
+  const [preview, setPreview] = useState(null);
+  const [items, setItems] = useState([]);
+  const [step, setStep] = useState("upload");
+  const [statusMsg, setStatusMsg] = useState("");
+  const [error, setError] = useState("");
 
-  const handleFileChange = (e) => {
-    const f = e.target.files[0];
+  const handleFile = (e) => {
+    const f = e.target.files?.[0];
     if (f) {
       setFile(f);
-      const url = URL.createObjectURL(f);
-      setPreviewUrl(url);
-      setError('');
+      setPreview(URL.createObjectURL(f));
+      setError("");
     }
   };
 
-async function compressToBase64(file, maxSize = 1280, quality = 0.7) {
-  const img = new Image();
-  const objectUrl = URL.createObjectURL(file);
+  const processImage = async () => {
+    if (!file) return;
+    setStep("processing");
+    setStatusMsg("Preparing image...");
+    setError("");
 
-  const loaded = await new Promise((resolve, reject) => {
-    img.onload = resolve;
-    img.onerror = reject;
-    img.src = objectUrl;
-  });
+    try {
+      const base64 = await compressImage(file);
+      setStatusMsg("Analyzing with Gemini 2.5... (may take 30s)");
 
-  const canvas = document.createElement("canvas");
-  let { width, height } = img;
+      // Try calling API; if 503/504, retry once more
+      let finalResult = null;
+      for (let i = 0; i < 2; i++) {
+        try {
+          const res = await fetch("/api/ai/parse-menu", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ image: base64 })
+          });
 
-  if (width > height) {
-    if (width > maxSize) {
-      height = Math.round((height * maxSize) / width);
-      width = maxSize;
+          if (res.status === 503 || res.status === 504) {
+             setStatusMsg("AI is busy, retrying one last time...");
+             await sleep(3000); 
+             continue;
+          }
+
+          if (!res.ok) {
+             const errData = await res.json();
+             throw new Error(errData.details || errData.message || "Analysis failed");
+          }
+
+          finalResult = await res.json();
+          break; 
+        } catch (e) {
+          if (i === 1) throw e; 
+        }
+      }
+
+      if (!finalResult?.items) throw new Error("No items found. Try a clearer image.");
+
+      const existingNames = new Set(existingItems.map(x => x.name.toLowerCase()));
+      const processed = finalResult.items.map(it => ({
+        ...it,
+        selected: !existingNames.has(it.name.toLowerCase()),
+        isDupe: existingNames.has(it.name.toLowerCase())
+      }));
+
+      setItems(processed);
+      setStep("review");
+
+    } catch (err) {
+      setError(err.message || "Failed to process image.");
+      setStep("upload");
     }
-  } else {
-    if (height > maxSize) {
-      width = Math.round((width * maxSize) / height);
-      height = maxSize;
-    }
-  }
-
-  canvas.width = width;
-  canvas.height = height;
-
-  const ctx = canvas.getContext("2d");
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = "high";
-  ctx.drawImage(img, 0, 0, width, height);
-
-  URL.revokeObjectURL(objectUrl);
-
-  // WebP first, fallback to JPEG
-  let dataUrl = canvas.toDataURL("image/webp", quality);
-  if (!dataUrl.startsWith("data:image/webp")) {
-    dataUrl = canvas.toDataURL("image/jpeg", quality);
-  }
-  return dataUrl;
-}
-
-
-const handleAnalyze = async () => {
-  if (!file) return;
-  setAnalyzing(true);
-  setError('');
-
-  try {
-    const base64 = await compressToBase64(file, 1280, 0.7);
-
-
-    const res = await fetch('/api/ai/parse-menu', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image: base64 })
-    });
-
-    const jsonOrText = await res.text();
-    if (!res.ok) throw new Error(jsonOrText || 'Failed to analyze image');
-
-    const data = JSON.parse(jsonOrText);
-    if (!Array.isArray(data.items)) throw new Error("Invalid response format: items[] missing");
-
-    const normalizedExisting = new Set(
-      existingItems.map(i => (i.name || '').toLowerCase().trim())
-    );
-
-    const processed = data.items.map(i => {
-      const name = (i.name || '').trim();
-      const isDupe = normalizedExisting.has(name.toLowerCase());
-      return {
-        ...i,
-        name,
-        price: Number(i.price) || 0,
-        variants: Array.isArray(i.variants) ? i.variants : [],
-        selected: !isDupe,
-        isDupe,
-      };
-    });
-
-    setParsedItems(processed);
-    setStep("review");
-  } catch (e) {
-    console.error(e);
-    setError(e.message || 'Error parsing image. Please try again.');
-  } finally {
-    setAnalyzing(false);
-  }
-};
-
-  const handleItemChange = (index, field, value) => {
-    const updated = [...parsedItems];
-    updated[index] = { ...updated[index], [field]: value };
-    setParsedItems(updated);
   };
 
-  const removeItem = (index) => {
-    setParsedItems(parsedItems.filter((_, i) => i !== index));
+  const doImport = async () => {
+    setStatusMsg("Saving items...");
+    try {
+      const toImport = items.filter(i => i.selected);
+      const res = await fetch("/api/owner/import-menu-items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ restaurantId, items: toImport })
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Save failed");
+      onImported(json.inserted);
+      onClose();
+    } catch (e) {
+      setError("Import Error: " + e.message);
+      setStatusMsg("");
+    }
   };
-
-const handleImport = async () => {
-  setUploading(true);
-  setError('');
-
-  try {
-    const toImport = parsedItems.filter(i => i.selected && i.name);
-
-    if (toImport.length === 0) throw new Error('No items selected to import');
-
-    const res = await fetch('/api/owner/import-menu-items', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ restaurantId, items: toImport }),
-    });
-
-    const json = await res.json();
-    if (!res.ok) throw new Error(json.error || 'Import failed');
-
-    onImported(json.inserted || []);
-    onClose();
-  } catch (e) {
-    setError(e.message || 'Import failed');
-  } finally {
-    setUploading(false);
-  }
-};
 
   return (
     <Overlay onClick={onClose}>
       <Modal onClick={e => e.stopPropagation()}>
         <Header>
-          <h3>Import Menu from Image</h3>
-          <button onClick={onClose} style={{border:'none', background:'transparent', fontSize:24, cursor:'pointer'}}>&times;</button>
+          <h3>Import Menu</h3>
+          <button onClick={onClose} style={{border:'none',background:'none',fontSize:20,cursor:'pointer'}}>×</button>
         </Header>
-        
         <Content>
-          {error && <div style={{padding: 12, background: '#fee2e2', color: '#dc2626', borderRadius: 8, marginBottom: 16}}>{error}</div>}
-
-          {step === 'upload' && (
-            <div style={{textAlign: 'center', padding: 40}}>
-              {previewUrl ? (
-                <div>
-                  <ImagePreview src={previewUrl} alt="Preview" />
-                  <div style={{marginTop: 16}}>
-                    <Button variant="outline" onClick={() => { setFile(null); setPreviewUrl(null); }} disabled={analyzing}>
-                      Change Image
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <div style={{border: '2px dashed #d1d5db', padding: 40, borderRadius: 12}}>
-                  <p style={{marginBottom: 16, fontSize: 16, color: '#6b7280'}}>Upload a clear photo of your menu</p>
-                  <label>
-                    <input type="file" accept="image/*" onChange={handleFileChange} style={{display: 'none'}} />
-                    <span style={{
-                      padding: '10px 20px', 
-                      background: '#4f46e5', 
-                      color: 'white', 
-                      borderRadius: 8, 
-                      cursor: 'pointer',
-                      fontWeight: 500
-                    }}>
-                      Choose File
-                    </span>
-                  </label>
-                </div>
-              )}
+          {error && <div style={{background:'#fee', color:'red', padding:10, borderRadius:4, marginBottom:10}}>{error}</div>}
+          
+          {step === "upload" && (
+            <div style={{textAlign:'center', padding:40}}>
+               {preview ? <PreviewImg src={preview} /> : <div style={{border:'2px dashed #ccc', padding:40, color:'#666'}}>Select Menu Photo</div>}
+               <input type="file" accept="image/*" onChange={handleFile} style={{marginTop:20}} />
             </div>
           )}
 
-          {step === 'review' && (
-            <div>
-              <p style={{marginBottom: 16, color: '#6b7280'}}>Review the extracted items before importing.</p>
-              <div style={{maxHeight: '50vh', overflowY: 'auto'}}>
-                <Table>
-                  <thead>
-                    <tr>
-                      <th style={{width: 40}}>#</th>
-                      <th>Name</th>
-                      <th>Price</th>
-                      <th>Category</th>
-                      <th style={{width: 80}}>Veg</th>
-                      <th style={{width: 60}}></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {parsedItems.map((item, idx) => (
-                      <tr key={idx} style={{opacity: item.selected ? 1 : 0.5}}>
-                        <td>
-                          <input 
-                            type="checkbox" 
-                            checked={!!item.selected} 
-                            onChange={(e) => handleItemChange(idx, 'selected', e.target.checked)}
-                          />
-                        </td>
-                        <td>
-                          <div style={{display:'flex', flexDirection:'column'}}>
-                            <input 
-                              value={item.name} 
-                              onChange={(e) => handleItemChange(idx, 'name', e.target.value)}
-                              placeholder="Item Name"
-                              style={{borderColor: item.isDupe ? '#f59e0b' : '#d1d5db'}}
-                            />
-                            {item.isDupe && (
-                              <span style={{fontSize: 11, color: '#d97706', fontWeight: 600, marginTop: 2}}>
-                                ⚠️ Already exists
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td>
-                          <input 
-                            type="number"
-                            value={item.price} 
-                            onChange={(e) => handleItemChange(idx, 'price', e.target.value)}
-                            placeholder="0.00"
-                          />
-                        </td>
-                        <td>
-                          <input 
-                            value={item.category || ''} 
-                            onChange={(e) => handleItemChange(idx, 'category', e.target.value)}
-                            placeholder="Category"
-                          />
-                        </td>
-                        <td style={{textAlign: 'center'}}>
-                          <input 
-                            type="checkbox" 
-                            checked={!!item.veg} 
-                            onChange={(e) => handleItemChange(idx, 'veg', e.target.checked)}
-                          />
-                        </td>
-                        <td>
-                          <button 
-                            onClick={() => removeItem(idx)}
-                            style={{color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer', fontWeight:'bold'}}
-                          >
-                            ✕
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </Table>
-              </div>
-            </div>
+          {step === "processing" && (
+             <div style={{textAlign:'center', padding:50}}>
+                <div style={{fontSize:24, marginBottom:10}}>🤖</div>
+                <p>{statusMsg}</p>
+             </div>
+          )}
+
+          {step === "review" && (
+            <Table>
+              <thead><tr><th width="30"></th><th>Name</th><th width="80">Price</th><th>Category</th></tr></thead>
+              <tbody>
+                {items.map((it, idx) => (
+                  <tr key={idx} style={{opacity: it.selected ? 1 : 0.5}}>
+                    <td><input type="checkbox" checked={it.selected} onChange={e => { const c = [...items]; c[idx].selected = e.target.checked; setItems(c); }} /></td>
+                    <td>
+                        <input value={it.name} onChange={e => { const c = [...items]; c[idx].name = e.target.value; setItems(c); }} />
+                        {it.isDupe && <div style={{fontSize:11, color:'orange'}}>Duplicate</div>}
+                    </td>
+                    <td><input type="number" value={it.price} onChange={e => { const c = [...items]; c[idx].price = e.target.value; setItems(c); }} /></td>
+                    <td><input value={it.category} onChange={e => { const c = [...items]; c[idx].category = e.target.value; setItems(c); }} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
           )}
         </Content>
-
         <Footer>
-          {step === 'upload' && (
-            <>
-              <Button variant="secondary" onClick={onClose} disabled={analyzing}>Cancel</Button>
-              <Button onClick={handleAnalyze} disabled={!file || analyzing}>
-                {analyzing ? 'Analyzing Image...' : 'Process Image'}
-              </Button>
-            </>
-          )}
-          {step === 'review' && (
-            <>
-              <Button variant="secondary" onClick={() => setStep('upload')} disabled={uploading}>Back</Button>
-              <Button onClick={handleImport} disabled={uploading}>
-                {uploading ? 'Importing...' : `Import ${parsedItems.filter(i => i.selected).length} Items`}
-              </Button>
-            </>
-          )}
+          {step === "upload" && <Button onClick={processImage} disabled={!file}>Analyze</Button>}
+          {step === "review" && <Button onClick={doImport}>Import ({items.filter(i=>i.selected).length})</Button>}
         </Footer>
       </Modal>
     </Overlay>
