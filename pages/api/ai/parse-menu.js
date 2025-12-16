@@ -122,16 +122,23 @@ Rules:
           ],
           generationConfig: {
             temperature: 0.1,
-            maxOutputTokens: 8192,
+            maxOutputTokens: 2048,
             response_mime_type: "application/json",
           },
         };
 
-        const resp = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
+        const controller = new AbortController();
+const t = setTimeout(() => controller.abort(), 45_000); // 45s hard stop
+
+const resp = await fetch(url, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(body),
+  signal: controller.signal,
+});
+
+clearTimeout(t);
+
 
         if (resp.status === 429) {
           lastError = { status: 429, message: "Rate limit exceeded" };

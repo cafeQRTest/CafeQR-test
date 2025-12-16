@@ -111,18 +111,58 @@ export default function MenuImageImport({ onClose, onImported, restaurantId, exi
     }
   };
 
+async function compressToBase64(file, maxSize = 1280, quality = 0.7) {
+  const img = new Image();
+  const objectUrl = URL.createObjectURL(file);
+
+  const loaded = await new Promise((resolve, reject) => {
+    img.onload = resolve;
+    img.onerror = reject;
+    img.src = objectUrl;
+  });
+
+  const canvas = document.createElement("canvas");
+  let { width, height } = img;
+
+  if (width > height) {
+    if (width > maxSize) {
+      height = Math.round((height * maxSize) / width);
+      width = maxSize;
+    }
+  } else {
+    if (height > maxSize) {
+      width = Math.round((width * maxSize) / height);
+      height = maxSize;
+    }
+  }
+
+  canvas.width = width;
+  canvas.height = height;
+
+  const ctx = canvas.getContext("2d");
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(img, 0, 0, width, height);
+
+  URL.revokeObjectURL(objectUrl);
+
+  // WebP first, fallback to JPEG
+  let dataUrl = canvas.toDataURL("image/webp", quality);
+  if (!dataUrl.startsWith("data:image/webp")) {
+    dataUrl = canvas.toDataURL("image/jpeg", quality);
+  }
+  return dataUrl;
+}
+
+
 const handleAnalyze = async () => {
   if (!file) return;
   setAnalyzing(true);
   setError('');
 
   try {
-    const base64 = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
+    const base64 = await compressToBase64(file, 1280, 0.7);
+
 
     const res = await fetch('/api/ai/parse-menu', {
       method: 'POST',
