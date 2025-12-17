@@ -66,6 +66,22 @@ export default function ItemEditor({
   return data; // null or {id,name}
 };
 
+  const checkDuplicateCode = async (c) => {
+    if (!c || c.trim() === "") return null;
+    const q = supabase
+      .from("menu_items")
+      .select("id, name")
+      .eq("restaurant_id", restaurantId)
+      .eq("code_number", c.trim());
+
+    // If editing, ignore self
+    if (isEdit) q.neq("id", item.id);
+
+    const { data, error } = await q.maybeSingle();
+    if (error) throw error;
+    return data; 
+  };
+
   // Variant template creation modal state
   const [showVariantModal, setShowVariantModal] = useState(false);
   const [newVariantName, setNewVariantName] = useState("");
@@ -73,6 +89,8 @@ export default function ItemEditor({
   const [newVariantErr, setNewVariantErr] = useState("");
 
   useEffect(() => {
+// ... existing code ...
+
     if (!supabase || !open || !restaurantId) return;
     setLoadingCats(true);
     supabase
@@ -398,6 +416,13 @@ if (dupe?.id) {
   throw new Error(`Item "${name.trim()}" already exists in your menu.`);
 }
 
+if (code.trim()) {
+  const dupeCode = await checkDuplicateCode(code);
+  if (dupeCode?.id) {
+     throw new Error(`Item code "${code.trim()}" is already used by item "${dupeCode.name}".`);
+  }
+}
+
       // ensure category
       let catId = cats.find((c) => c.name === category)?.id;
       if (!catId) {
@@ -481,7 +506,7 @@ if (dupe?.id) {
       const errorMsg = ex.message || "Failed to save";
       setErr(errorMsg);
       onError?.(errorMsg);
-      alert(`Error saving item: ${errorMsg}`); // Show alert for visibility
+      // alert(`Error saving item: ${errorMsg}`);
     } finally {
       setSaving(false);
     }
