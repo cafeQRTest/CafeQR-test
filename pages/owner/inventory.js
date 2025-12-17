@@ -75,7 +75,6 @@ export default function InventoryPage() {
   const [error, setError] = useState('')
   const [editingIngredient, setEditingIngredient] = useState(null)
   const [ingredientForm, setIngredientForm] = useState({ name: '', unit: '', current_stock: 0, reorder_threshold: 0 })
-  const [recipeForm, setRecipeForm] = useState({ menuItemId: '', variantId: null, items: [] })
   const [showRecipeEditor, setShowRecipeEditor] = useState(false)
   const [activeTab, setActiveTab] = useState('ingredients') // 'ingredients' or 'recipes'
   const [ingredientDialog, setIngredientDialog] = useState(null) // null, 'add', or ingredient id for edit
@@ -238,111 +237,140 @@ export default function InventoryPage() {
     })
   }
 
-  const openRecipe = (menuItem, recipeInput = null) => {
+  /* -------------------------------------------------------------------------- */
+  /*                            RECIPE EDITOR STATE                             */
+  /* -------------------------------------------------------------------------- */
+  const [activeVariantId, setActiveVariantId] = useState("base"); // 'base' or UUID
+  const [variantsRecipeState, setVariantsRecipeState] = useState({}); // { [variantId]: { items: [] } }
+
+  const openRecipe = (menuItem) => {
+    setSelectedMenuItem(menuItem || null)
+    setActiveVariantId("base")
     setShowRecipeEditor(true)
     setRecipeFormError('')
-    setSelectedMenuItem(menuItem || null)
-    
-    // Default to base recipe (variantId = null) if no specific recipe passed
-    // But if we passed a recipe object, use its variant_option_id
-    const targetVariantId = recipeInput?.variant_option_id || null
-    
-    // If no recipeInput passed, try to find the base recipe
-    let recipe = recipeInput
-    let cloneFrom = null
 
-    if (!recipe && menuItem) {
-       // Check for exact base recipe match
-       recipe = recipes.find(r => r.menu_item_id === menuItem.id && r.variant_option_id === targetVariantId)
+    if (!menuItem) return;
+
+    // Build initial state for all variants + base
+    const initialState = {
+      base: { items: [] }
+    };
+
+    if (menuItem.has_variants && menuItem.variants) {
+      menuItem.variants.forEach(v => {
+        initialState[v.variant_id] = { items: [] };
+      });
     }
 
-    // If still no recipe found for this specific target, find something to clone from
-    if (!recipe && menuItem) {
-       // 1. Try Base Recipe
-       cloneFrom = recipes.find(r => r.menu_item_id === menuItem.id && r.variant_option_id === null)
-       // 2. If no base, try ANY recipe for this item
-       if (!cloneFrom) {
-         cloneFrom = recipes.find(r => r.menu_item_id === menuItem.id)
+    // Populate with existing recipes
+    const itemRecipes = recipes.filter(r => r.menu_item_id === menuItem.id);
+    
+    // Helper to map DB items to Form items
+    const mapItems = (dbItems) => (dbItems || []).map((ri, i) => ({
+       _key: `${ri.ingredient_id}-${i}`,
+       ingredientId: ri.ingredient_id,
+       quantity: Number(ri.quantity) || 0
+    }));
+
+    itemRecipes.forEach(r => {
+       const key = r.variant_option_id || "base";
+       if (initialState[key]) {
+          initialState[key].items = mapItems(r.recipe_items);
        }
-    }
+    });
 
-    loadRecipeForm(menuItem?.id, targetVariantId, recipe, cloneFrom)
+    setVariantsRecipeState(initialState);
   }
 
-  const loadRecipeForm = (menuItemId, variantId, recipe, cloneFrom = null) => {
-     if (recipe) {
-      setRecipeForm({
-        menuItemId: menuItemId || recipe.menu_item_id,
-        variantId: variantId, 
-        items: (recipe.recipe_items || []).map((ri, i) => ({
-          _key: `${ri.ingredient_id || 'ri'}-${i}`,
-          ingredientId: ri.ingredient_id,
-          quantity: Number(ri.quantity) || 0,
-        })),
-      })
-    } else if (cloneFrom) {
-      // PRE-FILL from cloned recipe
-      // Just copy the ingredients and quantities, but this is a NEW recipe state (no ID yet)
-      setRecipeForm({
-        menuItemId: menuItemId,
-        variantId: variantId || null, 
-        items: (cloneFrom.recipe_items || []).map((ri, i) => ({
-          _key: `clone-${ri.ingredient_id}-${i}-${Date.now()}`, 
-          ingredientId: ri.ingredient_id,
-          quantity: Number(ri.quantity) || 0,
-        })),
-      })
-    } else {
-      setRecipeForm({ menuItemId: menuItemId || '', variantId: variantId || null, items: [] })
-    }
-  }
-
-  const handleVariantChange = (variantId) => {
-     const targetId = variantId || null
-     
-     // Find existing recipe for this variant
-     const recipe = recipes.find(r => r.menu_item_id === selectedMenuItem?.id && r.variant_option_id === targetId)
-     
-     let cloneFrom = null
-     if (!recipe) {
-        // Find best clone match
-        cloneFrom = recipes.find(r => r.menu_item_id === selectedMenuItem?.id && r.variant_option_id === null) // Base
-        if (!cloneFrom) {
-            cloneFrom = recipes.find(r => r.menu_item_id === selectedMenuItem?.id) // Any
-        }
-     }
-     
-     loadRecipeForm(selectedMenuItem?.id, targetId, recipe, cloneFrom)
-  }
+  const updateVariantState = (variantId, newItems) => {
+     setVariantsRecipeState(prev => ({
+        ...prev,
+        [variantId]: { ...prev[variantId], items: newItems }
+     }));
+  };
 
   const handleCloseRecipeEditor = () => {
     setShowRecipeEditor(false)
     setSelectedMenuItem(null)
-    setRecipeForm({ menuItemId: '', variantId: null, items: [] })
+    setVariantsRecipeState({})
     setRecipeFormError('')
   }
 
-  const changeRecipeByKey = (key, field, value) => {
-    // Store raw input (as string) for quantity so the field can be fully cleared
-    setRecipeForm((prev) => {
-      const items = prev.items.map((it) =>
-        it._key === key ? { ...it, [field]: value } : it
-      )
-      return { ...prev, items }
-    })
-  }
-  const addRecipeItem = () => {
-    const _key = `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`
-    setRecipeForm((prev) => ({
-      ...prev,
-      // start with empty quantity so the input shows placeholder instead of 0
-      items: [...prev.items, { _key, ingredientId: '', quantity: '' }],
-    }))
-  }
-  const removeRecipeItemByKey = (key) => {
-    setRecipeForm((prev) => ({ ...prev, items: prev.items.filter((it) => it._key !== key) }))
-  }
+  // --- SAVE ALL LOGIC ---
+  const handleSaveAll = async () => {
+    if (!supabase || savingRecipe) return;
+    try {
+      setSavingRecipe(true);
+      setError('');
+      setRecipeFormError('');
 
+      const menuItemId = selectedMenuItem?.id;
+      if (!menuItemId) throw new Error('No menu item selected.');
+
+      // Validate ALL recipes first
+      const updatesToProcess = [];
+
+      for (const [key, data] of Object.entries(variantsRecipeState)) {
+         const rawItems = data.items || [];
+         
+         // Filter valid items
+         const validItems = rawItems.filter(it => it.ingredientId && Number(it.quantity) > 0);
+         
+         // Check constraints
+         const seen = new Set();
+         for(const it of validItems) {
+            if(seen.has(it.ingredientId)) {
+               const variantName = key === 'base' ? 'Base Recipe' : (selectedMenuItem.variants?.find(v=>v.variant_id===key)?.variant_name || 'Unknown Variant');
+               throw new Error(`Duplicate ingredient in ${variantName}.`);
+            }
+            seen.add(it.ingredientId);
+         }
+         
+         const isBase = key === 'base';
+         const variantId = isBase ? null : key;
+         updatesToProcess.push({ variantId, items: validItems });
+      }
+
+      // If validation passes, save all sequentially
+      const newRecipeObjects = [];
+      const ingMap = new Map(ingredients.map((i) => [i.id, i]));
+
+      for (const update of updatesToProcess) {
+         const rId = await upsertRecipeToDb(menuItemId, update.variantId, update.items);
+         
+         newRecipeObjects.push({
+           id: rId,
+           menu_item_id: menuItemId,
+           variant_option_id: update.variantId,
+           recipe_items: update.items.map((it) => ({
+             ingredient_id: it.ingredientId,
+             quantity: Number(it.quantity),
+             ingredients: ingMap.get(it.ingredientId) 
+               ? { name: ingMap.get(it.ingredientId).name, unit: ingMap.get(it.ingredientId).unit } 
+               : null
+           })),
+         });
+      }
+
+      // Update Local State
+      setRecipes((prev) => {
+         // Remove all old recipes for this item
+         const otherItemsRecipes = prev.filter(r => r.menu_item_id !== menuItemId);
+         return [...otherItemsRecipes, ...newRecipeObjects];
+      });
+
+      handleCloseRecipeEditor();
+
+    } catch(e) {
+       setRecipeFormError(e.message);
+    } finally {
+       setSavingRecipe(false);
+    }
+  };
+
+  /* -------------------------------------------------------------------------- */
+  /*                            SEARCH FILTERS                                  */
+  /* -------------------------------------------------------------------------- */
   const normalizedIngredientSearch = ingredientSearch.trim().toLowerCase()
   const filteredIngredients = normalizedIngredientSearch
     ? ingredients.filter((ing) => (ing.name || '').toLowerCase().includes(normalizedIngredientSearch))
@@ -353,129 +381,10 @@ export default function InventoryPage() {
     ? menuItems.filter((mi) => (mi.name || '').toLowerCase().includes(normalizedRecipeSearch))
     : menuItems
 
-  const saveRecipe = async () => {
-    if (!supabase || savingRecipe) return
-    try {
-      setSavingRecipe(true)
-      setError('')
-      setRecipeFormError('')
+  /* -------------------------------------------------------------------------- */
+  /*                            RENDER                                          */
+  /* -------------------------------------------------------------------------- */
 
-      const rawItems = recipeForm.items
-
-      // Block save if any selected ingredient has no quantity or non-positive quantity
-      const hasMissingQty = rawItems.some((item) =>
-        item.ingredientId && (!item.quantity || Number(item.quantity) <= 0)
-      )
-      if (hasMissingQty) {
-        throw new Error('Please enter a quantity greater than 0 for each selected ingredient.')
-      }
-
-      // Only keep fully valid items
-      const items = rawItems.filter(
-        (item) => item.ingredientId && Number(item.quantity) > 0
-      )
-
-      // Disallow duplicate ingredients in a single recipe
-      const seen = new Set()
-      for (const it of items) {
-        if (seen.has(it.ingredientId)) {
-          throw new Error('Each ingredient can only appear once in a recipe.')
-        }
-        seen.add(it.ingredientId)
-      }
-
-      const payload = {
-        menu_item_id: recipeForm.menuItemId,
-        variant_option_id: recipeForm.variantId || null,
-        items,
-      }
-      if (!payload.menu_item_id) {
-        throw new Error('Select a menu item before saving recipe')
-      }
-      // Ensure a recipe row exists (avoid on_conflict upsert)
-      let recipeId
-      let query = supabase
-        .from('recipes')
-        .select('id')
-        .eq('menu_item_id', payload.menu_item_id)
-        .eq('restaurant_id', restaurantId)
-        
-      if (payload.variant_option_id) {
-        query = query.eq('variant_option_id', payload.variant_option_id)
-      } else {
-        query = query.is('variant_option_id', null)
-      }
-      
-      const { data: existingRows, error: existErr } = await query.limit(1)
-      
-      if (existErr) throw existErr
-      if (existingRows && existingRows.length > 0) {
-        recipeId = existingRows[0].id
-      } else {
-        const { data: inserted, error: insertErr } = await supabase
-          .from('recipes')
-          .insert([{ 
-             menu_item_id: payload.menu_item_id, 
-             restaurant_id: restaurantId,
-             variant_option_id: payload.variant_option_id
-          }])
-          .select('id')
-          .single()
-        if (insertErr) throw insertErr
-        recipeId = inserted.id
-      }
-
-      await supabase.from('recipe_items').delete().eq('recipe_id', recipeId)
-
-      if (payload.items.length > 0) {
-        const itemsToInsert = payload.items.map((item) => ({
-          recipe_id: recipeId,
-          ingredient_id: item.ingredientId,
-          quantity: Number(item.quantity)
-        }))
-        await supabase.from('recipe_items').insert(itemsToInsert)
-      }
-
-      // Optimistically update UI for this menu item
-      setRecipes((prev) => {
-        // Remove existing for this item+variant
-        const filtered = prev.filter(r => !(r.menu_item_id === payload.menu_item_id && r.variant_option_id === (payload.variant_option_id || null)))
-        
-        const ingMap = new Map(ingredients.map((i) => [i.id, i]))
-        const recipeObj = {
-          id: recipeId,
-          menu_item_id: payload.menu_item_id,
-          variant_option_id: payload.variant_option_id || null,
-          recipe_items: payload.items.map((it) => ({
-            ingredient_id: it.ingredientId,
-            quantity: Number(it.quantity),
-            ingredients: ingMap.get(it.ingredientId)
-              ? { name: ingMap.get(it.ingredientId).name, unit: ingMap.get(it.ingredientId).unit }
-              : null,
-          })),
-        }
-        return [...filtered, recipeObj]
-      })
-
-      // Close modal immediately after successful write
-      setShowRecipeEditor(false)
-      setSelectedMenuItem(null)
-      setRecipeForm({ menuItemId: '', variantId: null, items: [] })
-
-      // Background refresh (non-blocking)
-      try {
-        const { data: recipesData, error: recipesError } = await supabase
-          .from('recipes')
-          .select('id,menu_item_id,variant_option_id,recipe_items(*,ingredients(name,unit))')
-          .eq('restaurant_id', restaurantId)
-        if (!recipesError) setRecipes(recipesData || [])
-      } catch {}
-    } catch (e) {
-      setRecipeFormError(e.message)
-    } finally {
-      setSavingRecipe(false)
-    }
-  }
 
   if (checking || restLoading) return <LoadingContainer>Loading…</LoadingContainer>
   if (!restaurantId) return <LoadingContainer>No restaurant found.</LoadingContainer>
@@ -762,95 +671,154 @@ export default function InventoryPage() {
         >
           <div
             className="modal__card"
-            style={{ maxWidth: 800 }}
+            style={{ maxWidth: 900, height: '80vh', display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }}
           >
-            <h3>{selectedMenuItem ? `Recipe for ${selectedMenuItem.name}` : 'Edit Recipe'}</h3>
-            {selectedMenuItem ? (
-              <div style={{ marginBottom: 16 }}>
-                <div className="form-row" style={{ marginBottom: 8 }}>
-                  <strong style={{ marginRight: 6 }}>Menu Item:</strong>
-                  <span>{selectedMenuItem.name}</span>
-                </div>
-                
-                {selectedMenuItem.has_variants && selectedMenuItem.variants && (
-                   <div className="form-row" style={{ maxWidth: 320 }}>
-                     <FormLabel>Select Variant:</FormLabel>
-                     <NiceSelect
-                       value={recipeForm.variantId || ""}
-                       onChange={(val) => handleVariantChange(val || null)}
-                       placeholder="Base Recipe (Default)"
-                       options={[
-                         { value: "", label: "Base Recipe (Default)" },
-                         ...selectedMenuItem.variants.map(v => {
-                           const hasCustom = recipes.some(r => r.menu_item_id === selectedMenuItem.id && r.variant_option_id === v.variant_id)
-                           const suffix = hasCustom ? " (Custom)" : " (Uses Base)"
-                           return {
-                             value: v.variant_id,
-                             label: `${v.variant_name} (${v.template_name})${suffix}`
-                           }
-                         })
-                       ]}
-                     />
-                   </div>
-                )}
-              </div>
-            ) : (
-              <div style={{ maxWidth: 320 }}>
-                <NiceSelect
-                  value={recipeForm.menuItemId}
-                  onChange={(val) => setRecipeForm({ ...recipeForm, menuItemId: val })}
-                  placeholder="Select Menu Item"
-                  options={menuItems.map((mi) => ({ value: mi.id, label: mi.name }))}
-                />
-              </div>
-            )}
-            {recipeFormError && (
-              <InlineError style={{ marginTop: 8 }}>{recipeFormError}</InlineError>
-            )}
-            {recipeForm.items.map((item) => (
-              <div
-                className="form-row"
-                key={item._key}
-                style={{
-                  display: 'flex',
-                  flexWrap: 'wrap',
-                  gap: 8,
-                  alignItems: 'center',
-                  marginBottom: 8,
-                }}
-              >
-                <div style={{ flex: '1 1 240px', minWidth: 0 }}>
-                  <NiceSelect
-                    value={item.ingredientId}
-                    onChange={(val) => changeRecipeByKey(item._key, 'ingredientId', val)}
-                    placeholder="Select Ingredient"
-                    options={ingredients.map((ing) => ({ value: ing.id, label: ing.name }))}
-                  />
-                </div>
-                <input
-                  type="number"
-                  placeholder="Quantity"
-                  value={item.quantity}
-                  onChange={(e) => changeRecipeByKey(item._key, 'quantity', e.target.value)}
-                  style={{ flex: '0 0 120px', minWidth: 0 }}
-                />
-                <button
-                  type="button"
-                  onClick={() => removeRecipeItemByKey(item._key)}
-                  style={{ flexShrink: 0 }}
-                >
-                  Remove
-                </button>
-              </div>
-            ))}
-            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <SaveButton onClick={addRecipeItem}>+ Add Ingredient</SaveButton>
+            {/* Header */}
+            <div style={{ padding: '16px 24px', borderBottom: '1px solid #e5e7eb', background: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0, fontSize: '1.25rem' }}>{selectedMenuItem ? `Recipes for ${selectedMenuItem.name}` : 'Edit Recipe'}</h3>
+              <CloseButton onClick={handleCloseRecipeEditor}>✕</CloseButton>
             </div>
-            <div className="modal-actions" style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'flex-end' }}>
-              <SaveButton onClick={saveRecipe} disabled={savingRecipe}>
-                {savingRecipe ? 'Saving…' : 'Save'}
-              </SaveButton>
-              <CancelButton onClick={handleCloseRecipeEditor} disabled={savingRecipe}>Cancel</CancelButton>
+
+            {/* Split Content */}
+            <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+              
+              {/* SIDEBAR - Variants List */}
+              {selectedMenuItem?.has_variants && (
+                <div style={{ width: 260, flexShrink: 0, borderRight: '1px solid #e5e7eb', background: '#f9fafb', overflowY: 'auto' }}>
+                  <div style={{ padding: '16px 16px 8px 16px', fontWeight: 600, fontSize: '0.85rem', color: '#6b7280', textTransform: 'uppercase' }}>
+                    Select Variant
+                  </div>
+                  
+                  {/* Base Recipe Option */}
+                  <div 
+                    onClick={() => setActiveVariantId("base")}
+                    style={{ 
+                      padding: '12px 16px', 
+                      cursor: 'pointer',
+                      background: activeVariantId === "base" ? '#fff' : 'transparent',
+                      borderLeft: activeVariantId === "base" ? '3px solid #3b82f6' : '3px solid transparent',
+                      color: activeVariantId === "base" ? '#2563eb' : '#374151',
+                      fontWeight: activeVariantId === "base" ? 600 : 400,
+                      display: 'flex', justifyContent: 'space-between'
+                    }}
+                  >
+                     <span>Base Recipe</span>
+                     {variantsRecipeState["base"]?.items?.length > 0 && <span style={{fontSize: '1rem', color: '#059669', marginLeft: 'auto'}}>✓</span>}
+                  </div>
+
+                  {selectedMenuItem.variants.map(v => (
+                    <div 
+                      key={v.variant_id}
+                      onClick={() => setActiveVariantId(v.variant_id)}
+                      style={{ 
+                        padding: '12px 16px', 
+                        cursor: 'pointer',
+                        background: activeVariantId === v.variant_id ? '#fff' : 'transparent',
+                        borderLeft: activeVariantId === v.variant_id ? '3px solid #3b82f6' : '3px solid transparent',
+                        color: activeVariantId === v.variant_id ? '#2563eb' : '#374151',
+                        fontWeight: activeVariantId === v.variant_id ? 600 : 400,
+                        display: 'flex', flexDirection: 'column'
+                      }}
+                    >
+                       <div style={{display:'flex', justifyContent: 'space-between'}}>
+                          <span>{v.variant_name}</span>
+                          {variantsRecipeState[v.variant_id]?.items?.length > 0 && <span style={{fontSize: '1rem', color: '#059669', marginLeft: 'auto'}}>✓</span>}
+                       </div>
+                       <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>{v.template_name}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* MAIN CONTENT - Editor */}
+              <div style={{ flex: 1, padding: 24, overflowY: 'auto', background: '#fff' }}>
+                 {!selectedMenuItem?.has_variants ? (
+                    /* Simple view for non-variant items */
+                    <RecipeEditorContent 
+                       items={variantsRecipeState["base"]?.items || []}
+                       onChange={(newItems) => updateVariantState("base", newItems)}
+                       ingredients={ingredients}
+                    />
+                 ) : (
+                    <>
+                       <div style={{ marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <h4 style={{ margin: 0, fontSize: '1.1rem', color: '#111827' }}>
+                             {activeVariantId === 'base' ? 'Base Recipe (Default)' : (
+                                selectedMenuItem.variants.find(v => v.variant_id === activeVariantId)?.variant_name + ' Recipe'
+                             )}
+                          </h4>
+                          
+                          {/* Copy Action */}
+                          {activeVariantId !== 'base' && (
+                             <button 
+                               onClick={() => {
+                                  // Copy from base
+                                  const baseItems = variantsRecipeState["base"]?.items || [];
+                                  if (baseItems.length === 0) {
+                                    setRecipeFormError("Base recipe is empty. Nothing to copy.");
+                                    return;
+                                  }
+                                  // Deep copy with new keys
+                                  const copy = baseItems.map(it => ({...it, _key: `cp-${Date.now()}-${Math.random()}`}));
+                                  updateVariantState(activeVariantId, copy);
+                                  setRecipeFormError(""); // Clear any previous error
+                               }}
+                               style={{ fontSize: '0.85rem', padding: '6px 12px', background: '#e0f2fe', color: '#0369a1', border: '1px solid #7dd3fc', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}
+                             >
+                               Copy Base Recipe
+                             </button>
+                          )}
+                           {activeVariantId === 'base' && (
+                             <button 
+                               onClick={() => {
+                                  const baseItems = variantsRecipeState["base"]?.items || [];
+                                  if (baseItems.length === 0) {
+                                    setRecipeFormError("Base recipe is empty. Nothing to apply.");
+                                    return;
+                                  }
+
+                                  // Confirm UI
+                                  setConfirmDialog({
+                                    message: "This will overwrite all variant recipes with the current base recipe ingredients. Are you sure?",
+                                    onConfirm: () => {
+                                      const nextState = { ...variantsRecipeState };
+                                      selectedMenuItem.variants.forEach(v => {
+                                         nextState[v.variant_id] = {
+                                            items: baseItems.map(it => ({...it, _key: `cp-all-${v.variant_id}-${Date.now()}`}))
+                                         };
+                                      });
+                                      setVariantsRecipeState(nextState);
+                                      setConfirmDialog(null);
+                                      setRecipeFormError(""); 
+                                    },
+                                    onCancel: () => setConfirmDialog(null)
+                                  });
+                               }}
+                               style={{ fontSize: '0.85rem', padding: '6px 12px', background: '#fef3c7', border: '1px solid #fcd34d', color: '#92400e', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}
+                             >
+                               Apply to All Variants
+                             </button>
+                          )}
+                       </div>
+
+                       {recipeFormError && <InlineError>{recipeFormError}</InlineError>}
+
+                       <RecipeEditorContent 
+                          items={variantsRecipeState[activeVariantId]?.items || []}
+                          onChange={(newItems) => updateVariantState(activeVariantId, newItems)}
+                          ingredients={ingredients}
+                       />
+                    </>
+                 )}
+              </div>
+            </div>
+
+            {/* Footer Actions */}
+            <div style={{ padding: '16px 24px', borderTop: '1px solid #e5e7eb', background: '#fff', display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+                <CancelButton onClick={handleCloseRecipeEditor} disabled={savingRecipe}>Cancel</CancelButton>
+                <SaveButton onClick={handleSaveAll} disabled={savingRecipe} style={{ minWidth: 120 }}>
+                  {savingRecipe ? 'Saving All...' : 'Save All Changes'}
+                </SaveButton>
             </div>
           </div>
         </div>
@@ -1503,3 +1471,61 @@ const SaveButton = styled.button`
     background: #059669;
   }
 `
+
+// Helper Component for the Editor Form Section (Hoisted)
+function RecipeEditorContent({ items, onChange, ingredients }) {
+  const handleChange = (key, field, val) => {
+    const next = items.map(it => it._key === key ? { ...it, [field]: val } : it);
+    onChange(next);
+  };
+  const remove = (key) => {
+    onChange(items.filter(it => it._key !== key));
+  };
+  const add = () => {
+    const _key = `new-${Date.now()}-${Math.random()}`;
+    onChange([...items, { _key, ingredientId: '', quantity: '' }]);
+  };
+
+  return (
+    <div>
+      {items.length === 0 && (
+        <div style={{ color: '#9ca3af', fontStyle: 'italic', marginBottom: 16 }}>
+          No ingredients assigned to this recipe yet.
+        </div>
+      )}
+      {items.map(item => (
+        <div
+          className="form-row"
+          key={item._key}
+          style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 8 }}
+        >
+          <div style={{ flex: '1 1 240px', minWidth: 0 }}>
+            <NiceSelect
+              value={item.ingredientId}
+              onChange={(val) => handleChange(item._key, 'ingredientId', val)}
+              placeholder="Select Ingredient"
+              options={ingredients.map((ing) => ({ value: ing.id, label: ing.name }))}
+            />
+          </div>
+          <input
+            type="number"
+            placeholder="Quantity"
+            value={item.quantity}
+            onChange={(e) => handleChange(item._key, 'quantity', e.target.value)}
+            style={{ flex: '0 0 120px', minWidth: 0, padding: '0.7rem', border: '2px solid #e5e7eb', borderRadius: 8 }}
+          />
+          <button
+            type="button"
+            onClick={() => remove(item._key)}
+            style={{ flexShrink: 0, background: '#fee2e2', color: '#b91c1c', border: 'none', padding: '0.5rem 1rem', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}
+          >
+            Remove
+          </button>
+        </div>
+      ))}
+      <div style={{ marginTop: 12 }}>
+        <SaveButton onClick={add} style={{ background: '#f3f4f6', color: '#374151' }}>+ Add Ingredient</SaveButton>
+      </div>
+    </div>
+  );
+}

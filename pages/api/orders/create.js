@@ -336,10 +336,7 @@ export default async function handler(req, res) {
               continue;
             }
 
-            const menuItem = menuItems?.find((mi) => mi.id === item.id);
-            if (menuItem?.is_packaged_good) {
-              continue;
-            }
+
 
             console.log(
               `Processing stock deduction for menu item ${item.id} with recipe ${recipe.id}`
