@@ -114,15 +114,17 @@ export default function OrderPage() {
         setLoading(true)
         setError('')
 
+        // 1. Fetch Restaurant Info
         const { data: rest, error: restErr } = await supabase
           .from('restaurants')
           .select('id, name, online_paused, restaurant_profiles(brand_color, phone, features_menu_images_enabled)')
           .eq('id', restaurantId)
           .single()
+        
         if (restErr) throw restErr
         if (!rest) throw new Error('Restaurant not found')
-        
-        // Check if restaurant is paused
+
+        // 2. Check Hours
         if (rest.online_paused) {
           if (!cancelled) {
             setIsOutsideHours(true)
@@ -133,46 +135,44 @@ export default function OrderPage() {
           return
         }
 
-        // Check working hours from availability
-        const { data: hours, error: hoursErr } = await supabase
+        const { data: hours } = await supabase
           .from('restaurant_hours')
           .select('dow, open_time, close_time, enabled')
           .eq('restaurant_id', restaurantId)
 
-        if (!hoursErr && hours && hours.length > 0) {
-          const now = new Date()
-          const currentDOW = now.getDay() === 0 ? 7 : now.getDay() // 1=Mon, 7=Sun
-          const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-          const todayHours = hours.find(h => h.dow === currentDOW)
+        if (hours && hours.length > 0) {
+           const now = new Date()
+           const currentDOW = now.getDay() === 0 ? 7 : now.getDay()
+           const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+           const todayHours = hours.find(h => h.dow === currentDOW)
 
-          // Check if today is disabled
-          if (!todayHours || !todayHours.enabled) {
-            if (!cancelled) {
-              setIsOutsideHours(true)
-              setHoursMessage('Restaurant is closed today')
-              setRestaurant(rest)
-              setLoading(false)
-            }
-            return
-          }
-
-          // Check if current time is outside working hours
-          if (todayHours.open_time && todayHours.close_time) {
-            const openTime = todayHours.open_time.substring(0, 5)
-            const closeTime = todayHours.close_time.substring(0, 5)
-            if (currentTime < openTime || currentTime > closeTime) {
+           if (!todayHours || !todayHours.enabled) {
               if (!cancelled) {
                 setIsOutsideHours(true)
-                setHoursMessage(`Restaurant is closed. Opens at ${openTime}, closes at ${closeTime}`)
+                setHoursMessage('Restaurant is closed today')
                 setRestaurant(rest)
                 setLoading(false)
               }
               return
-            }
-          }
+           }
+
+           if (todayHours.open_time && todayHours.close_time) {
+             const openTime = todayHours.open_time.substring(0, 5)
+             const closeTime = todayHours.close_time.substring(0, 5)
+             if (currentTime < openTime || currentTime > closeTime) {
+                if (!cancelled) {
+                  setIsOutsideHours(true)
+                  setHoursMessage(`Restaurant is closed. Opens at ${openTime}, closes at ${closeTime}`)
+                  setRestaurant(rest)
+                  setLoading(false)
+                }
+                return
+             }
+           }
         }
 
-        const { data: menu, error: menuErr } = await supabase
+        // 3. Fetch Menu
+        const { data: rawItems, error: menuErr } = await supabase
           .from('menu_items')
           .select(`
             id, name, price, description, category, veg, status, is_packaged_good, ispopular, image_url, has_variants,
@@ -183,62 +183,75 @@ export default function OrderPage() {
           .eq('restaurant_id', restaurantId)
           .order('category', { ascending: true })
           .order('name', { ascending: true })
-        
+
         if (menuErr) throw menuErr
 
-        // Fetch variant pricing for variant items
-        const itemsWithVariants = (menu || []).filter(item => item.has_variants)
-        const variantDataMap = new Map()
-        
-        if (itemsWithVariants.length > 0) {
-          const itemIds = itemsWithVariants.map(i => i.id)
-          const { data: vpData } = await supabase
-            .from('variant_pricing')
-            .select(`
-              menu_item_id, price, is_available,
-              variant_options(id, name, display_order, template_id)
-            `)
-            .in('menu_item_id', itemIds)
-            
-          (vpData || []).forEach(vp => {
-            if (!variantDataMap.has(vp.menu_item_id)) {
-              variantDataMap.set(vp.menu_item_id, [])
-            }
-            if (vp.variant_options) {
-              variantDataMap.get(vp.menu_item_id).push({
-                variant_id: vp.variant_options.id,
-                variant_name: vp.variant_options.name,
-                price: vp.price,
-                is_available: vp.is_available,
-                display_order: vp.variant_options.display_order
-              })
-            }
-          })
+        // 4. Fetch Variant Pricing
+        const finalItems = (rawItems || []).map(i => ({ ...i })); 
+        // Filter only valid items with explicit IDs
+        const variantItemIds = finalItems.filter(i => i && i.has_variants && i.id).map(i => i.id);
+
+        const vMap = new Map();
+        if (variantItemIds.length > 0) {
+           // Use simpler join syntax. Supabase usually auto-detects if there's one FK.
+           // If that fails, we can reference the column name explicitly if needed.
+           const { data: vpData, error: vpErr } = await supabase
+             .from('variant_pricing')
+             .select(`
+                menu_item_id, price, is_available,
+                variant_options (id, name, display_order, template_id)
+             `)
+             .in('menu_item_id', variantItemIds);
+           
+           if (vpErr) {
+             console.error('Variant pricing load error:', vpErr);
+             // Don't crash entire menu, just log
+           } else {
+             (vpData || []).forEach(vp => {
+                if (!vp.menu_item_id || !vp.variant_options) return;
+                
+                if (!vMap.has(vp.menu_item_id)) vMap.set(vp.menu_item_id, []);
+                vMap.get(vp.menu_item_id).push({
+                  variant_id: vp.variant_options.id,
+                  variant_name: vp.variant_options.name,
+                  price: vp.price,
+                  is_available: vp.is_available,
+                  display_order: vp.variant_options.display_order
+                });
+             });
+           }
         }
 
-        const transformedMenu = (menu || []).map(item => {
-          const variants = variantDataMap.get(item.id) || []
-          const templateName = item.menu_item_variants?.[0]?.variant_templates?.name || 'Options'
-          return {
-            ...item,
-            variants: variants.sort((a, b) => a.display_order - b.display_order),
-            variant_template_name: item.has_variants ? templateName : null,
-            rating: Number((3.8 + Math.random() * 1.0).toFixed(1)),
-            popular: !!item.ispopular
-          }
-        })
+        // 5. Transform
+        const transformed = finalItems.map(item => {
+           if (!item) return null;
+           const variants = vMap.get(item.id) || [];
+           
+           let tName = 'Options';
+           if (item.menu_item_variants && item.menu_item_variants[0] && item.menu_item_variants[0].variant_templates) {
+              tName = item.menu_item_variants[0].variant_templates.name;
+           }
 
-      const cleaned = transformedMenu
+           return {
+             ...item,
+             variants: variants.sort((a, b) => (a.display_order || 0) - (b.display_order || 0)),
+             variant_template_name: item.has_variants ? tName : null,
+             rating: 4.8, // Static rating to prevent hydration mismatch errors
+             popular: !!item.ispopular
+           };
+        }).filter(Boolean); // remove any nulls
 
         if (!cancelled) {
           setRestaurant(rest)
-          setMenuItems(cleaned)
-          cacheMenuIntoMap(cleaned)
+          setMenuItems(transformed)
+          cacheMenuIntoMap(transformed)
           setIsOutsideHours(false)
           setHoursMessage('')
           setEnableMenuImages(!!rest.restaurant_profiles?.features_menu_images_enabled)
         }
+
       } catch (e) {
+        console.error('Load Error:', e);
         if (!cancelled) setError(e.message || 'Failed to load menu')
       } finally {
         if (!cancelled) setLoading(false)
@@ -589,7 +602,13 @@ export default function OrderPage() {
         {error && (
           <div style={{ padding: '1rem', color: '#dc2626', background: '#fee2e2', margin: '1rem', borderRadius: 8, textAlign: 'center' }}>
             <p style={{fontWeight: 'bold', marginBottom: 4}}>Unable to load menu</p>
-            <p style={{fontSize: '0.9em'}}>{error}</p>
+            <p style={{fontSize: '0.9em', marginBottom: 12}}>{error}</p>
+            <button 
+              onClick={() => window.location.reload()}
+              style={{ padding: '6px 16px', background: '#dc2626', color: 'white', border: 'none', borderRadius: 6, fontWeight: 600, cursor: 'pointer' }}
+            >
+              Retry
+            </button>
           </div>
         )}
         {!loading && !error && menuItems.length === 0 && (
