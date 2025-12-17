@@ -586,6 +586,12 @@ export default function OrderPage() {
       )}
 
       <div>
+        {error && (
+          <div style={{ padding: '1rem', color: '#dc2626', background: '#fee2e2', margin: '1rem', borderRadius: 8, textAlign: 'center' }}>
+            <p style={{fontWeight: 'bold', marginBottom: 4}}>Unable to load menu</p>
+            <p style={{fontSize: '0.9em'}}>{error}</p>
+          </div>
+        )}
         {!loading && !error && menuItems.length === 0 && (
           <div
             style={{

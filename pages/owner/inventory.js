@@ -296,6 +296,57 @@ export default function InventoryPage() {
     setRecipeFormError('')
   }
 
+  // Helper: Persist a single recipe to DB
+  const upsertRecipeToDb = async (menuItemId, variantId, finalItems) => {
+    // 1. Check for existing recipe row
+    let query = supabase
+      .from('recipes')
+      .select('id')
+      .eq('menu_item_id', menuItemId)
+      .eq('restaurant_id', restaurantId);
+
+    if (variantId) {
+      query = query.eq('variant_option_id', variantId);
+    } else {
+      query = query.is('variant_option_id', null);
+    }
+
+    const { data: existingRows, error: existErr } = await query.limit(1);
+    if (existErr) throw existErr;
+
+    let recipeId;
+    if (existingRows && existingRows.length > 0) {
+      recipeId = existingRows[0].id; // Update existing
+    } else {
+      // Create new
+      const { data: inserted, error: insertErr } = await supabase
+        .from('recipes')
+        .insert([{
+          menu_item_id: menuItemId,
+          restaurant_id: restaurantId,
+          variant_option_id: variantId
+        }])
+        .select('id')
+        .single();
+      if (insertErr) throw insertErr;
+      recipeId = inserted.id;
+    }
+
+    // 2. Replace items (transaction-like)
+    await supabase.from('recipe_items').delete().eq('recipe_id', recipeId);
+
+    if (finalItems.length > 0) {
+      const itemsToInsert = finalItems.map((item) => ({
+        recipe_id: recipeId,
+        ingredient_id: item.ingredientId,
+        quantity: Number(item.quantity)
+      }));
+      await supabase.from('recipe_items').insert(itemsToInsert);
+    }
+
+    return recipeId;
+  };
+
   // --- SAVE ALL LOGIC ---
   const handleSaveAll = async () => {
     if (!supabase || savingRecipe) return;
@@ -533,34 +584,47 @@ export default function InventoryPage() {
                       </RecipeTitle>
                     </RecipeCardHeader>
                     <RecipeContent>
-                      {defaultRecipe?.recipe_items?.length ? (
+                      {itemRecipes.length > 0 ? (
                         <IngredientsList>
-                          {recipeCount > 1 && (
-                             <div style={{ fontSize: '0.8rem', color: '#666', marginBottom: 4, fontStyle: 'italic' }}>
-                               Default Recipe:
+                          {/* If Base Recipe exists, show it */}
+                          {itemRecipes.find(r => !r.variant_option_id)?.recipe_items?.length ? (
+                             <>
+                               {recipeCount > 1 && <div style={{ fontSize: '0.8rem', color: '#666', marginBottom: 4, fontStyle: 'italic' }}>Base Recipe:</div>}
+                               {itemRecipes.find(r => !r.variant_option_id).recipe_items.map(ri => (
+                                 <IngredientItem key={`base-${ri.ingredient_id}`}>
+                                    <span>{ri.quantity}×</span>
+                                    <span>{ri.ingredients?.name}</span>
+                                    <span className="unit">({ri.ingredients?.unit})</span>
+                                 </IngredientItem>
+                               ))}
+                             </>
+                          ) : (
+                             /* If NO Base Recipe, but has variants, list them */
+                             <div style={{ fontSize: '0.85rem', color: '#374151' }}>
+                                <div style={{ marginBottom: 4, fontWeight: 500 }}>Configured Variants:</div>
+                                {itemRecipes.filter(r => r.variant_option_id).map(r => {
+                                   const vName = menuItem.variants?.find(v => v.variant_id === r.variant_option_id)?.variant_name || 'Variant';
+                                   const ingCount = r.recipe_items?.length || 0;
+                                   return (
+                                      <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                                         <span style={{ color: '#059669' }}>✓</span>
+                                         <span>{vName}</span>
+                                         <span style={{ color: '#9ca3af', fontSize: '0.75rem' }}>({ingCount} ingredients)</span>
+                                      </div>
+                                   )
+                                })}
                              </div>
                           )}
-                          {defaultRecipe.recipe_items.map((ri) => (
-                            <IngredientItem key={`${ri.ingredient_id}-${ri.quantity}`}>
-                              <span>{ri.quantity}×</span>
-                              <span>{ri.ingredients?.name || '–'}</span>
-                              <span className="unit">({ri.ingredients?.unit})</span>
-                            </IngredientItem>
-                          ))}
-                          {recipeCount > 1 && (
+
+                          {/* Summary footer if base shown */}
+                          {itemRecipes.find(r => !r.variant_option_id)?.recipe_items?.length > 0 && recipeCount > 1 && (
                             <div style={{ marginTop: 8, fontSize: '0.8rem', color: '#3b82f6' }}>
-                              + {recipeCount - 1} other variant recipe(s)
+                               + {recipeCount - 1} other variant recipe(s)
                             </div>
                           )}
                         </IngredientsList>
                       ) : (
-                        <NoRecipe>
-                          {recipeCount > 0 ? (
-                            <span>{recipeCount} variant recipe(s) configured.<br/>(No default recipe)</span>
-                          ) : (
-                            'No ingredients assigned yet'
-                          )}
-                        </NoRecipe>
+                        <NoRecipe>No ingredients assigned yet</NoRecipe>
                       )}
                     </RecipeContent>
                     <RecipeActions>
