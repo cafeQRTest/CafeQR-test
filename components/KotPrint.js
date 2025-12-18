@@ -119,8 +119,8 @@ useEffect(() => {
       // Fetch bill from DB only if needed and relevant (for bills, not KOT)
       if (!nextBill && kind !== 'kot' && order?.id) {
         const b = await supabase
-          .from('bills')
-          .select('*')
+          .from('invoices')
+          .select('*, bill_no')
           .eq('order_id', order.id)
           .maybeSingle();
         if (!alive) return;

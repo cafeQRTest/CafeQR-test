@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 
-export default function NiceSelect({ value, onChange, options, placeholder = "Select...", disabled = false }) {
+export default function NiceSelect({ value, onChange, options, placeholder = "Select...", disabled = false, maxHeight = 220 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -49,7 +49,7 @@ export default function NiceSelect({ value, onChange, options, placeholder = "Se
             borderRadius: 10,
             border: "1px solid #e5e7eb",
             boxShadow: "0 12px 30px rgba(15, 23, 42, 0.18)",
-            maxHeight: 220,
+            maxHeight: maxHeight,
             overflowY: "auto",
           }}
         >

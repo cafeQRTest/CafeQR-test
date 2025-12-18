@@ -53,6 +53,24 @@ export async function getNextInvoiceNumber(restaurant_id, fy, fyStartDateStr) {
   return Math.max(maxIssued, counter) + 1
 }
 
+// --- DAILY BILL NUMBER GENERATOR (Resets daily) ---
+export async function getNextBillNumber(restaurant_id) {
+  const today = new Date()
+  const startOfDay = new Date(today.setHours(0, 0, 0, 0)).toISOString()
+  
+  // Get max bill_no from invoices created today
+  const { data: invData } = await supabase
+    .from('invoices')
+    .select('bill_no')
+    .eq('restaurant_id', restaurant_id)
+    .gte('created_at', startOfDay)
+    .order('bill_no', { ascending: false })
+    .limit(1)
+
+  const maxBillNo = invData?.[0]?.bill_no || 0
+  return maxBillNo + 1
+}
+
 export class InvoiceService {
   static async createInvoiceFromOrder(orderId, regenerationReason = null) {
     try {
@@ -86,10 +104,11 @@ export class InvoiceService {
       
       // Safe atomic sequence (retry max 5)
       let ok = false
-      let invoiceNo, nextNum, inv
+      let invoiceNo, nextNum, inv, nextBillNo
       for (let tries = 0; tries < 5 && !ok; tries++) {
         nextNum = await getNextInvoiceNumber(restaurant.id, fy, fyStartDateStr)
         invoiceNo = `${fy}/${String(nextNum).padStart(6, '0')}`
+        nextBillNo = await getNextBillNumber(restaurant.id)
         
         // ✅ FIXED: Declare payMethod BEFORE it's used in generateBillPdf
         const payMethod = order.payment_method || order.actual_payment_method || 'cash'
@@ -100,6 +119,7 @@ export class InvoiceService {
             restaurant_id: restaurant.id,
             order_id: order.id,
             invoice_no: invoiceNo,
+            bill_no: nextBillNo,
             invoice_date: new Date().toISOString(),
             customer_name: order.customer_name || null,
             customer_gstin: order.customer_gstin || null,
@@ -116,7 +136,6 @@ export class InvoiceService {
             payment_method: payMethod,
             status: payMethod === 'none' ? 'unpaid' : 'paid',
             paid_amount: payMethod === 'none' ? 0 : (order.total_inc_tax ?? order.total_amount ?? 0),
-            paid_amount:payMethod === 'none'? 0: (order.total_inc_tax ?? order.total_amount ?? 0),
             mixed_payment_details: order.mixed_payment_details || null,
             generation_method: regenerationReason ? 'regenerated' : 'auto',
             regenerated_from_invoice_id: null,
@@ -135,8 +154,10 @@ export class InvoiceService {
             last_number: nextNum
           }, { onConflict: 'restaurant_id,fy_start' })
 
-        } else if (error?.message?.includes('unique')) {
-          // If duplicate, try again
+        } else if (error?.message?.includes('unique') && !error?.message?.includes('bill_no')) {
+          // If invoice_no duplicate, try again
+          // Note: if bill_no is duplicate (unlikely with just insert), it might error but we don't have unique constraint on bill_no alone, usually it's fine unless we added unique index on bill_no+date+restaurant.
+          // The retry loop is mainly for invoice_no.
           continue
         } else if (error) {
           throw new Error(error.message)

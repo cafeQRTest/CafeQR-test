@@ -1,104 +1,52 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@supabase/supabase-js';
+import { round2, normalizeQty } from '../../../lib/qty'; // adjust path
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-)
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
-/**
- * Deduct stock for a menu item based on its recipe
- * POST /api/inventory/deduct-stock
- * Body: { menu_item_id, quantity, restaurant_id }
- */
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' })
-  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
-    const { menu_item_id, quantity, restaurant_id } = req.body
-
-    if (!menu_item_id || !quantity || !restaurant_id) {
-      return res.status(400).json({ error: 'Missing required fields' })
+    const { menu_item_id, quantity, restaurant_id } = req.body || {};
+    const orderQty = normalizeQty(quantity);
+    if (!menu_item_id || !restaurant_id || orderQty === null) {
+      return res.status(400).json({ error: 'Missing/invalid fields' });
     }
 
-    // Check if menu item is a packaged good - if so, skip stock deduction
-    const { data: menuItem, error: menuErr } = await supabase
+    const { data: menuItem } = await supabase
       .from('menu_items')
       .select('is_packaged_good')
       .eq('id', menu_item_id)
-      .single()
+      .eq('restaurant_id', restaurant_id)
+      .maybeSingle();
 
-    if (menuErr || !menuItem) {
-      return res.status(200).json({ success: true, message: 'Menu item not found, stock not deducted' })
+    if (!menuItem || menuItem.is_packaged_good) {
+      return res.status(200).json({ success: true, message: 'No ingredient deduction needed' });
     }
 
-    if (menuItem.is_packaged_good) {
-      return res.status(200).json({ success: true, message: 'Packaged item - stock not deducted' })
-    }
-
-    // Get the recipe for this menu item
-    const { data: recipe, error: recipeErr } = await supabase
+    const { data: recipe } = await supabase
       .from('recipes')
       .select('id, recipe_items(ingredient_id, quantity)')
       .eq('menu_item_id', menu_item_id)
       .eq('restaurant_id', restaurant_id)
-      .single()
+      .maybeSingle();
 
-    if (recipeErr || !recipe) {
-      // No recipe means no ingredients to deduct
-      return res.status(200).json({ success: true, message: 'No recipe found, stock not deducted' })
-    }
+    const items = recipe?.recipe_items || [];
+    if (!items.length) return res.status(200).json({ success: true, message: 'No recipe, nothing to deduct' });
 
-    const recipeItems = recipe.recipe_items || []
+    const adjustments = items.map(ri => ({
+      ingredient_id: ri.ingredient_id,
+      delta: -round2(Number(ri.quantity) * orderQty),
+    }));
 
-    // Check if enough stock exists for all ingredients
-    for (const recipeItem of recipeItems) {
-      const { data: ingredient, error: ingErr } = await supabase
-        .from('ingredients')
-        .select('current_stock')
-        .eq('id', recipeItem.ingredient_id)
-        .eq('restaurant_id', restaurant_id)
-        .single()
+    const { error: rpcErr } = await supabase.rpc('apply_stock_adjustments', {
+      p_restaurant_id: restaurant_id,
+      p_adjustments: adjustments,
+    });
 
-      if (ingErr || !ingredient) {
-        throw new Error(`Ingredient not found: ${recipeItem.ingredient_id}`)
-      }
-
-      const requiredStock = recipeItem.quantity * quantity
-      if (ingredient.current_stock < requiredStock) {
-        throw new Error(`Insufficient stock for ingredient ID ${recipeItem.ingredient_id}. Required: ${requiredStock}, Available: ${ingredient.current_stock}`)
-      }
-    }
-
-    // Deduct stock for all ingredients
-    for (const recipeItem of recipeItems) {
-      const deductAmount = recipeItem.quantity * quantity
-
-      const { data: ingredient, error: ingErr } = await supabase
-        .from('ingredients')
-        .select('current_stock')
-        .eq('id', recipeItem.ingredient_id)
-        .single()
-
-      if (ingErr || !ingredient) continue
-
-      const newStock = ingredient.current_stock - deductAmount
-
-      const { error: updateErr } = await supabase
-        .from('ingredients')
-        .update({ current_stock: newStock })
-        .eq('id', recipeItem.ingredient_id)
-
-      if (updateErr) {
-        console.error('Stock deduction error:', updateErr)
-        throw updateErr
-      }
-    }
-
-    return res.status(200).json({ success: true, message: 'Stock deducted successfully' })
+    if (rpcErr) return res.status(400).json({ error: rpcErr.message });
+    return res.status(200).json({ success: true, message: 'Stock deducted successfully' });
   } catch (e) {
-    console.error('Deduct stock error:', e)
-    return res.status(500).json({ error: e.message || 'Failed to deduct stock' })
+    return res.status(500).json({ error: e.message || 'Failed to deduct stock' });
   }
 }

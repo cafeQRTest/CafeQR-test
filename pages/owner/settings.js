@@ -1,1227 +1,837 @@
-//pages/owner/settings.js
+//pages/owner/settings.js - "Best" Dynamic AI Structure + Brand Orange Theme
 
 import React, { useEffect, useState } from 'react';
+import styled, { css, keyframes } from 'styled-components';
 import { useRequireAuth } from '../../lib/useRequireAuth';
 import { useRestaurant } from '../../context/RestaurantContext';
-import { useSubscription } from '../../context/SubscriptionContext'; // ADD THIS LINE
-import Button from '../../components/ui/Button';
-import Card from '../../components/ui/Card';
-import { getSupabase } from '../../services/supabase'; // 1. IMPORT
+import { useSubscription } from '../../context/SubscriptionContext';
+import { getSupabase } from '../../services/supabase';
 import PrinterSetupCard from '../../components/PrinterSetupCard';
 import { fileToBitmapGrid } from '../../utils/logoBitmap';
 
+// --- Animations ---
 
+const fadeInUp = keyframes`
+  from { opacity: 0; transform: translateY(15px); }
+  to { opacity: 1; transform: translateY(0); }
+`;
 
-function Section({ title, icon, children }) {
-  return (
-    <Card padding24>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 24 }}>{icon}</span>
-        <h3 style={{ margin: 0, fontSize: 18 }}>{title}</h3>
-      </div>
-      <div style={{ display: 'grid', gap: 16 }}>
-        {children}
-      </div>
-    </Card>
-  );
-}
+const slideUp = keyframes`
+  from { transform: translate(-50%, 100%); opacity: 0; }
+  to { transform: translate(-50%, 0); opacity: 1; }
+`;
 
-function Field({ label, required, children, hint }) {
-  return (
-    <div>
-      <label style={{ display: 'block', marginBottom: 6, fontWeight: 500 }}>
-        {label}{required && <span style={{ color: '#ef4444', marginLeft: 4 }}>*</span>}
-      </label>
-      {children}
-      {hint && (
-        <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-          {hint}
-        </div>
-      )}
-    </div>
-  );
-}
+// --- Styled Components ---
 
-// === Printed bill logo (thermal only) ========================
+const PageContainer = styled.div`
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 60px 24px 160px;
+  font-family: 'DM Sans', 'Inter', sans-serif;
+  color: #1f2937;
+  background-color: #f8fafc;
+  min-height: 100vh;
+  animation: ${fadeInUp} 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  
+  @media (max-width: 640px) {
+    padding: 24px 16px 100px;
+  }
+`;
+
+const Header = styled.header`
+  margin-bottom: 56px;
+  text-align: center;
+`;
+
+const Title = styled.h1`
+  font-size: 36px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.03em;
+  margin: 0 0 16px 0;
+  /* Orange Gradient Text */
+  background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+`;
+
+const Subtitle = styled.p`
+  font-size: 17px;
+  color: #64748b;
+  margin: 0 auto;
+  max-width: 540px;
+  line-height: 1.6;
+`;
+
+const ContentGrid = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+`;
+
+/* Dynamic Section Card - "Floating" Effect */
+const SectionCard = styled.section`
+  background: white;
+  border-radius: 24px;
+  border: 1px solid rgba(255, 237, 213, 0.5); /* Very subtle orange tint border */
+  box-shadow: 0 10px 40px -10px rgba(0,0,0,0.05);
+  overflow: hidden;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  opacity: 0;
+  animation: ${fadeInUp} 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  
+  &:nth-child(1) { animation-delay: 0.1s; }
+  &:nth-child(2) { animation-delay: 0.15s; }
+  &:nth-child(3) { animation-delay: 0.2s; }
+  &:nth-child(4) { animation-delay: 0.25s; }
+  &:nth-child(5) { animation-delay: 0.3s; }
+
+  &:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 20px 40px -10px rgba(0,0,0,0.08);
+    border-color: #fed7aa; /* Orange-200 */
+  }
+`;
+
+const SectionHeader = styled.div`
+  padding: 28px 36px;
+  border-bottom: 1px solid #fff7ed;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  background: linear-gradient(to right, #ffffff, #fff7ed); /* Warm fade */
+`;
+
+const SectionIcon = styled.div`
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #ffedd5 0%, #fed7aa 100%); /* Orange tint */
+  color: #ea580c; /* Orange-600 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.5), 0 4px 6px -2px rgba(234, 88, 12, 0.1);
+`;
+
+const SectionTitle = styled.h2`
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+`;
+
+const SectionBody = styled.div`
+  padding: 36px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 36px;
+
+  @media (max-width: 640px) {
+    grid-template-columns: 1fr;
+    padding: 24px;
+    gap: 24px;
+  }
+`;
+
+const FormField = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  ${props => props.span && css`grid-column: span ${props.span};`}
+  
+  @media(max-width: 768px) {
+    grid-column: span 1 !important;
+  }
+`;
+
+const Label = styled.label`
+  font-size: 13px;
+  font-weight: 700;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 2px;
+`;
+
+const Required = styled.span`
+  color: #ef4444;
+  font-size: 14px;
+  margin-left: 2px;
+`;
+
+const Input = styled.input`
+  display: block;
+  width: 90%;
+  padding: 14px 18px;
+  font-size: 16px;
+  color: #0f172a;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+
+  &::placeholder {
+    color: #94a3b8;
+  }
+
+  &:focus {
+    background-color: white;
+    border-color: #f97316; /* Orange Focus */
+    outline: none;
+    box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.1); /* Orange Glow */
+    transform: translateY(-1px);
+  }
+
+  &:hover:not(:disabled):not(:focus) {
+    background-color: white;
+    border-color: #cbd5e1;
+  }
+`;
+
+const Textarea = styled.textarea`
+  display: block;
+  width: 90%;
+  padding: 14px 18px;
+  font-size: 16px;
+  color: #0f172a;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  transition: all 0.2s;
+  resize: vertical;
+  min-height: 120px;
+  font-family: inherit;
+
+  &:focus {
+    background-color: white;
+    border-color: #f97316;
+    outline: none;
+    box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.1);
+  }
+`;
+
+const HelperText = styled.div`
+  font-size: 13px;
+  color: #64748b;
+  margin-top: 6px;
+  line-height: 1.4;
+`;
+
+/* Dynamic Toggle Card (Restored from "Best" version, updated to Orange) */
+const FeatureCard = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px;
+  background-color: #ffffff;
+  border: 1px solid #f1f5f9;
+  border-radius: 20px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+
+  &:hover {
+    transform: translateY(-4px) scale(1.01);
+    box-shadow: 0 15px 30px -5px rgba(0, 0, 0, 0.06);
+    border-color: #fed7aa;
+    z-index: 1;
+  }
+
+  ${props => props.checked && css`
+    border-color: rgba(249, 115, 22, 0.3);
+    background: linear-gradient(135deg, #ffffff 0%, #fff7ed 100%); /* Warm Orange Tint */
+    box-shadow: 0 10px 25px -5px rgba(249, 115, 22, 0.15);
+
+    /* Left accent bar */
+    &::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 6px;
+      background: linear-gradient(to bottom, #f97316, #ea580c);
+    }
+  `}
+`;
+
+const FeatureIcon = styled.div`
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  /* Orange Gradient Active */
+  background: ${props => props.active ? 'linear-gradient(135deg, #f97316 0%, #c2410c 100%)' : '#f1f5f9'};
+  color: ${props => props.active ? 'white' : '#64748b'};
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  margin-right: 20px;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  flex-shrink: 0;
+  box-shadow: ${props => props.active ? '0 8px 16px -4px rgba(234, 88, 12, 0.4)' : 'none'};
+`;
+
+const FeatureText = styled.div`
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+`;
+
+const FeatureTitle = styled.div`
+  font-weight: 700;
+  font-size: 16px;
+  color: #0f172a;
+`;
+
+const FeatureDesc = styled.div`
+  font-size: 14px;
+  color: #64748b;
+  line-height: 1.5;
+`;
+
+const Switch = styled.div`
+  position: relative;
+  width: 52px;
+  height: 30px;
+  background: ${props => props.checked ? '#f97316' : '#e2e8f0'}; /* Orange Active */
+  border-radius: 999px;
+  transition: background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+  margin-left: 20px;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.06);
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: ${props => props.checked ? '25px' : '3px'};
+    width: 24px;
+    height: 24px;
+    background: white;
+    border-radius: 50%;
+    transition: left 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  }
+`;
+
+const ActionButton = styled.button`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 24px;
+  font-size: 15px;
+  font-weight: 600;
+  border-radius: 12px;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+  
+  ${props => props.primary ? css`
+    background: linear-gradient(135deg, #f97316 0%, #ea580c 100%); /* Orange Gradient */
+    color: white;
+    border: none;
+    box-shadow: 0 4px 6px -1px rgba(234, 88, 12, 0.2), 0 2px 4px -1px rgba(234, 88, 12, 0.1);
+    
+    &:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 15px -3px rgba(234, 88, 12, 0.3);
+    }
+    &:active:not(:disabled) { transform: translateY(0); }
+    &:disabled { opacity: 0.7; cursor: not-allowed; }
+  ` : css`
+    background-color: white;
+    color: #334155;
+    border: 1px solid #e2e8f0;
+    
+    &:hover:not(:disabled) {
+      background-color: #f8fafc;
+      border-color: #cbd5e1;
+      transform: translateY(-1px);
+    }
+  `}
+`;
+
+const SaveBar = styled.div`
+  position: fixed;
+  bottom: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  width: auto;
+`;
+
+const Toast = styled.div`
+  position: fixed;
+  bottom: 50px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(12px);
+  padding: 16px 28px;
+  border-radius: 16px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  z-index: 200;
+  border: 1px solid #e2e8f0;
+  animation: ${slideUp} 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  min-width: 340px;
+  justify-content: center;
+
+  ${props => props.type === 'error' && css`border-left: 5px solid #ef4444;`}
+  ${props => props.type === 'success' && css`border-left: 5px solid #10b981;`}
+`;
+
+/* "Dynamic UI" File Upload - Refined with Orange */
+const DynamicFileUpload = styled.label`
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 20px;
+  border: 2px dashed #e2e8f0;
+  border-radius: 16px;
+  cursor: pointer;
+  background: #f8fafc;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+
+  &:hover {
+    border-color: #f97316;
+    background: #fff7ed;
+    transform: scale(1.01);
+  }
+
+  & * { pointer-events: none; }
+  & button { pointer-events: auto; }
+`;
+
 function PrintLogoField({ restaurantId, supabase }) {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
 
-  const ensureReady = () => {
-    if (!restaurantId) {
-      setMsg('✗ Restaurant not loaded. Please reload this page and try again.');
-      return false;
-    }
-    if (!supabase) {
-      setMsg('✗ Supabase client not ready.');
-      return false;
-    }
-    return true;
-  };
+  const ensureReady = () => restaurantId && supabase;
 
   const handleFile = async (e) => {
     const file = e.target.files && e.target.files[0];
-    if (!file) return;
-    if (!ensureReady()) return;
+    if (!file || !ensureReady()) return;
 
     setSaving(true);
     setMsg('');
     try {
-      // Convert the image to a tiny black‑and‑white bitmap
-      const { bitmap, cols, rows } = await fileToBitmapGrid(file); // no 32,16 overrides
-
-      const { error } = await supabase
-        .from('restaurant_profiles')
-        .upsert(
-          {
-            restaurant_id: restaurantId,
-            print_logo_bitmap: bitmap,
-            print_logo_cols: cols,
-            print_logo_rows: rows,
-          },
+      const { bitmap, cols, rows } = await fileToBitmapGrid(file);
+      const { error } = await supabase.from('restaurant_profiles').upsert(
+          { restaurant_id: restaurantId, print_logo_bitmap: bitmap, print_logo_cols: cols, print_logo_rows: rows },
           { onConflict: 'restaurant_id', ignoreDuplicates: false }
-        );
-
+      );
       if (error) throw error;
-
-      setMsg('✓ Print logo saved. New bills will include it above the header.');
+      setMsg('✓ Logo saved');
+      setTimeout(() => setMsg(''), 3000);
     } catch (err) {
-      setMsg('✗ Could not save logo: ' + (err.message || String(err)));
+      setMsg('✗ ' + (err.message || String(err)));
     } finally {
       setSaving(false);
       if (e.target) e.target.value = '';
     }
   };
 
-  const clearLogo = async () => {
+  const clearLogo = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
     if (!ensureReady()) return;
-
     setSaving(true);
     setMsg('');
     try {
-      const { error } = await supabase
-        .from('restaurant_profiles')
-        .update({
-          print_logo_bitmap: null,
-          print_logo_cols: null,
-          print_logo_rows: null,
-        })
-        .eq('restaurant_id', restaurantId);
-
+      const { error } = await supabase.from('restaurant_profiles').update({ print_logo_bitmap: null }).eq('restaurant_id', restaurantId);
       if (error) throw error;
-
-      setMsg('✓ Print logo cleared. Bills will print without a logo.');
-    } catch (err) {
-      setMsg('✗ Could not clear logo: ' + (err.message || String(err)));
-    } finally {
-      setSaving(false);
-    }
+      setMsg('✓ Logo removed');
+    } catch (err) { setMsg('✗ Error'); } 
+    finally { setSaving(false); }
   };
 
   return (
-    <div style={{ marginTop: 16 }}>
-      <label style={{ display: 'block', fontWeight: 500, marginBottom: 6 }}>
-        Printed logo (thermal bill only)
-      </label>
-      <p style={{ margin: 0, fontSize: 12, color: '#6b7280' }}>
-        Upload any logo image (JPG, PNG, etc.). It will be converted to a small black‑and‑white
-        icon and printed at the top of the final bill. KOT tickets will not include this logo.
-      </p>
-      <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
-        <input
-          type="file"
-          accept="image/*"
-          onChange={handleFile}
-          disabled={saving}
-        />
-        <button
-          type="button"
-          onClick={clearLogo}
-          disabled={saving}
-          style={{ padding: '6px 10px', fontSize: 13 }}
-        >
-          Clear
-        </button>
-      </div>
-      {msg && (
-        <div
-          style={{
-            marginTop: 6,
-            fontSize: 12,
-            color: msg.startsWith('✗') ? '#b91c1c' : '#166534',
-          }}
-        >
-          {msg}
-        </div>
-      )}
+    <div style={{ marginTop: 24, paddingTop: 24, borderTop: '1px solid #fff7ed' }}>
+      <Label style={{ marginBottom: 16 }}>Receipt Logo</Label>
+      <DynamicFileUpload>
+         <input type="file" accept="image/*" onChange={handleFile} disabled={saving} style={{ display: 'none' }} />
+         <div style={{ width: 56, height: 56, borderRadius: 12, background: 'white', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+            🖼️
+         </div>
+         <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 600, fontSize: 16, color: '#0f172a', marginBottom: 4 }}>Upload Business Logo</div>
+            <div style={{ fontSize: 13, color: '#64748b' }}>Supports JPG/PNG • Max 380px width</div>
+         </div>
+         {saving ? (
+             <span style={{fontSize: 14, color: '#f97316', fontWeight: 600}}>Processing...</span>
+         ) : (
+            <button onClick={clearLogo} style={{ background: '#fef2f2', border: '1px solid #fee2e2', color: '#ef4444', fontSize: 13, cursor: 'pointer', fontWeight: 600, padding: '8px 16px', borderRadius: 8 }}>
+                Clear
+            </button>
+         )}
+      </DynamicFileUpload>
+      {msg && <div style={{ marginTop: 12, fontSize: 14, fontWeight: 600, color: msg.startsWith('✗') ? '#dc2626' : '#10b981'}}>{msg}</div>}
     </div>
   );
 }
 
+
 export default function SettingsPage() {
   const supabase = getSupabase();
-  const { checking } = useRequireAuth(supabase);
   const { restaurant, loading: loadingRestaurant } = useRestaurant();
   const { refresh: refreshSubscription } = useSubscription();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [routeAccountId, setRouteAccountId] = useState('');
+  const [showToast, setShowToast] = useState(false);
   const [form, setForm] = useState({
-    legal_name: '',
-    restaurant_name: '',
-    phone: '',
-    support_email: '',
-    gst_enabled: false,
-    gstin: '',
-    default_tax_rate: 5,
-    prices_include_tax: false,
-    shipping_name: '',
-    shipping_phone: '',
-    shipping_address_line1: '',
-    shipping_address_line2: '',
-    shipping_city: '',
-    shipping_state: '',
-    shipping_pincode: '',
-    tables_count: 0,
-    table_prefix: 'T',
-    upi_id: '',
-    online_payment_enabled: false,
-    use_own_gateway: false,
-    razorpay_key_id: '',
-    razorpay_key_secret: '',
-    bank_account_holder_name: '',
-    bank_account_number: '',
-    bank_ifsc: '',
-    bank_email: '',
-    bank_phone: '',
-    profile_category: 'food_and_beverages',
-    profile_subcategory: 'restaurant',
-    business_type: 'individual',
-    legal_pan: '',
-    legal_gst: '',
-    beneficiary_name: '',
-    brand_logo_url: '',
-    brand_color: '#1976d2',
-    website_url: '',
-    instagram_handle: '',
-    facebook_page: '',
-    description: '',
-    swiggy_enabled: false,
-    swiggy_api_key: '',
-    swiggy_api_secret: '',
-    swiggy_webhook_secret: '',
-    zomato_enabled: false,
-    zomato_api_key: '',
-    zomato_api_secret: '',
-    zomato_webhook_secret: '',
-    useswiggy: false,
-    usezomato: false,
-    features_credit_enabled: false,
-    features_production_enabled: false,
-    features_inventory_enabled: false,
-    features_table_ordering_enabled: false,
-    features_counter_send_to_kitchen_enabled: true,   // NEW
+    legal_name: '', restaurant_name: '', phone: '', support_email: '',
+    tables_count: 0, table_prefix: 'T', upi_id: '',
+    features_credit_enabled: false, features_menu_images_enabled: false,
+    features_table_ordering_enabled: false, features_inventory_enabled: false,
+    features_production_enabled: false, features_counter_send_to_kitchen_enabled: true,
+    swiggy_enabled: false, zomato_enabled: false,
+    brand_color: '#f97316', description: '', instagram_handle: '', website_url: '',
+    gst_enabled: false, gstin: '', default_tax_rate: 5, prices_include_tax: false,
+    swiggy_api_key: '', swiggy_api_secret: '', swiggy_webhook_secret: '',
+    zomato_api_key: '', zomato_api_secret: '', zomato_webhook_secret: '',
   });
 
   const [originalTables, setOriginalTables] = useState(0);
   const [isFirstTime, setIsFirstTime] = useState(false);
 
   useEffect(() => {
+    if (showToast) {
+        const timer = setTimeout(() => { setShowToast(false); }, 3000);
+        return () => clearTimeout(timer);
+    }
+  }, [showToast]);
+
+  useEffect(() => {
    if (!restaurant?.id || !supabase) return;
     async function load() {
       setLoading(true);
-      setError('');
       try {
-        const { data: profile, error: profileError } = await supabase
-          .from('restaurant_profiles')
-          .select('*')
-          .eq('restaurant_id', restaurant.id)
-          .maybeSingle();
-        if (profileError) throw profileError;
-
+        const { data: profile } = await supabase.from('restaurant_profiles').select('*').eq('restaurant_id', restaurant.id).maybeSingle();
         if (profile) {
-          // *** FIX STARTS HERE ***
-          // Sanitize the fetched data to replace any null values with empty strings.
-          // This prevents the "value prop on input should not be null" warning.
-          const sanitizedProfile = Object.entries(profile).reduce((acc, [key, value]) => {
-            acc[key] = value === null ? '' : value;
-            return acc;
-          }, {});
-          // *** FIX ENDS HERE ***
-          // Normalize stored booleans that might be strings from older saves
-          const normalizedPricesInclude = (sanitizedProfile.prices_include_tax === true
-            || sanitizedProfile.prices_include_tax === 'true'
-            || sanitizedProfile.prices_include_tax === 1
-            || sanitizedProfile.prices_include_tax === '1');
-
           setForm(prev => ({
-            ...prev,
-            ...sanitizedProfile, // Use the sanitized data
+            ...prev, ...profile,
             default_tax_rate: profile.default_tax_rate ?? 5,
-            prices_include_tax: profile.prices_include_tax != null ? normalizedPricesInclude : false,
-            profile_category: profile.profile_category || 'food_and_beverages',
-            profile_subcategory: profile.profile_subcategory || 'restaurant',
-            business_type: profile.business_type || 'individual',
-            online_payment_enabled: profile.online_payment_enabled ?? false,
-            use_own_gateway: profile.use_own_gateway ?? false,
-            swiggy_enabled: !!(profile.swiggy_api_key && profile.swiggy_api_secret && profile.swiggy_webhook_secret),
-            zomato_enabled: !!(profile.zomato_api_key && profile.zomato_api_secret && profile.zomato_webhook_secret),
-            useswiggy: !!(profile.swiggy_api_key && profile.swiggy_api_secret && profile.swiggy_webhook_secret),
-            usezomato: !!(profile.zomato_api_key && profile.zomato_api_secret && profile.zomato_webhook_secret),
-            features_credit_enabled: !!sanitizedProfile.features_credit_enabled,
-            features_production_enabled: !!sanitizedProfile.features_production_enabled,
-            features_inventory_enabled: !!sanitizedProfile.features_inventory_enabled,
-            features_table_ordering_enabled: !!sanitizedProfile.features_table_ordering_enabled,
-            features_counter_send_to_kitchen_enabled:
-            sanitizedProfile.features_counter_send_to_kitchen_enabled !== false, // default ON
-
+            features_production_enabled: !!profile.features_production_enabled,
+            features_credit_enabled: !!profile.features_credit_enabled,
+            features_menu_images_enabled: !!profile.features_menu_images_enabled,
+            features_table_ordering_enabled: !!profile.features_table_ordering_enabled,
+            features_inventory_enabled: !!profile.features_inventory_enabled,
+            features_counter_send_to_kitchen_enabled: profile.features_counter_send_to_kitchen_enabled !== false,
+            swiggy_enabled: !!(profile.swiggy_api_key), zomato_enabled: !!(profile.zomato_api_key),
           }));
           setOriginalTables(profile.tables_count || 0);
           setIsFirstTime(false);
-        } else {
-          setIsFirstTime(true);
-        }
+        } else { setIsFirstTime(true); }
 
-        const { data: restData, error: restError } = await supabase
-          .from('restaurants')
-          .select('name, route_account_id')
-          .eq('id', restaurant.id)
-          .single();
-
-        if (!restError) {
-          if (restData?.route_account_id) setRouteAccountId(restData.route_account_id);
-          if (restData?.name) {
-            setForm(prev => ({ ...prev, restaurant_name: restData.name }));
-          }
-        }
-      } catch (e) {
-        setError(e.message || 'Failed to load settings');
-      } finally {
-        setLoading(false);
-      }
+        const { data: restData } = await supabase.from('restaurants').select('name').eq('id', restaurant.id).single();
+        if (restData?.name) setForm(prev => ({ ...prev, restaurant_name: restData.name }));
+      } catch (e) { setError(e.message); } 
+      finally { setLoading(false); }
     }
     load();
-  }, [restaurant?.id, restaurant?.name, supabase]);
+  }, [restaurant]);
 
-  const onChange = (field) => (e) => {
-    const val = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
-    setForm(prev => {
-      const updated = { ...prev, [field]: val };
-      if (field === 'legal_name') {
-        updated.beneficiary_name = val;
-        updated.bank_account_holder_name = val;
-      }
-      if (field === 'online_payment_enabled' && !val) {
-        updated.use_own_gateway = false;
-        updated.razorpay_key_id = '';
-        updated.razorpay_key_secret = '';
-      }
-      if (field === 'use_own_gateway' && !val) {
-        updated.razorpay_key_id = '';
-        updated.razorpay_key_secret = '';
-      }
-      if (field === 'swiggy_enabled' && !val) {
-        updated.swiggy_api_key = '';
-        updated.swiggy_api_secret = '';
-        updated.swiggy_webhook_secret = '';
-        updated.useswiggy = false;
-      }
-      if (field === 'useswiggy' && !val) {
-        updated.swiggy_api_key = '';
-        updated.swiggy_api_secret = '';
-        updated.swiggy_webhook_secret = '';
-        updated.swiggy_enabled = false;
-      }
-      if (field === 'zomato_enabled' && !val) {
-        updated.zomato_api_key = '';
-        updated.zomato_api_secret = '';
-        updated.zomato_webhook_secret = '';
-        updated.usezomato = false;
-      }
-      if (field === 'usezomato' && !val) {
-        updated.zomato_api_key = '';
-        updated.zomato_api_secret = '';
-        updated.zomato_webhook_secret = '';
-        updated.zomato_enabled = false;
-      }
-      if (field === 'gst_enabled' && !val) {
-        updated.gstin = '';
-        updated.legal_gst = '';
-      }
-      return updated;
-    });
-  };
+  const onChange = (field) => (e) => setForm({ ...form, [field]: e.target.type === 'checkbox' ? e.target.checked : e.target.value });
 
-  function validateBusinessType(val) {
-    const allowed = ['individual', 'private_limited', 'proprietorship', 'partnership', 'llp', 'trust', 'society', 'ngo', 'public_limited'];
-    return allowed.includes(val);
+  async function save(e) {
+    e.preventDefault();
+    setSaving(true);
+    setShowToast(false);
+    try {
+      if (!form.legal_name) throw new Error("Legal Name required");
+      
+      const payload = {
+          restaurant_id: restaurant.id,
+          legal_name: form.legal_name,
+          phone: form.phone,
+          support_email: form.support_email,
+          tables_count: Number(form.tables_count),
+          table_prefix: form.table_prefix,
+          upi_id: form.upi_id,
+          gst_enabled: form.gst_enabled,
+          gstin: form.gstin,
+          prices_include_tax: form.prices_include_tax,
+          default_tax_rate: Number(form.default_tax_rate),
+          brand_color: form.brand_color,
+          description: form.description,
+          instagram_handle: form.instagram_handle,
+          website_url: form.website_url,
+          
+          features_credit_enabled: form.features_credit_enabled,
+          features_menu_images_enabled: form.features_menu_images_enabled,
+          features_table_ordering_enabled: form.features_table_ordering_enabled,
+          features_inventory_enabled: form.features_inventory_enabled,
+          features_production_enabled: form.features_production_enabled,
+          features_counter_send_to_kitchen_enabled: form.features_counter_send_to_kitchen_enabled,
+          
+          swiggy_enabled: form.swiggy_enabled,
+          swiggy_api_key: form.swiggy_api_key,
+          swiggy_api_secret: form.swiggy_api_secret,
+          swiggy_webhook_secret: form.swiggy_webhook_secret,
+          
+          zomato_enabled: form.zomato_enabled,
+          zomato_api_key: form.zomato_api_key,
+          zomato_api_secret: form.zomato_api_secret,
+          zomato_webhook_secret: form.zomato_webhook_secret,
+      };
+
+      await supabase.from('restaurant_profiles').upsert(payload, { onConflict: 'restaurant_id' });
+      await supabase.from('restaurants').update({ name: form.restaurant_name }).eq('id', restaurant.id);
+      
+      setOriginalTables(payload.tables_count);
+      setSuccess("Settings Saved");
+      setShowToast(true);
+      setTimeout(refreshSubscription, 500);
+    } catch (err) { setError(err.message); setShowToast(true); }
+    finally { setSaving(false); }
   }
 
-  function validateUPI(upi) {
-    return /^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/.test(upi.trim());
-  }
-
-  function validateIFSC(ifsc) {
-    return /^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifsc.trim().toUpperCase());
-  }
-
-async function save(e) {
-  e.preventDefault();
-  setSaving(true);
-  setError('');
-  setSuccess('');
-  const startTime = Date.now();
-  try {
-    // STEP 1: Quick validation
-    console.time("Validation");
-    const required = ['legal_name', 'restaurant_name', 'phone', 'support_email'];
-    if (form.online_payment_enabled) {
-      if (form.use_own_gateway) {
-        required.push('razorpay_key_id', 'razorpay_key_secret');
-      } else {
-        required.push('bank_account_holder_name', 'bank_account_number', 'bank_ifsc', 'beneficiary_name', 'business_type', 'legal_pan');
-      }
-    }
-
-    const missing = required.filter(f => !form[f] || !form[f].toString().trim());
-    if (missing.length) throw new Error(`Missing required fields: ${missing.join(', ')}`);
-
-    if (form.online_payment_enabled && !form.use_own_gateway) {
-      if (form.beneficiary_name.trim() !== form.legal_name.trim()) {
-        throw new Error('Beneficiary Name must match Legal Name');
-      }
-      if (!validateBusinessType(form.business_type)) {
-        throw new Error('Invalid business type selected');
-      }
-      if (!validateIFSC(form.bank_ifsc)) {
-        throw new Error('Invalid IFSC code format');
-      }
-    }
-
-    if (form.upi_id && !validateUPI(form.upi_id)) {
-      throw new Error('Invalid UPI format. Example: name@bankhandle');
-    }
-
-    const newTableCount = Number(form.tables_count);
-    if (!isFirstTime && newTableCount < originalTables) {
-      throw new Error('Cannot decrease number of tables');
-    }
-
-    // STEP 2: Ensure restaurant record exists
-    const { data: restCheck } = await supabase
-      .from('restaurants')
-      .select('id')
-      .eq('id', restaurant.id)
-      .maybeSingle();
-
-    if (!restCheck) {
-      const { error: createRestErr } = await supabase
-        .from('restaurants')
-        .insert({ id: restaurant.id, name: form.restaurant_name });
-
-      if (createRestErr) throw new Error("Failed to create restaurant");
-    }
-
-    const { useswiggy, usezomato, ...rest } = form;
-
-    const payload = {
-      restaurant_id: restaurant.id,
-      legal_name: rest.legal_name,
-      phone: rest.phone,
-      support_email: rest.support_email,
-      gst_enabled: rest.gst_enabled,
-      gstin: rest.gstin,
-      default_tax_rate: Number(rest.default_tax_rate) || 5,
-      prices_include_tax: !!rest.prices_include_tax,
-      shipping_name: rest.shipping_name,
-      shipping_phone: rest.shipping_phone,
-      shipping_address_line1: rest.shipping_address_line1,
-      shipping_address_line2: rest.shipping_address_line2,
-      shipping_city: rest.shipping_city,
-      shipping_state: rest.shipping_state,
-      shipping_pincode: rest.shipping_pincode,
-      tables_count: newTableCount,
-      table_prefix: rest.table_prefix,
-      upi_id: rest.upi_id.trim(),
-      online_payment_enabled: !!rest.online_payment_enabled,
-      use_own_gateway: !!rest.use_own_gateway,
-      razorpay_key_id: rest.razorpay_key_id,
-      razorpay_key_secret: rest.razorpay_key_secret,
-      bank_account_holder_name: rest.bank_account_holder_name,
-      bank_account_number: rest.bank_account_number,
-      bank_email: rest.bank_email,
-      bank_phone: rest.bank_phone,
-      bank_ifsc: rest.bank_ifsc.trim().toUpperCase(),
-      profile_category: rest.profile_category,
-      profile_subcategory: rest.profile_subcategory,
-      business_type: rest.business_type,
-      legal_pan: rest.legal_pan.trim().toUpperCase(),
-      legal_gst: rest.legal_gst,
-      beneficiary_name: rest.beneficiary_name,
-      brand_logo_url: rest.brand_logo_url,
-      brand_color: rest.brand_color,
-      website_url: rest.website_url,
-      instagram_handle: rest.instagram_handle,
-      facebook_page: rest.facebook_page,
-      description: rest.description,
-      swiggy_enabled: !!rest.swiggy_enabled,
-      swiggy_api_key: rest.swiggy_api_key,
-      swiggy_api_secret: rest.swiggy_api_secret,
-      swiggy_webhook_secret: rest.swiggy_webhook_secret,
-      zomato_enabled: !!rest.zomato_enabled,
-      zomato_api_key: rest.zomato_api_key,
-      zomato_api_secret: rest.zomato_api_secret,
-      zomato_webhook_secret: rest.zomato_webhook_secret,
-      features_credit_enabled: !!rest.features_credit_enabled,
-      features_production_enabled: !!rest.features_production_enabled,
-      features_inventory_enabled: !!rest.features_inventory_enabled,
-      features_table_ordering_enabled: !!rest.features_table_ordering_enabled,
-      features_counter_send_to_kitchen_enabled:
-      rest.features_counter_send_to_kitchen_enabled !== false,
-
-    };
-
-    // STEP 3: Show immediate success & disable saving
-    setSaving(false);
-    setSuccess('✓ Settings saved! Preparing your account...');
-    setOriginalTables(newTableCount);
-    setIsFirstTime(false);
-    console.timeEnd("Validation");
-
-    // STEP 4: All heavy work in background (parallel execution)
-    Promise.all([
-      // Save profile
-      (async () => {
-        try {
-          console.time("Supabase upsert: restaurantprofiles");
-          const { error: upsertError } = await supabase
-            .from('restaurant_profiles')
-            .upsert(payload, { 
-              onConflict: 'restaurant_id',
-              ignoreDuplicates: false 
-            });
-
-
-          if (upsertError) {
-            console.error('Profile upsert failed:', upsertError);
-            throw upsertError;
-          }
-        } catch (err) {
-          console.error('Profile upsert error:', err);
-        } finally {
-          console.timeEnd("Supabase Upsert restaurant_profiles");
-        }
-      })(),
-
-      // Update restaurant
-      (async () => {
-        try {
-          console.time("Supabase update: restaurants");
-          await supabase
-            .from('restaurants')
-            .update({ name: rest.restaurant_name })
-            .eq('id', restaurant.id);
-            console.timeEnd("Supabase update: restaurants");
-
-        } catch (err) {
-          console.error('Restaurant update error:', err);
-        }finally {
-          console.timeEnd("Supabase Update restaurants name");
-        }
-      })(),
-
-      // Create Route account if needed
-      (async () => {
-        try {
-          if (!rest.online_payment_enabled || rest.use_own_gateway || routeAccountId) {
-            return;
-          }
-
-          const profile = {
-            category: rest.profile_category,
-            subcategory: rest.profile_subcategory,
-            addresses: {
-              registered: {
-                street1: rest.shipping_address_line1.trim(),
-                street2: rest.shipping_address_line2.trim(),
-                city: rest.shipping_city.trim(),
-                state: rest.shipping_state.trim(),
-                postal_code: rest.shipping_pincode.trim(),
-                country: 'IN',
-              },
-            },
-          };
-
-          const legalInfo = { pan: rest.legal_pan.trim().toUpperCase() };
-          if (rest.gst_enabled && rest.legal_gst.trim()) {
-            legalInfo.gst = rest.legal_gst.trim().toUpperCase();
-          }
-
-          const resp = await fetch('/api/route/create-account', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              legal_name: rest.legal_name,
-              beneficiary_name: rest.beneficiary_name,
-              display_name: rest.restaurant_name,
-              business_type: rest.business_type,
-              account_number: rest.bank_account_number,
-              ifsc: rest.bank_ifsc.trim().toUpperCase(),
-              email: rest.bank_email?.trim() || rest.support_email.trim(),
-              phone: rest.bank_phone?.trim() || rest.phone.trim(),
-              owner_id: restaurant.id,
-              profile,
-              legal_info: legalInfo,
-            }),
-          });
-
-          if (!resp.ok) {
-            const err = await resp.json();
-            console.error('Route account error:', err);
-            return;
-          }
-
-          const accountId = await resp.json();
-          setRouteAccountId(accountId);
-
-          await supabase
-            .from('restaurants')
-            .update({ route_account_id: accountId })
-            .eq('id', restaurant.id);
-        } catch (err) {
-          console.error('Route account creation error:', err);
-        }
-      })(),
-
-      // Start trial if first time
-      (async () => {
-        console.time("Start Trial API");
-        try {
-          if (!isFirstTime) return;
-
-          const res = await fetch('/api/subscription/start-trial', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ restaurant_id: restaurant.id }),
-          });
-
-          if (!res.ok) {
-            const trialErr = await res.json().catch(() => ({}));
-            console.warn('Trial creation warning:', trialErr.message);
-          }
-        } catch (err) {
-          console.warn('Trial error (non-critical):', err.message);
-        } finally {
-          console.timeEnd("Start Trial API");
-        }
-
-      })(),
-    ]).then(() => {
-      console.timeEnd("Total Save Function");
-      console.log("Total time for settings save (including background tasks):", Date.now() - overallStartTime, "ms");
-    }).catch(console.error);
-
-   // SEND QR EMAIL SEPARATELY - FIRE & FORGET (ONLY if tables_count INCREMENTED)
-if (form.tables_count && form.tables_count > originalTables) {
-  console.time("Send QR Email (Fire & Forget)");
-  
-  // Generate QR codes ONLY for NEW tables
-  const newTablesCount = form.tables_count - originalTables;
-  const startTableNum = originalTables + 1;
-  
-  const qrCodes = Array.from({ length: newTablesCount }, (_, i) => ({
-    tableNumber: `${form.table_prefix}${startTableNum + i}`,
-    qrUrl: `${process.env.NEXT_PUBLIC_BASE_URL}/order?r=${restaurant.id}&t=${startTableNum + i}`,
-  }));
-
-  fetch('/api/send-qr-email', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      qrCodes,
-      restaurantData: {
-        restaurantName: form.restaurant_name,
-        legalName: form.legal_name,
-        phone: form.phone,
-        email: form.support_email,
-        recipientName: form.shipping_name,           
-        recipientPhone: form.shipping_phone,
-        address: [
-          form.shipping_address_line1,
-          form.shipping_address_line2,
-          form.shipping_city,
-          form.shipping_state,
-          form.shipping_pincode,
-        ].filter(Boolean).join(', '),
-      },
-      isIncremental: true,  // Mark as incremental/additional QR codes
-    }),
-  }).catch(err => {
-    console.warn('QR email failed (background):', err.message);
-    console.timeEnd("Send QR Email (Fire & Forget)");
-  });
-}
-
-
-    // Refresh subscription after delay
-    setTimeout(() => {
-      console.time("RefreshSubscription Timeout");
-      refreshSubscription();
-      console.timeEnd("RefreshSubscription Timeout");
-    }, 1000);
-
-
-  } catch (err) {
-    console.error('Save error:', err);
-    setError(err.message || 'Failed to save settings');
-    setSaving(false);
-  }
-}
-
-
-
-  if (checking || loadingRestaurant) return <div>Loading...</div>;
-  if (loading) return <div>Loading settings...</div>;
+  if (loading) return <div style={{padding:80, textAlign:'center'}}>Loading settings...</div>;
 
   return (
-    <div className="container" style={{ padding: 20 }}>
-      <h1 className="h1">Restaurant Settings</h1>
+    <PageContainer>
+      <Header>
+        <Title>Settings & Preferences</Title>
+        <Subtitle>Customize how your restaurant operates, manages orders, and connects with customers.</Subtitle>
+      </Header>
 
-      {error && (
-        <Card padding12 style={{ background: '#fee2e2', borderColor: '#fca5a5', marginBottom: 16 }}>
-          <div style={{ color: '#b91c1c' }}>{error}</div>
-        </Card>
+      {/* Toast */}
+      {showToast && (
+          <Toast type={error ? 'error' : 'success'}>
+              <span style={{ fontSize: 24 }}>{error ? '⚠️' : '🎉'}</span>
+              <div style={{display:'flex', flexDirection:'column'}}>
+                 <span style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>{error ? 'Update Failed' : 'Update Successful'}</span>
+                 <span style={{ fontSize: 13, color: '#64748b' }}>{error || success}</span>
+              </div>
+          </Toast>
       )}
 
-      {success && (
-        <Card padding12 style={{ background: '#ecfdf5', borderColor: '#34d399', marginBottom: 16 }}>
-          <div style={{ color: '#065f46' }}>{success}</div>
-        </Card>
-      )}
+      <form onSubmit={save}>
+        <ContentGrid>
+          
+          {/* BUSINESS INFO CARD */}
+          <SectionCard>
+            <SectionHeader>
+              <SectionIcon>🏢</SectionIcon>
+              <div>
+                 <SectionTitle>Business Profile</SectionTitle>
+                 <div style={{fontSize: 13, color:'gray', fontWeight:400}}>Core identity & contact details</div>
+              </div>
+            </SectionHeader>
+            <SectionBody>
+              <FormField>
+                <Label>Display Name <Required>*</Required></Label>
+                <Input value={form.restaurant_name} onChange={onChange('restaurant_name')} placeholder="e.g. The Coffee House" />
+              </FormField>
+              <FormField>
+                <Label>Legal Business Name <Required>*</Required></Label>
+                <Input value={form.legal_name} onChange={onChange('legal_name')} placeholder="Legal Registered Name" />
+              </FormField>
+              <FormField>
+                <Label>Phone Number <Required>*</Required></Label>
+                <Input value={form.phone} onChange={onChange('phone')} type="tel" placeholder="+91 999 999 9999" />
+              </FormField>
+              <FormField>
+                <Label>Support Email <Required>*</Required></Label>
+                <Input value={form.support_email} onChange={onChange('support_email')} type="email" />
+              </FormField>
+            </SectionBody>
+          </SectionCard>
 
-      <form onSubmit={save} style={{ display: 'grid', gap: 24 }}>
-        {/* Business Information */}
-        <Section title="Business Info" icon="🏢">
-          <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))' }}>
-            <Field label="Legal Name" required>
-              <input className="input" value={form.legal_name} onChange={onChange('legal_name')} />
-            </Field>
+          {/* OPERATIONS CARD */}
+          <SectionCard>
+            <SectionHeader>
+              <SectionIcon>⚙️</SectionIcon>
+              <div>
+                 <SectionTitle>Operations & Setup</SectionTitle>
+                 <div style={{fontSize: 13, color:'gray', fontWeight:400}}>Table management & payment config</div>
+              </div>
+            </SectionHeader>
+            <SectionBody>
+               <FormField>
+                  <Label>Total Tables <Required>*</Required></Label>
+                  <Input type="number" min={originalTables || 0} max="100" value={form.tables_count} onChange={onChange('tables_count')} />
+                  <HelperText>Increasing this will generate new QR codes.</HelperText>
+               </FormField>
+               <FormField>
+                  <Label>Table Prefix</Label>
+                  <Input value={form.table_prefix} onChange={onChange('table_prefix')} placeholder="e.g. T" maxLength={3} />
+               </FormField>
+               <FormField span={2}>
+                  <Label>UPI ID (VPA) <Required>*</Required></Label>
+                  <Input value={form.upi_id} onChange={onChange('upi_id')} placeholder="merchant@upi" />
+                  <HelperText>Direct UPI payments will be sent to this VPA.</HelperText>
+               </FormField>
+            </SectionBody>
+          </SectionCard>
 
-            <Field label="Display Name" required hint="Shown to customers">
-              <input className="input" value={form.restaurant_name} onChange={onChange('restaurant_name')} />
-            </Field>
-
-            <Field label="Phone" required>
-              <input
-                className="input"
-                type="tel"
-                value={form.phone}
-                onChange={onChange('phone')}
-                style={{ fontSize: 16 }}
-              />
-            </Field>
-
-            <Field label="Support Email" required>
-              <input
-                className="input"
-                type="email"
-                value={form.support_email}
-                onChange={onChange('support_email')}
-              />
-            </Field>
-          </div>
-        </Section>
-
-        {/* Payment Gateway Setup */}
-        <Section title="Payment Gateway Setup" icon="💳">
-          <Field label="Enable Online Payments?" required>
-            <div style={{ display: 'flex', gap: 16, marginTop: 8 }}>
-              <label>
-                <input
-                  type="radio"
-                  name="online_payment_enabled"
-                  checked={form.online_payment_enabled === true}
-                  onChange={() => setForm(prev => ({ ...prev, online_payment_enabled: true }))}
-                />
-                Yes
-              </label>
-              <label>
-                <input
-                  type="radio"
-                  name="online_payment_enabled"
-                  checked={form.online_payment_enabled === false}
-                  onChange={() =>
-                    setForm(prev => ({
-                      ...prev,
-                      online_payment_enabled: false,
-                      use_own_gateway: false,
-                      razorpay_key_id: '',
-                      razorpay_key_secret: '',
-                    }))
-                  }
-                />
-                No
-              </label>
-            </div>
-          </Field>
-
-          {form.online_payment_enabled && (
-            <>
-              <Field label="Use Your Own Gateway?" required>
-                <div style={{ display: 'flex', gap: 16, marginTop: 8 }}>
-                  <label>
-                    <input
-                      type="radio"
-                      name="use_own_gateway"
-                      checked={form.use_own_gateway === true}
-                      onChange={() => setForm(prev => ({ ...prev, use_own_gateway: true }))}
-                    />
-                    Yes
-                  </label>
-                  <label>
-                    <input
-                      type="radio"
-                      name="use_own_gateway"
-                      checked={form.use_own_gateway === false}
-                      onChange={() =>
-                        setForm(prev => ({
-                          ...prev,
-                          use_own_gateway: false,
-                          razorpay_key_id: '',
-                          razorpay_key_secret: '',
-                        }))
-                      }
-                    />
-                    No
-                  </label>
-                </div>
-              </Field>
-
-              {form.use_own_gateway && (
-                <Section title="Razorpay Account" icon="🔑">
-                  <Field label="Razorpay Key ID" required>
-                    <input
-                      className="input"
-                      value={form.razorpay_key_id}
-                      onChange={onChange('razorpay_key_id')}
-                      placeholder="rzp_test_..."
-                    />
-                  </Field>
-
-                  <Field label="Razorpay Key Secret" required>
-                    <input
-                      className="input"
-                      type="password"
-                      value={form.razorpay_key_secret}
-                      onChange={onChange('razorpay_key_secret')}
-                    />
-                  </Field>
-
-                  <div style={{ fontSize: 14, marginTop: 12 }}>
-                    Creating your own Razorpay account requires KYC and may incur additional charges.
-                  </div>
-                </Section>
-              )}
-
-              {!form.use_own_gateway && (
-                <>
-                  <Section title="Bank Details & KYC" icon="🏦">
-                    <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))' }}>
-                      <Field label="Account Holder Name" required>
-                        <input
-                          className="input"
-                          value={form.bank_account_holder_name}
-                          onChange={onChange('bank_account_holder_name')}
-                        />
-                      </Field>
-
-                      <Field label="Account Number" required>
-                        <input
-                          className="input"
-                          value={form.bank_account_number}
-                          onChange={onChange('bank_account_number')}
-                        />
-                      </Field>
-
-                      <Field label="IFSC Code" required hint="Example: HDFC0001234">
-                        <input
-                          className="input"
-                          value={form.bank_ifsc}
-                          onChange={onChange('bank_ifsc')}
-                          style={{ textTransform: 'uppercase' }}
-                        />
-                      </Field>
-
-                      <Field label="Email" hint="Optional">
-                        <input
-                          className="input"
-                          type="email"
-                          value={form.bank_email}
-                          onChange={onChange('bank_email')}
-                        />
-                      </Field>
-
-                      <Field label="Phone" hint="Optional">
-                        <input
-                          className="input"
-                          type="tel"
-                          value={form.bank_phone}
-                          onChange={onChange('bank_phone')}
-                        />
-                      </Field>
-                    </div>
-                  </Section>
-                  <Section title="KYC Information" icon="📋">
-                    <Field label="Business Category" required>
-                      <select value={form.profile_category} onChange={onChange('profile_category')}>
-                        <option value="food_and_beverages">Food & Beverages</option>
-                      </select>
-                    </Field>
-
-                    <Field label="Business Subcategory" required>
-                      <select value={form.profile_subcategory} onChange={onChange('profile_subcategory')}>
-                        <option value="restaurant">Restaurant</option>
-                      </select>
-                    </Field>
-
-                    <Field label="PAN" required>
-                      <input
-                        className="input"
-                        value={form.legal_pan}
-                        onChange={onChange('legal_pan')}
-                        placeholder="ABCDE1234F"
-                        style={{ textTransform: 'uppercase' }}
-                      />
-                    </Field>
-
-                    <Field label="Business Type" required hint="Select your business type">
-                      <select value={form.business_type} onChange={onChange('business_type')}>
-                        <option value="">-- Select --</option>
-                        <option value="individual">Individual</option>
-                        <option value="private_limited">Private Limited</option>
-                        <option value="proprietorship">Proprietorship</option>
-                        <option value="partnership">Partnership</option>
-                        <option value="llp">LLP</option>
-                        <option value="trust">Trust</option>
-                        <option value="society">Society</option>
-                        <option value="ngo">NGO</option>
-                        <option value="public_limited">Public Limited</option>
-                      </select>
-                    </Field>
-
-                    <Field label="Beneficiary Name" required hint="Auto-synced from Legal Name">
-                      <input
-                        className="input"
-                        value={form.beneficiary_name}
-                        readOnly
-                        style={{ backgroundColor: '#f9fafb', cursor: 'not-allowed' }}
-                      />
-                    </Field>
-                  </Section>
-                </>
-              )}
-            </>
-          )}
-
-        </Section>
-
-        {/* Tax Settings */}
-        <Section title="Tax Settings" icon="📊">
-          <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center' }}>
-            <input id="gst_enabled" type="checkbox" checked={form.gst_enabled} onChange={onChange('gst_enabled')} />
-            <label htmlFor="gst_enabled" style={{ marginLeft: 6 }}>Enable GST</label>
-          </div>
-          {form.gst_enabled && (
-            <>
-              <Field label="GSTIN">
-                <input
-                  className="input"
-                  value={form.gstin}
-                  onChange={onChange('gstin')}
-                  placeholder="22AAAAA0000A1Z"
-                  style={{ textTransform: 'uppercase' }}
-                />
-              </Field>
-              <Field label="GST Number (if different)">
-                <input
-                  className="input"
-                  value={form.legal_gst}
-                  onChange={onChange('legal_gst')}
-                  style={{ textTransform: 'uppercase' }}
-                />
-              </Field>
-            </>
-          )}
-         {form.gst_enabled && <div style={{ display: 'flex', gap: 24 }}>
-            <Field label="Default Tax Rate (GST %)" required hint="Common GST slabs in India are 5% and 18%">
-              <select className="input" value={String(form.default_tax_rate)} onChange={onChange('default_tax_rate')}>
-                <option value={"5"}>5%</option>
-                <option value={"18"}>18%</option>
-              </select>
-            </Field>
-
-            <Field label="Prices Include Tax" required hint="If checked, item prices you enter are tax-inclusive">
-              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                <input
-                  type="checkbox"
-                  checked={!!form.prices_include_tax}
-                  onChange={onChange('prices_include_tax')}
-                />
-              </label>
-            </Field>
-          </div>
-        }
-        </Section>
-        {/* Delivery Address */}
-        <Section title="Delivery Address" icon="📍">
-          <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))' }}>
-            <Field label="Recipient" required>
-              <input className="input" value={form.shipping_name} onChange={onChange('shipping_name')} />
-            </Field>
-
-            <Field label="Contact" required>
-              <input
-                className="input"
-                type="tel"
-                value={form.shipping_phone}
-                onChange={onChange('shipping_phone')}
-                style={{ fontSize: 16 }}
-              />
-            </Field>
-          </div>
-
-          <Field label="Address Line 1" required>
-            <input className="input" value={form.shipping_address_line1} onChange={onChange('shipping_address_line1')} />
-          </Field>
-
-          <Field label="Address Line 2">
-            <input className="input" value={form.shipping_address_line2} onChange={onChange('shipping_address_line2')} />
-          </Field>
-
-          <div style={{ display: 'grid', gap: 16, gridTemplateColumns: '2fr 1fr 1fr' }}>
-            <Field label="City" required>
-              <input className="input" value={form.shipping_city} onChange={onChange('shipping_city')} />
-            </Field>
-
-            <Field label="State" required>
-              <input className="input" value={form.shipping_state} onChange={onChange('shipping_state')} />
-            </Field>
-
-            <Field label="Pincode" required>
-              <input
-                className="input"
-                value={form.shipping_pincode}
-                onChange={onChange('shipping_pincode')}
-                style={{ fontSize: 16 }}
-              />
-            </Field>
-          </div>
-        </Section>
-
-        {/* Operations */}
-        <Section title="Operations" icon="⚙️">
-          <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))' }}>
-            <Field label="Tables Count" required>
-              <input
-                className="input"
-                type="number"
-                min={originalTables || 0}
-                max="100"
-                value={form.tables_count}
-                onChange={onChange('tables_count')}
-              />
-              {originalTables > 0 && (
-                <div className="muted" style={{ fontSize: 12 }}>
-                  Current: {originalTables}
-                </div>
-              )}
-            </Field>
-
-            <Field label="Table Prefix" hint="e.g. T for T1, T2">
-              <input className="input" maxLength="3" value={form.table_prefix} onChange={onChange('table_prefix')} placeholder="T" />
-            </Field>
-
-            <Field label="UPI ID" required>
-              <input className="input" value={form.upi_id} onChange={onChange('upi_id')} placeholder="name@bankhandle" />
-            </Field>
-          </div>
-
-
-        </Section>
-
-        {/* Brand & Web */}
-        <Section title="Brand & Web" icon="🎨">
-          <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))' }}>
-            <Field label="Logo URL">
-              <input className="input" type="url" value={form.brand_logo_url} onChange={onChange('brand_logo_url')} />
-            </Field>
-
-            <Field label="Brand Color">
-              <input className="input" type="color" value={form.brand_color} onChange={onChange('brand_color')} />
-            </Field>
-
-            <Field label="Website URL">
-              <input className="input" type="url" value={form.website_url} onChange={onChange('website_url')} />
-            </Field>
-
-            <Field label="Instagram">
-              <input className="input" value={form.instagram_handle} onChange={onChange('instagram_handle')} />
-            </Field>
-
-            <Field label="Facebook">
-              <input className="input" type="url" value={form.facebook_page} onChange={onChange('facebook_page')} />
-            </Field>
-          </div>
-
-          <Field label="Description">
-            <textarea className="input" rows="3" value={form.description} onChange={onChange('description')} />
-          </Field>
-        </Section>
-<PrintLogoField restaurantId={restaurant?.id} supabase={supabase} />
-
-        {/* Third-party Integrations */}
-        <Section title="Third-party Integrations" icon="🔗">
-          <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center' }}>
-            <input
-              id="swiggy_enabled"
-              type="checkbox"
-              checked={form.swiggy_enabled}
-              onChange={onChange('swiggy_enabled')}
-            />
-            <label htmlFor="swiggy_enabled" style={{ marginLeft: 6 }}>Enable Swiggy Integration</label>
-          </div>
-
-          {form.swiggy_enabled && (
-            <>
-              <Field label="Swiggy API Key" required>
-                <input className="input" value={form.swiggy_api_key} onChange={onChange('swiggy_api_key')} />
-              </Field>
-              <Field label="Swiggy API Secret" required>
-                <input className="input" type="password" value={form.swiggy_api_secret} onChange={onChange('swiggy_api_secret')} />
-              </Field>
-              <Field label="Swiggy Webhook Secret" required>
-                <input className="input" type="password" value={form.swiggy_webhook_secret} onChange={onChange('swiggy_webhook_secret')} />
-              </Field>
-            </>
-          )}
-
-          <div style={{ marginTop: 20, marginBottom: 12, display: 'flex', alignItems: 'center' }}>
-            <input id="zomato_enabled" type="checkbox" checked={form.zomato_enabled} onChange={onChange('zomato_enabled')} />
-            <label htmlFor="zomato_enabled" style={{ marginLeft: 6 }}>Enable Zomato Integration</label>
-          </div>
-
-          {form.zomato_enabled && (
-            <>
-              <Field label="Zomato API Key" required>
-                <input className="input" value={form.zomato_api_key} onChange={onChange('zomato_api_key')} />
-              </Field>
-              <Field label="Zomato API Secret" required>
-                <input className="input" type="password" value={form.zomato_api_secret} onChange={onChange('zomato_api_secret')} />
-              </Field>
-              <Field label="Zomato Webhook Secret" required>
-                <input className="input" type="password" value={form.zomato_webhook_secret} onChange={onChange('zomato_webhook_secret')} />
-              </Field>
-            </>
-          )}
-        </Section>
-
-{/* Modules visible in sidebar */}
-<Section title="Modules & Sidepanel" icon="🧩">
-  <div style={{ display: 'grid', gap: 14 }}>
-    <label style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      <input
-        type="checkbox"
-        checked={!!form.features_credit_enabled}
-        onChange={onChange('features_credit_enabled')}
-      />
-      <span>Credit (Credit Customers + Credit Sales Report)</span>
-    </label>
-
-    <label style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      <input
-        type="checkbox"
-        checked={!!form.features_production_enabled}
-        onChange={onChange('features_production_enabled')}
-      />
-      <span>Production (Production page)</span>
-    </label>
-
-    <label style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      <input
-        type="checkbox"
-        checked={!!form.features_table_ordering_enabled}
-        onChange={onChange('features_table_ordering_enabled')}
-      />
-      <span>Table‑wise Ordering (Availability page)</span>
-    </label>
-
-    <label style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      <input
-        type="checkbox"
-        checked={!!form.features_inventory_enabled}
-        onChange={onChange('features_inventory_enabled')}
-      />
-      <span>Inventory (Inventory page)</span>
-    </label>
-  </div>
-  <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-    <input
-      type="checkbox"
-      checked={form.features_counter_send_to_kitchen_enabled}
-      onChange={(e) =>
-        setForm(f => ({
-          ...f,
-          features_counter_send_to_kitchen_enabled: e.target.checked,
-        }))
-      }
-    />
-    <span>Show “Send to Kitchen” option on Counter Sale</span>
-  </label>
-
-</Section>
-
-
-        {/* Save Button */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <Button disabled={saving} type="submit">
-            {saving ? 'Saving...' : isFirstTime ? 'Complete Setup' : 'Save Changes'}
-          </Button>
-
-        </div>
-      </form>
-
-<Section title="Printing">
-  <PrinterSetupCard />
-</Section>
-
-      {/* Kitchen Dashboard Link */}
-      <Section title="Kitchen Dashboard Link" icon="👨‍🍳">
-        <Field label="Kitchen Dashboard URL">
-          {restaurant?.id ? (
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <input
-                className="input"
-                readOnly
-                value={`${window.location.origin}/kitchen?rid=${restaurant.id}`}
-                onFocus={e => e.target.select()}
-                style={{ flex: 1 }}
-              />
-              <Button
-                onClick={() => {
-                  navigator.clipboard.writeText(`${window.location.origin}/kitchen?rid=${restaurant.id}`);
-                  alert('Kitchen URL copied to clipboard!');
-                }}
+          {/* MODULES CARD (Dynamic Grid) */}
+          <SectionCard>
+            <SectionHeader>
+               <SectionIcon>⚡</SectionIcon>
+               <div>
+                 <SectionTitle>Power Modules</SectionTitle>
+                 <div style={{fontSize: 13, color:'gray', fontWeight:400}}>Enable specific features for your workflow</div>
+              </div>
+            </SectionHeader>
+            <div style={{ padding: 36, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px' }}>
+              
+              <FeatureCard 
+                 checked={form.features_menu_images_enabled} 
+                 onClick={() => setForm(f => ({ ...f, features_menu_images_enabled: !f.features_menu_images_enabled }))}
               >
-                Copy
-              </Button>
+                 <FeatureIcon active={form.features_menu_images_enabled}>📸</FeatureIcon>
+                 <FeatureText>
+                    <FeatureTitle>Menu Images</FeatureTitle>
+                    <FeatureDesc>Show product photos</FeatureDesc>
+                 </FeatureText>
+                 <Switch checked={form.features_menu_images_enabled} />
+              </FeatureCard>
+
+              <FeatureCard 
+                 checked={form.features_credit_enabled}
+                 onClick={() => setForm(f => ({ ...f, features_credit_enabled: !f.features_credit_enabled }))}
+              >
+                 <FeatureIcon active={form.features_credit_enabled}>📒</FeatureIcon>
+                 <FeatureText>
+                    <FeatureTitle>Credit Ledger</FeatureTitle>
+                    <FeatureDesc>Manage customer tabs</FeatureDesc>
+                 </FeatureText>
+                 <Switch checked={form.features_credit_enabled} />
+              </FeatureCard>
+
+              <FeatureCard 
+                 checked={form.features_table_ordering_enabled}
+                 onClick={() => setForm(f => ({ ...f, features_table_ordering_enabled: !f.features_table_ordering_enabled }))}
+              >
+                 <FeatureIcon active={form.features_table_ordering_enabled}>🤳</FeatureIcon>
+                 <FeatureText>
+                    <FeatureTitle>QR Ordering</FeatureTitle>
+                    <FeatureDesc>Customers order at table</FeatureDesc>
+                 </FeatureText>
+                 <Switch checked={form.features_table_ordering_enabled} />
+              </FeatureCard>
+
+              <FeatureCard 
+                 checked={form.features_inventory_enabled}
+                 onClick={() => setForm(f => ({ ...f, features_inventory_enabled: !f.features_inventory_enabled }))}
+              >
+                 <FeatureIcon active={form.features_inventory_enabled}>📦</FeatureIcon>
+                 <FeatureText>
+                    <FeatureTitle>Inventory</FeatureTitle>
+                    <FeatureDesc>Simple stock tracking</FeatureDesc>
+                 </FeatureText>
+                 <Switch checked={form.features_inventory_enabled} />
+              </FeatureCard>
+
+               <FeatureCard 
+                 checked={form.features_production_enabled}
+                 onClick={() => setForm(f => ({ ...f, features_production_enabled: !f.features_production_enabled }))}
+              >
+                 <FeatureIcon active={form.features_production_enabled}>🏭</FeatureIcon>
+                 <FeatureText>
+                    <FeatureTitle>Production</FeatureTitle>
+                    <FeatureDesc>Manufacturing pipeline</FeatureDesc>
+                 </FeatureText>
+                 <Switch checked={form.features_production_enabled} />
+              </FeatureCard>
+
+              <FeatureCard 
+                 checked={form.features_counter_send_to_kitchen_enabled}
+                 onClick={() => setForm(f => ({ ...f, features_counter_send_to_kitchen_enabled: !f.features_counter_send_to_kitchen_enabled }))}
+              >
+                 <FeatureIcon active={form.features_counter_send_to_kitchen_enabled}>🍳</FeatureIcon>
+                 <FeatureText>
+                    <FeatureTitle>Send to Kitchen</FeatureTitle>
+                    <FeatureDesc>Forward orders to kitchen</FeatureDesc>
+                 </FeatureText>
+                 <Switch checked={form.features_counter_send_to_kitchen_enabled} />
+              </FeatureCard>
+
             </div>
-          ) : (
-            <div>Loading link...</div>
-          )}
-        </Field>
-      </Section>
-    </div>
+          </SectionCard>
+
+          {/* BRANDING CARD */}
+          <SectionCard>
+             <SectionHeader>
+                <SectionIcon>🎨</SectionIcon>
+                <div>
+                  <SectionTitle>Branding & Assets</SectionTitle>
+                  <div style={{fontSize: 13, color:'gray', fontWeight:400}}>Customize your receipts and online presence</div>
+                </div>
+             </SectionHeader>
+             <SectionBody>
+               <FormField>
+                 <Label>Primary Brand Color</Label>
+                 <div style={{ display: 'flex', gap: 16 }}>
+                    <Input type="color" value={form.brand_color} onChange={onChange('brand_color')} style={{ width: 80, padding: 4, height: 50, borderRadius: 12, cursor: 'pointer', border: 'none', background:'none' }} />
+                    <Input value={form.brand_color} onChange={onChange('brand_color')} style={{ flex: 1 }} />
+                 </div>
+               </FormField>
+               <FormField>
+                 <Label>Short Description</Label>
+                 <Textarea value={form.description} onChange={onChange('description')} rows={2} placeholder="A short bio about your restaurant..." />
+               </FormField>
+               
+               <PrintLogoField restaurantId={restaurant?.id} supabase={supabase} />
+             </SectionBody>
+          </SectionCard>
+          
+          {/* PRINTERS CARD */}
+          <SectionCard>
+             <SectionHeader>
+                <SectionIcon>🖨️</SectionIcon>
+                <div>
+                   <SectionTitle>Printers & Hardware</SectionTitle>
+                   <div style={{fontSize: 13, color:'gray', fontWeight:400}}>Connect thermal printers for receipts</div>
+                </div>
+             </SectionHeader>
+             <div style={{ padding: 36 }}>
+                <PrinterSetupCard />
+             </div>
+          </SectionCard>
+
+          {/* KITCHEN LINK CARD */}
+          <SectionCard>
+            <SectionHeader>
+              <SectionIcon>🖥️</SectionIcon>
+               <div>
+                   <SectionTitle>Kitchen Display Screen</SectionTitle>
+                   <div style={{fontSize: 13, color:'gray', fontWeight:400}}>Use this link on a tablet or screen</div>
+                </div>
+            </SectionHeader>
+            <div style={{ padding: 36 }}>
+               <Label style={{marginBottom: 10}}>Kitchen Dashboard URL</Label>
+               <div style={{ display: 'flex', gap: 12 }}>
+                  <Input readOnly value={`${window.location.origin}/kitchen?rid=${restaurant?.id || ''}`} style={{ background: '#f1f5f9', color: '#64748b', fontFamily:'monospace', fontSize: 13 }} />
+                  <ActionButton onClick={(e) => {
+                     e.preventDefault();
+                     navigator.clipboard.writeText(`${window.location.origin}/kitchen?rid=${restaurant?.id}`);
+                     alert('Copied!');
+                  }}>Copy</ActionButton>
+               </div>
+            </div>
+          </SectionCard>
+
+        </ContentGrid>
+
+        <SaveBar>
+           <ActionButton primary disabled={saving} onClick={save} style={{minWidth: 200, padding: '16px 32px', fontSize: 16, borderRadius: 100, boxShadow: '0 10px 20px -5px rgba(249, 115, 22, 0.4)'}}>
+               {saving ? 'Saving...' : '✨ Save Changes'}
+           </ActionButton>
+        </SaveBar>
+      </form>
+    </PageContainer>
   );
 }

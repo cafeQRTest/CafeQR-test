@@ -1,14 +1,18 @@
 //pages/owner/menu
 
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useRequireAuth } from "../../lib/useRequireAuth";
 import { useRestaurant } from "../../context/RestaurantContext";
 import Alert from "../../components/Alert";
 import ItemEditor from "../../components/ItemEditor";
+import CategoryManager from "../../components/CategoryManager";
+import VariantManager from "../../components/VariantManager";
 import LibraryPicker from "../../components/LibraryPicker";
 import Button from "../../components/ui/Button";
+import MenuImageImport from "../../components/MenuImageImport";
 import NiceSelect from "../../components/NiceSelect";
 import { getSupabase } from "../../services/supabase";
+import { useAlert } from "../../context/AlertContext";
 import styled from "styled-components";
 const ToolBar = styled.div`
   display: flex;
@@ -116,13 +120,46 @@ const ToolBar = styled.div`
   }
 `;
 
+import { useRouter } from "next/router";
+
 export default function MenuPage() {
+  const router = useRouter();
   const supabase = getSupabase();
+  const { showConfirm } = useAlert();
   const { checking } = useRequireAuth(supabase);
   const { restaurant, loading: loadingRestaurant } = useRestaurant();
-  const [items, setItems] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [cachedRestId] = useState(() => {
+    if (typeof window !== 'undefined') {
+       return localStorage.getItem('last_active_restaurant') || "";
+    }
+    return "";
+  });
+
+  const restaurantId = restaurant?.id || cachedRestId;
+
+  const [items, setItems] = useState(() => {
+    if (typeof window !== 'undefined' && restaurantId) {
+      const saved = localStorage.getItem(`menu_items_${restaurantId}`);
+      try { return saved ? JSON.parse(saved) : []; } catch(e) {}
+    }
+    return [];
+  });
+  const [categories, setCategories] = useState(() => {
+    if (typeof window !== 'undefined' && restaurantId) {
+      const saved = localStorage.getItem(`categories_${restaurantId}`);
+      try { return saved ? JSON.parse(saved) : []; } catch(e) {}
+    }
+    return [];
+  });
+  
+  // Use cached data to determine initial loading state
+  const [loading, setLoading] = useState(() => {
+    if (typeof window !== 'undefined' && restaurantId) {
+       return !localStorage.getItem(`menu_items_${restaurantId}`);
+    }
+    return true;
+  });
+
   const [error, setError] = useState("");
   const [filterText, setFilterText] = useState("");
   const [filterCategory, setFilterCategory] = useState("all");
@@ -131,14 +168,117 @@ export default function MenuPage() {
   const [selected, setSelected] = useState(new Set());
   const [editorItem, setEditorItem] = useState(null);
   const [showLibrary, setShowLibrary] = useState(false);
+  const [viewImage, setViewImage] = useState(null);
+  const [enableMenuImages, setEnableMenuImages] = useState(false);
+  
+  const [showCategoryManager, setShowCategoryManager] = useState(false);
+  const [showVariantManager, setShowVariantManager] = useState(false);
+  const [showImageImport, setShowImageImport] = useState(false);
 
-  const restaurantId = restaurant?.id || "";
+  // Helper to refresh categories and items after edits
+  const refreshCategories = useCallback(async () => {
+    if (!supabase || !restaurantId) return;
+    
+    // 1. Refresh Categories
+    const { data: catData } = await supabase
+      .from("categories")
+      .select("id,name")
+      .or(`is_global.eq.true,restaurant_id.eq.${restaurantId}`)
+      .order("name");
+    
+    if (catData) {
+      setCategories(catData);
+      localStorage.setItem(`categories_${restaurantId}`, JSON.stringify(catData));
+    }
+
+    // 2. Refresh Items (to reflect any category name changes)
+    const { data: itemData } = await supabase
+      .from("menu_items")
+      .select(
+        "id, name, category, price, code_number, hsn, tax_rate, status, veg, is_packaged_good, compensation_cess_rate, ispopular, image_url, has_variants"
+      )
+      .eq("restaurant_id", restaurantId)
+      .order("category", { ascending: true })
+      .order("name", { ascending: true });
+
+    if (itemData) {
+      setItems(itemData);
+      localStorage.setItem(`menu_items_${restaurantId}`, JSON.stringify(itemData));
+    }
+  }, [supabase, restaurantId]);
+
+  // Persist restaurant ID when known
+  useEffect(() => {
+    if (restaurant?.id) {
+      localStorage.setItem('last_active_restaurant', restaurant.id);
+    }
+  }, [restaurant]);
+
+  // 0. Load from Cache immediately when restaurantId is known
+  useEffect(() => {
+    if (!restaurantId) return;
+    
+    try {
+      const cachedItems = localStorage.getItem(`menu_items_${restaurantId}`);
+      if (cachedItems) {
+        const parsed = JSON.parse(cachedItems);
+        if (parsed?.length) {
+          setItems(parsed);
+          setLoading(false); // Instant load!
+        }
+      }
+
+      const cachedCats = localStorage.getItem(`categories_${restaurantId}`);
+      if (cachedCats) {
+        const parsed = JSON.parse(cachedCats);
+        if (parsed?.length) setCategories(parsed);
+      }
+    } catch(e) {
+      console.error("Cache load failed", e);
+    }
+  }, [restaurantId]);
+
+  // 1. Check URL on load (and when items load) to restore editor state
+  useEffect(() => {
+    if (!router.isReady) return;
+
+    const { edit } = router.query;
+    if (edit === 'new') {
+      if (!editorItem) setEditorItem({});
+    } else if (edit && items.length > 0) {
+      const found = items.find(i => i.id === edit);
+      if (found && (!editorItem || editorItem.id !== found.id)) {
+        setEditorItem(found);
+      }
+    }
+  }, [router.isReady, router.query, loading, items]);
+
+  // 2. Helper to open editor and update URL
+  const openEditor = (item) => {
+    setEditorItem(item || {});
+    const val = item?.id || 'new';
+    router.push({
+      pathname: router.pathname,
+      query: { ...router.query, edit: val }
+    }, undefined, { shallow: true });
+  };
+
+  // 3. Helper to close editor and clear URL
+  const closeEditor = () => {
+    setEditorItem(null);
+    const { edit, ...rest } = router.query;
+    router.push({
+      pathname: router.pathname,
+      query: rest
+    }, undefined, { shallow: true });
+  };
+
+  const dataLoadedRef = useRef(false);
 
   useEffect(() => {
     if (checking || loadingRestaurant || !restaurantId || !supabase) return;
-
+    
     const load = async () => {
-      setLoading(true);
       setError("");
       try {
         const { data: cats, error: catsErr } = await supabase
@@ -148,18 +288,35 @@ export default function MenuPage() {
           .order("name");
         if (catsErr) throw catsErr;
 
+        // Fetch settings
+        const { data: prof } = await supabase
+          .from("restaurant_profiles")
+          .select("features_menu_images_enabled")
+          .eq("restaurant_id", restaurantId)
+          .maybeSingle();
+        if (prof) setEnableMenuImages(!!prof.features_menu_images_enabled);
+
         const { data: its, error: itsErr } = await supabase
           .from("menu_items")
           .select(
-            "id, name, category, price, code_number, hsn, tax_rate, status, veg, is_packaged_good, compensation_cess_rate, ispopular"
+            "id, name, category, price, code_number, hsn, tax_rate, status, veg, is_packaged_good, compensation_cess_rate, ispopular, image_url, has_variants"
           )
           .eq("restaurant_id", restaurantId)
           .order("category", { ascending: true })
           .order("name", { ascending: true });
         if (itsErr) throw itsErr;
 
-        setCategories(cats || []);
-        setItems(its || []);
+        const newCats = cats || [];
+        const newItems = its || [];
+
+        setCategories(newCats);
+        setItems(newItems);
+        
+        // Cache to localStorage
+        localStorage.setItem(`categories_${restaurantId}`, JSON.stringify(newCats));
+        localStorage.setItem(`menu_items_${restaurantId}`, JSON.stringify(newItems));
+        
+        dataLoadedRef.current = true;
       } catch (e) {
         setError(e.message || "Failed to load");
       } finally {
@@ -257,7 +414,8 @@ export default function MenuPage() {
     });
   }, []);
 
-  if (checking || loadingRestaurant || !restaurantId)
+  const isInitialLoad = (checking || loadingRestaurant || !restaurantId) && items.length === 0;
+  if (isInitialLoad)
     return <p style={{ padding: 24 }}>Loading…</p>;
 
   return (
@@ -318,8 +476,11 @@ export default function MenuPage() {
         </div>
 
         <div className="toolbar-cta">
-          <Button onClick={() => setEditorItem({})}>Add New Item</Button>
+          <Button onClick={() => openEditor({})}>Add New Item</Button>
+          <Button onClick={() => setShowImageImport(true)}>Import from Image</Button>
           <Button onClick={() => setShowLibrary(true)}>Add from Library</Button>
+          <Button variant="outline" onClick={() => setShowCategoryManager(true)}>Categories</Button>
+          <Button variant="outline" onClick={() => setShowVariantManager(true)}>Variants</Button>
           {hasSelection && (
             <>
               <Button variant="success" onClick={() => applyBulk("available")}>
@@ -345,28 +506,30 @@ export default function MenuPage() {
                     onChange={toggleSelectAll}
                   />
                 </th>
-                <th>Name</th>
-                <th className="hide-sm">Code</th>
-                <th className="hide-sm">Category</th>
+                <th className="col-name">Name</th>
+                <th className="hide-extra">Code</th>
+                <th className="hide-sm col-cat">Category</th>
                 <th>Price</th>
-                <th className="hide-sm">HSN</th>
-                <th className="hide-md">Tax %</th>
-                <th className="hide-sm">Cess %</th>
-                <th className="hide-sm">Type</th>
-                <th>Status</th>
-                <th className="hide-mobile">Actions</th>
+                <th className="hide-extra">HSN</th>
+                <th className="hide-extra">Tax %</th>
+                <th className="hide-extra">Cess %</th>
+                <th className="hide-extra">Type</th>
+                <th className="hide-sm">Status</th>
+                <th className="hide-sm">Variants</th>
+                {enableMenuImages && <th>Image</th>}
+                <th className="hide-mobile col-actions" style={{ textAlign: 'right' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={11} style={{ padding: 12 }}>
+                  <td colSpan={enableMenuImages ? 12 : 11} style={{ padding: 12 }}>
                     Loading…
                   </td>
                 </tr>
               ) : visible.length === 0 ? (
                 <tr>
-                  <td colSpan={11} style={{ padding: 12, color: "#666" }}>
+                  <td colSpan={enableMenuImages ? 12 : 11} style={{ padding: 12, color: "#666" }}>
                     No items found.
                   </td>
                 </tr>
@@ -391,19 +554,25 @@ export default function MenuPage() {
                             gap: 6,
                           }}
                         >
-                          <span
+                          <div
                             style={{
                               fontWeight: 600,
-                              overflowWrap: "anywhere",
+                              overflowWrap: "break-word",
+                              display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap'
                             }}
                           >
                             {item.name}
-                          </span>
+                            {item.veg && (
+                              <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#dcfce7', color: '#166534', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                                VEG
+                              </span>
+                            )}
+                          </div>
                           <span className="only-mobile mobile-actions">
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => setEditorItem(item)}
+                              onClick={() => openEditor(item)}
                             >
                               Edit
                             </Button>
@@ -418,7 +587,8 @@ export default function MenuPage() {
                               size="sm"
                               variant="outline"
                               onClick={async () => {
-                                if (!confirm("Delete?")) return;
+                                const ok = await showConfirm("Are you sure you want to delete this item?");
+                                if (!ok) return;
                                 try {
                                   if (!supabase)
                                     throw new Error("Client not ready");
@@ -441,7 +611,7 @@ export default function MenuPage() {
                         </div>
                       </td>
                       <td
-                        className="hide-sm"
+                        className="hide-extra"
                         style={{ fontFamily: "monospace", fontSize: 13 }}
                       >
                         {item.code_number || "—"}
@@ -450,18 +620,18 @@ export default function MenuPage() {
                       <td style={{ fontWeight: 700 }}>
                         ₹{Number(item.price ?? 0).toFixed(2)}
                       </td>
-                      <td className="hide-sm">{item.hsn || "—"}</td>
-                      <td className="hide-md">
+                      <td className="hide-extra">{item.hsn || "—"}</td>
+                      <td className="hide-extra">
                         {item.tax_rate != null
                           ? Number(item.tax_rate).toFixed(2)
                           : "—"}
                       </td>
-                      <td className="hide-sm">
+                      <td className="hide-extra">
                         {item.is_packaged_good
                           ? Number(item.compensation_cess_rate ?? 0).toFixed(2)
                           : "—"}
                       </td>
-                      <td className="hide-sm">
+                      <td className="hide-extra">
                         <span
                           className={`pill ${
                             item.is_packaged_good ? "pill--pkg" : "pill--menu"
@@ -470,22 +640,50 @@ export default function MenuPage() {
                           {typeBadge}
                         </span>
                       </td>
-                      <td>
+                      <td className="hide-sm">
                         <span
                           className={`chip ${
                             available ? "chip--avail" : "chip--out"
                           }`}
+                          style={{ whiteSpace: 'nowrap' }}
                         >
                           {available ? "Available" : "Out of Stock"}
                         </span>
                       </td>
+                      <td className="hide-sm" style={{ textAlign: 'center' }}>
+                        {item.has_variants ? '✓' : '—'}
+                      </td>
+                      {enableMenuImages && (
+                        <td>
+                          {item.image_url ? (
+                            <div 
+                              onClick={() => setViewImage(item.image_url)}
+                              style={{ 
+                                width: 40, height: 40, 
+                                overflow: 'hidden', borderRadius: 6, 
+                                cursor: 'pointer', border: '1px solid #ddd',
+                                background: '#fff'
+                              }}
+                              title="Click to view"
+                            >
+                              <img 
+                                src={item.image_url} 
+                                alt="" 
+                                style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                              />
+                            </div>
+                          ) : (
+                            <div style={{ width: 40, height: 40, background: '#f9fafb', borderRadius: 6, border: '1px dashed #e5e7eb' }} />
+                          )}
+                        </td>
+                      )}
                       <td className="hide-mobile">
                         <div
                           className="row"
                           style={{
                             justifyContent: "flex-end",
                             gap: 6,
-                            flexWrap: "wrap",
+                            flexWrap: "nowrap",
                           }}
                         >
                           <Button
@@ -498,7 +696,7 @@ export default function MenuPage() {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => setEditorItem(item)}
+                            onClick={() => openEditor(item)}
                           >
                             Edit
                           </Button>
@@ -506,7 +704,8 @@ export default function MenuPage() {
                             size="sm"
                             variant="outline"
                             onClick={async () => {
-                              if (!confirm("Delete?")) return;
+                              const ok = await showConfirm("Are you sure you want to delete this item?");
+                              if (!ok) return;
                               try {
                                 if (!supabase)
                                   throw new Error("Client not ready");
@@ -538,21 +737,154 @@ export default function MenuPage() {
 
       <ItemEditor
         open={!!editorItem}
-        onClose={() => setEditorItem(null)}
+        onClose={closeEditor}
         item={editorItem}
         restaurantId={restaurantId}
         supabase={supabase}
         onSaved={handleSaved}
+        enableMenuImages={enableMenuImages}
       />
       <LibraryPicker
         open={showLibrary}
         onClose={() => setShowLibrary(false)}
         supabase={supabase}
         restaurantId={restaurantId}
+        enableMenuImages={enableMenuImages}
         onAdded={(rows) => {
           if (rows?.length) setItems((prev) => [...rows, ...prev]);
         }}
       />
+      
+      {showCategoryManager && (
+        <CategoryManager
+          restaurantId={restaurantId}
+          onClose={() => setShowCategoryManager(false)}
+          onSaved={refreshCategories}
+        />
+      )}
+
+      {showVariantManager && (
+        <VariantManager
+          onClose={() => setShowVariantManager(false)}
+        />
+      )}
+      
+      {viewImage && (
+        <div 
+          onClick={() => setViewImage(null)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.85)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20
+          }} 
+        >
+          <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
+            <button 
+              onClick={() => setViewImage(null)}
+              style={{
+                position: 'absolute', top: -15, right: -15, 
+                background: 'white', border: 'none', borderRadius: '50%', 
+                width: 32, height: 32, cursor: 'pointer', fontSize: 18,
+                boxShadow: '0 2px 10px rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center'
+              }}
+            >
+              ✕
+            </button>
+            <img 
+              src={viewImage} 
+              alt="Item Preview" 
+              style={{ 
+                maxWidth: '90vw', maxHeight: '90vh', 
+                borderRadius: 8, 
+                boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
+                display: 'block' 
+              }} 
+            />
+          </div>
+        </div>
+      )}
+      <style jsx>{`
+        /* Ensure the container handles the scrolling so sticky works internally */
+        /* Ensure the container handles the scrolling so sticky works internally */
+        .table-scroll {
+          max-height: calc(100vh - 200px); /* Leave space for header/toolbar */
+          overflow-y: auto;
+          overflow-x: auto; /* ENABLE horizontal scroll */
+          border: 1px solid #e5e7eb;
+          border-radius: 8px;
+        }
+
+        .table {
+          width: 100%;
+          border-collapse: collapse;
+          table-layout: auto; /* Let columns expand naturally */
+        }
+
+        .table th {
+          position: sticky;
+          top: 0;
+          background: #fff;
+          z-index: 10;
+          box-shadow: 0 1px 0 #e5e7eb;
+          white-space: nowrap;
+          padding: 12px 10px;
+          border-bottom: 2px solid #e5e7eb;
+          color: #374151;
+          font-weight: 600;
+          text-align: left;
+        }
+
+        .table td {
+          vertical-align: middle;
+          padding: 12px 10px;
+          border-bottom: 1px solid #f3f4f6;
+          color: #111827;
+          font-size: 14px;
+        }
+        
+        .table tbody tr:hover {
+          background-color: #f9fafb;
+        }
+        
+        /* Column Widths */
+        .col-name { min-width: 180px; max-width: 300px; }
+        .col-cat { min-width: 120px; }
+        .col-actions { min-width: 180px; text-align: right; }
+
+        /* Mobile Responsive Overrides */
+        @media (max-width: 640px) {
+          .table-scroll {
+            max-height: 70vh;
+          }
+          .table th, .table td {
+            padding: 10px 8px;
+          }
+          .col-name { min-width: auto; max-width: none; }
+        }
+
+        /* Mobile Responsive Overrides */
+        @media (max-width: 640px) {
+          .table-scroll {
+            max-height: 70vh;
+          }
+          .table th, .table td {
+            padding: 10px 8px;
+          }
+          .col-name { min-width: auto; max-width: none; }
+        }
+      `}</style>
+      {showImageImport && (
+        <MenuImageImport
+          restaurantId={restaurantId}
+          existingItems={items}
+          onClose={() => setShowImageImport(false)}
+          onImported={(newItems) => {
+            if (newItems && newItems.length) {
+              setItems(prev => [...newItems, ...prev]);
+              // Also refresh cache/categories if implicit
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -242,6 +242,9 @@ export function buildKotText(order, restaurantProfile) {
     lines.push(`${dateStr} ${timeStr}`);
     lines.push(`Order: #${orderId}`);
     lines.push(`For: ${tableLabel}`);
+    if (order.number_of_customers) {
+      lines.push(`No. of Customers: ${order.number_of_customers}`);
+    }
     lines.push(dashes());
 
     // === ITEMS: name + qty only ===
@@ -317,6 +320,7 @@ export async function downloadTextAndShare(order, bill, restaurantProfile) {
     const orderId = order?.id?.slice(0, 8)?.toUpperCase() || 'N/A';
     const orderType = getOrderTypeLabel(order);
     const invoiceNo = order?.invoice_no || bill?.invoice_no || '';
+    const billNo = order?.bill_no || bill?.bill_no || '';
     
     // Date & Time
     const orderDate = new Date(order.created_at);
@@ -342,6 +346,7 @@ export async function downloadTextAndShare(order, bill, restaurantProfile) {
     );
     const netAmount = Number(
       bill?.subtotal || 
+      bill?.subtotal_ex_tax ||
       order?.subtotal || 
       order?.total_amount || 
       order?.total || 
@@ -379,6 +384,7 @@ export async function downloadTextAndShare(order, bill, restaurantProfile) {
     // === DATE & TIME (RIGHT ALIGNED) ===
     lines.push(`${dateStr} ${timeStr}`);
         lines.push(`Invoice: ${invoiceNo}`);
+    if (billNo) lines.push(`Bill No: ${billNo}`);
     // lines.push(`Order: #${orderId}`);
     lines.push(`Order Type: ${orderType}`);
     
@@ -502,6 +508,7 @@ export function buildReceiptText(order, bill, restaurantProfile) {
 
     const orderType = getOrderTypeLabel(order);
     const invoiceNo = order?.invoice_no || bill?.invoice_no || '';
+    const billNo = order?.bill_no || bill?.bill_no || '';
 
     const orderDate = new Date(order.created_at);
     const dateStr = orderDate.toLocaleDateString('en-IN', {
@@ -546,7 +553,13 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     if (invoiceNo) {
       lines.push(`Invoice: ${invoiceNo}`);
     }
+    if (billNo) {
+      lines.push(`Bill No: ${billNo}`);
+    }
     lines.push(`Order Type: ${orderType}`);
+    if (order?.number_of_customers) {
+      lines.push(`No. of Customers: ${order.number_of_customers}`);
+    }
     lines.push(dashes());
 
     // ITEMS

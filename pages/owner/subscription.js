@@ -21,17 +21,57 @@ export default function SubscriptionPage() {
   }, [restaurant])
 
   async function fetchStatus() {
-    try {
-      const res = await fetch(`/api/subscription/status?restaurant_id=${restaurant.id}`)
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data = await res.json()
-      setStatus({ found: true, ...data })
-    } catch (err) {
-      console.error('Status fetch error:', err)
-      setError(err.message)
-      setStatus({ found: false })
+  try {
+    setError(null);
+
+    // 1) Check current status
+    const res = await fetch(`/api/subscription/status?restaurant_id=${restaurant.id}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+
+    // 2) If no subscription exists yet, start a free trial
+    if (data.status === 'none' && !data.subscription) {
+      // Optional: optimistic UI while trial is being created
+      setStatus({
+        found: true,
+        ...data,
+        statusReason: 'Starting your free 7‑day trial…',
+      });
+
+      const trialRes = await fetch('/api/subscription/start-trial', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          restaurant_id: restaurant.id,
+          owner_email: restaurant.owner_email || null,
+        }),
+      });
+
+      if (!trialRes.ok) {
+        const tj = await trialRes.json().catch(() => ({}));
+        throw new Error(tj.error || 'Failed to start trial');
+      }
+
+      // 3) Refresh global subscription context (used by GlobalSubscriptionGate)
+      await refetchSubscription();
+
+      // 4) Re‑fetch status so UI shows the new trial as active
+      const res2 = await fetch(`/api/subscription/status?restaurant_id=${restaurant.id}`);
+      if (!res2.ok) throw new Error(`HTTP ${res2.status}`);
+      const data2 = await res2.json();
+      setStatus({ found: true, ...data2 });
+      return;
     }
+
+    // Normal path: subscription exists already
+    setStatus({ found: true, ...data });
+  } catch (err) {
+    console.error('Status fetch error:', err);
+    setError(err.message);
+    setStatus({ found: false });
   }
+}
+
 
   async function handlePayment() {
     setLoading(true)

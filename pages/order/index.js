@@ -1,10 +1,12 @@
-// pages/order/index.js
-
 import { useRouter } from 'next/router'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { getSupabase } from '../../services/supabase'
 import AlertRestaurantButton from '../../components/AlertRestaurantButton'
+import MenuItemCard from '../../components/MenuItemCard'
+import HorizontalScrollRow from '../../components/HorizontalScrollRow'
+import VariantSelector from '../../components/VariantSelector'
+import VariantEditModal from '../../components/VariantEditModal'
 
 export default function OrderPage() {
   const router = useRouter()
@@ -30,7 +32,13 @@ export default function OrderPage() {
     menuMapRef.current = m
   }
   const [justAddedItem, setJustAddedItem] = useState('')
+  const [enableMenuImages, setEnableMenuImages] = useState(false)
   const addToastTimeoutRef = useRef(null)
+
+  // Variant state
+  const [showVariantSelector, setShowVariantSelector] = useState(false)
+  const [selectedItem, setSelectedItem] = useState(null)
+  const [editingVariantItem, setEditingVariantItem] = useState(null)
 
   // 🔧 Fix for "data only comes after clearing browser cache" on QR flows.
   // When a customer opens the QR menu, aggressively clear any old
@@ -106,15 +114,17 @@ export default function OrderPage() {
         setLoading(true)
         setError('')
 
+        // 1. Fetch Restaurant Info
         const { data: rest, error: restErr } = await supabase
           .from('restaurants')
-          .select('id, name, online_paused, restaurant_profiles(brand_color, phone)')
+          .select('id, name, online_paused, restaurant_profiles(brand_color, phone, features_menu_images_enabled)')
           .eq('id', restaurantId)
           .single()
+        
         if (restErr) throw restErr
         if (!rest) throw new Error('Restaurant not found')
-        
-        // Check if restaurant is paused
+
+        // 2. Check Hours
         if (rest.online_paused) {
           if (!cancelled) {
             setIsOutsideHours(true)
@@ -125,67 +135,123 @@ export default function OrderPage() {
           return
         }
 
-        // Check working hours from availability
-        const { data: hours, error: hoursErr } = await supabase
+        const { data: hours } = await supabase
           .from('restaurant_hours')
           .select('dow, open_time, close_time, enabled')
           .eq('restaurant_id', restaurantId)
 
-        if (!hoursErr && hours && hours.length > 0) {
-          const now = new Date()
-          const currentDOW = now.getDay() === 0 ? 7 : now.getDay() // 1=Mon, 7=Sun
-          const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-          const todayHours = hours.find(h => h.dow === currentDOW)
+        if (hours && hours.length > 0) {
+           const now = new Date()
+           const currentDOW = now.getDay() === 0 ? 7 : now.getDay()
+           const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+           const todayHours = hours.find(h => h.dow === currentDOW)
 
-          // Check if today is disabled
-          if (!todayHours || !todayHours.enabled) {
-            if (!cancelled) {
-              setIsOutsideHours(true)
-              setHoursMessage('Restaurant is closed today')
-              setRestaurant(rest)
-              setLoading(false)
-            }
-            return
-          }
-
-          // Check if current time is outside working hours
-          if (todayHours.open_time && todayHours.close_time) {
-            const openTime = todayHours.open_time.substring(0, 5)
-            const closeTime = todayHours.close_time.substring(0, 5)
-            if (currentTime < openTime || currentTime > closeTime) {
+           if (!todayHours || !todayHours.enabled) {
               if (!cancelled) {
                 setIsOutsideHours(true)
-                setHoursMessage(`Restaurant is closed. Opens at ${openTime}, closes at ${closeTime}`)
+                setHoursMessage('Restaurant is closed today')
                 setRestaurant(rest)
                 setLoading(false)
               }
               return
-            }
-          }
+           }
+
+           if (todayHours.open_time && todayHours.close_time) {
+             const openTime = todayHours.open_time.substring(0, 5)
+             const closeTime = todayHours.close_time.substring(0, 5)
+             if (currentTime < openTime || currentTime > closeTime) {
+                if (!cancelled) {
+                  setIsOutsideHours(true)
+                  setHoursMessage(`Restaurant is closed. Opens at ${openTime}, closes at ${closeTime}`)
+                  setRestaurant(rest)
+                  setLoading(false)
+                }
+                return
+             }
+           }
         }
 
-        const { data: menu, error: menuErr } = await supabase
+        // 3. Fetch Menu
+        const { data: rawItems, error: menuErr } = await supabase
           .from('menu_items')
-          .select('id, name, price, description, category, veg, status, is_packaged_good, ispopular')
+          .select(`
+            id, name, price, description, category, veg, status, is_packaged_good, ispopular, image_url, has_variants,
+            menu_item_variants(
+              variant_templates(id, name)
+            )
+          `)
           .eq('restaurant_id', restaurantId)
           .order('category', { ascending: true })
           .order('name', { ascending: true })
+
         if (menuErr) throw menuErr
 
-      const cleaned = (menu || []).map((item) => ({
-          ...item,
-          rating: Number((3.8 + Math.random() * 1.0).toFixed(1)),
-          popular: !!item.ispopular
-        }))
+        // 4. Fetch Variant Pricing
+        const finalItems = (rawItems || []).map(i => ({ ...i })); 
+        // Filter only valid items with explicit IDs
+        const variantItemIds = finalItems.filter(i => i && i.has_variants && i.id).map(i => i.id);
+
+        const vMap = new Map();
+        if (variantItemIds.length > 0) {
+           // Use simpler join syntax. Supabase usually auto-detects if there's one FK.
+           // If that fails, we can reference the column name explicitly if needed.
+           const { data: vpData, error: vpErr } = await supabase
+             .from('variant_pricing')
+             .select(`
+                menu_item_id, price, is_available,
+                variant_options (id, name, display_order, template_id)
+             `)
+             .in('menu_item_id', variantItemIds);
+           
+           if (vpErr) {
+             console.error('Variant pricing load error:', vpErr);
+             // Don't crash entire menu, just log
+           } else {
+             (vpData || []).forEach(vp => {
+                if (!vp.menu_item_id || !vp.variant_options) return;
+                
+                if (!vMap.has(vp.menu_item_id)) vMap.set(vp.menu_item_id, []);
+                vMap.get(vp.menu_item_id).push({
+                  variant_id: vp.variant_options.id,
+                  variant_name: vp.variant_options.name,
+                  price: vp.price,
+                  is_available: vp.is_available,
+                  display_order: vp.variant_options.display_order
+                });
+             });
+           }
+        }
+
+        // 5. Transform
+        const transformed = finalItems.map(item => {
+           if (!item) return null;
+           const variants = vMap.get(item.id) || [];
+           
+           let tName = 'Options';
+           if (item.menu_item_variants && item.menu_item_variants[0] && item.menu_item_variants[0].variant_templates) {
+              tName = item.menu_item_variants[0].variant_templates.name;
+           }
+
+           return {
+             ...item,
+             variants: variants.sort((a, b) => (a.display_order || 0) - (b.display_order || 0)),
+             variant_template_name: item.has_variants ? tName : null,
+             rating: 4.8, // Static rating to prevent hydration mismatch errors
+             popular: !!item.ispopular
+           };
+        }).filter(Boolean); // remove any nulls
 
         if (!cancelled) {
           setRestaurant(rest)
-          setMenuItems(cleaned)
-          cacheMenuIntoMap(cleaned)
+          setMenuItems(transformed)
+          cacheMenuIntoMap(transformed)
           setIsOutsideHours(false)
           setHoursMessage('')
+          setEnableMenuImages(!!rest.restaurant_profiles?.features_menu_images_enabled)
         }
+
       } catch (e) {
+        console.error('Load Error:', e);
         if (!cancelled) setError(e.message || 'Failed to load menu')
       } finally {
         if (!cancelled) setLoading(false)
@@ -240,14 +306,61 @@ export default function OrderPage() {
     return () => { supabase.removeChannel(channel) }
   }, [restaurantId, supabase])
   
+  // Handle adding variant from modal
+  const handleVariantAdd = (variantItem) => {
+    // variantItem already has quantity, price, selectedVariant
+    setCart(prev => {
+      // Logic for variants: treat as distinct based on variant_id
+      // Check if this exact variant is already in cart
+      const existingIdx = prev.findIndex(c => c.id === variantItem.id && c.selectedVariant?.variant_id === variantItem.selectedVariant?.variant_id)
+      
+      if (existingIdx >= 0) {
+         const copy = [...prev]
+         copy[existingIdx].quantity += variantItem.quantity
+         return copy
+      }
+      return [...prev, variantItem]
+    })
+    
+    // Feedback
+    const name = variantItem.displayName || variantItem.name
+    setJustAddedItem(name)
+    if (addToastTimeoutRef.current) clearTimeout(addToastTimeoutRef.current)
+    addToastTimeoutRef.current = setTimeout(() => setJustAddedItem(''), 1500)
+  }
+
+  // Handle updates from Edit Modal (deep match)
+  const handleVariantEditUpdate = (targetItem, quantity) => {
+    const isMatch = (c) => {
+      if (c.id !== targetItem.id) return false;
+      if (targetItem.selectedVariant) {
+        return c.selectedVariant?.variant_id === targetItem.selectedVariant?.variant_id;
+      }
+      return !c.selectedVariant;
+    };
+
+    if (quantity === 0) {
+      setCart(prev => prev.filter(c => !isMatch(c)));
+    } else {
+      setCart(prev => prev.map(c => isMatch(c) ? { ...c, quantity } : c));
+    }
+  }
+
   const addToCart = (item) => {
     if (item.status && item.status !== 'available') {
       alert('This item is currently out of stock.')
       return
     }
+
+    if (item.has_variants) {
+      setSelectedItem(item)
+      setShowVariantSelector(true)
+      return
+    }
+
     setCart(prev => {
-      const existing = prev.find(c => c.id === item.id)
-      if (existing) return prev.map(c => c.id === item.id ? { ...c, quantity: c.quantity + 1 } : c)
+      const existing = prev.find(c => c.id === item.id && !c.selectedVariant)
+      if (existing) return prev.map(c => c.id === item.id && !c.selectedVariant ? { ...c, quantity: c.quantity + 1 } : c)
       return [...prev, { ...item, quantity: 1 }]
     })
 
@@ -267,7 +380,11 @@ export default function OrderPage() {
     else setCart(prev => prev.map(c => c.id === itemId ? { ...c, quantity } : c))
   }
 
-  const getItemQuantity = (itemId) => cart.find(c => c.id === itemId)?.quantity || 0
+  const getItemQuantity = (itemId) => {
+    // If exact variant matching needed, we'd need variantId. 
+    // Here we return TOTAL quantity of that item (all variants summed)
+    return cart.filter(c => c.id === itemId).reduce((sum, c) => sum + (c.quantity || 1), 0)
+  }
 
   const filteredItems = useMemo(() => {
     const q = (searchQuery || '').toLowerCase()
@@ -319,24 +436,8 @@ export default function OrderPage() {
   }
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        background: '#f8f9fa',
-        paddingBottom: cartItemsCount > 0 ? '90px' : '0',
-        fontFamily: 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif'
-      }}
-    >
-      <header
-        style={{
-          padding: '1rem',
-          background: '#fff',
-          borderBottom: '1px solid #e5e7eb',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12
-        }}
-      >
+    <div className="cust-page">
+      <header className="cust-header">
         <button
           onClick={() => router.back()}
           style={{ background: 'none', border: 'none', padding: 8, cursor: 'pointer' }}
@@ -498,6 +599,18 @@ export default function OrderPage() {
       )}
 
       <div>
+        {error && (
+          <div style={{ padding: '1rem', color: '#dc2626', background: '#fee2e2', margin: '1rem', borderRadius: 8, textAlign: 'center' }}>
+            <p style={{fontWeight: 'bold', marginBottom: 4}}>Unable to load menu</p>
+            <p style={{fontSize: '0.9em', marginBottom: 12}}>{error}</p>
+            <button 
+              onClick={() => window.location.reload()}
+              style={{ padding: '6px 16px', background: '#dc2626', color: 'white', border: 'none', borderRadius: 6, fontWeight: 600, cursor: 'pointer' }}
+            >
+              Retry
+            </button>
+          </div>
+        )}
         {!loading && !error && menuItems.length === 0 && (
           <div
             style={{
@@ -546,153 +659,176 @@ export default function OrderPage() {
           </div>
         )}
 
-        {Object.entries(groupedItems).map(([category, items]) => (
-          <section key={category} style={{ background: '#fff', marginBottom: 8 }}>
-            <h2 style={{ margin: 0, padding: '16px 20px 8px', fontSize: 18, fontWeight: 600 }}>
-              {category} ({items.length} items)
-            </h2>
-
-            {items.map((item) => {
-              const quantity = getItemQuantity(item.id)
-              const isAvailable = !item.status || item.status === 'available'
-              return (
-                <div
-                  key={item.id}
-                  style={{
-                    display: 'flex',
-                    gap: 16,
-                    padding: 20,
-                    borderBottom: '1px solid #f3f4f6',
-                    opacity: isAvailable ? 1 : 0.6
-                  }}
-                >
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
-                      {item.popular && (
-                        <span
-                          style={{
-                            padding: '2px 8px',
-                            borderRadius: 12,
-                            fontSize: 12,
-                            background: '#fef3c7',
-                            color: '#b45309'
-                          }}
-                        >
-                          🔥 Offers
-                        </span>
-                      )}
-                      {!isAvailable && (
-                        <span
-                          style={{
-                            padding: '2px 8px',
-                            borderRadius: 12,
-                            fontSize: 12,
-                            background: '#fee2e2',
-                            color: '#b91c1c'
-                          }}
-                        >
-                          Out of stock
-                        </span>
-                      )}
+        {enableMenuImages ? (
+          // NEW LAYOUT: HorizontalScrollRow with MenuItemCard (when images enabled)
+          Object.entries(groupedItems).map(([category, items]) => (
+            <section key={category} style={{ background: '#fff', marginBottom: 8, paddingBottom: 1 }}>
+              <HorizontalScrollRow
+                title={category}
+                count={items.length}
+                items={items}
+                renderItem={(item) => {
+                  const totalQty = getItemQuantity(item.id)
+                  // For variants, we force "ADD" state (qty=0) but show badge
+                  const passQty = item.has_variants ? 0 : totalQty
+                  const badge = item.has_variants ? totalQty : 0
+                  
+                  return (
+                    <div style={{ minWidth: '240px', maxWidth: '240px' }}>
+                      <MenuItemCard
+                        item={item}
+                        quantity={passQty}
+                        badge={badge}
+                        onAdd={() => addToCart(item)}
+                        onRemove={() => updateCartItem(item.id, passQty - 1)}
+                        onEdit={item.has_variants ? () => setEditingVariantItem(item) : undefined}
+                        showImage={true}
+                      />
                     </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                      <span style={{ fontSize: 12 }}>{item.veg ? '🟢' : '🔺'}</span>
-                      <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>{item.name}</h3>
-                    </div>
-
-                    {item.description && (
-                      <p style={{ margin: '0 0 10px 0', color: '#6b7280', fontSize: 13, lineHeight: 1.5 }}>
-                        {item.description}
-                      </p>
-                    )}
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: 16, fontWeight: 700 }}>
-                        ₹{Number(item.price).toFixed(2)}
-                      </span>
-
-                      {quantity > 0 ? (
-                        <div
-                          style={{
+                  )
+                }}
+              />
+            </section>
+          ))
+        ) : (
+          // OLD LAYOUT: Simple vertical list (when images disabled)
+          Object.entries(groupedItems).map(([category, items]) => (
+            <section key={category} style={{ background: '#fff', marginBottom: 8, padding: '12px 16px' }}>
+              <h3 style={{ fontSize: 16, fontWeight: 600, margin: '0 0 12px 0', color: '#111827' }}>
+                {category} ({items.length})
+              </h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {items.map((item) => {
+                  const totalQty = getItemQuantity(item.id);
+                  const isOutOfStock = item.status === 'out_of_stock' || item.available === false;
+                  
+                  // Logic for manual list rendering (No-Image mode)
+                  // If variant, show simple Add button that opens popup
+                  const showStepper = !item.has_variants && totalQty > 0;
+                  
+                  return (
+                    <div 
+                      key={item.id}
+                      style={{
+                        display: 'flex',
+                        gap: 12,
+                        padding: 12,
+                        border: '1px solid #e5e7eb',
+                        borderRadius: 8,
+                        background: isOutOfStock ? '#f9fafb' : '#fff',
+                      }}
+                    >
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                          <span style={{ flexShrink: 0 }}>
+                            {item.veg ? (
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                                <rect x="1" y="1" width="22" height="22" stroke="#166534" strokeWidth="2" />
+                                <circle cx="12" cy="12" r="6" fill="#166534" />
+                              </svg>
+                            ) : (
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                                <rect x="1" y="1" width="22" height="22" stroke="#991b1b" strokeWidth="2" />
+                                <path d="M12 6L18 16H6L12 6Z" fill="#991b1b" />
+                              </svg>
+                            )}
+                          </span>
+                          <h4 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: '#111827' }}>
+                            {item.name}
+                          </h4>
+                        </div>
+                        {item.category && (
+                          <div style={{ fontSize: 11, color: '#6b7280', textTransform: 'uppercase', marginBottom: 4 }}>
+                            [{item.category}]
+                          </div>
+                        )}
+                        <div style={{ fontSize: 16, fontWeight: 700, color: brandColor }}>
+                          ₹{Number(item.price).toFixed(2)}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center' }}>
+                        {isOutOfStock || !showStepper ? (
+                          <button
+                            onClick={() => addToCart(item)}
+                            disabled={isOutOfStock}
+                            style={{
+                              padding: '8px 16px',
+                              background: isOutOfStock ? '#e5e7eb' : brandColor,
+                              color: '#fff',
+                              border: 'none',
+                              borderRadius: 6,
+                              fontWeight: 700,
+                              fontSize: 13,
+                              cursor: isOutOfStock ? 'not-allowed' : 'pointer',
+                              opacity: isOutOfStock ? 0.6 : 1,
+                            }}
+                          >
+                            {isOutOfStock ? 'OUT OF STOCK' : 'ADD'}
+                            {item.has_variants && totalQty > 0 && (
+                                <span style={{marginLeft: 6, fontSize: 11, background: '#f97316', color: 'white', padding: '1px 6px', borderRadius: 99}}>
+                                  {totalQty}
+                                </span>
+                            )}
+                          </button>
+                        ) : (
+                          <div style={{
                             display: 'flex',
                             alignItems: 'center',
-                            background: brandColor,
+                            gap: 8,
+                            background: `${brandColor}10`,
+                            padding: 4,
                             borderRadius: 6,
-                            overflow: 'hidden'
-                          }}
-                        >
-                          <button
-                            onClick={() => updateCartItem(item.id, quantity - 1)}
-                            style={{
-                              background: 'none',
-                              border: 'none',
-                              color: '#fff',
-                              width: 32,
-                              height: 32,
-                              cursor: 'pointer',
-                              fontWeight: 600
-                            }}
-                          >
-                            -
-                          </button>
-                          <span
-                            style={{
-                              background: '#fff',
-                              color: brandColor,
-                              minWidth: 32,
-                              height: 32,
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontWeight: 600
-                            }}
-                          >
-                            {quantity}
-                          </span>
-                          <button
-                            onClick={() => {
-                              if (!isAvailable) return
-                              updateCartItem(item.id, quantity + 1)
-                            }}
-                            disabled={!isAvailable}
-                            style={{
-                              background: 'none',
-                              border: 'none',
-                              color: '#fff',
-                              width: 32,
-                              height: 32,
-                              cursor: isAvailable ? 'pointer' : 'not-allowed',
-                              fontWeight: 600
-                            }}
-                          >
-                            +
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => addToCart(item)}
-                          disabled={!isAvailable}
-                          style={{
-                            background: isAvailable ? brandColor : '#9ca3af',
-                            color: '#fff',
-                            border: 'none',
-                            padding: '8px 16px',
-                            borderRadius: 6,
-                            fontWeight: 500,
-                            cursor: isAvailable ? 'pointer' : 'not-allowed'
-                          }}
-                        >
-                          Add to cart
-                        </button>
-                      )}
+                            border: `1px solid ${brandColor}`,
+                          }}>
+                            <button
+                              onClick={() => updateCartItem(item.id, totalQty - 1)}
+                              style={{
+                                width: 28,
+                                height: 28,
+                                border: 'none',
+                                background: 'transparent',
+                                color: brandColor,
+                                fontWeight: 'bold',
+                                fontSize: 16,
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                              }}
+                            >
+                              −
+                            </button>
+                            <span style={{ fontSize: 14, fontWeight: 700, color: brandColor, minWidth: 20, textAlign: 'center' }}>
+                              {totalQty}
+                            </span>
+                            <button
+                              onClick={() => addToCart(item)}
+                              style={{
+                                width: 28,
+                                height: 28,
+                                border: 'none',
+                                background: 'transparent',
+                                color: brandColor,
+                                fontWeight: 'bold',
+                                fontSize: 16,
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                              }}
+                            >
+                              +
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </div>
-              )
-            })}
-          </section>
-        ))}
+                  );
+                })}
+              </div>
+            </section>
+          ))
+        )}
       </div>
 
       {justAddedItem && (
@@ -716,18 +852,8 @@ export default function OrderPage() {
 
       {cartItemsCount > 0 && (
         <div
-          style={{
-            position: 'fixed',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            background: brandColor,
-            color: '#fff',
-            padding: '12px 16px',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center'
-          }}
+          className="cust-cart-bar"
+          style={{ background: brandColor }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1 }}>
             <span>🛒</span>
@@ -754,6 +880,40 @@ export default function OrderPage() {
           </Link>
         </div>
       )}
+
+
+      {showVariantSelector && selectedItem && (
+        <VariantSelector
+          item={selectedItem}
+          onSelect={handleVariantAdd}
+          onClose={() => setShowVariantSelector(false)}
+          showImage={enableMenuImages}
+          gstEnabled={false} 
+          pricesIncludeTax={true}
+        />
+      )}
+
+      {editingVariantItem && (
+        <VariantEditModal
+          item={editingVariantItem}
+          cartItems={cart.filter(c => c.id === editingVariantItem.id)}
+          onUpdate={handleVariantEditUpdate}
+          onClose={() => setEditingVariantItem(null)}
+          themeColor={brandColor}
+        />
+      )}
+
+    <style jsx>{`
+      .cust-page { min-height: 100vh; background: #f8f9fa; font-family: system-ui, -apple-system, sans-serif; padding-bottom: 90px; }
+      @media (min-width: 768px) { .cust-page { padding-bottom: 0; max-width: 800px; margin: 0 auto; background: #fff; box-shadow: 0 0 40px rgba(0,0,0,0.05); min-height: 100vh; position: relative; } }
+      
+      .cust-header { padding: 16px; background: white; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 50; }
+      
+      .cust-cart-bar { position: fixed; bottom: 0; left: 0; right: 0; color: white; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; z-index: 100; box-shadow: 0 -4px 10px rgba(0,0,0,0.1); }
+      @media (min-width: 768px) { .cust-cart-bar { position: sticky; bottom: 20px; left: 20px; right: 20px; width: calc(100% - 40px); margin: 0 auto 20px auto; border-radius: 12px; } }
+      
+      /* Additional responsive helpers can be added here */
+    `}</style>
     </div>
-  )
+  );
 }

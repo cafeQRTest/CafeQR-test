@@ -10,7 +10,8 @@ import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import { subscribeOwnerDevice } from '../../helpers/subscribePush';
 import { downloadInvoicePdf } from '../../lib/downloadInvoicePdf'
-
+import VariantSelector from '../../components/VariantSelector'
+import { round2 } from '../../lib/qty'
 
 // Constants
 const STATUSES = ['new','in_progress','ready','completed'];
@@ -39,29 +40,76 @@ async function restoreStockForOrder(supabase, restaurantId, orderItems) {
       continue;
     }
 
-    // Skip packaged goods (no ingredient impact)
-    if (oi.is_packaged_good) {
-      console.log('[STOCK RESTORE] Skipping packaged good');
-      continue;
-    }
+    // Skip packaged goods check removed to allow restoration
+
 
     // Fetch recipe for this menu item
-    const { data: recipe, error: recipeErr } = await supabase
+    // Fetch recipe for this menu item
+    // We need to handle variants if present
+    
+    // Attempt to find specific recipe for variant, else base
+    let recipeQuery = supabase
       .from('recipes')
-      .select('id, recipe_items(ingredient_id, quantity)')
+      .select('id, variant_option_id, recipe_items(ingredient_id, quantity)')
       .eq('menu_item_id', oi.menu_item_id)
       .eq('restaurant_id', restaurantId)
-      .maybeSingle();
+
+    const { data: potentialRecipes, error: recipeErr } = await recipeQuery
     
-    console.log('[STOCK RESTORE] Recipe fetch result:', { recipe, error: recipeErr });
+    console.log('[STOCK RESTORE] Recipe fetch result:', { potentialRecipes, error: recipeErr })
     
-    if (recipeErr || !recipe?.recipe_items?.length) {
-      console.log('[STOCK RESTORE] No recipe found or error');
-      continue;
+    if (recipeErr || !potentialRecipes?.length) {
+      console.log('[STOCK RESTORE] No recipes found or error')
+      continue
+    }
+
+    let targetVariantId = oi.variant_option_id || oi.variant_id || null;
+
+    // Fallback: If ID is missing but we have a name, look it up via variant_pricing
+    if (!targetVariantId && oi.variant_name) {
+      console.log('[STOCK RESTORE] Variant ID missing for', oi.variant_name, '- attempting lookup...');
+      const { data: vpData, error: vpErr } = await supabase
+        .from('variant_pricing')
+        .select('variant_options!inner(id, name)')
+        .eq('menu_item_id', oi.menu_item_id);
+      
+      if (vpErr) console.error('[STOCK RESTORE] Lookup error:', vpErr);
+
+      if (vpData) {
+        const normName = oi.variant_name.trim().toLowerCase();
+        const match = vpData.find(v => v.variant_options?.name?.trim().toLowerCase() === normName);
+        if (match && match.variant_options?.id) {
+            targetVariantId = match.variant_options.id;
+            console.log('[STOCK RESTORE] RESOLVED ID:', targetVariantId);
+        } else {
+            console.log('[STOCK RESTORE] No match found for name:', normName);
+        }
+      }
+    }
+    let recipe = potentialRecipes.find(r => {
+      const rId = r.variant_option_id;
+      if (!rId && !targetVariantId) return true; // Both null
+      if (!rId || !targetVariantId) return false; // One is null
+      return String(rId) === String(targetVariantId);
+    })
+    
+    // Fallback to base
+    if (!recipe && targetVariantId) {
+      recipe = potentialRecipes.find(r => r.variant_option_id === null)
+    }
+    // If absolutely no match found (and no base), maybe pick first? Or behave strictly?
+    // Let's behave strictly - if no base and no variant recipe, then no ingredients deducted.
+    if (!recipe && !targetVariantId && potentialRecipes.length > 0) {
+        recipe = potentialRecipes.find(r => r.variant_option_id === null)
+    }
+
+    if (!recipe?.recipe_items?.length) {
+       console.log('[STOCK RESTORE] No recipe items found for matched recipe')
+       continue
     }
 
     for (const ri of recipe.recipe_items) {
-      const addBack = Number(ri.quantity) * Number(oi.quantity);
+      const addBack = round2(Number(ri.quantity) * Number(oi.quantity));
       console.log('[STOCK RESTORE] Restoring ingredient:', { ingredient_id: ri.ingredient_id, addBack });
       
       // Get current stock
@@ -78,7 +126,7 @@ async function restoreStockForOrder(supabase, restaurantId, orderItems) {
       }
 
       const oldStock = Number(ing.current_stock || 0);
-      const newStock = oldStock + addBack;
+      const newStock = round2(oldStock + addBack);
       console.log('[STOCK RESTORE] Updating stock for', ing.name, ':', oldStock, '→', newStock);
       
       const { error: updateErr } = await supabase
@@ -112,12 +160,21 @@ function computeOrderTotalDisplay(order) {
 }
 
 function toDisplayItems(order) {
-  if (Array.isArray(order.items)) return order.items;
+  if (Array.isArray(order.items) && order.items.length > 0) {
+    return order.items.map((item) => ({
+      ...item,
+      menu_item_id: item.menu_item_id || item.id,
+    }));
+  }
   if (Array.isArray(order.order_items)) {
     return order.order_items.map((oi) => ({
-      name: oi.menu_items?.name || oi.item_name || 'Item',
+      menu_item_id: oi.menu_item_id,
+      name: oi.item_name || oi.menu_items?.name || 'Item',
       quantity: oi.quantity,
       price: oi.price,
+      is_packaged_good: oi.is_packaged_good,
+      variant_id: oi.variant_option_id || null,
+      variant_name: oi.variant_name || null,
     }));
   }
   return [];
@@ -532,6 +589,8 @@ function EditOrderPanel({ order, onClose, onSave }) {
   const [menuSearch, setMenuSearch] = useState('');
   const [menuItems, setMenuItems] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [showVariantSelector, setShowVariantSelector] = useState(false);
+  const [selectedItemForVariant, setSelectedItemForVariant] = useState(null);
 
   const total = lines.reduce(
     (sum, l) => sum + (Number(l.price) || 0) * (Number(l.quantity) || 0),
@@ -556,12 +615,15 @@ function EditOrderPanel({ order, onClose, onSave }) {
     (arr || [])
       .map((l) => ({
         name: (l.name || '').trim().toLowerCase(),
+        variant_id: l.variant_id || null,
         quantity: Number(l.quantity) || 0,
         price: Number(l.price) || 0,
       }))
       .sort((a, b) => {
         const n = a.name.localeCompare(b.name);
         if (n !== 0) return n;
+        const v = (a.variant_id || '').localeCompare(b.variant_id || '');
+        if (v !== 0) return v;
         const p = a.price - b.price;
         if (p !== 0) return p;
         return a.quantity - b.quantity;
@@ -575,7 +637,8 @@ function EditOrderPanel({ order, onClose, onSave }) {
       if (
         a[i].name !== b[i].name ||
         a[i].quantity !== b[i].quantity ||
-        a[i].price !== b[i].price
+        a[i].price !== b[i].price ||
+        a[i].variant_id !== b[i].variant_id
       ) {
         return true;
       }
@@ -598,17 +661,82 @@ function EditOrderPanel({ order, onClose, onSave }) {
   const openMenuPicker = async () => {
     try {
       const s = getSupabase();
-      const { data, error } = await s
+      
+      // 1. Fetch menu items with variant template info
+      const { data: menu, error } = await s
         .from('menu_items')
-        .select('id, name, price')
+        .select(`
+          id, name, price, is_packaged_good, has_variants,
+          menu_item_variants (
+            variant_templates (
+              id,
+              name
+            )
+          )
+        `)
         .eq('restaurant_id', order.restaurant_id);
 
       if (error) {
         console.error('menu_items fetch error', error);
         return;
       }
+      
+      // 2. Fetch variant pricing/options for items that have them
+      const itemsWithVariants = (menu || []).filter(item => item.has_variants);
+      const variantDataMap = new Map();
+      
+      if (itemsWithVariants.length > 0) {
+        const itemIds = itemsWithVariants.map(item => item.id);
+        const { data: variantPricing, error: vpError } = await s
+          .from('variant_pricing')
+          .select(`
+            menu_item_id,
+            price,
+            is_available,
+            variant_options(
+              id,
+              name,
+              display_order,
+              template_id
+            )
+          `)
+          .in('menu_item_id', itemIds);
+          
+         if (vpError) {
+             console.error('variant_pricing fetch error', vpError);
+         } else {
+            // Group by menu_item_id
+            (variantPricing || []).forEach(vp => {
+              if (!variantDataMap.has(vp.menu_item_id)) {
+                variantDataMap.set(vp.menu_item_id, []);
+              }
+              // Guard against missing variant_options relation
+              if (vp.variant_options) {
+                  variantDataMap.get(vp.menu_item_id).push({
+                    variant_id: vp.variant_options.id,
+                    variant_name: vp.variant_options.name,
+                    price: vp.price,
+                    is_available: vp.is_available,
+                    display_order: vp.variant_options.display_order
+                  });
+              }
+            });
+         }
+      }
 
-      setMenuItems(data || []);
+      // 3. Attach variants to items
+      const finalItems = (menu || []).map(item => {
+          const variants = variantDataMap.get(item.id) || [];
+          const templateName = item.menu_item_variants?.[0]?.variant_templates?.name || 'Options';
+          
+          return {
+            ...item,
+            variants: variants.sort((a, b) => a.display_order - b.display_order),
+            variant_template_name: item.has_variants ? templateName : null
+          };
+      });
+
+      setMenuItems(finalItems);
       setMenuSearch('');
       setShowMenuPicker(true);
     } catch (e) {
@@ -617,34 +745,123 @@ function EditOrderPanel({ order, onClose, onSave }) {
   };
 
   const addMenuItemToLines = (item) => {
+    const variantId = item.selectedVariant?.variant_id || item.variant_id || null;
+    const finalName = item.displayName || item.name;
+    
+    // Robust Pricing Logic:
+    // 1. Start with the price passed on the item (which might be variant price from Selector)
+    let finalPrice = item.price; 
+    
+    // 2. If valid variant selected, ensure we use its price
+    if (item.selectedVariant) {
+        const vp = item.selectedVariant.price;
+        // Accept 0 as valid price, but reject null/undefined
+        if (vp !== undefined && vp !== null) {
+             finalPrice = Number(vp);
+        }
+    }
+    
+    // 3. Fallback: If price is missing/invalid (e.g. from bad spread), look up original Base Price
+    if (finalPrice === undefined || finalPrice === null || Number.isNaN(finalPrice)) {
+        const originalBase = menuItems.find(mi => String(mi.id) === String(item.id || item.menu_item_id));
+        finalPrice = Number(originalBase?.price || 0);
+    } else {
+        finalPrice = Number(finalPrice);
+    }
+    
+    const qtyToAdd = Number(item.quantity) || 1;
+    
     setLines((prev) => {
-      const existingIndex = prev.findIndex(
-        (l) => l.menu_item_id === item.id || l.name === item.name
-      );
+      const existingIndex = prev.findIndex((l) => {
+        const sameItem = String(l.menu_item_id) === String(item.id);
+        const sameVariant = String(l.variant_id || '') === String(variantId || '');
+        const sameName = (l.name || '').trim().toLowerCase() === (finalName || '').trim().toLowerCase();
+        
+        // Match if (Same ID AND Same Variant) OR (Same Name)
+        // This covers cases where ID might have changed but it's the same product name
+        return (sameItem && sameVariant) || sameName;
+      });
 
-      // If already exists, just increase qty
+      // If already exists, just increase qty and update details to latest
       if (existingIndex !== -1) {
         return prev.map((l, i) =>
           i === existingIndex
-            ? { ...l, quantity: (Number(l.quantity) || 0) + 1 }
+            ? { 
+                ...l, 
+                quantity: (Number(l.quantity) || 0) + qtyToAdd,
+                price: finalPrice, 
+                variant_id: variantId || l.variant_id,
+                menu_item_id: item.id, // Update ID to current
+                name: finalName // Update name formatting if needed
+              }
             : l
         );
       }
-
       // Otherwise add new line
       return [
         ...prev,
         {
-          name: item.name,
-          quantity: 1,
-          price: item.price,
+          name: finalName,
+          quantity: qtyToAdd,
+          price: finalPrice,
           menu_item_id: item.id,
+          is_packaged_good: !!item.is_packaged_good,
+          variant_id: variantId,
         },
       ];
     });
 
     setShowMenuPicker(false);
   };
+
+  const handleItemClick = (item) => {
+      if (item.has_variants) {
+          setSelectedItemForVariant(item);
+          setShowVariantSelector(true);
+      } else {
+          addMenuItemToLines(item);
+      }
+  }
+
+  const handleVariantSelect = (itemWithVariant) => {
+      addMenuItemToLines(itemWithVariant);
+      setShowVariantSelector(false);
+      setSelectedItemForVariant(null);
+  }
+
+  // Refetch/Sync prices with current menu when menuItems loads
+  // This fixes the issue where an edited order might have stale/incorrect base prices (e.g. 1000 instead of 2000)
+  useEffect(() => {
+    if (menuItems.length > 0 && lines.length > 0) {
+      setLines(prevLines => {
+        return prevLines.map(line => {
+          // Find matching menu item
+          const menuItem = menuItems.find(m => String(m.id) === String(line.menu_item_id || line.id));
+          if (!menuItem) return line;
+
+          // If line has a variant, find updated variant price
+          if (line.variant_id) {
+             const variant = menuItem.variants?.find(v => String(v.variant_id) === String(line.variant_id));
+             if (variant && variant.price !== undefined && variant.price !== null) {
+               // Only update if price is different to avoid unnecessary renders/changes
+               if (Number(line.price) !== Number(variant.price)) {
+                 return { ...line, price: Number(variant.price) };
+               }
+             }
+          } else {
+             // No variant - update to base price
+             if (menuItem.price !== undefined && menuItem.price !== null) {
+                if (Number(line.price) !== Number(menuItem.price)) {
+                  return { ...line, price: Number(menuItem.price) };
+                }
+             }
+          }
+          return line;
+        });
+      });
+    }
+  }, [menuItems]); // Run when menu items are fetched
+
 
   const filteredMenuItems = menuItems.filter((m) =>
     m.name.toLowerCase().includes(menuSearch.toLowerCase())
@@ -974,7 +1191,7 @@ function EditOrderPanel({ order, onClose, onSave }) {
                 filteredMenuItems.map((item) => (
                   <button
                     key={item.id}
-                    onClick={() => addMenuItemToLines(item)}
+                    onClick={() => handleItemClick(item)}
                     style={{
                       width: '100%',
                       textAlign: 'left',
@@ -1028,6 +1245,21 @@ function EditOrderPanel({ order, onClose, onSave }) {
           </div>
         </div>
       )}
+
+      {showVariantSelector && selectedItemForVariant && (
+        <VariantSelector
+            item={selectedItemForVariant}
+            onSelect={handleVariantSelect}
+            onClose={() => {
+                setShowVariantSelector(false);
+                setSelectedItemForVariant(null);
+            }}
+            gstEnabled={true} // Defaults for admin
+            pricesIncludeTax={false} // Defaults for admin
+            showImage={false}
+            zIndex={1300}
+        />
+      )}
     </div>
   );
 }
@@ -1068,6 +1300,46 @@ function CancelConfirmDialog({ order, onConfirm, onCancel }) {
   );
 }
 
+function PaxEditDialog({ order, onSave, onClose }) {
+  const [val, setVal] = useState(order.number_of_customers || '');
+  return (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+      backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex',
+      alignItems: 'center', justifyContent: 'center', zIndex: 1100
+    }}>
+      <div style={{ backgroundColor: 'white', padding: 24, borderRadius: 12, width: 300, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}>
+        <h3 style={{ margin: '0 0 16px 0', fontSize: 18 }}>Update Pax</h3>
+        <p style={{ margin: '0 0 12px 0', color: '#6b7280', fontSize: 14 }}>
+            Enter number of customers for Table {order.table_number || 'Counter'}:
+        </p>
+        <input 
+            type="number"
+            autoFocus
+            value={val}
+            onChange={e => {
+              const v = e.target.value;
+              if (v === '') setVal('');
+              else {
+                const n = parseInt(v, 10);
+                if (n > 0) setVal(n);
+              }
+            }}
+            style={{ 
+                width: '100%', padding: '10px', fontSize: 16, 
+                border: '1px solid #d1d5db', borderRadius: 8,
+                marginBottom: 20
+            }}
+        />
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <Button onClick={onClose} variant="outline">Cancel</Button>
+          <Button onClick={() => onSave(val)} variant="primary">Save</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 async function fetchFullOrder(supabase, orderId) {
   const { data, error } = await supabase
     .from('orders')
@@ -1088,6 +1360,7 @@ export default function OrdersPage() {
   // NEW: state for showing the print modal
   const [cancelOrderDialog, setCancelOrderDialog] = useState(null);
   const [editingOrder, setEditingOrder] = useState(null);
+  const [paxEditOrder, setPaxEditOrder] = useState(null);
 
 
   const [ordersByStatus, setOrdersByStatus] = useState({
@@ -1296,7 +1569,9 @@ const handleCancelConfirm = async (reason) => {
            itemsToConvert.push({
              menu_item_id: menuItemId,
              quantity: item.quantity || item.qty || 1,
-             is_packaged_good: item.is_packaged_good || false
+             is_packaged_good: item.is_packaged_good || false,
+             variant_option_id: item.variant_id || item.variant_option_id || null, // Capture variant info
+             variant_name: item.variant_name || null
            });
          }
          
@@ -1529,6 +1804,18 @@ useEffect(() => {
     }
   }
 
+  async function updateCustomerCount(id, val) {
+    if (!supabase || !restaurantId) return;
+    const count = parseInt(val, 10);
+    if (isNaN(count)) return;
+    try {
+      await supabase.from('orders').update({ number_of_customers: count }).eq('id', id).eq('restaurant_id', restaurantId);
+      loadOrders();
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
   const finalize = async (order) => {
 
 
@@ -1546,10 +1833,6 @@ useEffect(() => {
   if (invErr) {
     console.error('Invoice fetch error in finalize:', invErr);
   }
-  //  const fullOrder = {
-  //   ...order,
-  //   invoice,
-  // };
 
   // ✅ Check PAYMENT_METHOD first for credit orders
   if (order?.payment_method === 'credit') {
@@ -1558,14 +1841,35 @@ useEffect(() => {
     return;
   }
 
-  // If invoice already exists, customer paid online - skip dialog
-  if (invoice.status == 'paid') {
+  // If invoice already exists and fully paid, skip dialog
+  if (invoice?.status === 'paid') {
     complete(order.id);
     return;
   }
 
-  // No invoice = counter payment - show payment confirmation dialog
-  setPaymentConfirmDialog(order);
+  // Calculate payment status
+  const orderTotal = computeOrderTotalDisplay(order);
+  const paidAmount = Number(invoice?.paid_amount || 0);
+  const remainingAmount = orderTotal - paidAmount;
+  const refundAmount = paidAmount > orderTotal ? paidAmount - orderTotal : 0;
+
+  // Determine mode
+  let mode = null;
+  if (remainingAmount > 0.01) {
+    mode = 'collect'; // Need to collect remaining payment
+  } else if (refundAmount > 0.01) {
+    mode = 'refund'; // Need to refund excess payment
+  }
+
+  // Show payment confirmation dialog with calculated amounts
+  setPaymentConfirmDialog({
+    ...order,
+    mode,
+    totalAmount: orderTotal,
+    alreadyPaidAmount: paidAmount,
+    remainingAmount: remainingAmount > 0 ? remainingAmount : 0,
+    refundAmount,
+  });
 };
 
 // Updated handler - receives payment method AND mixed details
@@ -1790,7 +2094,7 @@ if (ordersByStatus.mobileFilter === 'inprogress') {
 
         onCancelOrderOpen={onCancelOrderOpen}
         onEditOrder={(order) => setEditingOrder(order)}
-
+        onEditPax={(order) => setPaxEditOrder(order)}
       />
     ))
   )}
@@ -1887,6 +2191,7 @@ colOrders =
 
                 onCancelOrderOpen={onCancelOrderOpen}
                 onEditOrder={(order) => setEditingOrder(order)}
+                onEditPax={(order) => setPaxEditOrder(order)}
               />
             ))
           )}
@@ -1946,6 +2251,17 @@ colOrders =
   />
 )}
 
+{paxEditOrder && (
+    <PaxEditDialog 
+        order={paxEditOrder}
+        onClose={() => setPaxEditOrder(null)}
+        onSave={(val) => {
+            updateCustomerCount(paxEditOrder.id, val);
+            setPaxEditOrder(null);
+        }}
+    />
+)}
+
 
       <style jsx>{`
 .orders-wrap { padding:12px 0 32px; }
@@ -1997,10 +2313,13 @@ function OrderCard({
   onPrintKot,
   onPrintBill,
   onCancelOrderOpen,
-  onEditOrder
+  onEditOrder,
+  onEditPax
 }) {
   const items = toDisplayItems(order);
   const total = computeOrderTotalDisplay(order);
+
+  // Removed local state for editingPax
 
   const isCreditOrder = order?.is_credit && order?.credit_customer_id;
   const pm = String(order.payment_method || '').toLowerCase();
@@ -2025,6 +2344,18 @@ function OrderCard({
             <span style={{ marginLeft:8 }}>
               <small>{getOrderTypeLabel(order)}</small>
               {isCreditOrder && <small style={{marginLeft: 8, color: '#f59e0b', fontWeight: 'bold'}}>💳 CREDIT</small>}
+              {order.number_of_customers && (
+                 <small 
+                   style={{marginLeft: 8, cursor: 'pointer'}} 
+                   title="Edit Pax"
+                   onClick={(e) => {
+                     e.stopPropagation();
+                     onEditPax && onEditPax(order);
+                   }}
+                 >
+                   👥 {order.number_of_customers}
+                 </small>
+              )}
             </span>
             <span style={{ color:'#6b7280',fontSize:12 }}>
               {new Date(order.updated_at).toLocaleTimeString()}

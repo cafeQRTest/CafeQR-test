@@ -5,7 +5,18 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRequireAuth } from '../../lib/useRequireAuth';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { getSupabase } from '../../services/supabase';
+<<<<<<< HEAD
 import NiceSelect from '../../components/NiceSelect';
+=======
+import MenuItemCard from '../../components/MenuItemCard';
+import MenuItemCardSimple from '../../components/MenuItemCardSimple';
+import VariantSelector from '../../components/VariantSelector';
+import NiceSelect from '../../components/NiceSelect';
+import { useAlert } from '../../context/AlertContext';
+import HorizontalScrollRow from '../../components/HorizontalScrollRow';
+import { round2, normalizeQty, formatQty2 } from '../../lib/qty'; // adjust path
+
+>>>>>>> origin/main
 
 // -------------------------------
 // Inline Payment Confirm Dialog
@@ -97,9 +108,18 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false, mode 
                 <input type="number" min="0" step="0.01" value={onlineAmount} onChange={(e)=>setOnlineAmount(e.target.value)} style={{width:'100%'}} disabled={disabled}/>
               </div>
               <div><label>Online Method</label>
-                <select value={onlineMethod} onChange={(e)=>setOnlineMethod(e.target.value)} style={{width:'100%'}} disabled={disabled}>
-                  <option value="upi">UPI</option><option value="card">Card</option><option value="netbanking">Net Banking</option><option value="wallet">Wallet</option>
-                </select>
+                <div style={{marginTop: 4}}>
+                  <NiceSelect
+                    value={onlineMethod}
+                    onChange={setOnlineMethod}
+                    options={[
+                      { value: 'upi', label: 'UPI' },
+                      { value: 'card', label: 'Card' },
+                      { value: 'netbanking', label: 'Net Banking' },
+                      { value: 'wallet', label: 'Wallet' }
+                    ]}
+                  />
+                </div>
               </div>
               <div style={{background:BRAND.bgSoft,padding:8,borderLeft:`4px solid ${BRAND.orange}`,borderRadius:6,color:BRAND.text}}>
                 Total ₹{total.toFixed(2)} → ₹{cashAmount||0} + ₹{onlineAmount||0} ({onlineMethod.toUpperCase()})
@@ -148,6 +168,45 @@ export default function CounterSale() {
 // inside CounterSale
   const [printProfile, setPrintProfile] = useState(null);
 
+// CounterSale component (pages/owner/counter.js)
+const [qtyDrafts, setQtyDrafts] = useState({}); // cartId -> string
+
+const setDraft = (cartId, v) =>
+  setQtyDrafts((prev) => ({ ...prev, [cartId]: v }));
+
+const clearDraft = (cartId) =>
+  setQtyDrafts((prev) => {
+    const next = { ...prev };
+    delete next[cartId];
+    return next;
+  });
+
+const updateCartItem = (cartId, qty) => {
+  const q = round2(qty);
+  if (!Number.isFinite(q) || q <= 0) {
+    setCart((p) => p.filter((c) => c.cartId !== cartId));
+    clearDraft(cartId);
+    return;
+  }
+  setCart((p) => p.map((c) => (c.cartId === cartId ? { ...c, quantity: q } : c)));
+  clearDraft(cartId);
+};
+
+const commitQtyDraft = (cartId, raw) => {
+  const q = normalizeQty(raw, { allowZero: true }); // allow 0 => remove line
+  if (q === 0) return updateCartItem(cartId, 0);
+  if (q === null) {
+    clearDraft(cartId); // revert UI
+    return;
+  }
+  return updateCartItem(cartId, q);
+};
+
+const getDraftOrQtyNumber = (cartId, fallbackQty) => {
+  const parsed = normalizeQty(qtyDrafts[cartId], { allowZero: true });
+  if (parsed === null) return Number(fallbackQty || 0);
+  return parsed;
+};
 
 
   const [tables, setTables] = useState([]);
@@ -162,6 +221,7 @@ export default function CounterSale() {
 
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [numberOfCustomers, setNumberOfCustomers] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('cash');
 
   // Credit mode
@@ -179,6 +239,12 @@ export default function CounterSale() {
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
 
   const [sendToKitchenEnabled, setSendToKitchenEnabled] = useState(true);
+  const [enableMenuImages, setEnableMenuImages] = useState(false);
+
+  // Variant selector state
+  const [showVariantSelector, setShowVariantSelector] = useState(false);
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [showClearCartConfirm, setShowClearCartConfirm] = useState(false);
 
 
   // NEW: Order mode toggle
@@ -284,13 +350,70 @@ const [orderMode, setOrderMode] = useState('settle');
       try {
         const { data: menu, error: menuErr } = await supabase
           .from('menu_items')
-          .select('id,name,price,category,veg,status,hsn,tax_rate,is_packaged_good,code_number')
+          .select(`
+            id,name,price,category,veg,status,hsn,tax_rate,is_packaged_good,code_number,image_url,has_variants,
+            menu_item_variants(
+              variant_templates(
+                id,
+                name
+              )
+            )
+          `)
           .eq('restaurant_id', restaurantId)
           .order('category')
           .order('name');
         if (menuErr) throw menuErr;
-        setMenuItems(menu || []);
-        cacheMenuIntoMap(menu || []);
+        
+        // Fetch variant pricing separately for items with variants
+        const itemsWithVariants = (menu || []).filter(item => item.has_variants);
+        const variantDataMap = new Map();
+        
+        if (itemsWithVariants.length > 0) {
+          const itemIds = itemsWithVariants.map(item => item.id);
+          const { data: variantPricing } = await supabase
+            .from('variant_pricing')
+            .select(`
+              menu_item_id,
+              price,
+              is_available,
+              variant_options(
+                id,
+                name,
+                display_order,
+                template_id
+              )
+            `)
+            .in('menu_item_id', itemIds);
+          
+          // Group by menu_item_id
+          (variantPricing || []).forEach(vp => {
+            if (!variantDataMap.has(vp.menu_item_id)) {
+              variantDataMap.set(vp.menu_item_id, []);
+            }
+            variantDataMap.get(vp.menu_item_id).push({
+              variant_id: vp.variant_options.id,
+              variant_name: vp.variant_options.name,
+              price: vp.price,
+              is_available: vp.is_available,
+              display_order: vp.variant_options.display_order
+            });
+          });
+        }
+        
+        // Transform menu data with variants
+        const transformedMenu = (menu || []).map(item => {
+          const variants = variantDataMap.get(item.id) || [];
+          const templateName = item.menu_item_variants?.[0]?.variant_templates?.name || 'Options';
+          
+          return {
+            ...item,
+            variants: variants.sort((a, b) => a.display_order - b.display_order),
+            variant_template_name: item.has_variants ? templateName : null
+          };
+        });
+        
+        setMenuItems(transformedMenu);
+        cacheMenuIntoMap(transformedMenu);
 
         // Pull tax settings for client calc
         const { data: profile, error: profErr } = await supabase
@@ -312,7 +435,8 @@ const [orderMode, setOrderMode] = useState('settle');
     shipping_phone,
     print_logo_bitmap,
     print_logo_cols,
-    print_logo_rows
+    print_logo_rows,
+    features_menu_images_enabled
   `)
   .eq('restaurant_id', restaurantId)
   .limit(1)
@@ -334,7 +458,12 @@ setProfileTax({
 
 // NEW: set credit feature flag
 setCreditFeatureEnabled(!!profile?.features_credit_enabled);
+
+// Set tables from profile count
+const tCount = profile?.tables_count || 0;
+setTables(Array.from({ length: tCount }, (_, i) => i + 1));
 setSendToKitchenEnabled(profile?.features_counter_send_to_kitchen_enabled !== false);
+setEnableMenuImages(!!profile?.features_menu_images_enabled);
 
 // after loading profile
 setOrderMode(
@@ -579,18 +708,49 @@ const loadCreditCustomers = async () => {
       alert('Out of stock');
       return;
     }
+    
+    // Check if item has variants
+    if (item.has_variants && item.variants?.length > 0) {
+      setSelectedItem(item);
+      setShowVariantSelector(true);
+      return;
+    }
+    
+    // No variants - add directly
+    addItemToCart(item);
+  };
+  
+  const addItemToCart = (itemWithVariant) => {
+    // Create unique cart ID
+    const cartId = itemWithVariant.selectedVariant 
+      ? `${itemWithVariant.id}_${itemWithVariant.selectedVariant.variant_id}`
+      : itemWithVariant.id;
+    
+    // Get quantity from variant selector or default to 1
+    const qtyToAdd = itemWithVariant.quantity || 1;
+    
     setCart((prev) => {
-      const ex = prev.find((c) => c.id === item.id);
+      const ex = prev.find((c) => c.cartId === cartId);
       return ex
-        ? prev.map((c) => (c.id === item.id ? { ...c, quantity: c.quantity + 1 } : c))
-        : [...prev, { ...item, quantity: 1 }];
+        ? prev.map((c) => (c.cartId === cartId ? { ...c, quantity: c.quantity + qtyToAdd } : c))
+        : [...prev, { 
+            ...itemWithVariant, 
+            cartId,
+            quantity: qtyToAdd,
+            variant_id: itemWithVariant.selectedVariant?.variant_id || null,
+            variant_name: itemWithVariant.selectedVariant?.variant_name || null,
+            price: itemWithVariant.selectedVariant?.price || itemWithVariant.price,
+            displayName: itemWithVariant.displayName || itemWithVariant.name
+          }];
     });
   };
-
-  const updateCartItem = (id, qty) => {
-    if (qty <= 0) setCart((p) => p.filter((c) => c.id !== id));
-    else setCart((p) => p.map((c) => (c.id === id ? { ...c, quantity: qty } : c)));
+  
+  const handleVariantSelect = (itemWithVariant) => {
+    addItemToCart(itemWithVariant);
+    setShowVariantSelector(false);
+    setSelectedItem(null);
   };
+
 
   // Create + finalize (settle now)
 // inside pages/owner/counter.js
@@ -605,13 +765,15 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
 
   const items = cart.map((i) => ({
     id: i.id,
-    name: i.name,
+    name: i.displayName || i.name, // consistent with kitchen order
     price: i.price,
-    quantity: i.quantity,
+    quantity: round2(i.quantity),
     hsn: i.hsn,
     tax_rate: i.tax_rate,
     is_packaged_good: i.is_packaged_good,
     code_number: i.code_number,
+    variant_id: i.variant_id || null,
+    variant_name: i.variant_name || null,
   }));
 
   const isCredit = isCreditSale;
@@ -622,6 +784,7 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
     table_number,
     customer_name: customerName.trim() || null,
     customer_phone: customerPhone.trim() || null,
+    number_of_customers: numberOfCustomers ? Number(numberOfCustomers) : null,
     payment_method: isCredit ? 'credit' : finalPaymentMethod,
     payment_status: isCredit ? 'pending' : 'completed',
     status: finalizeNow ? 'completed' : 'new',
@@ -667,6 +830,7 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
       subtotal: cartTotals.subtotalEx,
       tax_total: cartTotals.totalTax,
       invoice_no: result.invoice_no || null,
+      bill_no: result.bill_no || null,
     },
   };
 
@@ -682,7 +846,7 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
 
   // clear UI, reload credit customers as you already do...
 
-    setCart([]); setCustomerName(''); setCustomerPhone(''); setPaymentMethod('cash');
+    setCart([]); setCustomerName(''); setCustomerPhone(''); setNumberOfCustomers(''); setPaymentMethod('cash');
     setOrderSelect(''); setIsCreditSale(false); setSelectedCreditCustomerId(''); setCreditCustomerBalance(0);
     setDrawerOpen(false); setShowPaymentDialog(false);
     await loadCreditCustomers();
@@ -698,8 +862,9 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
     else if (orderSelect && orderSelect.startsWith('table:')) table_number = orderSelect.split(':')[1] || null;
 
     const items = cart.map((i) => ({
-      id: i.id, name: i.name, price: i.price, quantity: i.quantity,
-      hsn: i.hsn, tax_rate: i.tax_rate, is_packaged_good: i.is_packaged_good, code_number: i.code_number
+      id: i.id, name: i.displayName || i.name, price: i.price, quantity: round2(i.quantity),
+      hsn: i.hsn, tax_rate: i.tax_rate, is_packaged_good: i.is_packaged_good, code_number: i.code_number,
+      variant_id: i.variant_id || null, variant_name: i.variant_name || null
     }));
 
     const isCredit = isCreditSale;
@@ -710,6 +875,7 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
       table_number,
       customer_name: customerName.trim() || null,
       customer_phone: customerPhone.trim() || null,
+      number_of_customers: numberOfCustomers ? Number(numberOfCustomers) : null,
       payment_method: isCredit ? 'credit' : 'none',
       payment_status: 'pending',
       items,
@@ -747,7 +913,7 @@ window.dispatchEvent(
   })
 );
 
-    setCart([]); setCustomerName(''); setCustomerPhone(''); setPaymentMethod('cash');
+    setCart([]); setCustomerName(''); setCustomerPhone(''); setNumberOfCustomers(''); setPaymentMethod('cash');
     setOrderSelect(''); setIsCreditSale(false); setSelectedCreditCustomerId(''); setCreditCustomerBalance(0);
     setDrawerOpen(false);
     setSuccess('✅ Order sent to kitchen');
@@ -851,19 +1017,40 @@ window.dispatchEvent(
   )}
 </div>
 
+
+
+
+      
+      {/* Additional Inputs Row (No. of Customers) */}
+      <div style={{ padding: '0 12px 8px', display: 'flex', gap: 12, alignItems: 'center' }}>
+          <div style={{ flex: 1,  maxWidth: 200 }}>
+             <input
+              type="number"
+              min="1"
+              placeholder="No. of Customers"
+              value={numberOfCustomers}
+              onChange={(e) => setNumberOfCustomers(e.target.value)}
+              className="input"
+            />
+          </div>
+      </div>
+
         <div className="counter-inputs-row">
           {isCreditSale ? (
             <>
               {!showNewCreditCustomer ? (
                 <>
-                  <select value={selectedCreditCustomerId} onChange={(e) => handleSelectCreditCustomer(e.target.value)} className="select" style={{ flex: 1 }}>
-                    <option value="">Select Credit Customer...</option>
-                    {creditCustomers.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name} ({c.phone}) - Balance: ₹{c.current_balance.toFixed(2)}
-                      </option>
-                    ))}
-                  </select>
+                  <div style={{flex: 1}}>
+                    <NiceSelect
+                      value={selectedCreditCustomerId}
+                      onChange={handleSelectCreditCustomer}
+                      placeholder="Select Credit Customer..."
+                      options={creditCustomers.map(c => ({
+                        value: c.id,
+                        label: `${c.name} (${c.phone}) - ₹${c.current_balance.toFixed(2)}`
+                      }))}
+                    />
+                  </div>
                   <button onClick={() => setShowNewCreditCustomer(true)} className="btn" style={{ padding: '8px 12px', fontSize: 12 }}>
                     + New Customer
                   </button>
@@ -880,6 +1067,7 @@ window.dispatchEvent(
                   </button>
                 </>
               )}
+<<<<<<< HEAD
               <NiceSelect
   value={orderSelect}
   onChange={setOrderSelect}
@@ -889,12 +1077,30 @@ window.dispatchEvent(
     ...tables.map(n => ({ value: `table:${n}`, label: `Table ${n}` }))
   ]}
 />
+=======
+              <div style={{minWidth: 160}}>
+                <NiceSelect
+                  value={orderSelect}
+                  onChange={setOrderSelect}
+                  placeholder="Select Type..."
+                  options={[
+                    { value: 'parcel', label: 'Parcel' },
+                    ...tables.map(n => ({ value: `table:${n}`, label: `Table ${n}` }))
+                  ]}
+                />
+              </div>
+>>>>>>> origin/main
             </>
           ) : (
             <>
   <input type="text" placeholder="Customer name (optional)" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="input" />
   <input type="tel" placeholder="Phone (optional)" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} className="input" />
+<<<<<<< HEAD
 <NiceSelect
+=======
+  <div style={{minWidth: 160}}>
+    <NiceSelect
+>>>>>>> origin/main
       value={orderSelect}
       onChange={setOrderSelect}
       placeholder="Select Type..."
@@ -903,6 +1109,10 @@ window.dispatchEvent(
         ...tables.map(n => ({ value: `table:${n}`, label: `Table ${n}` }))
       ]}
     />
+<<<<<<< HEAD
+=======
+  </div>
+>>>>>>> origin/main
 </>
 
           )}
@@ -973,58 +1183,128 @@ window.dispatchEvent(
 
       <main className="counter-main-mobile-like">
         <section className="counter-menu-items">
-          {groupedItems.map(([cat, items]) => (
-            <div key={cat} className="counter-category">
-              <h2 className="counter-category-title">{cat} ({items.length})</h2>
-              <div className="counter-category-grid">
-                {items.map((item) => {
-                  const qty = cart.find((c) => c.id === item.id)?.quantity || 0;
-                  const avail = !item.status || item.status === 'available';
-                  return (
-                    <div key={item.id} className={`counter-item-card${!avail ? ' item-out' : ''}`}>
-                      <div className="counter-item-info">
-                        <span>{item.veg ? '🟢' : '🔺'}</span>
-                        <div>
-                          <h3>{item.name}{item.code_number && <small>[{item.code_number}]</small>}</h3>
-                          <div>₹{item.price.toFixed(2)}</div>
-                        </div>
-                      </div>
-                      <div className="counter-item-actions">
-  {qty > 0 ? (
-    <div className="counter-cart-qty">
-      <button
-        onClick={() => updateCartItem(item.id, qty - 1)}
-        style={{ background: THEME.main, color: '#fff' }}
-      >
-        -
-      </button>
-      <div>{qty}</div>
-      <button
-        onClick={() => updateCartItem(item.id, qty + 1)}
-        disabled={!avail}
-        style={{ background: THEME.main, color: '#fff' }}
-      >
-        +
-      </button>
+          {enableMenuImages ? (
+            // NEW LAYOUT: HorizontalScrollRow with MenuItemCard (when images enabled)
+            groupedItems.map(([cat, items]) => (
+              <HorizontalScrollRow
+                key={cat}
+                title={cat}
+                count={items.length}
+                items={items}
+renderItem={(item) => {
+  const qty = cart.find((c) => c.id === item.id)?.quantity || 0;
+
+  const handleQuantityChange = (it, q) => {
+    // Only safe for non-variant items because cartId differs for variants
+    const cartId = it.id;
+    if (q <= 0) return updateCartItem(cartId, 0);
+
+    const exists = cart.some((c) => c.cartId === cartId);
+    if (exists) updateCartItem(cartId, q);
+    else addItemToCart({ ...it, quantity: q });
+  };
+
+const isVariantItem = !!item.hasvariants && (item.variants?.length || 0) > 0;
+
+
+  return (
+    <div style={{ minWidth: '200px', maxWidth: '200px' }}>
+      <MenuItemCard
+  item={item}
+  quantity={isVariantItem ? 0 : qty}
+  onAdd={() => addToCart(item)}
+  onRemove={() => {
+          const current = cart.find((c) => c.id === item.id)?.quantity || 0;
+          updateCartItem(item.id, current - 1);
+        }}
+  onQuantityChange={isVariantItem ? undefined : handleQuantityChange}
+  showImage={true}      />
     </div>
-  ) : (
-    <button
-      onClick={() => addToCart(item)}
-      disabled={!avail}
-      className="btn"
-      style={{ background: THEME.main, borderColor: THEME.main }}
-    >
-      Add
-    </button>
-  )}
+  );
+}}
+
+
+              />
+            ))
+          ) : (
+            // OLD LAYOUT: Simple grid (when images disabled)
+            groupedItems.map(([cat, items]) => (
+              <div key={cat} className="counter-category">
+                <h2 className="counter-category-title">{cat} ({items.length})</h2>
+                <div className="counter-category-grid">
+                  {items.map((item) => {
+                    const qty = cart.find((c) => c.id === item.id)?.quantity || 0;
+                    const avail = !item.status || item.status === 'available';
+                    return (
+                      <div key={item.id} className={`counter-item-card${!avail ? ' item-out' : ''}`}>
+                        <div className="counter-item-info">
+                          <span>{item.veg ? '🟢' : '🔺'}</span>
+                          <div>
+                            <h3>{item.name}{item.code_number && <small>[{item.code_number}]</small>}</h3>
+                            <div>₹{item.price.toFixed(2)}</div>
+                          </div>
+                        </div>
+                        <div className="counter-item-actions">
+                          {qty > 0 ? (
+                            <div className="counter-cart-qty">
+  <button
+    onClick={() => updateCartItem(item.id, qty - 1)}
+    style={{ background: THEME.main, color: '#fff' }}
+    type="button"
+  >
+    -
+  </button>
+
+  <input
+    value={qtyDrafts[item.id] ?? formatQty2(qty)}
+    inputMode="decimal"
+    // keep it text so browser doesn't fight decimals/step
+    type="text"
+    onChange={(e) => setDraft(item.id, e.target.value)}
+    onBlur={(e) => commitQtyDraft(item.id, e.target.value)}
+    onKeyDown={(e) => {
+      if (e.key === 'Enter') e.currentTarget.blur();
+      if (e.key === 'Escape') clearDraft(item.id);
+    }}
+    style={{
+      width: 56,
+      textAlign: 'center',
+      border: '1px solid #e5e7eb',
+      borderLeft: 'none',
+      borderRight: 'none',
+      height: 32,
+      outline: 'none',
+    }}
+  />
+
+  <button
+    onClick={() => addToCart(item)}
+    disabled={!avail}
+    style={{ background: THEME.main, color: '#fff' }}
+    type="button"
+  >
+    +
+  </button>
 </div>
 
-                    </div>
-                  );
-                })}
+                          ) : (
+                            <button
+                              onClick={() => addToCart(item)}
+                              disabled={!avail}
+                              className="btn"
+                              style={{ background: THEME.main, borderColor: THEME.main }}
+                            >
+                              Add
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
         </section>
       </main>
 
@@ -1042,89 +1322,391 @@ window.dispatchEvent(
       {drawerOpen && (
         <div className="counter-drawer-overlay" onClick={() => setDrawerOpen(false)}>
           <div className="counter-drawer" onClick={(e) => e.stopPropagation()}>
-            <div className="counter-drawer-head">
-              <h3>Cart ({cartItemsCount})</h3>
-              {isCreditSale && selectedCreditCustomerId && (
-                <small style={{ color: '#f59e0b', fontWeight: 600 }}>
-                  💳 Credit Balance: ₹{(creditCustomerBalance + cartTotals.totalInc).toFixed(2)}
-                </small>
-              )}
-              <button onClick={() => setDrawerOpen(false)} className="btn btn--outline btn--sm">Close</button>
-            </div>
-            <div className="counter-drawer-body">
-              {cart.map((i) => (
-                <div key={i.id} className="counter-drawer-row">
-                  <div>
-                    <div className="drawer-name">{i.name}</div>
-                    <div className="drawer-sub">₹{i.price} × {i.quantity} = ₹{(i.price * i.quantity).toFixed(2)}</div>
-                  </div>
-                  <div className="cart-qty-controls">
-  <button
-    onClick={() => updateCartItem(i.id, i.quantity - 1)}
-    style={{
-      background: THEME.main,
-      color: '#fff',
-      border: 'none',
-      width: 32,
-      height: 32,
-      borderRadius: 6,
-      cursor: 'pointer',
-      fontWeight: 700,
-    }}
-  >
-    -
-  </button>
-  <span>{i.quantity}</span>
-  <button
-    onClick={() => updateCartItem(i.id, i.quantity + 1)}
-    style={{
-      background: THEME.main,
-      color: '#fff',
-      border: 'none',
-      width: 32,
-      height: 32,
-      borderRadius: 6,
-      cursor: 'pointer',
-      fontWeight: 700,
-    }}
-  >
-    +
-  </button>
-</div>
-
-                </div>
-              ))}
-            </div>
-            <div className="counter-drawer-foot">
-              <div className="drawer-total" style={{ display:'grid', gap:6 }}>
-                <div style={{display:'flex',justifyContent:'space-between'}}>
-                  <span>Net (ex‑tax)</span>
-                  <span>₹{cartTotals.subtotalEx.toFixed(2)}</span>
-                </div>
-                <div style={{display:'flex',justifyContent:'space-between'}}>
-                  <span>GST</span>
-                  <span>₹{cartTotals.totalTax.toFixed(2)}</span>
-                </div>
-                <div style={{display:'flex',justifyContent:'space-between',fontWeight:700}}>
-                  <span>Total</span>
-                  <span>₹{cartTotals.totalInc.toFixed(2)}</span>
-                </div>
+            {/* Enhanced Header */}
+            <div className="counter-drawer-head" style={{
+              padding: '20px 24px 16px',
+              borderBottom: '2px solid #f3f4f6',
+              background: 'linear-gradient(to bottom, #ffffff, #fafafa)',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                {/* Left Side - Close Button */}
+                <button 
+                  onClick={() => setDrawerOpen(false)} 
+                  style={{
+                    background: 'none',
+                    border: '2px solid #e5e7eb',
+                    fontSize: 24,
+                    color: '#6b7280',
+                    cursor: 'pointer',
+                    padding: 0,
+                    width: 40,
+                    height: 40,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: 8,
+                    transition: 'all 0.2s',
+                    fontWeight: 300,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.background = '#f3f4f6';
+                    e.target.style.borderColor = '#d1d5db';
+                    e.target.style.color = '#111827';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.background = 'none';
+                    e.target.style.borderColor = '#e5e7eb';
+                    e.target.style.color = '#6b7280';
+                  }}
+                >
+                  ×
+                </button>
+                
+                {/* Right Side - Clear Cart Button (only shows when cart has items) */}
+                {cart.length > 0 ? (
+                  <button
+                    onClick={() => setShowClearCartConfirm(true)}
+                    style={{
+                      marginLeft: 'auto',
+                      background: 'white',
+                      border: '1.5px solid #fecaca',
+                      color: '#dc2626',
+                      padding: '7px 14px',
+                      borderRadius: 8,
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 7,
+                    }}
+                    onMouseEnter={(e) => {
+                      e.target.style.background = '#fee2e2';
+                      e.target.style.borderColor = '#fca5a5';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.style.background = 'white';
+                      e.target.style.borderColor = '#fecaca';
+                    }}
+                  >
+                    <span style={{ fontSize: 15 }}>🗑️</span>
+                    <span>Clear Cart</span>
+                  </button>
+                ) : (
+                  <div style={{ marginLeft: 'auto' }}></div>
+                )}
               </div>
-            <button
-  onClick={completeSale}
-  disabled={processing}
-  className="btn btn--lg"
-  style={{ width: '100%', marginTop:10, background: THEME.main, borderColor: THEME.main }}
->
-                {processing
-                  ? 'Processing…'
-                  : orderMode === 'kitchen'
-                  ? `Send to Kitchen (₹${cartTotals.totalInc.toFixed(2)})`
-                  : isCreditSale
-                  ? `Credit & Settle (₹${cartTotals.totalInc.toFixed(2)})`
-                  : `Complete & Print (₹${cartTotals.totalInc.toFixed(2)})`}
-              </button>
+              
+              {/* Credit Balance Below Header if needed */}
+              {isCreditSale && selectedCreditCustomerId && (
+                <div style={{ 
+                  marginTop: 12,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  background: '#fffbeb',
+                  color: '#f59e0b', 
+                  fontWeight: 600,
+                  fontSize: 13,
+                  padding: '6px 12px',
+                  borderRadius: 8,
+                  border: '1px solid #fef3c7',
+                  width: 'fit-content',
+                }}>
+                  <span>💳</span>
+                  Credit Balance: ₹{(creditCustomerBalance + cartTotals.totalInc).toFixed(2)}
+                </div>
+              )}
             </div>
+            
+            {/* Cart Body */}
+            <div className="counter-drawer-body" style={{ 
+              padding: cart.length === 0 ? '60px 20px' : '16px',
+              flex: 1,
+              overflowY: 'auto',
+            }}>
+              {cart.length === 0 ? (
+                <div style={{ textAlign: 'center', color: '#9ca3af' }}>
+                  <div style={{ fontSize: 64, marginBottom: 16 }}>🛒</div>
+                  <div style={{ fontSize: 18, fontWeight: 600, color: '#6b7280', marginBottom: 8 }}>
+                    Your cart is empty
+                  </div>
+                  <div style={{ fontSize: 14, color: '#9ca3af' }}>
+                    Add items from the menu to get started
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {cart.map((i) => (
+                    <div 
+                      key={i.cartId || i.id} 
+                      style={{
+                        padding: '12px 14px',
+                        background: '#ffffff',
+                        border: '1px solid #e5e7eb',
+                        borderRadius: 8,
+                      }}
+                    >
+                      {/* Top Row: Name and Quantity Controls */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                        <div style={{ flex: 1, paddingRight: 8 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            {/* Veg/Non-veg indicator */}
+                            {i.veg !== undefined && (
+                              i.veg ? (
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                                  <rect x="1" y="1" width="22" height="22" stroke="#16a34a" strokeWidth="2.5" />
+                                  <circle cx="12" cy="12" r="6" fill="#16a34a" />
+                                </svg>
+                              ) : (
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                                  <rect x="1" y="1" width="22" height="22" stroke="#dc2626" strokeWidth="2.5" />
+                                  <path d="M12 6L18 16H6L12 6Z" fill="#dc2626" />
+                                </svg>
+                              )
+                            )}
+                            <div style={{ fontSize: 15, fontWeight: 600, color: '#111827', lineHeight: 1.3 }}>
+                              {i.name}
+                            </div>
+                            {/* Variant badge inline */}
+                            {i.variant_name && (
+                              <span style={{ 
+                                fontSize: 11, 
+                                fontWeight: 600, 
+                                color: THEME.main,
+                                background: THEME.soft,
+                                padding: '2px 8px',
+                                borderRadius: 4,
+                              }}>
+                                {i.variant_name}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {/* Quantity Controls - Compact */}
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 0,
+                          border: `1.5px solid ${THEME.main}`,
+                          borderRadius: 6,
+                          overflow: 'hidden',
+                          flexShrink: 0,
+                        }}>
+                          <button
+onClick={() => {
+  const id = i.cartId || i.id;
+  const base = getDraftOrQtyNumber(id, i.quantity);
+  updateCartItem(id, base - 1);
+}}
+                            style={{
+                              background: 'white',
+                              color: THEME.main,
+                              border: 'none',
+                              width: 28,
+                              height: 28,
+                              cursor: 'pointer',
+                              fontWeight: 700,
+                              fontSize: 16,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              transition: 'background 0.2s',
+                            }}
+                            onMouseEnter={(e) => e.target.style.background = THEME.soft}
+                            onMouseLeave={(e) => e.target.style.background = 'white'}
+                          >
+                            −
+                          </button>
+                          <span style={{ 
+                            minWidth: 32, 
+                            textAlign: 'center', 
+                            fontSize: 14, 
+                            fontWeight: 700,
+                            color: '#111827',
+                            background: '#fafafa',
+                            borderLeft: `1px solid ${THEME.light || '#e5e7eb'}`,
+                            borderRight: `1px solid ${THEME.light || '#e5e7eb'}`,
+                            padding: '0 6px',
+                            height: 28,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}>
+                            {i.quantity}
+                          </span>
+                          <button
+onClick={() => {
+  const id = i.cartId || i.id;
+  const base = getDraftOrQtyNumber(id, i.quantity);
+  updateCartItem(id, base + 1);
+}}
+                            style={{
+                              background: 'white',
+                              color: THEME.main,
+                              border: 'none',
+                              width: 28,
+                              height: 28,
+                              cursor: 'pointer',
+                              fontWeight: 700,
+                              fontSize: 16,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              transition: 'background 0.2s',
+                            }}
+                            onMouseEnter={(e) => e.target.style.background = THEME.soft}
+                            onMouseLeave={(e) => e.target.style.background = 'white'}
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+                      
+                      {/* Bottom Row: Pricing */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 13, color: '#6b7280' }}>
+                            ₹{i.price} × {i.quantity}
+                          </span>
+                          {profileTax.gst_enabled && !profileTax.prices_include_tax && !i.is_packaged_good && (
+                            <span style={{
+                              fontSize: 10,
+                              fontWeight: 700,
+                              color: '#f97316',
+                              background: '#fff7ed',
+                              padding: '2px 6px',
+                              borderRadius: 4,
+                              border: '1px solid #fed7aa',
+                            }}>
+                              +GST
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 15, fontWeight: 700, color: '#111827' }}>
+                            ₹{(i.price * i.quantity).toFixed(2)}
+                          </span>
+                          {profileTax.gst_enabled && !profileTax.prices_include_tax && !i.is_packaged_good && (
+                            <span style={{
+                              fontSize: 10,
+                              fontWeight: 700,
+                              color: '#f97316',
+                              background: '#fff7ed',
+                              padding: '2px 6px',
+                              borderRadius: 4,
+                              border: '1px solid #fed7aa',
+                            }}>
+                              +GST
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            
+            {/* Footer with Totals */}
+            {cart.length > 0 && (
+              <div className="counter-drawer-foot" style={{
+                padding: '20px',
+                borderTop: '2px solid #f3f4f6',
+                background: '#fafafa',
+              }}>
+                {/* No. of Customers Input in Cart Footer */}
+                <div style={{ marginBottom: 12 }}>
+                   <input
+                    type="number"
+                    min="1"
+                    placeholder="No. of Customers (Optional)"
+                    value={numberOfCustomers}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '') setNumberOfCustomers('');
+                      else {
+                        const num = parseInt(val, 10);
+                        if (num > 0) setNumberOfCustomers(num);
+                      }
+                    }}
+                    className="input"
+                    style={{ background: '#fff', border: '1px solid #d1d5db' }}
+                  />
+                </div>
+
+                <div style={{ 
+                  background: '#ffffff',
+                  padding: '16px',
+                  borderRadius: 12,
+                  border: '2px solid #e5e7eb',
+                  marginBottom: 16,
+                }}>
+                  <div style={{ display: 'grid', gap: 10 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#6b7280' }}>
+                      <span>Subtotal (ex-tax)</span>
+                      <span style={{ fontWeight: 600 }}>₹{cartTotals.subtotalEx.toFixed(2)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#6b7280' }}>
+                      <span>GST</span>
+                      <span style={{ fontWeight: 600 }}>₹{cartTotals.totalTax.toFixed(2)}</span>
+                    </div>
+                    <div style={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between', 
+                      paddingTop: 10,
+                      borderTop: '2px solid #f3f4f6',
+                      fontSize: 18,
+                      fontWeight: 700,
+                      color: '#111827',
+                    }}>
+                      <span>Total</span>
+                      <span style={{ color: THEME.main }}>₹{cartTotals.totalInc.toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
+                
+                <button
+                  onClick={completeSale}
+                  disabled={processing}
+                  style={{
+                    width: '100%',
+                    padding: '16px',
+                    background: processing ? '#d1d5db' : `linear-gradient(135deg, ${THEME.main} 0%, ${THEME.dark} 100%)`,
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 12,
+                    fontSize: 16,
+                    fontWeight: 700,
+                    cursor: processing ? 'not-allowed' : 'pointer',
+                    boxShadow: processing ? 'none' : '0 4px 12px rgba(0,0,0,0.15)',
+                    transition: 'all 0.2s',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!processing) {
+                      e.target.style.transform = 'translateY(-2px)';
+                      e.target.style.boxShadow = '0 6px 16px rgba(0,0,0,0.2)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!processing) {
+                      e.target.style.transform = 'translateY(0)';
+                      e.target.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+                    }
+                  }}
+                >
+                  {processing
+                    ? '⏳ Processing…'
+                    : orderMode === 'kitchen'
+                    ? `🍳 Send to Kitchen • ₹${cartTotals.totalInc.toFixed(2)}`
+                    : isCreditSale
+                    ? `💳 Credit & Settle • ₹${cartTotals.totalInc.toFixed(2)}`
+                    : `✓ Complete & Print • ₹${cartTotals.totalInc.toFixed(2)}`}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1152,8 +1734,170 @@ window.dispatchEvent(
   />
 )}
 
+{/* Variant Selector Modal */}
+{showVariantSelector && selectedItem && (
+  <VariantSelector
+    item={selectedItem}
+    onSelect={handleVariantSelect}
+    onClose={() => {
+      setShowVariantSelector(false);
+      setSelectedItem(null);
+    }}
+    gstEnabled={profileTax.gst_enabled}
+    pricesIncludeTax={profileTax.prices_include_tax}
+    onCartOpen={() => setDrawerOpen(true)}
+    showImage={enableMenuImages}
+  />
+)}{/* Clear Cart Confirmation Modal */}
+{showClearCartConfirm && (
+  <div 
+    style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      background: 'rgba(0,0,0,0.5)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 10000,
+    }}
+    onClick={() => setShowClearCartConfirm(false)}
+  >
+    <div 
+      style={{
+        background: 'white',
+        borderRadius: 16,
+        padding: '32px',
+        maxWidth: 400,
+        width: '90%',
+        boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)',
+      }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div style={{ textAlign: 'center', marginBottom: 24 }}>
+        <div style={{ fontSize: 64, marginBottom: 16 }}>⚠️</div>
+        <h3 style={{ margin: 0, marginBottom: 12, fontSize: 20, fontWeight: 700, color: '#111827' }}>
+          Clear Cart?
+        </h3>
+        <p style={{ margin: 0, fontSize: 15, color: '#6b7280', lineHeight: 1.5 }}>
+          Are you sure you want to remove all items from the cart? This action cannot be undone.
+        </p>
+      </div>
+      <div style={{ display: 'flex', gap: 12 }}>
+        <button
+          onClick={() => setShowClearCartConfirm(false)}
+          style={{
+            flex: 1,
+            padding: '12px',
+            background: 'white',
+            border: '2px solid #e5e7eb',
+            borderRadius: 10,
+            fontSize: 15,
+            fontWeight: 600,
+            color: '#374151',
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+          }}
+          onMouseEnter={(e) => {
+            e.target.style.background = '#f9fafb';
+            e.target.style.borderColor = '#d1d5db';
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.background = 'white';
+            e.target.style.borderColor = '#e5e7eb';
+          }}
+        >
+          Cancel
+        </button>
+        <button
+          onClick={() => {
+            setCart([]);
+            setShowClearCartConfirm(false);
+            setDrawerOpen(false); // Close cart drawer
+          }}
+          style={{
+            flex: 1,
+            padding: '12px',
+            background: '#dc2626',
+            border: 'none',
+            borderRadius: 10,
+            fontSize: 15,
+            fontWeight: 700,
+            color: 'white',
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+            boxShadow: '0 4px 12px rgba(220,38,38,0.3)',
+          }}
+          onMouseEnter={(e) => {
+            e.target.style.background = '#b91c1c';
+            e.target.style.transform = 'translateY(-1px)';
+            e.target.style.boxShadow = '0 6px 16px rgba(220,38,38,0.4)';
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.background = '#dc2626';
+            e.target.style.transform = 'translateY(0)';
+            e.target.style.boxShadow = '0 4px 12px rgba(220,38,38,0.3)';
+          }}
+        >
+          Clear Cart
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
-
-          </div>
+          <style jsx>{`
+            .counter-shell { min-height: 100vh; background: #f9fafb; padding-bottom: 80px; }
+            .counter-header { background: white; border-bottom: 1px solid #e5e7eb; }
+            .counter-header-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; }
+            .counter-title { margin: 0; font-size: 1.25rem; font-weight: 700; color: #111827; }
+            .counter-cart-info { font-size: 0.875rem; font-weight: 600; color: #4b5563; background: #f3f4f6; padding: 4px 12px; borderRadius: 999px; }
+            
+            .counter-main-mobile-like { padding: 16px; max-width: 1280px; margin: 0 auto; }
+            
+            .counter-menu-items { display: flex; flex-direction: column; gap: 24px; }
+            
+            .counter-category-title { font-size: 1.125rem; font-weight: 700; color: #374151; margin: 0 0 12px 0; }
+            
+            .counter-category-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+            @media (min-width: 640px) { .counter-category-grid { grid-template-columns: repeat(3, 1fr); } }
+            @media (min-width: 1024px) { .counter-category-grid { grid-template-columns: repeat(4, 1fr); } }
+            @media (min-width: 1280px) { .counter-category-grid { grid-template-columns: repeat(5, 1fr); } }
+            
+            .counter-item-card { background: white; border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px; display: flex; flex-direction: column; justify-content: space-between; gap: 8px; height: 100%; transition: all 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+            .counter-item-card:active { transform: scale(0.98); }
+            .item-out { opacity: 0.6; pointer-events: none; filter: grayscale(1); }
+            
+            .counter-item-info { display: flex; gap: 8px; }
+            .counter-item-info h3 { margin: 0; font-size: 0.95rem; font-weight: 600; color: #111827; line-height: 1.3; }
+            .counter-item-info div { font-weight: 700; color: #374151; font-size: 0.9rem; margin-top: 2px; }
+            
+            .counter-item-actions { margin-top: auto; }
+            .counter-cart-qty { display: flex; align-items: center; justify-content: space-between; border-radius: 8px; overflow: hidden; border: 1px solid #e5e7eb; height: 36px; }
+            .counter-cart-qty button { width: 36px; height: 100%; border: none; font-size: 1.25rem; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+            .counter-cart-qty div { font-weight: 600; color: #111827; font-size: 0.95rem; }
+            
+            .counter-mobile-cart-btn { position: fixed; bottom: 16px; left: 16px; right: 16px; padding: 16px; border-radius: 12px; color: white; border: none; font-weight: 700; font-size: 1rem; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05); z-index: 50; display: flex; justify-content: center; align-items: center; gap: 8px; animation: slideUp 0.3s ease-out; }
+            @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+            
+            .counter-drawer-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; display: flex; justify-content: flex-end; backdrop-filter: blur(2px); animation: fadeIn 0.2s ease-out; }
+            .counter-drawer { width: 100%; max-width: 450px; background: #f9fafb; height: 100%; display: flex; flex-direction: column; box-shadow: -4px 0 24px rgba(0,0,0,0.15); animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+            @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
+            @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+            
+            .sales-carousel-btn { white-space: nowrap; padding: 8px 16px; border-radius: 999px; font-size: 0.875rem; font-weight: 600; border: 1px solid; cursor: pointer; transition: all 0.2s; }
+            .sales-carousel-btn.active { box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+            
+            /* Responsive Utilities */
+            @media (max-width: 640px) {
+              .counter-title { font-size: 1.125rem; }
+              .counter-cart-info { font-size: 0.75rem; }
+              .counter-main-mobile-like { padding: 12px; }
+              .counter-category-title { font-size: 1rem; margin-bottom: 8px; }
+            }
+          `}</style>
+        </div>
   );
 }

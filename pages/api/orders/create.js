@@ -37,6 +37,7 @@ export default async function handler(req, res) {
       credit_customer_id = null,
       original_payment_method = null,
       status: incomingStatus = null,
+      number_of_customers = null, // optional
     } = req.body;
 
     if (!restaurant_id || !Array.isArray(items) || items.length === 0) {
@@ -144,6 +145,8 @@ export default async function handler(req, res) {
         quantity: qty,
         price: unit,
         item_name: it.name,
+        variant_option_id: it.variant_id || it.variant_option_id || null,
+        variant_name: it.variant_name || null,
         unit_price_ex_tax: unitExR,
         unit_price_inc_tax: unitIncR,
         unit_tax_amount: Number((unitIncR - unitExR).toFixed(2)),
@@ -205,6 +208,7 @@ export default async function handler(req, res) {
           is_credit: is_credit ?? false,
           credit_customer_id: credit_customer_id ?? null,
           original_payment_method: original_payment_method || null,
+          number_of_customers: number_of_customers || null,
         },
       ])
       .select('id, created_at');
@@ -239,7 +243,7 @@ export default async function handler(req, res) {
       await InvoiceService.createInvoiceFromOrder(order.id, null);
       const { data: invoiceData } = await supabase
         .from('invoices')
-        .select('id, invoice_no')
+        .select('id, invoice_no, bill_no')
         .eq('order_id', order.id)
         .single();
 
@@ -259,6 +263,7 @@ export default async function handler(req, res) {
       order_id: order.id,
       invoice_id: invoice.id,
       invoice_no: invoice.invoice_no,
+      bill_no: invoice.bill_no,
       order_number: order.id.slice(0, 8).toUpperCase(),
       order_for_print: {
         id: order.id,
@@ -277,6 +282,7 @@ export default async function handler(req, res) {
         payment_status,
         status: finalStatus,
         invoice_no: invoice.invoice_no,
+        bill_no: invoice.bill_no,
         created_at: order.created_at,
       },
     };
@@ -289,12 +295,42 @@ export default async function handler(req, res) {
           if (!item.id || !item.quantity) continue;
 
           try {
-            const { data: recipe, error: recipeErr } = await supabase
+            // Find specific recipe for this variant, or fall back to base recipe
+            let recipeQuery = supabase
               .from('recipes')
-              .select('id, recipe_items(ingredient_id, quantity)')
+              .select('id, variant_option_id, recipe_items(ingredient_id, quantity)')
               .eq('menu_item_id', item.id)
               .eq('restaurant_id', restaurant_id)
-              .maybeSingle();
+            
+            // Note: We can't easily do "try variant, else base" in one query without a robust helper or stored proc.
+            // But we can fetch potentially both and pick the best one in JS.
+            // Since we only expect max 2 rows (one for variant, one for base), this is cheap.
+            
+            const { data: potentialRecipes, error: recipeErr } = await recipeQuery;
+            
+            if (recipeErr) throw recipeErr;
+            
+            // Logic: 
+            // 1. If item has variant_id, look for recipe with that variant_option_id
+            // 2. If not found (or item has no variant), try finding one with variant_option_id IS NULL (base)
+            
+            const targetVariantId = item.variant_id || item.variant_option_id || null;
+            let recipe = potentialRecipes?.find(r => {
+                const rId = r.variant_option_id;
+                if (!rId && !targetVariantId) return true;
+                if (!rId || !targetVariantId) return false;
+                return String(rId) === String(targetVariantId);
+            });
+            
+            if (!recipe && targetVariantId) {
+               // Fallback to base if specific variant recipe missing
+               recipe = potentialRecipes?.find(r => r.variant_option_id === null);
+            }
+            // If still no recipe (and didn't have variant, or no base found), try just the first one if flexible? 
+            // No, strictly follow base. If no base, then no recipe.
+            if (!recipe && !targetVariantId && potentialRecipes?.length > 0) {
+               recipe = potentialRecipes.find(r => r.variant_option_id === null);
+            }
 
             if (
               recipeErr ||
@@ -305,10 +341,7 @@ export default async function handler(req, res) {
               continue;
             }
 
-            const menuItem = menuItems?.find((mi) => mi.id === item.id);
-            if (menuItem?.is_packaged_good) {
-              continue;
-            }
+
 
             console.log(
               `Processing stock deduction for menu item ${item.id} with recipe ${recipe.id}`

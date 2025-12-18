@@ -122,18 +122,40 @@ const [aiLoading, setAiLoading] = useState(false);
 const [aiError, setAiError] = useState('');
 const [aiSuggestions, setAiSuggestions] = useState('');
 
+// Inside your AnalyticsPage component...
+
 const fetchAiSuggestions = async () => {
   try {
     setAiLoading(true);
     setAiError('');
-    const res = await fetch('/api/owner/ai-sales-insights', {
+    setAiSuggestions(''); // Clear previous suggestions
+
+    const response = await fetch('/api/owner/ai-sales-insights', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ restaurantId, timeRange })
     });
-    const json = await res.json();
-    if (!res.ok) throw new Error(json.error || 'Failed to get AI suggestions');
-    setAiSuggestions(json.suggestions);
+
+    if (!response.ok) {
+      const json = await response.json();
+      throw new Error(json.error || 'Failed to fetch AI insights');
+    }
+
+    // STREAM READER LOGIC
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let done = false;
+
+    while (!done) {
+      const { value, done: doneReading } = await reader.read();
+      done = doneReading;
+      if (value) {
+        const chunk = decoder.decode(value, { stream: true });
+        // Append new text to the existing text state
+        setAiSuggestions((prev) => prev + chunk);
+      }
+    }
+
   } catch (e) {
     setAiError(e.message);
   } finally {
