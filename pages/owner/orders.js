@@ -40,11 +40,8 @@ async function restoreStockForOrder(supabase, restaurantId, orderItems) {
       continue;
     }
 
-    // Skip packaged goods (no ingredient impact)
-    if (oi.is_packaged_good) {
-      console.log('[STOCK RESTORE] Skipping packaged good');
-      continue;
-    }
+    // Skip packaged goods check removed to allow restoration
+
 
     // Fetch recipe for this menu item
     // Fetch recipe for this menu item

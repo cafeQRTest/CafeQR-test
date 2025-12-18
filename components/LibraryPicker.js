@@ -131,7 +131,11 @@ export default function LibraryPicker({ supabase, open, onClose, restaurantId, o
       onAdded?.(data || [])
       onClose?.()
     } catch (e) {
-      setError(e.message || 'Failed to add selected items')
+      if (e.message?.includes('menu_items_unique_restaurant_normname') || e.details?.includes('menu_items_unique_restaurant_normname')) {
+        setError('One or more items already exist in your menu. Duplicate names are not allowed.')
+      } else {
+        setError(e.message || 'Failed to add selected items')
+      }
     } finally {
       setLoading(false)
     }

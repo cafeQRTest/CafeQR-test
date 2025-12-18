@@ -599,7 +599,7 @@ export default async function handler(req, res) {
 // STOCK HELPERS
 async function restoreStockForItems(supabase, restaurant_id, items) {
   for (const oi of items) {
-    if (!oi.menu_item_id || !oi.quantity || oi.is_packaged_good) continue;
+    if (!oi.menu_item_id || !oi.quantity) continue;
 
     // Find recipe (Variant > Base)
     const { data: potentialRecipes } = await supabase
@@ -651,7 +651,7 @@ async function deductStockForItem(supabase, restaurant_id, item) {
     .eq('restaurant_id', restaurant_id)
     .maybeSingle();
 
-  if (!menuItem || menuItem.is_packaged_good) return;
+  if (!menuItem) return;
 
   // Find recipe (Variant > Base)
   const { data: potentialRecipes } = await supabase
