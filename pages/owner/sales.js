@@ -128,7 +128,8 @@ export default function SalesPage() {
           payment_method,
           actual_payment_method,
           mixed_payment_details,
-          order_type
+          order_type,
+          table_number
         `)
         .eq('restaurant_id', restaurantId)
         .gte('created_at', startUtc)
@@ -252,18 +253,40 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
 
       const orderTypeMap = {}
       orderData.forEach(o => {
-        const type = o.order_type || 'counter'
+        let type = o.order_type || 'counter'
+        const table = o.table_number ? String(o.table_number).trim() : null
+        
+        // Logic:
+        // 1. If it's parcel/takeaway, keep as is (ignore table if any, usually 0)
+        // 2. If it has a VALID table number (and not parcel), categorize as Table X
+        // 3. Else fallback to original type (counter/dashboard/etc.)
+        
+        const isParcel = type.toLowerCase().includes('parcel') || type.toLowerCase().includes('takeaway')
+
+        if (!isParcel && table && table !== '0') {
+           type = `Table ${table}`
+        } else if (type === 'dashboard') {
+           type = 'QR (No Table)'
+        }
+        
         const amount = Number(o.total_inc_tax ?? o.total_amount ?? 0)
         if (!orderTypeMap[type]) orderTypeMap[type] = { count: 0, amount: 0 }
         orderTypeMap[type].count += 1
         orderTypeMap[type].amount += amount
       })
-      setOrderTypeBreakdown(Object.entries(orderTypeMap).map(([type, data]) => ({
+      
+      const typeArray = Object.entries(orderTypeMap).map(([type, data]) => ({
         order_type: type,
         order_count: data.count,
         total_amount: data.amount,
         percentage: totalRevenue > 0 ? ((data.amount / totalRevenue) * 100).toFixed(1) : '0.0'
-      })))
+      }))
+      
+      // Sort: maybe group Tables together if possible, or just amount desc
+      // Let's sort by amount descending
+      typeArray.sort((a,b) => b.total_amount - a.total_amount)
+      
+      setOrderTypeBreakdown(typeArray)
 
       setTaxBreakdown([
         { tax_type: 'CGST', amount: Math.round(cgst * 100) / 100 },
