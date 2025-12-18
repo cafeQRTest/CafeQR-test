@@ -5,18 +5,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRequireAuth } from '../../lib/useRequireAuth';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { getSupabase } from '../../services/supabase';
-<<<<<<< HEAD
-import NiceSelect from '../../components/NiceSelect';
-=======
 import MenuItemCard from '../../components/MenuItemCard';
 import MenuItemCardSimple from '../../components/MenuItemCardSimple';
 import VariantSelector from '../../components/VariantSelector';
 import NiceSelect from '../../components/NiceSelect';
 import { useAlert } from '../../context/AlertContext';
 import HorizontalScrollRow from '../../components/HorizontalScrollRow';
-import { round2, normalizeQty, formatQty2 } from '../../lib/qty'; // adjust path
-
->>>>>>> origin/main
+import { round2, normalizeQty, formatQty2 } from '../../lib/qty';
 
 // -------------------------------
 // Inline Payment Confirm Dialog
@@ -1067,17 +1062,6 @@ window.dispatchEvent(
                   </button>
                 </>
               )}
-<<<<<<< HEAD
-              <NiceSelect
-  value={orderSelect}
-  onChange={setOrderSelect}
-  placeholder="Select Type..."
-  options={[
-    { value: 'parcel', label: 'Parcel' },
-    ...tables.map(n => ({ value: `table:${n}`, label: `Table ${n}` }))
-  ]}
-/>
-=======
               <div style={{minWidth: 160}}>
                 <NiceSelect
                   value={orderSelect}
@@ -1089,31 +1073,23 @@ window.dispatchEvent(
                   ]}
                 />
               </div>
->>>>>>> origin/main
             </>
           ) : (
             <>
-  <input type="text" placeholder="Customer name (optional)" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="input" />
-  <input type="tel" placeholder="Phone (optional)" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} className="input" />
-<<<<<<< HEAD
-<NiceSelect
-=======
-  <div style={{minWidth: 160}}>
-    <NiceSelect
->>>>>>> origin/main
-      value={orderSelect}
-      onChange={setOrderSelect}
-      placeholder="Select Type..."
-      options={[
-        { value: 'parcel', label: 'Parcel' },
-        ...tables.map(n => ({ value: `table:${n}`, label: `Table ${n}` }))
-      ]}
-    />
-<<<<<<< HEAD
-=======
-  </div>
->>>>>>> origin/main
-</>
+              <input type="text" placeholder="Customer name (optional)" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="input" />
+              <input type="tel" placeholder="Phone (optional)" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} className="input" />
+              <div style={{minWidth: 160}}>
+                <NiceSelect
+                  value={orderSelect}
+                  onChange={setOrderSelect}
+                  placeholder="Select Type..."
+                  options={[
+                    { value: 'parcel', label: 'Parcel' },
+                    ...tables.map(n => ({ value: `table:${n}`, label: `Table ${n}` }))
+                  ]}
+                />
+              </div>
+            </>
 
           )}
         </div>
