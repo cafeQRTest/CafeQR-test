@@ -848,7 +848,8 @@ export default function InventoryPage() {
                                       const nextState = { ...variantsRecipeState };
                                       selectedMenuItem.variants.forEach(v => {
                                          nextState[v.variant_id] = {
-                                            items: baseItems.map(it => ({...it, _key: `cp-all-${v.variant_id}-${Date.now()}`}))
+                                            items: baseItems.map(it => ({...it, _key: `cp-all-${v.variant_id}-${Date.now()}-${Math.random()}`}))
+
                                          };
                                       });
                                       setVariantsRecipeState(nextState);
@@ -1317,7 +1318,7 @@ const IngredientModalOverlay = styled.div`
   justify-content: center;
   align-items: flex-start;
   padding: 1rem;
-  z-index: 1000;
+  z-index: 2005;
   overflow-y: auto;
 `
 
