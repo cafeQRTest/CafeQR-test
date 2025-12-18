@@ -610,7 +610,7 @@ async function restoreStockForItems(supabase, restaurant_id, items) {
 
     if (!potentialRecipes?.length) continue;
 
-    const targetVariantId = oi.variant_option_id || null;
+    const targetVariantId = oi.variant_option_id || oi.variant_id || null;
     let recipe = potentialRecipes.find(r => r.variant_option_id === targetVariantId);
     if (!recipe && targetVariantId) recipe = potentialRecipes.find(r => r.variant_option_id === null); // Fallback
     if (!recipe && !targetVariantId) recipe = potentialRecipes.find(r => r.variant_option_id === null); // Strict base
@@ -662,7 +662,7 @@ async function deductStockForItem(supabase, restaurant_id, item) {
 
   if (!potentialRecipes?.length) return;
 
-  const targetVariantId = item.variant_option_id || null;
+  const targetVariantId = item.variant_option_id || item.variant_id || null;
   let recipe = potentialRecipes.find(r => r.variant_option_id === targetVariantId);
   if (!recipe && targetVariantId) recipe = potentialRecipes.find(r => r.variant_option_id === null); // Fallback
   if (!recipe && !targetVariantId) recipe = potentialRecipes.find(r => r.variant_option_id === null); // Strict base

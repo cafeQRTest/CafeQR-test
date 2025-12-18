@@ -63,7 +63,7 @@ async function restoreStockForOrder(supabase, restaurantId, orderItems) {
       continue
     }
 
-    const targetVariantId = oi.variant_option_id || null
+    const targetVariantId = oi.variant_option_id || oi.variant_id || null
     let recipe = potentialRecipes.find(r => r.variant_option_id === targetVariantId)
     
     // Fallback to base

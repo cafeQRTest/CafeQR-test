@@ -219,6 +219,8 @@ export default function PaymentPage() {
             price: Number(i.price) || 0,
             quantity: Number(i.quantity) || 1,
             veg: !!i.veg,
+            variant_id: i.variant_id || null,
+            variant_name: i.variant_name || null,
           })),
           subtotal: calculateTotals.subtotalEx,
           tax: calculateTotals.taxAmount,
