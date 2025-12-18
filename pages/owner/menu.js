@@ -507,13 +507,13 @@ export default function MenuPage() {
                   />
                 </th>
                 <th className="col-name">Name</th>
-                <th className="hide-sm">Code</th>
+                <th className="hide-extra">Code</th>
                 <th className="hide-sm col-cat">Category</th>
                 <th>Price</th>
-                <th className="hide-sm">HSN</th>
-                <th className="hide-md">Tax %</th>
-                <th className="hide-sm">Cess %</th>
-                <th className="hide-sm">Type</th>
+                <th className="hide-extra">HSN</th>
+                <th className="hide-extra">Tax %</th>
+                <th className="hide-extra">Cess %</th>
+                <th className="hide-extra">Type</th>
                 <th className="hide-sm">Status</th>
                 <th className="hide-sm">Variants</th>
                 {enableMenuImages && <th>Image</th>}
@@ -611,7 +611,7 @@ export default function MenuPage() {
                         </div>
                       </td>
                       <td
-                        className="hide-sm"
+                        className="hide-extra"
                         style={{ fontFamily: "monospace", fontSize: 13 }}
                       >
                         {item.code_number || "—"}
@@ -620,18 +620,18 @@ export default function MenuPage() {
                       <td style={{ fontWeight: 700 }}>
                         ₹{Number(item.price ?? 0).toFixed(2)}
                       </td>
-                      <td className="hide-sm">{item.hsn || "—"}</td>
-                      <td className="hide-md">
+                      <td className="hide-extra">{item.hsn || "—"}</td>
+                      <td className="hide-extra">
                         {item.tax_rate != null
                           ? Number(item.tax_rate).toFixed(2)
                           : "—"}
                       </td>
-                      <td className="hide-sm">
+                      <td className="hide-extra">
                         {item.is_packaged_good
                           ? Number(item.compensation_cess_rate ?? 0).toFixed(2)
                           : "—"}
                       </td>
-                      <td className="hide-sm">
+                      <td className="hide-extra">
                         <span
                           className={`pill ${
                             item.is_packaged_good ? "pill--pkg" : "pill--menu"
@@ -804,10 +804,11 @@ export default function MenuPage() {
       )}
       <style jsx>{`
         /* Ensure the container handles the scrolling so sticky works internally */
+        /* Ensure the container handles the scrolling so sticky works internally */
         .table-scroll {
           max-height: calc(100vh - 200px); /* Leave space for header/toolbar */
           overflow-y: auto;
-          overflow-x: auto;
+          overflow-x: auto; /* ENABLE horizontal scroll */
           border: 1px solid #e5e7eb;
           border-radius: 8px;
         }
@@ -815,6 +816,7 @@ export default function MenuPage() {
         .table {
           width: 100%;
           border-collapse: collapse;
+          table-layout: auto; /* Let columns expand naturally */
         }
 
         .table th {
@@ -847,6 +849,17 @@ export default function MenuPage() {
         .col-name { min-width: 180px; max-width: 300px; }
         .col-cat { min-width: 120px; }
         .col-actions { min-width: 180px; text-align: right; }
+
+        /* Mobile Responsive Overrides */
+        @media (max-width: 640px) {
+          .table-scroll {
+            max-height: 70vh;
+          }
+          .table th, .table td {
+            padding: 10px 8px;
+          }
+          .col-name { min-width: auto; max-width: none; }
+        }
 
         /* Mobile Responsive Overrides */
         @media (max-width: 640px) {

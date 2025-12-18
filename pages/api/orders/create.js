@@ -314,8 +314,13 @@ export default async function handler(req, res) {
             // 1. If item has variant_id, look for recipe with that variant_option_id
             // 2. If not found (or item has no variant), try finding one with variant_option_id IS NULL (base)
             
-            const targetVariantId = item.variant_id || null;
-            let recipe = potentialRecipes?.find(r => r.variant_option_id === targetVariantId);
+            const targetVariantId = item.variant_id || item.variant_option_id || null;
+            let recipe = potentialRecipes?.find(r => {
+                const rId = r.variant_option_id;
+                if (!rId && !targetVariantId) return true;
+                if (!rId || !targetVariantId) return false;
+                return String(rId) === String(targetVariantId);
+            });
             
             if (!recipe && targetVariantId) {
                // Fallback to base if specific variant recipe missing

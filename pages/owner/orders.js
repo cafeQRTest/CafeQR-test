@@ -64,7 +64,12 @@ async function restoreStockForOrder(supabase, restaurantId, orderItems) {
     }
 
     const targetVariantId = oi.variant_option_id || oi.variant_id || null
-    let recipe = potentialRecipes.find(r => r.variant_option_id === targetVariantId)
+    let recipe = potentialRecipes.find(r => {
+      const rId = r.variant_option_id;
+      if (!rId && !targetVariantId) return true; // Both null
+      if (!rId || !targetVariantId) return false; // One is null
+      return String(rId) === String(targetVariantId);
+    })
     
     // Fallback to base
     if (!recipe && targetVariantId) {
@@ -1542,7 +1547,9 @@ const handleCancelConfirm = async (reason) => {
            itemsToConvert.push({
              menu_item_id: menuItemId,
              quantity: item.quantity || item.qty || 1,
-             is_packaged_good: item.is_packaged_good || false
+             is_packaged_good: item.is_packaged_good || false,
+             variant_option_id: item.variant_id || item.variant_option_id || null, // Capture variant info
+             variant_name: item.variant_name || null
            });
          }
          
