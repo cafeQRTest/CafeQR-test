@@ -63,7 +63,29 @@ async function restoreStockForOrder(supabase, restaurantId, orderItems) {
       continue
     }
 
-    const targetVariantId = oi.variant_option_id || oi.variant_id || null
+    let targetVariantId = oi.variant_option_id || oi.variant_id || null;
+
+    // Fallback: If ID is missing but we have a name, look it up via variant_pricing
+    if (!targetVariantId && oi.variant_name) {
+      console.log('[STOCK RESTORE] Variant ID missing for', oi.variant_name, '- attempting lookup...');
+      const { data: vpData, error: vpErr } = await supabase
+        .from('variant_pricing')
+        .select('variant_options!inner(id, name)')
+        .eq('menu_item_id', oi.menu_item_id);
+      
+      if (vpErr) console.error('[STOCK RESTORE] Lookup error:', vpErr);
+
+      if (vpData) {
+        const normName = oi.variant_name.trim().toLowerCase();
+        const match = vpData.find(v => v.variant_options?.name?.trim().toLowerCase() === normName);
+        if (match && match.variant_options?.id) {
+            targetVariantId = match.variant_options.id;
+            console.log('[STOCK RESTORE] RESOLVED ID:', targetVariantId);
+        } else {
+            console.log('[STOCK RESTORE] No match found for name:', normName);
+        }
+      }
+    }
     let recipe = potentialRecipes.find(r => {
       const rId = r.variant_option_id;
       if (!rId && !targetVariantId) return true; // Both null

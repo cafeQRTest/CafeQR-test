@@ -51,32 +51,69 @@ export default async function handler(req, res) {
         console.log('[VOID INVOICE] Starting stock restoration for order:', inv.order_id);
         const { data: orderItems, error: itemsErr } = await supabase
           .from('order_items')
-          .select('menu_item_id, quantity, is_packaged_good')
+          .select('menu_item_id, quantity, is_packaged_good, variant_option_id, variant_name')
           .eq('order_id', inv.order_id);
 
         console.log('[VOID INVOICE] Order items fetched:', orderItems?.length, 'items');
 
         if (!itemsErr && orderItems && orderItems.length > 0) {
           for (const oi of orderItems) {
-            console.log('[VOID INVOICE] Processing item:', { menu_item_id: oi.menu_item_id, quantity: oi.quantity, is_packaged: oi.is_packaged_good });
-            if (!oi.menu_item_id || !oi.quantity || oi.is_packaged_good) {
-              console.log('[VOID INVOICE] Skipping item');
+            console.log('[VOID INVOICE] Processing item:', { menu_item_id: oi.menu_item_id, quantity: oi.quantity });
+            
+            if (!oi.menu_item_id || !oi.quantity) {
+              console.log('[VOID INVOICE] Skipping item - invalid data');
               continue;
             }
 
-            // Get recipe for this menu item
-            const { data: recipe, error: recipeErr } = await supabase
+            // Get recipes for this menu item (fetch ALL, do not use single())
+            const { data: potentialRecipes, error: recipeErr } = await supabase
               .from('recipes')
-              .select('id, recipe_items(ingredient_id, quantity)')
+              .select('id, variant_option_id, recipe_items(ingredient_id, quantity)')
               .eq('menu_item_id', oi.menu_item_id)
-              .eq('restaurant_id', restaurant_id)
-              .maybeSingle();
+              .eq('restaurant_id', restaurant_id);
 
-            console.log('[VOID INVOICE] Recipe result:', { recipe, error: recipeErr });
+            console.log('[VOID INVOICE] Recipes found:', potentialRecipes?.length || 0);
 
-            if (recipeErr || !recipe?.recipe_items?.length) {
-              console.log('[VOID INVOICE] No recipe found for menu item:', oi.menu_item_id);
+            if (recipeErr || !potentialRecipes?.length) {
+              console.log('[VOID INVOICE] No recipes found for menu item:', oi.menu_item_id);
               continue;
+            }
+
+            // Resolve Variant ID
+            let targetVariantId = oi.variant_option_id || oi.variant_id || null;
+            
+            // Fallback lookup by name if ID missing
+            if (!targetVariantId && oi.variant_name) {
+                console.log('[VOID INVOICE] Attempting name lookup for variant:', oi.variant_name);
+                const { data: vpData } = await supabase
+                   .from('variant_pricing')
+                   .select('variant_options!inner(id, name)')
+                   .eq('menu_item_id', oi.menu_item_id);
+                
+                if (vpData) {
+                   const norm = oi.variant_name.trim().toLowerCase();
+                   const match = vpData.find(v => v.variant_options?.name?.trim().toLowerCase() === norm);
+                   if (match?.variant_options?.id) {
+                       targetVariantId = match.variant_options.id;
+                       console.log('[VOID INVOICE] Resolved ID by name:', targetVariantId);
+                   }
+                }
+            }
+
+            // Find matching recipe
+            let recipe = potentialRecipes.find(r => {
+               const rId = r.variant_option_id;
+               if (!rId && !targetVariantId) return true;
+               if (!rId || !targetVariantId) return false;
+               return String(rId) === String(targetVariantId);
+            });
+            
+            // Fallback to base
+            if (!recipe && targetVariantId) recipe = potentialRecipes.find(r => r.variant_option_id === null);
+
+            if (!recipe?.recipe_items?.length) {
+                console.log('[VOID INVOICE] No ingredients in matched recipe');
+                continue;
             }
 
             // Restore stock for each ingredient

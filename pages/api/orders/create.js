@@ -145,7 +145,7 @@ export default async function handler(req, res) {
         quantity: qty,
         price: unit,
         item_name: it.name,
-        variant_option_id: it.variant_id || null,
+        variant_option_id: it.variant_id || it.variant_option_id || null,
         variant_name: it.variant_name || null,
         unit_price_ex_tax: unitExR,
         unit_price_inc_tax: unitIncR,
