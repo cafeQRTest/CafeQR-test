@@ -85,8 +85,11 @@ const bumpQty = (variantId, dir) => {
           ...item,
           selectedVariant: variant,
           price: variant.price,
+          name: `${item.name} (${variant.variant_name})`, // Explicitly update name for cart display
           displayName: `${item.name} (${variant.variant_name})`,
-          quantity: qty
+          quantity: qty,
+          variant_id: variant.variant_id, // Explicitly pass variant_id
+          variant_name: variant.variant_name // Explicitly pass variant_name
         });
       }
     });

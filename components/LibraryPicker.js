@@ -69,7 +69,13 @@ export default function LibraryPicker({ supabase, open, onClose, restaurantId, o
     const needle = q.trim().toLowerCase()
     return (list || []).filter(it => {
       if (vegOnly && !it.veg) return false
-      if (cat !== 'all' && it.category_id !== cat) return false
+      if (cat !== 'all') {
+         // It might be an ID or a name mismatch? The `cat` is an ID from the dropdown. 
+         // But library items might be linked differently? 
+         // Let's assume strict ID match is intended, BUT if fail, maybe try name?
+         // Actually, if it's strict ID, ensure we are comparing strings/numbers robustly
+         if (String(it.category_id) !== String(cat)) return false
+      }
       if (!needle) return true
       return (it.name || '').toLowerCase().includes(needle)
     })
