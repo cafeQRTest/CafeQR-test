@@ -803,28 +803,56 @@ export default function MenuPage() {
         </div>
       )}
       <style jsx>{`
+        /* Ensure the container handles the scrolling so sticky works internally */
+        .table-scroll {
+          max-height: calc(100vh - 200px); /* Leave space for header/toolbar */
+          overflow-y: auto;
+          overflow-x: auto;
+          border: 1px solid #e5e7eb;
+          border-radius: 8px;
+        }
+
+        .table {
+          width: 100%;
+          border-collapse: collapse;
+        }
+
         .table th {
+          position: sticky;
+          top: 0;
+          background: #fff;
+          z-index: 10;
+          box-shadow: 0 1px 0 #e5e7eb;
           white-space: nowrap;
           padding: 12px 10px;
           border-bottom: 2px solid #e5e7eb;
           color: #374151;
           font-weight: 600;
+          text-align: left;
         }
+
         .table td {
           vertical-align: middle;
           padding: 12px 10px;
+          border-bottom: 1px solid #f3f4f6;
+          color: #111827;
+          font-size: 14px;
         }
+        
         .table tbody tr:hover {
           background-color: #f9fafb;
         }
         
         /* Column Widths */
-        .col-name { min-width: 160px; max-width: 240px; }
-        .col-cat { min-width: 100px; }
-        .col-actions { min-width: 130px; }
+        .col-name { min-width: 180px; max-width: 300px; }
+        .col-cat { min-width: 120px; }
+        .col-actions { min-width: 180px; text-align: right; }
 
         /* Mobile Responsive Overrides */
         @media (max-width: 640px) {
+          .table-scroll {
+            max-height: 70vh;
+          }
           .table th, .table td {
             padding: 10px 8px;
           }
