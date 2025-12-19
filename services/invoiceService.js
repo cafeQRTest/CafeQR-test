@@ -53,12 +53,22 @@ export async function getNextInvoiceNumber(restaurant_id, fy, fyStartDateStr) {
   return Math.max(maxIssued, counter) + 1
 }
 
-// --- DAILY BILL NUMBER GENERATOR (Resets daily) ---
+// --- DAILY BILL NUMBER GENERATOR (Resets daily at 00:00 IST) ---
 export async function getNextBillNumber(restaurant_id) {
-  const today = new Date()
-  const startOfDay = new Date(today.setHours(0, 0, 0, 0)).toISOString()
+  // Get current time in IST (UTC + 5:30)
+  const now = new Date()
+  const istOffset = 5.5 * 60 * 60 * 1000 // IST is UTC+5:30
+  const istTime = new Date(now.getTime() + istOffset)
   
-  // Get max bill_no from invoices created today
+  // Get start of day in IST (00:00 IST)
+  const startOfDayIST = new Date(istTime)
+  startOfDayIST.setUTCHours(0, 0, 0, 0)
+  
+  // Convert back to UTC for database query
+  const startOfDayUTC = new Date(startOfDayIST.getTime() - istOffset)
+  const startOfDay = startOfDayUTC.toISOString()
+  
+  // Get max bill_no from invoices created today (IST)
   const { data: invData } = await supabase
     .from('invoices')
     .select('bill_no')
