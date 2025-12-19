@@ -180,6 +180,14 @@ const fetchAiSuggestions = async () => {
             <Button variant={timeRange === 'week' ? 'primary' : 'outline'} onClick={() => setTimeRange('week')}>7 Days</Button>
             <Button variant={timeRange === 'month' ? 'primary' : 'outline'} onClick={() => setTimeRange('month')}>30 Days</Button>
 
+<Button
+      variant="outline"
+      onClick={fetchAiSuggestions}
+      disabled={aiLoading}
+    >
+      {aiLoading ? 'Asking AI…' : 'Ask AI for ideas'}
+    </Button>
+
 
           </div>
         </div>
