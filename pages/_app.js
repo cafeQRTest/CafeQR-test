@@ -1,6 +1,7 @@
-import '../styles/responsive.css'
+import Head from 'next/head'
 import '../styles/globals.css'
 import '../styles/theme.css'
+import '../styles/responsive.css'
 import Layout from '../components/Layout'
 import KotPrint from '../components/KotPrint'
 import { RestaurantProvider } from '../context/RestaurantContext'
@@ -276,6 +277,13 @@ function MyApp({ Component, pageProps }) {
   const isCustomer = path.startsWith(CUSTOMER_PREFIX)
 
   return (
+    <>
+      <Head>
+        <meta
+          name="viewport"
+          content="width=device-width, initial-scale=1, viewport-fit=cover"
+        />
+      </Head>
     <RestaurantProvider>
       <AlertProvider>
         <SubscriptionProvider>
@@ -293,6 +301,8 @@ function MyApp({ Component, pageProps }) {
         </SubscriptionProvider>
       </AlertProvider>
     </RestaurantProvider>
+    </>
+
   )
 }
 

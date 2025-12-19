@@ -25,13 +25,18 @@ const slideUp = keyframes`
 // --- Styled Components ---
 
 const PageContainer = styled.div`
+  width: min(100%, 1100px);
   max-width: 1000px;
   margin: 0 auto;
+  margin-inline: auto;
   padding: 60px 24px 160px;
+  padding-inline: clamp(12px, 2vw, 28px);
+  padding-block: clamp(20px, 4vw, 60px);
+  padding-bottom: calc(clamp(110px, 14vw, 170px) + env(safe-area-inset-bottom, 0px));
   font-family: 'DM Sans', 'Inter', sans-serif;
   color: #1f2937;
   background-color: #f8fafc;
-  min-height: 100vh;
+  min-height: 100dvh;
   animation: ${fadeInUp} 0.6s cubic-bezier(0.16, 1, 0.3, 1);
   
   @media (max-width: 640px) {
@@ -45,11 +50,11 @@ const Header = styled.header`
 `;
 
 const Title = styled.h1`
-  font-size: 36px;
+  font-size: clamp(24px, 4vw, 40px);
   font-weight: 800;
   color: #0f172a;
   letter-spacing: -0.03em;
-  margin: 0 0 16px 0;
+  margin: 0 0 clamp(10px, 1.5vw, 16px) 0;
   /* Orange Gradient Text */
   background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%);
   -webkit-background-clip: text;
@@ -57,10 +62,10 @@ const Title = styled.h1`
 `;
 
 const Subtitle = styled.p`
-  font-size: 17px;
+  font-size: clamp(14px, 1.6vw, 17px);
   color: #64748b;
   margin: 0 auto;
-  max-width: 540px;
+  max-width: 60ch;
   line-height: 1.6;
 `;
 
@@ -95,12 +100,16 @@ const SectionCard = styled.section`
 `;
 
 const SectionHeader = styled.div`
-  padding: 28px 36px;
+  padding: clamp(16px, 2.5vw, 28px) clamp(16px, 3vw, 36px);
   border-bottom: 1px solid #fff7ed;
   display: flex;
   align-items: center;
   gap: 20px;
   background: linear-gradient(to right, #ffffff, #fff7ed); /* Warm fade */
+  @media (max-width: 412px) {
+    gap: 12px;
+    padding: 14px 14px;
+  }
 `;
 
 const SectionIcon = styled.div`
@@ -114,6 +123,12 @@ const SectionIcon = styled.div`
   justify-content: center;
   font-size: 24px;
   box-shadow: inset 0 0 0 1px rgba(255,255,255,0.5), 0 4px 6px -2px rgba(234, 88, 12, 0.1);
+  @media (max-width: 412px) {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    font-size: 20px;
+  }
 `;
 
 const SectionTitle = styled.h2`
@@ -125,15 +140,19 @@ const SectionTitle = styled.h2`
 `;
 
 const SectionBody = styled.div`
-  padding: 36px;
+  padding: clamp(16px, 3vw, 36px);
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 36px;
+  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); /* key change */
+  gap: clamp(14px, 2.5vw, 36px);
 
   @media (max-width: 640px) {
     grid-template-columns: 1fr;
     padding: 24px;
     gap: 24px;
+  }
+
+  @media (max-width: 360px) {
+    padding: 14px;
   }
 `;
 
@@ -141,6 +160,7 @@ const FormField = styled.div`
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-width: 0; /* guard against overflow in grids/flex parents */
   ${props => props.span && css`grid-column: span ${props.span};`}
   
   @media(max-width: 768px) {
@@ -165,7 +185,8 @@ const Required = styled.span`
 
 const Input = styled.input`
   display: block;
-  width: 90%;
+  width: 100%;
+  max-width: 100%;
   padding: 14px 18px;
   font-size: 16px;
   color: #0f172a;
@@ -194,7 +215,8 @@ const Input = styled.input`
 
 const Textarea = styled.textarea`
   display: block;
-  width: 90%;
+  width: 100%;
+  max-width: 100%;
   padding: 14px 18px;
   font-size: 16px;
   color: #0f172a;
@@ -216,7 +238,9 @@ const Textarea = styled.textarea`
 
 const Select = styled.select`
   display: block;
-  width: 90%;
+  width: 100%;
+  max-width: 100%;
+
   padding: 14px 18px;
   font-size: 16px;
   color: #0f172a;
@@ -253,6 +277,8 @@ const FeatureCard = styled.div`
   align-items: center;
   justify-content: space-between;
   padding: 24px;
+  gap: 12px;
+  flex-wrap: wrap;               /* allow wrap under 340-360px */
   background-color: #ffffff;
   border: 1px solid #f1f5f9;
   border-radius: 20px;
@@ -261,6 +287,9 @@ const FeatureCard = styled.div`
   overflow: hidden;
   transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
   box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+  @media (max-width: 360px) {
+    padding: 16px;
+  }
 
   &:hover {
     transform: translateY(-4px) scale(1.01);
@@ -306,6 +335,7 @@ const FeatureIcon = styled.div`
 
 const FeatureText = styled.div`
   flex: 1;
+  min-width: 0;                  /* IMPORTANT: allow shrink */
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -315,12 +345,14 @@ const FeatureTitle = styled.div`
   font-weight: 700;
   font-size: 16px;
   color: #0f172a;
+  overflow-wrap: anywhere;        /* long words/emails won’t overflow */
 `;
 
 const FeatureDesc = styled.div`
   font-size: 14px;
   color: #64748b;
   line-height: 1.5;
+  overflow-wrap: anywhere;
 `;
 
 const Switch = styled.div`
@@ -331,8 +363,13 @@ const Switch = styled.div`
   border-radius: 999px;
   transition: background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   flex-shrink: 0;
-  margin-left: 20px;
-  box-shadow: inset 0 2px 4px rgba(0,0,0,0.06);
+  flex-shrink: 0;
+  margin-left: 0;                /* remove forced spacing */
+
+  @media (max-width: 360px) {
+    transform: scale(0.92);
+    transform-origin: right center;
+  }  box-shadow: inset 0 2px 4px rgba(0,0,0,0.06);
 
   &::after {
     content: '';
@@ -358,6 +395,15 @@ const ActionButton = styled.button`
   border-radius: 12px;
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   cursor: pointer;
+  @media (max-width: 412px) {
+    width: 100%;
+    padding: 12px 16px;
+  }
+
+  @media (max-width: 360px) {
+    font-size: 14px;
+    padding: 11px 14px;
+  }
   
   ${props => props.primary ? css`
     background: linear-gradient(135deg, #f97316 0%, #ea580c 100%); /* Orange Gradient */
@@ -386,11 +432,30 @@ const ActionButton = styled.button`
 
 const SaveBar = styled.div`
   position: fixed;
-  bottom: 40px;
   left: 50%;
   transform: translateX(-50%);
+  bottom: 40px;
   z-index: 100;
   width: auto;
+
+  @media (max-width: 412px) {
+    left: 0;
+    right: 0;
+    transform: none;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    width: 100%;
+    padding: 0 12px;
+    box-sizing: border-box;
+  }
+`;
+
+const SaveBtn = styled(ActionButton)`
+  width: min(100%, 420px);
+  pointer-events: auto;
+
+  @media (max-width: 412px) {
+    width: 100%;
+  }
 `;
 
 const Toast = styled.div`
@@ -398,23 +463,71 @@ const Toast = styled.div`
   bottom: 50px;
   left: 50%;
   transform: translateX(-50%);
+  z-index: 200;
+
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(12px);
   padding: 16px 28px;
   border-radius: 16px;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
+  border: 1px solid #e2e8f0;
+
+  /* Replace min-width: 340px */
+  min-width: 0;
+  max-width: min(520px, calc(100vw - 24px));
+  width: max-content;
+
   display: flex;
   align-items: center;
   gap: 12px;
-  z-index: 200;
-  border: 1px solid #e2e8f0;
-  animation: ${slideUp} 0.5s cubic-bezier(0.16, 1, 0.3, 1);
-  min-width: 340px;
   justify-content: center;
 
-  ${props => props.type === 'error' && css`border-left: 5px solid #ef4444;`}
-  ${props => props.type === 'success' && css`border-left: 5px solid #10b981;`}
+  @media (max-width: 412px) {
+    left: 12px;
+    right: 12px;
+    transform: none;
+    width: auto;                 /* now controlled by left/right */
+    padding: 14px 14px;
+  }
 `;
+
+const Row = styled.div`
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  width: 100%;
+
+  /* Critical: allow wrapping on tiny widths */
+  flex-wrap: wrap;
+
+  & > * {
+    min-width: 0; /* allow children to shrink */
+  }
+
+  @media (max-width: 360px) {
+    gap: 10px;
+  }
+`;
+
+const ColorSwatch = styled(Input)`
+  width: 80px;
+  padding: 4px;
+  height: 50px;
+  border-radius: 12px;
+  cursor: pointer;
+  border: none;
+  background: none;
+
+  @media (max-width: 360px) {
+    width: 64px;
+    height: 46px;
+  }
+`;
+
+const FlexInput = styled(Input)`
+  flex: 1;
+  min-width: 0; /* key for flex overflow on narrow screens */
+`;
+
 
 /* "Dynamic UI" File Upload - Refined with Orange */
 const DynamicFileUpload = styled.label`
@@ -437,6 +550,42 @@ const DynamicFileUpload = styled.label`
   & * { pointer-events: none; }
   & button { pointer-events: auto; }
 `;
+
+const UrlRow = styled.div`
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  flex-wrap: wrap;
+
+  & > * { min-width: 0; }
+
+  @media (max-width: 412px) {
+    gap: 10px;
+  }
+`;
+
+const UrlInput = styled(Input)`
+  flex: 1;
+  min-width: 0;
+  background: #f1f5f9;
+  color: #64748b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 13px;
+
+  @media (max-width: 360px) {
+    font-size: 12px;
+  }
+`;
+
+const CopyBtn = styled(ActionButton)`
+  flex: 0 0 auto;
+
+  @media (max-width: 412px) {
+    width: 100%;
+  }
+`;
+
 
 function PrintLogoField({ restaurantId, supabase }) {
   const [saving, setSaving] = useState(false);
@@ -919,12 +1068,13 @@ export default function SettingsPage() {
              </SectionHeader>
              <SectionBody>
                <FormField>
-                 <Label>Primary Brand Color</Label>
-                 <div style={{ display: 'flex', gap: 16 }}>
-                    <Input type="color" value={form.brand_color} onChange={onChange('brand_color')} style={{ width: 80, padding: 4, height: 50, borderRadius: 12, cursor: 'pointer', border: 'none', background:'none' }} />
-                    <Input value={form.brand_color} onChange={onChange('brand_color')} style={{ flex: 1 }} />
-                 </div>
-               </FormField>
+  <Label>Primary Brand Color</Label>
+  <Row>
+    <ColorSwatch type="color" value={form.brand_color} onChange={onChange('brand_color')} />
+    <FlexInput value={form.brand_color} onChange={onChange('brand_color')} />
+  </Row>
+</FormField>
+
                <FormField>
                  <Label>Short Description</Label>
                  <Textarea value={form.description} onChange={onChange('description')} rows={2} placeholder="A short bio about your restaurant..." />
@@ -959,24 +1109,34 @@ export default function SettingsPage() {
             </SectionHeader>
             <div style={{ padding: 36 }}>
                <Label style={{marginBottom: 10}}>Kitchen Dashboard URL</Label>
-               <div style={{ display: 'flex', gap: 12 }}>
-                  <Input readOnly value={`${window.location.origin}/kitchen?rid=${restaurant?.id || ''}`} style={{ background: '#f1f5f9', color: '#64748b', fontFamily:'monospace', fontSize: 13 }} />
-                  <ActionButton onClick={(e) => {
-                     e.preventDefault();
-                     navigator.clipboard.writeText(`${window.location.origin}/kitchen?rid=${restaurant?.id}`);
-                     alert('Copied!');
-                  }}>Copy</ActionButton>
-               </div>
+               <UrlRow>
+  <UrlInput readOnly value={`${window.location.origin}/kitchen?rid=${restaurant?.id || ''}`} />
+  <CopyBtn onClick={(e) => { e.preventDefault(); navigator.clipboard.writeText(`${window.location.origin}/kitchen?rid=${restaurant?.id}`); alert('Copied!'); }}>
+    Copy
+  </CopyBtn>
+</UrlRow>
+
             </div>
           </SectionCard>
 
         </ContentGrid>
 
         <SaveBar>
-           <ActionButton primary disabled={saving} onClick={save} style={{minWidth: 200, padding: '16px 32px', fontSize: 16, borderRadius: 100, boxShadow: '0 10px 20px -5px rgba(249, 115, 22, 0.4)'}}>
-               {saving ? 'Saving...' : '✨ Save Changes'}
-           </ActionButton>
-        </SaveBar>
+  <SaveBtn
+    primary
+    disabled={saving}
+    onClick={save}
+    style={{
+      padding: '16px 32px',
+      fontSize: 16,
+      borderRadius: 100,
+      boxShadow: '0 10px 20px -5px rgba(249, 115, 22, 0.4)',
+    }}
+  >
+    {saving ? 'Saving...' : '✨ Save Changes'}
+  </SaveBtn>
+</SaveBar>
+
       </form>
     </PageContainer>
   );
