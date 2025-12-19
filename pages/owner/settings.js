@@ -525,7 +525,7 @@ export default function SettingsPage() {
     features_production_enabled: false, features_counter_send_to_kitchen_enabled: true,
     swiggy_enabled: false, zomato_enabled: false,
     brand_color: '#f97316', description: '', instagram_handle: '', website_url: '',
-    gst_enabled: false, gstin: '', default_tax_rate: 5, prices_include_tax: false,
+    gst_enabled: false, gstin: '', fssai_license: '', default_tax_rate: 5, prices_include_tax: false,
     swiggy_api_key: '', swiggy_api_secret: '', swiggy_webhook_secret: '',
     zomato_api_key: '', zomato_api_secret: '', zomato_webhook_secret: '',
   });
@@ -556,6 +556,7 @@ export default function SettingsPage() {
             shipping_pincode: profile.shipping_pincode || '',
             gst_enabled: !!profile.gst_enabled,
             gstin: profile.gstin || '',
+            fssai_license: profile.fssai_license || '',
             prices_include_tax: !!profile.prices_include_tax,
             default_tax_rate: profile.default_tax_rate ?? 5,
             features_production_enabled: !!profile.features_production_enabled,
@@ -586,6 +587,7 @@ export default function SettingsPage() {
     setShowToast(false);
     try {
       if (!form.legal_name) throw new Error("Legal Name required");
+      if (!form.fssai_license) throw new Error("FSSAI License Number is required");
       
       const payload = {
           restaurant_id: restaurant.id,
@@ -602,6 +604,7 @@ export default function SettingsPage() {
           upi_id: form.upi_id,
           gst_enabled: form.gst_enabled,
           gstin: form.gstin,
+          fssai_license: form.fssai_license,
           prices_include_tax: form.prices_include_tax,
           default_tax_rate: Number(form.default_tax_rate),
           brand_color: form.brand_color,
@@ -686,6 +689,17 @@ export default function SettingsPage() {
               <FormField>
                 <Label>Support Email <Required>*</Required></Label>
                 <Input value={form.support_email} onChange={onChange('support_email')} type="email" />
+              </FormField>
+              <FormField span={2}>
+                <Label>FSSAI License Number <Required>*</Required></Label>
+                <Input 
+                  value={form.fssai_license} 
+                  onChange={onChange('fssai_license')} 
+                  placeholder="e.g. 12345678901234"
+                  maxLength={14}
+                  required
+                />
+                <HelperText>14-digit FSSAI License Number (mandatory for food businesses)</HelperText>
               </FormField>
               <FormField span={2}>
                 <Label>Address Line 1</Label>
