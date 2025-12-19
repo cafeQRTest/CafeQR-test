@@ -489,6 +489,37 @@ export default function MenuPage() {
               <Button variant="outline" onClick={() => applyBulk("out_of_stock")}>
                 Mark Out of Stock
               </Button>
+              <Button 
+                variant="outline" 
+                onClick={async () => {
+                  const count = selected.size;
+                  const ok = await showConfirm(
+                    `Are you sure you want to delete ${count} selected item${count > 1 ? 's' : ''}?`
+                  );
+                  if (!ok) return;
+                  
+                  try {
+                    setLoading(true);
+                    const { error: delError } = await supabase
+                      .from('menu_items')
+                      .delete()
+                      .in('id', Array.from(selected));
+                    
+                    if (delError) throw delError;
+                    
+                    setItems(prev => prev.filter(item => !selected.has(item.id)));
+                    setSelected(new Set());
+                    setError('');
+                  } catch (e) {
+                    setError(e.message || 'Failed to delete items');
+                  } finally {
+                    setLoading(false);
+                  }
+                }}
+                style={{ background: '#fee2e2', color: '#dc2626', borderColor: '#fecaca' }}
+              >
+                Delete Selected ({selected.size})
+              </Button>
             </>
           )}
         </div>
@@ -546,7 +577,7 @@ export default function MenuPage() {
                           onChange={() => toggleSelect(item.id)}
                         />
                       </td>
-                      <td style={{ maxWidth: 220 }}>
+                      <td className="col-name" style={{ maxWidth: 220 }}>
                         <div
                           style={{
                             display: "flex",
@@ -677,7 +708,7 @@ export default function MenuPage() {
                           )}
                         </td>
                       )}
-                      <td className="hide-mobile">
+                      <td className="hide-mobile col-actions" style={{ textAlign: 'right' }}>
                         <div
                           className="row"
                           style={{
