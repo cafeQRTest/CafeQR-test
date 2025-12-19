@@ -1015,20 +1015,7 @@ window.dispatchEvent(
 
 
 
-      
-      {/* Additional Inputs Row (No. of Customers) */}
-      <div style={{ padding: '0 12px 8px', display: 'flex', gap: 12, alignItems: 'center' }}>
-          <div style={{ flex: 1,  maxWidth: 200 }}>
-             <input
-              type="number"
-              min="1"
-              placeholder="No. of Customers"
-              value={numberOfCustomers}
-              onChange={(e) => setNumberOfCustomers(e.target.value)}
-              className="input"
-            />
-          </div>
-      </div>
+
 
         <div className="counter-inputs-row">
           {isCreditSale ? (

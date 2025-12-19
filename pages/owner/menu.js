@@ -803,20 +803,22 @@ export default function MenuPage() {
         </div>
       )}
       <style jsx>{`
-        /* Ensure the container handles the scrolling so sticky works internally */
-        /* Ensure the container handles the scrolling so sticky works internally */
         .table-scroll {
-          max-height: calc(100vh - 200px); /* Leave space for header/toolbar */
+          max-height: calc(100vh - 200px);
           overflow-y: auto;
-          overflow-x: auto; /* ENABLE horizontal scroll */
+          overflow-x: auto;
           border: 1px solid #e5e7eb;
           border-radius: 8px;
+          -webkit-overflow-scrolling: touch;
+          touch-action: pan-x pan-y;
+          position: relative;
         }
 
         .table {
           width: 100%;
+          min-width: 1000px;
           border-collapse: collapse;
-          table-layout: auto; /* Let columns expand naturally */
+          table-layout: fixed;
         }
 
         .table th {
@@ -839,37 +841,62 @@ export default function MenuPage() {
           border-bottom: 1px solid #f3f4f6;
           color: #111827;
           font-size: 14px;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
         
         .table tbody tr:hover {
           background-color: #f9fafb;
         }
         
-        /* Column Widths */
-        .col-name { min-width: 180px; max-width: 300px; }
-        .col-cat { min-width: 120px; }
-        .col-actions { min-width: 180px; text-align: right; }
+        .col-name { width: 200px; }
+        .col-cat { width: 120px; }
+        .col-actions { width: 200px; text-align: right; }
 
-        /* Mobile Responsive Overrides */
-        @media (max-width: 640px) {
+        @media (max-width: 768px) {
           .table-scroll {
-            max-height: 70vh;
+            max-height: calc(100vh - 180px);
+            border-radius: 6px;
           }
+          
+          .table {
+            min-width: 900px;
+          }
+          
+          .hide-sm {
+            display: none;
+          }
+          
           .table th, .table td {
             padding: 10px 8px;
+            font-size: 13px;
           }
-          .col-name { min-width: auto; max-width: none; }
         }
 
-        /* Mobile Responsive Overrides */
         @media (max-width: 640px) {
           .table-scroll {
-            max-height: 70vh;
+            max-height: calc(100vh - 160px);
           }
+          
+          .table {
+            min-width: 800px;
+          }
+          
+          .hide-mobile {
+            display: none;
+          }
+          
+          .hide-extra {
+            display: none;
+          }
+          
           .table th, .table td {
-            padding: 10px 8px;
+            padding: 8px 6px;
+            font-size: 12px;
           }
-          .col-name { min-width: auto; max-width: none; }
+          
+          .col-name { width: 150px; }
         }
       `}</style>
       {showImageImport && (

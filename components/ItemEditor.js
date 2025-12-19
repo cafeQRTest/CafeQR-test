@@ -555,58 +555,77 @@ if (code.trim()) {
           />
         </label>
 
-        {/* Small Image Upload Section */}
+        {/* Enhanced Image Upload Section */}
         {enableMenuImages && (
-          <div style={{ marginTop: 14 }}>
-            <div className="ie-label">Image</div>
-            <div className="ie-image-upload">
+          <div style={{ marginTop: 20, marginBottom: 4 }}>
+            <div className="ie-label" style={{ marginBottom: 10 }}>
+              Menu Item Image
+              <span style={{ fontSize: 11, fontWeight: 400, color: '#9ca3af', marginLeft: 8 }}>
+                (Optional)
+              </span>
+            </div>
+            <div className="ie-image-upload-enhanced">
               {uploadingImage ? (
-                <div className="ie-upload-placeholder">
-                  <div className="spinner" style={{ 
-                    border: '3px solid #f3f3f3', 
-                    borderTop: '3px solid #652ae2', 
-                    borderRadius: '50%', 
-                    width: 24, 
-                    height: 24, 
-                    animation: 'spin 1s linear infinite',
-                    marginBottom: 8 
-                  }} />
-                  <span style={{ fontSize: 13, color: '#652ae2', fontWeight: 500 }}>Uploading...</span>
-                  <style>{`
-                    @keyframes spin {
-                      0% { transform: rotate(0deg); }
-                      100% { transform: rotate(360deg); }
-                    }
-                  `}</style>
+                <div className="ie-upload-loading">
+                  <div className="ie-spinner" />
+                  <span className="ie-loading-text">Processing image...</span>
+                  <span className="ie-loading-subtext">Optimizing for best quality</span>
                 </div>
               ) : imageUrl ? (
-                <div className="ie-image-preview-wrapper">
-                  <img src={imageUrl} alt="Preview" className="ie-image-preview" style={{ maxHeight: 120 }} />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setImageUrl("");
-                      setImageFile(null);
-                    }}
-                    style={{}}
-                    className="ie-remove-image-btn"
-                    title="Remove image"
-                  >
-                    ✕
-                  </button>
+                <div className="ie-image-preview-container">
+                  <div className="ie-image-preview-box">
+                    <img src={imageUrl} alt="Menu item preview" className="ie-image-preview-img" />
+                    <div className="ie-image-overlay">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setImageUrl("");
+                          setImageFile(null);
+                        }}
+                        className="ie-image-remove-btn"
+                        title="Remove image"
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/>
+                        </svg>
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                  <div className="ie-image-info">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                      <polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                    <span>Image uploaded successfully</span>
+                  </div>
                 </div>
               ) : (
-                <label className="ie-upload-label">
+                <label className="ie-upload-dropzone">
                   <input
                     type="file"
                     accept="image/*"
                     onChange={handleImageChange}
-                    style={{ display: 'none' }}
+                    className="ie-file-input"
                   />
-                  <span style={{ fontSize: 24 }}>📷</span>
-                  <div style={{ textAlign: 'left' }}>
-                    <div style={{ fontSize: 13, fontWeight: 500, color: '#4b5563' }}>Upload Image</div>
-                    <div style={{ fontSize: 11, color: '#9ca3af' }}>Max 10MB</div>
+                  <div className="ie-upload-icon-wrapper">
+                    <svg className="ie-upload-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                      <polyline points="17 8 12 3 7 8"/>
+                      <line x1="12" y1="3" x2="12" y2="15"/>
+                    </svg>
+                  </div>
+                  <div className="ie-upload-text-primary">
+                    <span className="ie-upload-highlight">Click to upload</span> or drag and drop
+                  </div>
+                  <div className="ie-upload-text-secondary">
+                    PNG, JPG, GIF up to 10MB
+                  </div>
+                  <div className="ie-upload-badge">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                    Auto-compressed for optimal quality
                   </div>
                 </label>
               )}
@@ -1173,8 +1192,218 @@ if (code.trim()) {
         .ie-overlay-inner { position: fixed; inset: 0; background: rgba(0,0,0,0.2); z-index: 1100; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(1px); }
         .ie-modal-inner { background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 360px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); border: 1px solid #e5e7eb; }
         
-        /* Image Upload */
-        .ie-image-upload { border: 2px dashed #d1d5db; border-radius: 8px; padding: 4px; display: flex; justify-content: center; align-items: center; min-height: 80px; background-color: #f9fafb; margin-top: 4px; }
+        /* Enhanced Image Upload Styles */
+        .ie-image-upload-enhanced {
+          border: 2px dashed #e5e7eb;
+          border-radius: 12px;
+          background: linear-gradient(135deg, #fafafa 0%, #ffffff 100%);
+          overflow: hidden;
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .ie-upload-dropzone {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          padding: 32px 20px;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          position: relative;
+        }
+        
+        .ie-upload-dropzone:hover {
+          border-color: #f97316;
+          background: linear-gradient(135deg, #fff7ed 0%, #ffffff 100%);
+        }
+        
+        .ie-upload-dropzone:hover .ie-upload-icon-wrapper {
+          transform: translateY(-4px) scale(1.05);
+          background: linear-gradient(135deg, #f97316 0%, #fb923c 100%);
+        }
+        
+        .ie-upload-dropzone:hover .ie-upload-icon {
+          stroke: white;
+        }
+        
+        .ie-file-input {
+          position: absolute;
+          width: 100%;
+          height: 100%;
+          top: 0;
+          left: 0;
+          opacity: 0;
+          cursor: pointer;
+        }
+        
+        .ie-upload-icon-wrapper {
+          width: 80px;
+          height: 80px;
+          border-radius: 50%;
+          background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin-bottom: 16px;
+          transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+          box-shadow: 0 4px 12px rgba(251, 146, 60, 0.15);
+        }
+        
+        .ie-upload-icon {
+          stroke: #f97316;
+          transition: all 0.3s ease;
+        }
+        
+        .ie-upload-text-primary {
+          font-size: 15px;
+          font-weight: 500;
+          color: #374151;
+          margin-bottom: 6px;
+          text-align: center;
+        }
+        
+        .ie-upload-highlight {
+          color: #f97316;
+          font-weight: 600;
+        }
+        
+        .ie-upload-text-secondary {
+          font-size: 13px;
+          color: #9ca3af;
+          margin-bottom: 14px;
+        }
+        
+        .ie-upload-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 6px 14px;
+          background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+          border: 1px solid #a7f3d0;
+          border-radius: 20px;
+          font-size: 11px;
+          font-weight: 600;
+          color: #059669;
+          box-shadow: 0 2px 4px rgba(5, 150, 105, 0.1);
+        }
+        
+        .ie-upload-badge svg {
+          stroke: #059669;
+        }
+        
+        /* Loading State */
+        .ie-upload-loading {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          padding: 40px 20px;
+          gap: 10px;
+        }
+        
+        .ie-spinner {
+          width: 48px;
+          height: 48px;
+          border: 4px solid #fee2e2;
+          border-top: 4px solid #f97316;
+          border-radius: 50%;
+          animation: spin 0.8s linear infinite;
+        }
+        
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        
+        .ie-loading-text {
+          font-size: 14px;
+          font-weight: 600;
+          color: #f97316;
+        }
+        
+        .ie-loading-subtext {
+          font-size: 12px;
+          color: #9ca3af;
+        }
+        
+        /* Preview State */
+        .ie-image-preview-container {
+          padding: 16px;
+        }
+        
+        .ie-image-preview-box {
+          position: relative;
+          border-radius: 10px;
+          overflow: hidden;
+          background: #f9fafb;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+          transition: all 0.3s ease;
+        }
+        
+        .ie-image-preview-box:hover .ie-image-overlay {
+          opacity: 1;
+        }
+        
+        .ie-image-preview-img {
+          width: 100%;
+          height: 200px;
+          object-fit: cover;
+          display: block;
+          border-radius: 10px;
+        }
+        
+        .ie-image-overlay {
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(to bottom, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.7));
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          opacity: 0;
+          transition: opacity 0.3s ease;
+        }
+        
+        .ie-image-remove-btn {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 10px 18px;
+          background: #ef4444;
+          color: white;
+          border: none;
+          border-radius: 8px;
+          font-size: 13px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+        }
+        
+        .ie-image-remove-btn:hover {
+          background: #dc2626;
+          transform: translateY(-2px);
+          box-shadow: 0 6px 16px rgba(239, 68, 68, 0.4);
+        }
+        
+        .ie-image-remove-btn:active {
+          transform: translateY(0);
+        }
+        
+        .ie-image-info {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-top: 12px;
+          padding: 10px 14px;
+          background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+          border: 1px solid #a7f3d0;
+          border-radius: 8px;
+          font-size: 12px;
+          font-weight: 500;
+          color: #059669;
+        }
+        
+        /* Old styles (keeping for backward compatibility) */
         .ie-upload-placeholder { display: flex; flex-direction: column; align-items: center; color: #6b7280; }
         .ie-image-preview-wrapper { position: relative; width: 100%; text-align: center; }
         .ie-image-preview { max-width: 100%; max-height: 200px; border-radius: 6px; object-fit: contain; }
