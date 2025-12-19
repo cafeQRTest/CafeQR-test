@@ -397,6 +397,9 @@ export async function downloadTextAndShare(order, bill, restaurantProfile) {
     if (billNo) lines.push(`Bill No: ${billNo}`);
     // lines.push(`Order: #${orderId}`);
     lines.push(`Order Type: ${orderType}`);
+    if (order?.number_of_customers) {
+      lines.push(`No. of Customers: ${order.number_of_customers}`);
+    }
     
     lines.push(dashes());
     lines.push('');
