@@ -7,6 +7,7 @@ import { useRestaurant } from '../../context/RestaurantContext';
 import { useSubscription } from '../../context/SubscriptionContext';
 import { getSupabase } from '../../services/supabase';
 import PrinterSetupCard from '../../components/PrinterSetupCard';
+import NiceSelect from '../../components/NiceSelect';
 import { fileToBitmapGrid } from '../../utils/logoBitmap';
 
 // --- Animations ---
@@ -210,6 +211,32 @@ const Textarea = styled.textarea`
     border-color: #f97316;
     outline: none;
     box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.1);
+  }
+`;
+
+const Select = styled.select`
+  display: block;
+  width: 90%;
+  padding: 14px 18px;
+  font-size: 16px;
+  color: #0f172a;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+
+  &:focus {
+    background-color: white;
+    border-color: #f97316;
+    outline: none;
+    box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.1);
+    transform: translateY(-1px);
+  }
+
+  &:hover:not(:disabled):not(:focus) {
+    background-color: white;
+    border-color: #cbd5e1;
   }
 `;
 
@@ -490,7 +517,7 @@ export default function SettingsPage() {
   const [success, setSuccess] = useState('');
   const [showToast, setShowToast] = useState(false);
   const [form, setForm] = useState({
-    legal_name: '', restaurant_name: '', phone: '', support_email: '',
+    legal_name: '', restaurant_name: '', phone: '', support_email: '', address: '',
     tables_count: 0, table_prefix: 'T', upi_id: '',
     features_credit_enabled: false, features_menu_images_enabled: false,
     features_table_ordering_enabled: false, features_inventory_enabled: false,
@@ -556,6 +583,7 @@ export default function SettingsPage() {
           legal_name: form.legal_name,
           phone: form.phone,
           support_email: form.support_email,
+          address: form.address,
           tables_count: Number(form.tables_count),
           table_prefix: form.table_prefix,
           upi_id: form.upi_id,
@@ -646,6 +674,11 @@ export default function SettingsPage() {
                 <Label>Support Email <Required>*</Required></Label>
                 <Input value={form.support_email} onChange={onChange('support_email')} type="email" />
               </FormField>
+              <FormField span={2}>
+                <Label>Business Address</Label>
+                <Textarea value={form.address} onChange={onChange('address')} rows={3} placeholder="Enter your complete business address..." />
+                <HelperText>This address will appear on receipts and invoices</HelperText>
+              </FormField>
             </SectionBody>
           </SectionCard>
 
@@ -673,6 +706,77 @@ export default function SettingsPage() {
                   <Input value={form.upi_id} onChange={onChange('upi_id')} placeholder="merchant@upi" />
                   <HelperText>Direct UPI payments will be sent to this VPA.</HelperText>
                </FormField>
+            </SectionBody>
+          </SectionCard>
+
+          {/* TAX & COMPLIANCE CARD */}
+          <SectionCard>
+            <SectionHeader>
+              <SectionIcon>📋</SectionIcon>
+              <div>
+                <SectionTitle>Tax & Compliance</SectionTitle>
+                <div style={{fontSize: 13, color:'gray', fontWeight:400}}>Configure tax settings and GST information</div>
+              </div>
+            </SectionHeader>
+            <SectionBody>
+              <FormField span={2}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px 0' }}>
+                  <input 
+                    type="checkbox" 
+                    id="gst-enabled" 
+                    checked={form.gst_enabled} 
+                    onChange={onChange('gst_enabled')}
+                    style={{ width: 20, height: 20, cursor: 'pointer', accentColor: '#f97316' }}
+                  />
+                  <label htmlFor="gst-enabled" style={{ fontSize: 16, fontWeight: 600, color: '#0f172a', cursor: 'pointer' }}>
+                    Enable GST
+                  </label>
+                </div>
+                <HelperText>Check this if your business is registered under GST</HelperText>
+              </FormField>
+
+              {form.gst_enabled && (
+                <FormField span={2}>
+                  <Label>GSTIN (GST Identification Number)</Label>
+                  <Input 
+                    value={form.gstin} 
+                    onChange={onChange('gstin')} 
+                    placeholder="e.g. 22AAAAA0000A1Z5"
+                    maxLength={15}
+                  />
+                  <HelperText>15-character GST Identification Number</HelperText>
+                </FormField>
+              )}
+
+              <FormField>
+                <Label>Default Tax Rate (%)</Label>
+                <NiceSelect
+                  value={form.default_tax_rate}
+                  onChange={(val) => setForm({ ...form, default_tax_rate: val })}
+                  options={[
+                    { value: 5, label: '5%' },
+                    { value: 18, label: '18%' },
+                  ]}
+                  placeholder="Select tax rate"
+                />
+                <HelperText>Applied to items without specific tax rates</HelperText>
+              </FormField>
+
+              <FormField>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px 0' }}>
+                  <input 
+                    type="checkbox" 
+                    id="prices-include-tax" 
+                    checked={form.prices_include_tax} 
+                    onChange={onChange('prices_include_tax')}
+                    style={{ width: 20, height: 20, cursor: 'pointer', accentColor: '#f97316' }}
+                  />
+                  <label htmlFor="prices-include-tax" style={{ fontSize: 16, fontWeight: 600, color: '#0f172a', cursor: 'pointer' }}>
+                    Prices Include Tax
+                  </label>
+                </div>
+                <HelperText>Check if menu prices already include tax</HelperText>
+              </FormField>
             </SectionBody>
           </SectionCard>
 
