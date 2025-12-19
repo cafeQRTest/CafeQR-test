@@ -377,6 +377,16 @@ export async function downloadTextAndShare(order, bill, restaurantProfile) {
     
     if (phone) lines.push(center(`Contact No.: ${phone}`, W));
     
+    // Add FSSAI if available
+    if (restaurantProfile?.fssai_license) {
+      lines.push(center(`FSSAI: ${restaurantProfile.fssai_license}`, W));
+    }
+    
+    // Add GSTIN if GST is enabled and GSTIN exists
+    if (restaurantProfile?.gst_enabled && restaurantProfile?.gstin) {
+      lines.push(center(`GSTIN: ${restaurantProfile.gstin}`, W));
+    }
+    
     lines.push('');
     lines.push(dashes());
     lines.push('');
@@ -546,6 +556,17 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     lines.push(center(restaurantName, W));
     wrapText(address, W).forEach((l) => lines.push(center(l, W)));
     if (phone) lines.push(center(`Contact No.: ${phone}`, W));
+    
+    // Add FSSAI if available
+    if (restaurantProfile?.fssai_license) {
+      lines.push(center(`FSSAI: ${restaurantProfile.fssai_license}`, W));
+    }
+    
+    // Add GSTIN if GST is enabled and GSTIN exists
+    if (restaurantProfile?.gst_enabled && restaurantProfile?.gstin) {
+      lines.push(center(`GSTIN: ${restaurantProfile.gstin}`, W));
+    }
+    
     lines.push(dashes());
 
     // META

@@ -132,7 +132,7 @@ useEffect(() => {
         const [rp, rn] = await Promise.all([
           supabase
             .from('restaurant_profiles')
-            .select('restaurant_name,shipping_address_line1,shipping_address_line2,shipping_city,shipping_state,shipping_pincode,phone,shipping_phone,print_logo_bitmap,print_logo_cols,print_logo_rows')
+            .select('restaurant_name,shipping_address_line1,shipping_address_line2,shipping_city,shipping_state,shipping_pincode,phone,shipping_phone,print_logo_bitmap,print_logo_cols,print_logo_rows,fssai_license,gstin,gst_enabled')
             .eq('restaurant_id', order.restaurant_id)
             .maybeSingle(),
           supabase
