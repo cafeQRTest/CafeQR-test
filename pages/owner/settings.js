@@ -517,7 +517,8 @@ export default function SettingsPage() {
   const [success, setSuccess] = useState('');
   const [showToast, setShowToast] = useState(false);
   const [form, setForm] = useState({
-    legal_name: '', restaurant_name: '', phone: '', support_email: '', address: '',
+    legal_name: '', restaurant_name: '', phone: '', support_email: '',
+    shipping_address_line1: '', shipping_address_line2: '', shipping_city: '', shipping_state: '', shipping_pincode: '',
     tables_count: 0, table_prefix: 'T', upi_id: '',
     features_credit_enabled: false, features_menu_images_enabled: false,
     features_table_ordering_enabled: false, features_inventory_enabled: false,
@@ -548,6 +549,14 @@ export default function SettingsPage() {
         if (profile) {
           setForm(prev => ({
             ...prev, ...profile,
+            shipping_address_line1: profile.shipping_address_line1 || '',
+            shipping_address_line2: profile.shipping_address_line2 || '',
+            shipping_city: profile.shipping_city || '',
+            shipping_state: profile.shipping_state || '',
+            shipping_pincode: profile.shipping_pincode || '',
+            gst_enabled: !!profile.gst_enabled,
+            gstin: profile.gstin || '',
+            prices_include_tax: !!profile.prices_include_tax,
             default_tax_rate: profile.default_tax_rate ?? 5,
             features_production_enabled: !!profile.features_production_enabled,
             features_credit_enabled: !!profile.features_credit_enabled,
@@ -583,7 +592,11 @@ export default function SettingsPage() {
           legal_name: form.legal_name,
           phone: form.phone,
           support_email: form.support_email,
-          address: form.address,
+          shipping_address_line1: form.shipping_address_line1,
+          shipping_address_line2: form.shipping_address_line2,
+          shipping_city: form.shipping_city,
+          shipping_state: form.shipping_state,
+          shipping_pincode: form.shipping_pincode,
           tables_count: Number(form.tables_count),
           table_prefix: form.table_prefix,
           upi_id: form.upi_id,
@@ -675,9 +688,24 @@ export default function SettingsPage() {
                 <Input value={form.support_email} onChange={onChange('support_email')} type="email" />
               </FormField>
               <FormField span={2}>
-                <Label>Business Address</Label>
-                <Textarea value={form.address} onChange={onChange('address')} rows={3} placeholder="Enter your complete business address..." />
-                <HelperText>This address will appear on receipts and invoices</HelperText>
+                <Label>Address Line 1</Label>
+                <Input value={form.shipping_address_line1} onChange={onChange('shipping_address_line1')} placeholder="Street address, building name..." />
+              </FormField>
+              <FormField span={2}>
+                <Label>Address Line 2</Label>
+                <Input value={form.shipping_address_line2} onChange={onChange('shipping_address_line2')} placeholder="Apartment, suite, unit..." />
+              </FormField>
+              <FormField>
+                <Label>City</Label>
+                <Input value={form.shipping_city} onChange={onChange('shipping_city')} placeholder="City" />
+              </FormField>
+              <FormField>
+                <Label>State</Label>
+                <Input value={form.shipping_state} onChange={onChange('shipping_state')} placeholder="State" />
+              </FormField>
+              <FormField>
+                <Label>Pincode</Label>
+                <Input value={form.shipping_pincode} onChange={onChange('shipping_pincode')} placeholder="Pincode" maxLength={6} />
               </FormField>
             </SectionBody>
           </SectionCard>
