@@ -169,6 +169,38 @@ export default function MenuPage() {
   const [editorItem, setEditorItem] = useState(null);
   const [showLibrary, setShowLibrary] = useState(false);
   const [viewImage, setViewImage] = useState(null);
+  const [detailPopupItem, setDetailPopupItem] = useState(null);
+  const carouselRef = useRef(null);
+  const [showLeftArrow, setShowLeftArrow] = useState(false);
+  const [showRightArrow, setShowRightArrow] = useState(false);
+
+  // Check scroll position to toggle arrows
+  const checkScroll = () => {
+    if (carouselRef.current) {
+      const { scrollLeft, scrollWidth, clientWidth } = carouselRef.current;
+      setShowLeftArrow(scrollLeft > 0);
+      setShowRightArrow(Math.ceil(scrollLeft + clientWidth) < scrollWidth);
+    }
+  };
+
+  useEffect(() => {
+    checkScroll();
+    window.addEventListener('resize', checkScroll);
+    return () => window.removeEventListener('resize', checkScroll);
+  }, [categories]);
+
+  const scrollCarousel = (direction) => {
+    if (carouselRef.current) {
+      const scrollAmount = 200;
+      carouselRef.current.scrollBy({
+        left: direction === 'left' ? -scrollAmount : scrollAmount,
+        behavior: 'smooth'
+      });
+      // checking after scroll animation would ideally be better, but timeout works for simple cases
+      setTimeout(checkScroll, 300);
+    }
+  };
+
   const [enableMenuImages, setEnableMenuImages] = useState(false);
   
   const [showCategoryManager, setShowCategoryManager] = useState(false);
@@ -299,7 +331,15 @@ export default function MenuPage() {
         const { data: its, error: itsErr } = await supabase
           .from("menu_items")
           .select(
-            "id, name, category, price, code_number, hsn, tax_rate, status, veg, is_packaged_good, compensation_cess_rate, ispopular, image_url, has_variants"
+            `id, name, category, price, code_number, hsn, tax_rate, status, veg, is_packaged_good, compensation_cess_rate, ispopular, image_url, has_variants,
+            menu_item_variants(
+              variant_templates(name)
+            ),
+            variant_pricing(
+              option_id,
+              price,
+              variant_options(name)
+            )`
           )
           .eq("restaurant_id", restaurantId)
           .order("category", { ascending: true })
@@ -424,57 +464,114 @@ export default function MenuPage() {
       {error && <Alert type="error">{error}</Alert>}
 
       <ToolBar>
-        <div className="search-row">
-          <span className="search-icon">🔍</span>
-          <input
-            className="input search-input"
-            placeholder="Search by name or code..."
-            value={filterText}
-            onChange={(e) => setFilterText(e.target.value)}
-            style={{ fontSize: 14 }}
-          />
-          {filterText && (
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', width: '100%' }}>
+          <div className="search-row search-bar-premium" style={{ flex: 1 }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="search-icon-svg">
+              <circle cx="11" cy="11" r="8" />
+              <path d="M21 21L16.65 16.65" />
+            </svg>
+            <input
+              className="input search-input-premium"
+              placeholder="Search by name or code..."
+              value={filterText}
+              onChange={(e) => setFilterText(e.target.value)}
+            />
+            {filterText && (
+              <button
+                type="button"
+                className="clear-search-btn-premium"
+                onClick={() => setFilterText("")}
+                aria-label="Clear search"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+          
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
             <button
-              type="button"
-              className="clear-search-btn"
-              onClick={() => setFilterText("")}
-              aria-label="Clear search"
+              onClick={() => setVegOnly(!vegOnly)}
+              style={{
+                padding: '6px 12px',
+                borderRadius: '8px',
+                border: vegOnly ? '1px solid #16a34a' : '1px solid #e5e7eb',
+                background: vegOnly ? '#15803d' : '#f9fafb',
+                color: vegOnly ? '#ffffff' : '#374151',
+                fontSize: '13px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4
+              }}
             >
-              ✕
+              {vegOnly ? '✓ Veg' : 'Veg'}
+            </button>
+            <button
+              onClick={() => setPkgOnly(!pkgOnly)}
+              style={{
+                padding: '6px 12px',
+                borderRadius: '8px',
+                border: pkgOnly ? '1px solid #fde68a' : '1px solid #e5e7eb',
+                background: pkgOnly ? '#fef3c7' : '#f9fafb',
+                color: pkgOnly ? '#92400e' : '#374151',
+                fontSize: '13px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4
+              }}
+            >
+              {pkgOnly ? '✓ Packaged' : 'Packaged'}
+            </button>
+          </div>
+        </div>
+        
+        {/* Category Carousel */}
+        {/* Category Carousel with Filters */}
+        <div className="carousel-container">
+          {showLeftArrow && (
+            <button className="carousel-btn left" onClick={() => scrollCarousel('left')}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M15 18l-6-6 6-6"/>
+              </svg>
+            </button>
+          )}
+          <div 
+            className="category-carousel" 
+            ref={carouselRef}
+            onScroll={checkScroll}
+          >
+            <button
+              className={`category-chip ${filterCategory === 'all' ? 'category-chip-active' : ''}`}
+              onClick={() => setFilterCategory('all')}
+            >
+              All Categories
+            </button>
+            {categories.map((cat) => (
+              <button
+                key={cat.name}
+                className={`category-chip ${filterCategory === cat.name ? 'category-chip-active' : ''}`}
+                onClick={() => setFilterCategory(cat.name)}
+              >
+                {cat.name}
+              </button>
+            ))}
+          </div>
+          {showRightArrow && (
+            <button className="carousel-btn right" onClick={() => scrollCarousel('right')}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 18l6-6-6-6"/>
+              </svg>
             </button>
           )}
         </div>
-        <div style={{ maxWidth: 260 }}>
-          <NiceSelect
-            value={filterCategory}
-            onChange={setFilterCategory}
-            placeholder="All Categories"
-            options={[
-              { value: "all", label: "All Categories" },
-              ...categories.map((c) => ({ value: c.name, label: c.name })),
-            ]}
-          />
-        </div>
 
-        <div className="checkbox-row">
-          <div className="flag">
-            <span>Veg only</span>
-            <input
-              type="checkbox"
-              checked={vegOnly}
-              onChange={(e) => setVegOnly(e.target.checked)}
-            />
-          </div>
-          <label className="flag">
-            <span>Packaged goods</span>
-            <input
-              type="checkbox"
-              checked={pkgOnly}
-              onChange={(e) => setPkgOnly(e.target.checked)}
-            />
-          </label>
-        </div>
 
+        {/* Actions Row */}
         <div className="toolbar-cta">
           <Button onClick={() => openEditor({})}>Add New Item</Button>
           <Button onClick={() => setShowImageImport(true)}>Import from Image</Button>
@@ -525,42 +622,39 @@ export default function MenuPage() {
         </div>
       </ToolBar>
 
-      <div className="card" style={{ padding: 0 }}>
+      <div className="card" style={{ padding: 0, width: 'fit-content', maxWidth: '100%' }}>
         <div className="table-scroll">
-          <table className="table">
+          <table className="menu-items-table">
             <thead>
               <tr>
-                <th style={{ width: 40 }}>
+                <th style={{ width: '45px' }}>
                   <input
                     type="checkbox"
                     checked={allSelected}
                     onChange={toggleSelectAll}
                   />
                 </th>
-                <th className="col-name">Name</th>
-                <th className="hide-extra">Code</th>
-                <th className="hide-sm col-cat">Category</th>
-                <th>Price</th>
-                <th className="hide-extra">HSN</th>
-                <th className="hide-extra">Tax %</th>
-                <th className="hide-extra">Cess %</th>
-                <th className="hide-extra">Type</th>
-                <th className="hide-sm">Status</th>
-                <th className="hide-sm">Variants</th>
-                {enableMenuImages && <th>Image</th>}
-                <th className="hide-mobile col-actions" style={{ textAlign: 'right' }}>Actions</th>
+                <th className="col-name" style={{ width: '200px' }}>Name</th>
+                <th className="hide-sm" style={{ width: '85px' }}>Code</th>
+                <th className="hide-sm col-cat" style={{ width: '130px' }}>Category</th>
+                <th style={{ width: '95px' }}>Price</th>
+                <th className="hide-sm" style={{ width: '120px' }}>Type</th>
+                <th className="hide-sm" style={{ width: '115px' }}>Status</th>
+                <th className="hide-sm" style={{ width: '90px' }}>Variants</th>
+                {enableMenuImages && <th className="hide-sm" style={{ width: '75px' }}>Image</th>}
+                <th className="hide-mobile col-actions" style={{ width: '185px' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={enableMenuImages ? 12 : 11} style={{ padding: 12 }}>
+                  <td colSpan={enableMenuImages ? 10 : 9} style={{ padding: 12 }}>
                     Loading…
                   </td>
                 </tr>
               ) : visible.length === 0 ? (
                 <tr>
-                  <td colSpan={enableMenuImages ? 12 : 11} style={{ padding: 12, color: "#666" }}>
+                  <td colSpan={enableMenuImages ? 10 : 9} style={{ padding: 12, color: "#666" }}>
                     No items found.
                   </td>
                 </tr>
@@ -569,15 +663,26 @@ export default function MenuPage() {
                   const available = item.status === "available";
                   const typeBadge = item.is_packaged_good ? "Packaged" : "Menu";
                   return (
-                    <tr key={item.id}>
-                      <td>
+                    <tr 
+                      key={item.id} 
+                      className="table-row-hover"
+                      onClick={(e) => {
+                        // Don't open popup if clicking checkbox or action buttons
+                        if (e.target.closest('input[type="checkbox"]') || e.target.closest('.col-actions')) {
+                          return;
+                        }
+                        setDetailPopupItem(item);
+                      }}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <td style={{ width: '45px' }} onClick={(e) => e.stopPropagation()}>
                         <input
                           type="checkbox"
                           checked={selected.has(item.id)}
                           onChange={() => toggleSelect(item.id)}
                         />
                       </td>
-                      <td className="col-name" style={{ maxWidth: 220 }}>
+                      <td className="col-name" style={{ maxWidth: 220, position: 'relative', width: '200px' }}>
                         <div
                           style={{
                             display: "flex",
@@ -640,29 +745,93 @@ export default function MenuPage() {
                             </Button>
                           </span>
                         </div>
+                        {/* Hover Popup - Outside the main content div */}
+                        <div className="item-details-popup">
+                          <div className="popup-header">
+                            <h4>{item.name}</h4>
+                            {item.veg && <span className="popup-veg-badge">VEG</span>}
+                          </div>
+                          <div className="popup-grid">
+                            <div className="popup-field">
+                              <span className="popup-label">Code</span>
+                              <span className="popup-value">{item.code_number || "—"}</span>
+                            </div>
+                            <div className="popup-field">
+                              <span className="popup-label">Category</span>
+                              <span className="popup-value">{item.category || "—"}</span>
+                            </div>
+                            <div className="popup-field">
+                              <span className="popup-label">Price</span>
+                              <span className="popup-value popup-price">₹{Number(item.price ?? 0).toFixed(2)}</span>
+                            </div>
+                            <div className="popup-field">
+                              <span className="popup-label">HSN</span>
+                              <span className="popup-value">{item.hsn || "—"}</span>
+                            </div>
+                            <div className="popup-field">
+                              <span className="popup-label">Tax %</span>
+                              <span className="popup-value">
+                                {item.tax_rate != null ? Number(item.tax_rate).toFixed(2) : "—"}
+                              </span>
+                            </div>
+                            <div className="popup-field">
+                              <span className="popup-label">Cess %</span>
+                              <span className="popup-value">
+                                {item.is_packaged_good
+                                  ? Number(item.compensation_cess_rate ?? 0).toFixed(2)
+                                  : "—"}
+                              </span>
+                            </div>
+                            <div className="popup-field">
+                              <span className="popup-label">Type</span>
+                              <span className={`popup-badge ${item.is_packaged_good ? 'popup-badge-pkg' : 'popup-badge-menu'}`}>
+                                {typeBadge}
+                              </span>
+                            </div>
+                            <div className="popup-field">
+                              <span className="popup-label">Status</span>
+                              <span className={`popup-badge ${available ? 'popup-badge-available' : 'popup-badge-out'}`}>
+                                {available ? "Available" : "Out of Stock"}
+                              </span>
+                            </div>
+                          </div>
+                          
+                          {/* Variant Details Section */}
+                          {item.has_variants && item.variant_pricing && item.variant_pricing.length > 0 && (
+                            <div className="popup-variants">
+                              <div className="popup-variants-header">
+                                <span className="popup-label">Variants</span>
+                                <span className="popup-variant-template">
+                                  {item.menu_item_variants?.[0]?.variant_templates?.name || "Options"}
+                                </span>
+                              </div>
+                              <div className="popup-variants-list">
+                                {item.variant_pricing.map((pricing, idx) => (
+                                  <div key={idx} className="popup-variant-item">
+                                    <span className="popup-variant-name">
+                                      {pricing.variant_options?.name || "Option"}
+                                    </span>
+                                    <span className="popup-variant-price">
+                                      ₹{Number(pricing.price ?? 0).toFixed(2)}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </td>
                       <td
-                        className="hide-extra"
-                        style={{ fontFamily: "monospace", fontSize: 13 }}
+                        className="hide-sm"
+                        style={{ fontFamily: "monospace", fontSize: 13, width: '85px' }}
                       >
                         {item.code_number || "—"}
                       </td>
-                      <td className="hide-sm">{item.category || "—"}</td>
-                      <td style={{ fontWeight: 700 }}>
+                      <td className="hide-sm" style={{ width: '130px' }}>{item.category || "—"}</td>
+                      <td style={{ fontWeight: 700, color: '#f97316', width: '95px' }}>
                         ₹{Number(item.price ?? 0).toFixed(2)}
                       </td>
-                      <td className="hide-extra">{item.hsn || "—"}</td>
-                      <td className="hide-extra">
-                        {item.tax_rate != null
-                          ? Number(item.tax_rate).toFixed(2)
-                          : "—"}
-                      </td>
-                      <td className="hide-extra">
-                        {item.is_packaged_good
-                          ? Number(item.compensation_cess_rate ?? 0).toFixed(2)
-                          : "—"}
-                      </td>
-                      <td className="hide-extra">
+                      <td className="hide-sm" style={{ width: '120px' }}>
                         <span
                           className={`pill ${
                             item.is_packaged_good ? "pill--pkg" : "pill--menu"
@@ -671,7 +840,7 @@ export default function MenuPage() {
                           {typeBadge}
                         </span>
                       </td>
-                      <td className="hide-sm">
+                      <td className="hide-sm" style={{ width: '115px' }}>
                         <span
                           className={`chip ${
                             available ? "chip--avail" : "chip--out"
@@ -681,11 +850,13 @@ export default function MenuPage() {
                           {available ? "Available" : "Out of Stock"}
                         </span>
                       </td>
-                      <td className="hide-sm" style={{ textAlign: 'center' }}>
-                        {item.has_variants ? '✓' : '—'}
+                      <td className="hide-sm" style={{ width: '90px', textAlign: 'center' }}>
+                        <span className={`badge-variant ${item.has_variants ? 'badge-variant-yes' : 'badge-variant-no'}`}>
+                          {item.has_variants ? "✓" : "✗"}
+                        </span>
                       </td>
                       {enableMenuImages && (
-                        <td>
+                        <td className="hide-sm" style={{ width: '75px' }}>
                           {item.image_url ? (
                             <div 
                               onClick={() => setViewImage(item.image_url)}
@@ -707,11 +878,11 @@ export default function MenuPage() {
                             <div style={{ width: 40, height: 40, background: '#f9fafb', borderRadius: 6, border: '1px dashed #e5e7eb' }} />
                           )}
                         </td>
-                      )}
-                      <td className="hide-mobile col-actions" style={{ textAlign: 'right' }}>
+                      )} 
+                      <td className="hide-mobile col-actions" style={{ width: '185px' }}>
                         <div
-                          className="row"
                           style={{
+                            display: 'flex',
                             justifyContent: "flex-end",
                             gap: 6,
                             flexWrap: "nowrap",
@@ -765,6 +936,1068 @@ export default function MenuPage() {
           </table>
         </div>
       </div>
+
+      {/* Detail Popup Modal */}
+      {detailPopupItem && (
+        <div className="detail-modal-overlay" onClick={() => setDetailPopupItem(null)}>
+          <div className="detail-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="detail-modal-header">
+              <div>
+                <h2>{detailPopupItem.name}</h2>
+                {detailPopupItem.veg && <span className="veg-badge">VEG</span>}
+              </div>
+              <button className="close-btn" onClick={() => setDetailPopupItem(null)}>✕</button>
+            </div>
+
+            <div className="detail-modal-body">
+              {enableMenuImages && detailPopupItem.image_url && (
+                <div className="detail-image-section">
+                  <img src={detailPopupItem.image_url} alt={detailPopupItem.name} />
+                </div>
+              )}
+
+              <div className="detail-info-grid">
+                <div className="detail-item">
+                  <span className="detail-label">Code</span>
+                  <span className="detail-value">{detailPopupItem.code_number || "—"}</span>
+                </div>
+                <div className="detail-item">
+                  <span className="detail-label">Category</span>
+                  <span className="detail-value">{detailPopupItem.category || "—"}</span>
+                </div>
+                <div className="detail-item">
+                  <span className="detail-label">Price</span>
+                  <span className="detail-value detail-price">₹{Number(detailPopupItem.price ?? 0).toFixed(2)}</span>
+                </div>
+                <div className="detail-item">
+                  <span className="detail-label">HSN Code</span>
+                  <span className="detail-value">{detailPopupItem.hsn || "—"}</span>
+                </div>
+                <div className="detail-item">
+                  <span className="detail-label">Tax %</span>
+                  <span className="detail-value">
+                    {detailPopupItem.tax_rate != null ? Number(detailPopupItem.tax_rate).toFixed(2) + '%' : "—"}
+                  </span>
+                </div>
+                <div className="detail-item">
+                  <span className="detail-label">Cess %</span>
+                  <span className="detail-value">
+                    {detailPopupItem.is_packaged_good
+                      ? Number(detailPopupItem.compensation_cess_rate ?? 0).toFixed(2) + '%'
+                      : "—"}
+                  </span>
+                </div>
+                <div className="detail-item">
+                  <span className="detail-label">Type</span>
+                  <span className={`detail-badge ${detailPopupItem.is_packaged_good ? 'badge-pkg' : 'badge-menu'}`}>
+                    {detailPopupItem.is_packaged_good ? "Packaged" : "Menu"}
+                  </span>
+                </div>
+                <div className="detail-item">
+                  <span className="detail-label">Status</span>
+                  <span className={`detail-badge ${detailPopupItem.status === 'available' ? 'badge-available' : 'badge-out'}`}>
+                    {detailPopupItem.status === 'available' ? "Available" : "Out of Stock"}
+                  </span>
+                </div>
+              </div>
+
+              {detailPopupItem.has_variants && detailPopupItem.variant_pricing && detailPopupItem.variant_pricing.length > 0 && (
+                <div className="detail-variants-section">
+                  <h3>
+                    Variants
+                    {detailPopupItem.menu_item_variants?.[0]?.variant_templates?.name && (
+                      <span className="variant-template-name">
+                        ({detailPopupItem.menu_item_variants[0].variant_templates.name})
+                      </span>
+                    )}
+                  </h3>
+                  <div className="variant-options-grid">
+                    {detailPopupItem.variant_pricing.map((pricing, idx) => (
+                      <div key={idx} className="variant-option-card">
+                        <span className="variant-option-name">{pricing.variant_options?.name || "Option"}</span>
+                        <span className="variant-option-price">₹{Number(pricing.price ?? 0).toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+
+      <style jsx>{`
+        .table-scroll {
+          max-height: calc(100vh - 200px);
+          overflow-y: auto;
+          overflow-x: auto;
+          border-radius: 12px;
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+          -webkit-overflow-scrolling: touch;
+          touch-action: pan-x pan-y;
+          position: relative;
+          background: white;
+          width: fit-content;
+          max-width: 100%;
+          margin: 0;
+          padding: 0;
+        }
+
+        .card {
+          background: white;
+        }
+
+        /* Category Carousel */
+        .carousel-container {
+          position: relative;
+          display: flex;
+          align-items: center;
+          margin-bottom: 16px;
+        }
+
+        .carousel-btn {
+          position: absolute;
+          top: 50%;
+          transform: translateY(-50%);
+          width: 28px;
+          height: 28px;
+          border-radius: 50%;
+          border: 1px solid #fed7aa;
+          background: white;
+          color: #f97316;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          flex-shrink: 0;
+          z-index: 10;
+          transition: all 0.2s;
+          padding: 0;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .carousel-btn svg {
+          display: block;
+        }
+
+        .carousel-btn:hover {
+          background: #fff7ed;
+          border-color: #f97316;
+          box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+        }
+
+        .carousel-btn.left { 
+          left: 0;
+          background: linear-gradient(90deg, white 50%, rgba(255,255,255,0.9)); 
+        }
+        
+        .carousel-btn.right { 
+          right: 0;
+          background: linear-gradient(-90deg, white 50%, rgba(255,255,255,0.9));
+        }
+
+        @media (pointer: coarse) {
+          .carousel-btn {
+            display: none !important;
+          }
+        }
+
+        .category-carousel {
+          display: flex;
+          gap: 8px;
+          overflow-x: auto;
+          padding: 4px 0;
+          flex-grow: 1;
+          -webkit-overflow-scrolling: touch;
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+          scroll-behavior: smooth;
+        }
+
+        .category-carousel::-webkit-scrollbar {
+          display: none; /* Hide scrollbar Chrome/Safari */
+        }
+
+        .category-chip {
+          flex-shrink: 0;
+          padding: 6px 16px;
+          border-radius: 100px;
+          border: 1px solid #fed7aa;
+          background: white;
+          color: #1f2937;
+          font-size: 13px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          white-space: nowrap;
+        }
+
+        .category-chip:hover {
+          border-color: #f97316;
+          background: #fff7ed;
+          transform: translateY(-2px);
+          box-shadow: 0 4px 6px -1px rgba(249, 115, 22, 0.2);
+        }
+
+        .category-chip-active {
+          background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+          color: white;
+          border-color: #f97316;
+          box-shadow: 0 4px 6px -1px rgba(249, 115, 22, 0.3);
+        }
+
+        .category-chip-active:hover {
+          background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%);
+          transform: translateY(-2px);
+        }
+
+        /* Filter Chips */
+        .filter-chips {
+          display: flex;
+          gap: 12px;
+          flex-wrap: wrap;
+          margin-bottom: 16px;
+        }
+
+        .filter-chip {
+          padding: 8px 16px;
+          border-radius: 20px;
+          border: 2px solid #e5e7eb;
+          background: white;
+          color: #1f2937;
+          font-size: 14px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          white-space: nowrap;
+        }
+
+        .filter-chip:hover {
+          border-color: #9ca3af;
+          background: #f9fafb;
+          transform: translateY(-2px);
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .filter-chip-veg-active {
+          background: #166534;
+          color: white;
+          border-color: #14532d;
+          box-shadow: 0 4px 6px -1px rgba(22, 101, 52, 0.4);
+        }
+
+        .filter-chip-veg-active:hover {
+          background: #14532d;
+          transform: translateY(-2px);
+        }
+
+        .filter-chip-pkg-active {
+          background: #f97316;
+          color: white;
+          border-color: #ea580c;
+          box-shadow: 0 4px 6px -1px rgba(249, 115, 22, 0.4);
+        }
+
+        .filter-chip-pkg-active:hover {
+          background: #ea580c;
+          transform: translateY(-2px);
+        }
+
+        .menu-items-table {
+          min-width: 1140px !important;
+          border-collapse: collapse !important;
+        }
+
+        .menu-items-table th {
+          position: sticky;
+          top: 0;
+          background: linear-gradient(to bottom, #ffffff 0%, #fafafa 100%) !important;
+          z-index: 20;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+          padding: 12px !important;
+          border-bottom: 2px solid #f97316 !important;
+          color: #1f2937 !important;
+          font-weight: 700;
+          text-align: left !important;
+          font-size: 11px;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          box-sizing: border-box !important;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          vertical-align: middle !important;
+          line-height: 16px !important;
+          height: 40px;
+        }
+        
+        .menu-items-table th[style*="width"] {
+          max-width: var(--col-width);
+        }
+
+        .menu-items-table td {
+          padding: 12px !important;
+          border-bottom: 1px solid #f3f4f6 !important;
+          color: #374151 !important;
+          font-size: 14px;
+          background: white !important;
+          transition: all 0.2s ease;
+          box-sizing: border-box !important;
+          vertical-align: middle;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        
+        .menu-items-table tbody tr {
+          position: relative;
+          transition: all 0.2s ease;
+        }
+
+        .menu-items-table tbody tr:hover {
+          background: linear-gradient(to right, #fff7ed 0%, #ffffff 100%);
+          transform: translateY(-1px);
+          box-shadow: 0 2px 8px rgba(249, 115, 22, 0.1);
+          z-index: 5;
+        }
+
+        .menu-items-table tbody tr:hover td {
+          background: transparent;
+        }
+
+        .menu-items-table tbody tr:last-child td {
+          border-bottom: none;
+        }
+
+        .menu-items-table input[type="checkbox"] {
+          width: 18px;
+          height: 18px;
+          accent-color: #f97316;
+          cursor: pointer;
+        }
+        
+        /* Premium Search Bar */
+        .search-row.search-bar-premium {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 10px 16px;
+          border-radius: 9999px; /* Pill shape */
+          background: #ffffff;
+          border: 1px solid #e5e7eb;
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+          width: 100%;
+        }
+
+        .search-row.search-bar-premium:focus-within {
+          border-color: #fdba74; /* Light orange border */
+          box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.15), 0 10px 15px -3px rgba(0, 0, 0, 0.05);
+          transform: translateY(-1px);
+        }
+
+        .search-icon-svg {
+          color: #9ca3af;
+          flex-shrink: 0;
+          transition: color 0.2s;
+        }
+
+        .search-row.search-bar-premium:focus-within .search-icon-svg {
+          color: #f97316; /* Orange on focus */
+        }
+
+        .search-input-premium {
+          flex: 1;
+          border: none;
+          background: transparent;
+          padding: 0;
+          height: auto;
+          font-size: 15px;
+          color: #1f2937;
+          outline: none;
+        }
+        
+        .search-input-premium::placeholder {
+          color: #9ca3af;
+        }
+
+        .clear-search-btn-premium {
+          background: #f3f4f6;
+          color: #6b7280;
+          width: 24px;
+          height: 24px;
+          font-size: 13px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 50%;
+          border: none;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+
+        .clear-search-btn-premium:hover {
+          background: #fee2e2;
+          color: #ef4444;
+          transform: scale(1.1);
+        }
+
+        .col-name { 
+          min-width: 200px;
+          font-weight: 600;
+          position: relative;
+        }
+        
+        .col-name {
+          white-space: normal !important;
+          word-wrap: break-word;
+        }
+
+        .col-cat { 
+          min-width: 130px;
+        }
+
+        .col-actions { 
+          min-width: 185px;
+          text-align: center !important;
+        }
+        
+        .menu-items-table .col-actions {
+          text-align: center !important;
+          display: table-cell !important;
+          vertical-align: middle !important;
+          padding: 12px !important;
+        }
+        
+        .menu-items-table th.col-actions {
+          padding-top: 12px !important;
+          padding-bottom: 12px !important;
+        }
+
+        /* Hover Popup */
+        .item-details-popup {
+          position: absolute;
+          left: 0;
+          top: 100%;
+          width: 400px;
+          background: white;
+          border-radius: 12px;
+          box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(0, 0, 0, 0.05);
+          padding: 16px;
+          z-index: 100;
+          display: none;
+          margin-top: 8px;
+        }
+
+        .table-row-hover:hover .item-details-popup {
+          display: block;
+          animation: popupSlideIn 0.2s ease-out;
+        }
+
+        @keyframes popupSlideIn {
+          from {
+            opacity: 0;
+            transform: translateY(-10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        .popup-header {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding-bottom: 12px;
+          margin-bottom: 12px;
+          border-bottom: 2px solid #f97316;
+        }
+
+        .popup-header h4 {
+          margin: 0;
+          font-size: 16px;
+          font-weight: 700;
+          color: #111827;
+          flex: 1;
+        }
+
+        .popup-veg-badge {
+          background: #dcfce7;
+          color: #166534;
+          padding: 3px 8px;
+          border-radius: 6px;
+          font-size: 10px;
+          font-weight: 700;
+        }
+
+        .popup-grid {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 12px;
+        }
+
+        .popup-field {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+
+        .popup-label {
+          font-size: 11px;
+          font-weight: 700;
+          color: #6b7280;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+
+        .popup-value {
+          font-size: 13px;
+          color: #111827;
+          font-weight: 500;
+        }
+
+        .popup-price {
+          color: #f97316;
+          font-weight: 700;
+          font-size: 15px;
+        }
+
+        .popup-badge {
+          display: inline-block;
+          padding: 4px 8px;
+          border-radius: 8px;
+          font-size: 11px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.3px;
+          width: fit-content;
+        }
+
+        .popup-badge-menu {
+          background: #dbeafe;
+          color: #1e40af;
+        }
+
+        .popup-badge-pkg {
+          background: #fef3c7;
+          color: #92400e;
+        }
+
+        .popup-badge-available {
+          background: #d1fae5;
+          color: #065f46;
+        }
+
+        .popup-badge-out {
+          background: #fee2e2;
+          color: #991b1b;
+        }
+
+        /* Variant Details in Popup */
+        .popup-variants {
+          margin-top: 16px;
+          padding-top: 16px;
+          border-top: 1px solid #f3f4f6;
+        }
+
+        .popup-variants-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 10px;
+        }
+
+        .popup-variant-template {
+          font-size: 13px;
+          font-weight: 600;
+          color: #f97316;
+          background: #fff7ed;
+          padding: 4px 10px;
+          border-radius: 6px;
+        }
+
+        .popup-variants-list {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+
+        .popup-variant-item {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 8px 12px;
+          background: #f9fafb;
+          border-radius: 8px;
+          border: 1px solid #e5e7eb;
+          transition: all 0.2s ease;
+        }
+
+        .popup-variant-item:hover {
+          background: #fff7ed;
+          border-color: #f97316;
+        }
+
+        .popup-variant-name {
+          font-size: 13px;
+          color: #374151;
+          font-weight: 500;
+        }
+
+        .popup-variant-price {
+          font-size: 14px;
+          color: #f97316;
+          font-weight: 700;
+        }
+
+        /* Premium chip styling */
+        .chip {
+          display: inline-flex;
+          align-items: center;
+          padding: 5px 12px;
+          border-radius: 16px;
+          font-size: 12px;
+          font-weight: 600;
+          letter-spacing: 0.3px;
+          transition: all 0.2s ease;
+        }
+
+        .chip--avail {
+          background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+          color: #065f46;
+          border: 1px solid #6ee7b7;
+        }
+
+        .chip--out {
+          background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+          color: #991b1b;
+          border: 1px solid #fca5a5;
+        }
+
+        /* Pill badges for Type */
+        .pill {
+          display: inline-flex;
+          padding: 4px 10px;
+          border-radius: 12px;
+          font-size: 11px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+
+        .pill--menu {
+          background: #dbeafe;
+          color: #1e40af;
+          border: 1px solid #bfdbfe;
+        }
+
+        .pill--pkg {
+          background: #fef3c7;
+          color: #92400e;
+          border: 1px solid #fde68a;
+        }
+
+        /* Variant badges */
+        .badge-variant {
+          display: inline-flex;
+          font-size: 18px;
+          font-weight: 700;
+        }
+
+        .badge-variant-yes {
+          color: #075985;
+        }
+
+        .badge-variant-no {
+          color: #dc2626;
+        }
+
+        /* Enhanced scrollbar */
+        .table-scroll::-webkit-scrollbar {
+          width: 10px;
+          height: 10px;
+        }
+
+        .table-scroll::-webkit-scrollbar-track {
+          background: #f9fafb;
+          border-radius: 12px;
+        }
+
+        .table-scroll::-webkit-scrollbar-thumb {
+          background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+          border-radius: 12px;
+          border: 2px solid #f9fafb;
+        }
+
+        .table-scroll::-webkit-scrollbar-thumb:hover {
+          background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%);
+        }
+
+        .table-scroll::-webkit-scrollbar-corner {
+          background: #f9fafb;
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+          .hide-sm {
+            display: none;
+          }
+
+          .table {
+            min-width: 700px;
+          }
+
+          .item-details-popup {
+            width: 350px;
+          }
+
+          .popup-grid {
+            grid-template-columns: repeat(2, 1fr);
+          }
+        }
+
+        @media (max-width: 768px) {
+          .table {
+            min-width: 600px;
+          }
+
+          .table th,
+          .table td {
+            padding: 12px 10px;
+            font-size: 13px;
+          }
+
+          .table th:first-child,
+          .table td:first-child {
+            padding-left: 16px;
+          }
+
+          .table th:last-child,
+          .table td:last-child {
+            padding-right: 16px;
+          }
+
+          .item-details-popup {
+            width: 320px;
+          }
+        }
+
+        @media (max-width: 640px) {
+          .hide-mobile {
+            display: none;
+          }
+          
+          .table {
+            min-width: 500px;
+          }
+          
+          .table th,
+          .table td {
+            padding: 10px 8px;
+            font-size: 12px;
+          }
+
+          .table th:first-child,
+          .table td:first-child {
+            padding-left: 12px;
+          }
+
+          .table th:last-child,
+          .table td:last-child {
+            padding-right: 12px;
+          }
+          
+          .col-name { 
+            min-width: 160px;
+          }
+
+          .item-details-popup {
+            width: 280px;
+          }
+
+          .popup-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        /* Detail Modal Styles */
+        .detail-modal-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0, 0, 0, 0.6);
+          backdrop-filter: blur(4px);
+          z-index: 9999;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 20px;
+          animation: fadeIn 0.2s ease-out;
+        }
+
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+
+        .detail-modal {
+          background: white;
+          border-radius: 16px;
+          max-width: 600px;
+          width: 100%;
+          max-height: 90vh;
+          overflow: hidden;
+          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+          animation: slideUp 0.3s ease-out;
+        }
+
+        @keyframes slideUp {
+          from {
+            opacity: 0;
+            transform: translateY(20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        .detail-modal-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          padding: 24px;
+          border-bottom: 2px solid #f97316;
+          background: linear-gradient(to bottom, #fff7ed 0%, #ffffff 100%);
+        }
+
+        .detail-modal-header h2 {
+          margin: 0;
+          font-size: 24px;
+          font-weight: 700;
+          color: #1f2937;
+        }
+
+        .veg-badge {
+          display: inline-block;
+          background: #dcfce7;
+          color: #166534;
+          padding: 4px 12px;
+          border-radius: 12px;
+          font-size: 11px;
+          font-weight: 700;
+          margin-left: 12px;
+          border: 1px solid #86efac;
+        }
+
+        .close-btn {
+          background: #fee2e2;
+          border: 1px solid #fca5a5;
+          color: #dc2626;
+          width: 36px;
+          height: 36px;
+          border-radius: 50%;
+          font-size: 20px;
+          cursor: pointer;
+          transition: background 0.2s ease;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-shrink: 0;
+        }
+
+        .close-btn:hover {
+          background: #fecaca;
+        }
+
+        .detail-modal-body {
+          padding: 24px;
+          max-height: calc(90vh - 100px);
+          overflow-y: auto;
+        }
+
+        .detail-image-section {
+          display: flex;
+          justify-content: center;
+          margin-bottom: 24px;
+        }
+
+        .detail-image-section img {
+          width: 150px;
+          height: 150px;
+          object-fit: cover;
+          border-radius: 12px;
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+          border: 3px solid #f97316;
+        }
+
+        .detail-info-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 16px;
+          margin-bottom: 24px;
+        }
+
+        .detail-item {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+
+        .detail-label {
+          font-size: 12px;
+          font-weight: 600;
+          color: #6b7280;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+
+        .detail-value {
+          font-size: 15px;
+          font-weight: 600;
+          color: #1f2937;
+        }
+
+        .detail-price {
+          color: #f97316;
+          font-size: 18px;
+          font-weight: 700;
+        }
+
+        .detail-badge {
+          display: inline-block;
+          padding: 6px 12px;
+          border-radius: 12px;
+          font-size: 12px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          width: fit-content;
+        }
+
+        .badge-menu {
+          background: #dbeafe;
+          color: #1e40af;
+          border: 1px solid #bfdbfe;
+        }
+
+        .badge-pkg {
+          background: #fef3c7;
+          color: #92400e;
+          border: 1px solid #fde68a;
+        }
+
+        .badge-available {
+          background: #d1fae5;
+          color: #065f46;
+          border: 1px solid #6ee7b7;
+        }
+
+        .badge-out {
+          background: #fee2e2;
+          color: #991b1b;
+          border: 1px solid #fca5a5;
+        }
+
+        .detail-variants-section {
+          background: #fff7ed;
+          border: 2px solid #f97316;
+          border-radius: 12px;
+          padding: 16px;
+          margin-top: 20px;
+        }
+
+        .detail-variants-section h3 {
+          margin: 0 0 12px 0;
+          font-size: 16px;
+          font-weight: 700;
+          color: #1f2937;
+        }
+
+        .variant-template-name {
+          font-size: 13px;
+          color: #f97316;
+          font-weight: 600;
+          margin-left: 6px;
+        }
+
+        .variant-options-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+          gap: 8px;
+        }
+
+        .variant-option-card {
+          background: white;
+          border: 1.5px solid #fed7aa;
+          border-radius: 8px;
+          padding: 10px 12px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          transition: all 0.2s ease;
+        }
+
+        .variant-option-card:hover {
+          border-color: #f97316;
+          box-shadow: 0 2px 4px rgba(249, 115, 22, 0.15);
+          transform: translateY(-1px);
+        }
+
+        .variant-option-name {
+          font-size: 13px;
+          font-weight: 600;
+          color: #1f2937;
+        }
+
+        .variant-option-price {
+          font-size: 14px;
+          font-weight: 700;
+          color: #f97316;
+        }
+
+        @media (max-width: 640px) {
+          .detail-modal {
+            max-width: 100%;
+            margin: 0;
+            border-radius: 16px 16px 0 0;
+          }
+
+          .detail-info-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .variant-options-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        /* Mobile actions */
+        .mobile-actions {
+          display: none;
+        }
+
+        @media (max-width: 640px) {
+          .mobile-actions {
+            display: flex;
+            gap: 6px;
+            margin-top: 8px;
+          }
+        }
+
+        .only-mobile {
+          display: none;
+        }
+
+        @media (max-width: 640px) {
+          .only-mobile {
+            display: flex;
+          }
+        }
+      `}</style>
 
       <ItemEditor
         open={!!editorItem}
@@ -838,59 +2071,148 @@ export default function MenuPage() {
           max-height: calc(100vh - 200px);
           overflow-y: auto;
           overflow-x: auto;
-          border: 1px solid #e5e7eb;
-          border-radius: 8px;
+          border-radius: 10px;
           -webkit-overflow-scrolling: touch;
           touch-action: pan-x pan-y;
           position: relative;
+          background: white;
+          border: 1px solid #e5e7eb;
         }
 
         .table {
           width: 100%;
           min-width: 1000px;
           border-collapse: collapse;
-          table-layout: fixed;
+          table-layout: auto;
         }
 
         .table th {
           position: sticky;
           top: 0;
-          background: #fff;
+          background: linear-gradient(to bottom, #fafafa 0%, #f5f5f5 100%);
           z-index: 10;
           box-shadow: 0 1px 0 #e5e7eb;
           white-space: nowrap;
-          padding: 12px 10px;
+          padding: 16px 14px;
           border-bottom: 2px solid #e5e7eb;
-          color: #374151;
-          font-weight: 600;
+          color: #6b7280;
+          font-weight: 700;
           text-align: left;
+          font-size: 12px;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
         }
 
         .table td {
           vertical-align: middle;
-          padding: 12px 10px;
+          padding: 16px 14px;
           border-bottom: 1px solid #f3f4f6;
-          color: #111827;
+          color: #374151;
           font-size: 14px;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
+          transition: background 0.15s ease;
         }
         
-        .table tbody tr:hover {
-          background-color: #f9fafb;
+        .table tbody tr {
+          transition: all 0.15s ease;
         }
-        
-        .col-name { width: 200px; }
-        .col-cat { width: 120px; }
-        .col-actions { width: 200px; text-align: right; }
 
+        .table tbody tr:hover {
+          background: #fafafa;
+        }
+
+        .table tbody tr:last-child td {
+          border-bottom: none;
+        }
+        
+        .col-name { 
+          width: 200px;
+          max-width: 250px;
+        }
+        
+        .col-cat { 
+          width: 120px; 
+        }
+        
+        .col-actions { 
+          width: 200px; 
+          text-align: right; 
+        }
+
+        /* Premium chip styling */
+        .chip {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 6px 12px;
+          border-radius: 20px;
+          font-size: 12px;
+          font-weight: 600;
+          letter-spacing: 0.3px;
+          transition: all 0.2s ease;
+        }
+
+        .chip--avail {
+          background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+          color: #065f46;
+          border: 1px solid #6ee7b7;
+        }
+
+        .chip--out {
+          background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+          color: #991b1b;
+          border: 1px solid #fca5a5;
+        }
+
+        .pill {
+          display: inline-flex;
+          align-items: center;
+          padding: 4px 10px;
+          border-radius: 12px;
+          font-size: 11px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+        }
+
+        .pill--menu {
+          background: #dbeafe;
+          color: #1e40af;
+        }
+
+        .pill--pkg {
+          background: #fef3c7;
+          color: #92400e;
+        }
+
+        /* Enhanced scrollbar */
+        .table-scroll::-webkit-scrollbar {
+          width: 10px;
+          height: 10px;
+        }
+
+        .table-scroll::-webkit-scrollbar-track {
+          background: #f9fafb;
+        }
+
+        .table-scroll::-webkit-scrollbar-thumb {
+          background: linear-gradient(135deg, #d1d5db 0%, #9ca3af 100%);
+          border-radius: 5px;
+          border: 2px solid #f9fafb;
+        }
+
+        .table-scroll::-webkit-scrollbar-thumb:hover {
+          background: linear-gradient(135deg, #9ca3af 0%, #6b7280 100%);
+        }
+
+        .table-scroll::-webkit-scrollbar-corner {
+          background: #f9fafb;
+        }
+
+        /* Responsive visibility classes */
         @media (max-width: 768px) {
-          .table-scroll {
-            max-height: calc(100vh - 180px);
-            border-radius: 6px;
-          }
-          
           .table {
             min-width: 900px;
           }
@@ -900,16 +2222,12 @@ export default function MenuPage() {
           }
           
           .table th, .table td {
-            padding: 10px 8px;
+            padding: 12px 10px;
             font-size: 13px;
           }
         }
 
         @media (max-width: 640px) {
-          .table-scroll {
-            max-height: calc(100vh - 160px);
-          }
-          
           .table {
             min-width: 800px;
           }
@@ -923,11 +2241,37 @@ export default function MenuPage() {
           }
           
           .table th, .table td {
-            padding: 8px 6px;
+            padding: 10px 8px;
             font-size: 12px;
           }
           
-          .col-name { width: 150px; }
+          .col-name { 
+            width: 150px;
+            max-width: 180px;
+          }
+        }
+
+        /* Mobile action buttons */
+        .mobile-actions {
+          display: none;
+        }
+
+        @media (max-width: 640px) {
+          .mobile-actions {
+            display: flex;
+            gap: 6px;
+            margin-top: 8px;
+          }
+        }
+
+        .only-mobile {
+          display: none;
+        }
+
+        @media (max-width: 640px) {
+          .only-mobile {
+            display: flex;
+          }
         }
       `}</style>
       {showImageImport && (

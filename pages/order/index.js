@@ -39,6 +39,36 @@ export default function OrderPage() {
   const [showVariantSelector, setShowVariantSelector] = useState(false)
   const [selectedItem, setSelectedItem] = useState(null)
   const [editingVariantItem, setEditingVariantItem] = useState(null)
+  
+  // Carousel Logic
+  const carouselRef = useRef(null);
+  const [showLeftArrow, setShowLeftArrow] = useState(false);
+  const [showRightArrow, setShowRightArrow] = useState(false);
+
+  const checkScroll = () => {
+    if (carouselRef.current) {
+      const { scrollLeft, scrollWidth, clientWidth } = carouselRef.current;
+      setShowLeftArrow(scrollLeft > 0);
+      setShowRightArrow(Math.ceil(scrollLeft + clientWidth) < scrollWidth);
+    }
+  };
+
+  useEffect(() => {
+    checkScroll();
+    window.addEventListener('resize', checkScroll);
+    return () => window.removeEventListener('resize', checkScroll);
+  }, [menuItems]); // Re-check when menu items (and thus categories) load
+
+  const scrollCarousel = (direction) => {
+    if (carouselRef.current) {
+      const scrollAmount = 200;
+      carouselRef.current.scrollBy({
+        left: direction === 'left' ? -scrollAmount : scrollAmount,
+        behavior: 'smooth'
+      });
+      setTimeout(checkScroll, 300);
+    }
+  };
 
   // 🔧 Fix for "data only comes after clearing browser cache" on QR flows.
   // When a customer opens the QR menu, aggressively clear any old
@@ -573,28 +603,46 @@ export default function OrderPage() {
       </div>
 
       {categoryChips.length > 1 && (
-        <div
-          className="sales-carousel"
-          style={{
-            padding: '0 1rem 0.75rem',
-            background: '#fff',
-            borderBottom: '1px solid #f3f4f6',
-          }}
-        >
-          {['all', ...categoryChips].map((cat) => (
-            <button
-              key={cat}
-              onClick={() => setCategoryFilter(cat)}
-              className={`sales-carousel-btn${categoryFilter === cat ? ' active' : ''}`}
-              style={{
-                background: categoryFilter === cat ? brandColor : '#f9fafb',
-                color: categoryFilter === cat ? '#fff' : '#374151',
-                borderColor: categoryFilter === cat ? brandColor : '#e5e7eb',
-              }}
+        <div style={{ padding: '0 1rem 0.75rem', background: '#fff', borderBottom: '1px solid #f3f4f6' }}>
+          <div className="carousel-container">
+            {showLeftArrow && (
+              <button className="carousel-btn left" onClick={() => scrollCarousel('left')}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M15 18l-6-6 6-6"/>
+                </svg>
+              </button>
+            )}
+            <div 
+              className="category-carousel" 
+              ref={carouselRef}
+              onScroll={checkScroll}
             >
-              {cat === 'all' ? 'All categories' : cat}
-            </button>
-          ))}
+              <button
+                onClick={() => setCategoryFilter('all')}
+                className={`category-chip ${categoryFilter === 'all' ? 'category-chip-active' : ''}`}
+                style={categoryFilter === 'all' ? { background: brandColor, borderColor: brandColor, color: '#fff' } : {}}
+              >
+                All categories
+              </button>
+              {categoryChips.map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => setCategoryFilter(cat)}
+                  className={`category-chip ${categoryFilter === cat ? 'category-chip-active' : ''}`}
+                  style={categoryFilter === cat ? { background: brandColor, borderColor: brandColor, color: '#fff' } : {}}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+            {showRightArrow && (
+              <button className="carousel-btn right" onClick={() => scrollCarousel('right')}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 18l6-6-6-6"/>
+                </svg>
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -913,6 +961,79 @@ export default function OrderPage() {
       @media (min-width: 768px) { .cust-cart-bar { position: sticky; bottom: 20px; left: 20px; right: 20px; width: calc(100% - 40px); margin: 0 auto 20px auto; border-radius: 12px; } }
       
       /* Additional responsive helpers can be added here */
+      
+      .search-container:focus-within {
+        border-color: #d1d5db !important;
+        background: #fff !important;
+        box-shadow: 0 0 0 3px rgba(0,0,0,0.05);
+      }
+
+      /* Carousel CSS */
+      .carousel-container {
+        position: relative;
+        display: flex;
+        align-items: center;
+      }
+      .category-carousel {
+        display: flex;
+        gap: 8px;
+        overflow-x: auto;
+        padding: 4px 0;
+        flex-grow: 1;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+        scroll-behavior: smooth;
+      }
+      .category-carousel::-webkit-scrollbar { display: none; }
+      
+      .category-chip {
+        flex-shrink: 0;
+        padding: 6px 16px;
+        border-radius: 100px;
+        border: 1px solid #e5e7eb;
+        background: #f9fafb;
+        color: #374151;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        white-space: nowrap;
+      }
+      
+      .carousel-btn {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        border: 1px solid #e5e7eb;
+        background: white;
+        color: #f97316;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        flex-shrink: 0;
+        z-index: 10;
+        transition: all 0.2s;
+        padding: 0;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      }
+      .carousel-btn:hover {
+        background: #fff7ed;
+        border-color: #f97316;
+        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+      }
+      .carousel-btn.left { 
+        left: 0;
+        background: linear-gradient(90deg, white 50%, rgba(255,255,255,0.9)); 
+      }
+      .carousel-btn.right { 
+        right: 0;
+        background: linear-gradient(-90deg, white 50%, rgba(255,255,255,0.9));
+      }
     `}</style>
     </div>
   );

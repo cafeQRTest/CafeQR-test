@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import Button from "./ui/Button";
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -30,6 +30,7 @@ async function compressImage(file) {
 }
 
 export default function MenuImageImport({ onClose, onImported, restaurantId, existingItems = [] }) {
+  const fileInputRef = useRef(null);
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [items, setItems] = useState([]);
@@ -123,82 +124,93 @@ export default function MenuImageImport({ onClose, onImported, restaurantId, exi
   };
 
   return (
-    <div className="overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
-        <div className="header">
-          <div className="title-row">
-            <div className="icon-badge">📋</div>
-            <h3 className="title">Menu Import</h3>
+    <div className="import-overlay">
+      <div className="import-modal">
+        {/* Header */}
+        <div className="import-header">
+          <div className="import-header-left">
+            <div className="import-icon">📋</div>
+            <h2 className="import-title">Menu Import</h2>
           </div>
-          <button onClick={onClose} className="close-btn" aria-label="Close">×</button>
+          <button onClick={onClose} className="import-close" aria-label="Close">×</button>
         </div>
 
-        <div className="content">
+        {/* Content */}
+        <div className="import-content">
           {error && (
-            <div className="error-box">
+            <div className="import-error">
               ⚠️ {error}
             </div>
           )}
           
           {step === "upload" && (
-            <div className="upload-section">
+            <>
               {preview ? (
-                <div className="preview-container">
-                  <img src={preview} alt="Menu preview" className="preview-image" />
-                  <button onClick={() => { setPreview(null); setFile(null); }} className="change-btn">
+                <div className="import-preview-wrap">
+                  <img src={preview} alt="Menu preview" className="import-preview-img" />
+                  <button onClick={() => { setPreview(null); setFile(null); }} className="import-change-btn">
                     🔄 Change Image
                   </button>
                 </div>
               ) : (
-                <label className="upload-dropzone">
-                  <input type="file" accept="image/*" onChange={handleFile} className="file-input" />
-                  <div className="upload-icon">📸</div>
-                  <div className="upload-text">
-                    <span className="highlight">Click to upload</span> your menu photo
+                <div 
+                  className="import-dropzone" 
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <input 
+                    ref={fileInputRef}
+                    type="file" 
+                    accept="image/*" 
+                    onChange={handleFile} 
+                    style={{ display: 'none' }}
+                  />
+                  <div className="import-dropzone-icon">📸</div>
+                  <div className="import-dropzone-text">
+                    <span className="import-dropzone-highlight">Click to upload</span> your menu photo
                   </div>
-                  <div className="upload-hint">PNG, JPG, or GIF</div>
-                </label>
+                  <div className="import-dropzone-hint">PNG, JPG, or GIF</div>
+                </div>
               )}
-            </div>
+            </>
           )}
 
           {step === "processing" && (
-             <div className="processing-section">
-                <div className="loading-icon">📄</div>
-                <div className="processing-text">Analyzing menu...</div>
-                <div className="processing-hint">This may take a moment</div>
+             <div className="import-processing">
+                <div className="import-processing-icon">📄</div>
+                <div className="import-processing-text">Analyzing menu...</div>
+                <div className="import-processing-hint">This may take a moment</div>
              </div>
           )}
 
           {step === "importing" && (
-             <div className="processing-section">
-                <div className="loading-icon">💾</div>
-                <div className="processing-text">Importing items...</div>
-                <div className="processing-hint">Please wait</div>
+             <div className="import-processing">
+                <div className="import-processing-icon">💾</div>
+                <div className="import-processing-text">Importing items...</div>
+                <div className="import-processing-hint">Please wait</div>
              </div>
           )}
 
           {step === "review" && (
-            <div className="review-section">
-              <div className="stats-bar">
-                <div className="stat">
-                  <span className="num">{items.length}</span>
-                  <span className="lbl">Found</span>
+            <div className="import-review">
+              <div className="import-stats">
+                <div className="import-stat">
+                  <span className="import-stat-num">{items.length}</span>
+                  <span className="import-stat-label">Found</span>
                 </div>
-                <div className="stat primary">
-                  <span className="num">{items.filter(i => i.selected).length}</span>
-                  <span className="lbl">Selected</span>
+                <div className="import-stat import-stat-primary">
+                  <span className="import-stat-num">{items.filter(i => i.selected).length}</span>
+                  <span className="import-stat-label">Selected</span>
                 </div>
-                <div className="stat warn">
-                  <span className="num">{items.filter(i => i.isDupe).length}</span>
-                  <span className="lbl">Duplicates</span>
+                <div className="import-stat import-stat-warn">
+                  <span className="import-stat-num">{items.filter(i => i.isDupe).length}</span>
+                  <span className="import-stat-label">Duplicates</span>
                 </div>
               </div>
 
-              <div className="items-list">
+              <div className="import-items">
                 {items.map((it, idx) => (
-                  <div key={idx} className={`item ${it.selected ? 'selected' : ''}`}>
-                    <div className="item-top">
+                  <div key={idx} className={`import-item ${it.selected ? 'import-item-selected' : ''}`}>
+                    <div className="import-item-header">
                       <input 
                         type="checkbox" 
                         checked={it.selected} 
@@ -207,12 +219,12 @@ export default function MenuImageImport({ onClose, onImported, restaurantId, exi
                           c[idx].selected = e.target.checked; 
                           setItems(c); 
                         }} 
-                        className="chk"
+                        className="import-checkbox"
                       />
-                      {it.isDupe && <span className="badge">⚠️ Duplicate</span>}
+                      {it.isDupe && <span className="import-badge">⚠️ Duplicate</span>}
                     </div>
-                    <div className="item-fields">
-                      <div className="field full">
+                    <div className="import-item-fields">
+                      <div className="import-field import-field-full">
                         <label>Name</label>
                         <input 
                           value={it.name} 
@@ -224,10 +236,10 @@ export default function MenuImageImport({ onClose, onImported, restaurantId, exi
                           placeholder="Item name"
                         />
                       </div>
-                      <div className="field-row">
-                        <div className="field">
+                      <div className="import-field-row">
+                        <div className="import-field">
                           <label>Price</label>
-                          <div className="price-wrap">
+                          <div className="import-price">
                             <span>₹</span>
                             <input 
                               type="number" 
@@ -241,7 +253,7 @@ export default function MenuImageImport({ onClose, onImported, restaurantId, exi
                             />
                           </div>
                         </div>
-                        <div className="field">
+                        <div className="import-field">
                           <label>Category</label>
                           <input 
                             value={it.category} 
@@ -262,7 +274,8 @@ export default function MenuImageImport({ onClose, onImported, restaurantId, exi
           )}
         </div>
 
-        <div className="footer">
+        {/* Footer */}
+        <div className="import-footer">
           <Button variant="outline" onClick={onClose} disabled={step === "processing" || step === "importing"}>Cancel</Button>
           {step === "upload" && <Button onClick={processImage} disabled={!file}>✨ Analyze</Button>}
           {step === "review" && (
@@ -277,16 +290,17 @@ export default function MenuImageImport({ onClose, onImported, restaurantId, exi
       </div>
 
       <style jsx>{`
-        .overlay {
+        .import-overlay {
           position: fixed;
           inset: 0;
-          background: rgba(0, 0, 0, 0.5);
+          background: rgba(11, 18, 32, 0.5);
+          backdrop-filter: blur(2px);
           display: flex;
           align-items: center;
           justify-content: center;
           z-index: 9999;
-          padding: 16px;
-          animation: fadeIn 0.2s;
+          padding: 20px;
+          animation: fadeIn 0.2s ease-out;
         }
 
         @keyframes fadeIn {
@@ -295,400 +309,429 @@ export default function MenuImageImport({ onClose, onImported, restaurantId, exi
         }
 
         @keyframes slideUp {
-          from { transform: translateY(12px); opacity: 0; }
-          to { transform: translateY(0); opacity: 1; }
+          from { 
+            transform: translateY(20px);
+            opacity: 0;
+          }
+          to { 
+            transform: translateY(0);
+            opacity: 1;
+          }
         }
 
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-
-        .modal {
+        .import-modal {
           background: white;
           width: 100%;
-          max-width: 520px;
-          max-height: 85vh;
-          border-radius: 10px;
-          box-shadow: 0 15px 40px rgba(0, 0, 0, 0.2);
+          max-width: 560px;
+          max-height: 88vh;
+          border-radius: 12px;
+          box-shadow: 
+            0 0 0 1px rgba(0, 0, 0, 0.05),
+            0 20px 40px rgba(0, 0, 0, 0.15);
           display: flex;
           flex-direction: column;
-          animation: slideUp 0.2s ease-out;
-        }
-
-        .header {
-          padding: 12px 14px;
-          border-bottom: 1px solid #e5e7eb;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-        }
-
-        .title-row {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-        }
-
-        .icon-badge {
-          width: 28px;
-          height: 28px;
-          background: linear-gradient(135deg, #8b5cf6, #6366f1);
-          border-radius: 6px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 16px;
-        }
-
-        .title {
-          margin: 0;
-          font-size: 15px;
-          font-weight: 700;
-          color: #111;
-        }
-
-        .close-btn {
-          width: 28px;
-          height: 28px;
-          border: none;
-          background: #f3f4f6;
-          border-radius: 6px;
-          font-size: 18px;
-          color: #6b7280;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-
-        .close-btn:hover {
-          background: #e5e7eb;
-          color: #111;
-        }
-
-        .content {
-          flex: 1;
-          overflow-y: auto;
-          padding: 14px;
-        }
-
-        .content::-webkit-scrollbar {
-          width: 4px;
-        }
-
-        .content::-webkit-scrollbar-thumb {
-          background: #d1d5db;
-          border-radius: 10px;
-        }
-
-        .error-box {
-          background: #fef2f2;
-          color: #dc2626;
-          padding: 10px 12px;
-          border-radius: 6px;
-          margin-bottom: 12px;
-          font-size: 13px;
-          border: 1px solid #fecaca;
-        }
-
-        /* Upload */
-        .upload-section {
-          padding: 4px 0;
-        }
-
-        .upload-dropzone {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          padding: 24px 16px;
-          border: 2px dashed #d1d5db;
-          border-radius: 10px;
-          cursor: pointer;
-          transition: all 0.2s;
-          background: #fafafa;
-          position: relative;
-        }
-
-        .upload-dropzone:hover {
-          border-color: #8b5cf6;
-          background: #faf5ff;
-        }
-
-        .file-input {
-          position: absolute;
-          inset: 0;
-          opacity: 0;
-          cursor: pointer;
-        }
-
-        .upload-icon {
-          font-size: 36px;
-          margin-bottom: 8px;
-        }
-
-        .upload-text {
-          font-size: 13px;
-          color: #374151;
-          margin-bottom: 2px;
-        }
-
-        .highlight {
-          color: #8b5cf6;
-          font-weight: 600;
-        }
-
-        .upload-hint {
-          font-size: 11px;
-          color: #9ca3af;
-        }
-
-        .preview-container {
-          position: relative;
-          border-radius: 8px;
+          animation: slideUp 0.25s ease-out;
           overflow: hidden;
         }
 
-        .preview-image {
-          width: 100%;
-          max-height: 280px;
-          object-fit: contain;
-          display: block;
-          background: #f9fafb;
+        .import-header {
+          padding: 18px 20px;
+          border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+          color: white;
         }
 
-        .change-btn {
-          margin-top: 10px;
-          width: 100%;
-          padding: 10px;
-          background: white;
-          border: 1.5px solid #e5e7eb;
-          border-radius: 6px;
-          font-size: 13px;
+        .import-header-left {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+
+        .import-icon {
+          font-size: 22px;
+        }
+
+        .import-title {
+          margin: 0;
+          font-size: 17px;
           font-weight: 600;
-          color: #374151;
+          letter-spacing: -0.01em;
+        }
+
+        .import-close {
+          width: 32px;
+          height: 32px;
+          border: none;
+          background: rgba(255, 255, 255, 0.15);
+          border-radius: 6px;
+          font-size: 20px;
+          color: white;
           cursor: pointer;
-          transition: all 0.2s;
+          transition: all 0.15s ease;
+          display: flex;
+          align-items: center;
+          justify-content: center;
         }
 
-        .change-btn:hover {
-          background: #f9fafb;
-          border-color: #8b5cf6  ;
-          color: #8b5cf6;
+        .import-close:hover {
+          background: rgba(255, 255, 255, 0.25);
         }
 
-        /* Processing */
-        .processing-section {
+        .import-content {
+          flex: 1;
+          overflow-y: auto;
+          padding: 20px;
+          background: white;
+        }
+
+        .import-content::-webkit-scrollbar {
+          width: 8px;
+        }
+
+        .import-content::-webkit-scrollbar-track {
+          background: #f1f1f1;
+        }
+
+        .import-content::-webkit-scrollbar-thumb {
+          background: #d1d5db;
+          border-radius: 4px;
+        }
+
+        .import-content::-webkit-scrollbar-thumb:hover {
+          background: #9ca3af;
+        }
+
+        .import-error {
+          background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+          color: #dc2626;
+          padding: 14px 18px;
+          border-radius: 10px;
+          margin-bottom: 20px;
+          font-size: 14px;
+          font-weight: 500;
+          border: 1px solid #fecaca;
+          box-shadow: 0 2px 8px rgba(220, 38, 38, 0.08);
+        }
+
+        .import-dropzone {
+          border: 1.5px dashed #d1d5db;
+          border-radius: 8px;
+          padding: 40px 24px;
           text-align: center;
-          padding: 50px 20px;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          background: #fafafa;
         }
 
-        .loading-icon {
-          font-size: 48px;
-          margin-bottom: 16px;
+        .import-dropzone:hover {
+          border-color: #f97316;
+          background: #fff7ed;
+        }
+
+        .import-dropzone-icon {
+          font-size: 40px;
+          margin-bottom: 12px;
           opacity: 0.9;
         }
 
-        .processing-text {
+        .import-dropzone-text {
           font-size: 14px;
-          font-weight: 600;
           color: #374151;
-          margin-bottom: 4px;
+          margin-bottom: 6px;
+          font-weight: 500;
         }
 
-        .processing-hint {
+        .import-dropzone-highlight {
+          color: #f97316;
+          font-weight: 600;
+        }
+
+        .import-dropzone-hint {
           font-size: 12px;
           color: #9ca3af;
         }
 
-        /* Review */
-        .review-section {
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
+        .import-preview-wrap {
+          text-align: center;
         }
 
-        .stats-bar {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 8px;
-          padding: 10px;
+        .import-preview-img {
+          width: 100%;
+          max-height: 320px;
+          object-fit: contain;
+          border-radius: 10px;
           background: #f9fafb;
-          border-radius: 8px;
+          margin-bottom: 18px;
           border: 1px solid #e5e7eb;
         }
 
-        .stat {
+        .import-change-btn {
+          padding: 12px 28px;
+          background: white;
+          border: 2px solid #e5e7eb;
+          border-radius: 10px;
+          font-size: 14px;
+          font-weight: 600;
+          color: #374151;
+          cursor: pointer;
+          transition: all 0.2s;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+
+        .import-change-btn:hover {
+          background: #fff7ed;
+          border-color: #f97316;
+          color: #f97316;
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(249, 115, 22, 0.15);
+        }
+
+        .import-processing {
           text-align: center;
-          padding: 6px;
+          padding: 50px 24px;
         }
 
-        .num {
-          display: block;
-          font-size: 22px;
-          font-weight: 700;
-          color: #111;
-          margin-bottom: 2px;
+        .import-processing-icon {
+          font-size: 48px;
+          margin-bottom: 16px;
+          opacity: 0.8;
         }
 
-        .stat.primary .num {
-          color: #8b5cf6;
+        .import-processing-text {
+          font-size: 15px;
+          font-weight: 600;
+          color: #374151;
+          margin-bottom: 6px;
         }
 
-        .stat.warn .num {
-          color: #f59e0b;
+        .import-processing-hint {
+          font-size: 13px;
+          color: #9ca3af;
         }
 
-        .lbl {
-          font-size: 11px;
-          color: #6b7280;
-          font-weight: 500;
-        }
-
-        .items-list {
+        .import-review {
           display: flex;
           flex-direction: column;
-          gap: 10px;
-          max-height: 380px;
-          overflow-y: auto;
-          padding-right: 4px;
+          gap: 20px;
         }
 
-        .items-list::-webkit-scrollbar {
-          width: 4px;
-        }
-
-        .items-list::-webkit-scrollbar-thumb {
-          background: #d1d5db;
-          border-radius: 10px;
-        }
-
-        .item {
-          border: 1.5px solid #e5e7eb;
-          border-radius: 8px;
-          padding: 12px;
+        .import-stats {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 14px;
+          padding: 20px;
           background: white;
+          border-radius: 12px;
+          border: 1px solid #e5e7eb;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+        }
+
+        .import-stat {
+          text-align: center;
+          padding: 8px;
+          border-radius: 8px;
           transition: all 0.2s;
         }
 
-        .item.selected {
-          border-color: #8b5cf6;
-          background: #faf5ff;
+        .import-stat:hover {
+          background: #f9fafb;
         }
 
-        .item-top {
+        .import-stat-num {
+          display: block;
+          font-size: 32px;
+          font-weight: 800;
+          color: #0b1220;
+          margin-bottom: 6px;
+          background: linear-gradient(135deg, #0b1220 0%, #374151 100%);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+        }
+
+        .import-stat-primary .import-stat-num {
+          background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+        }
+
+        .import-stat-warn .import-stat-num {
+          background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+        }
+
+        .import-stat-label {
+          font-size: 11px;
+          color: #6b7280;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.8px;
+        }
+
+        .import-items {
+          display: flex;
+          flex-direction: column;
+          gap: 14px;
+        }
+
+        .import-item {
+          border: 2px solid #e5e7eb;
+          border-radius: 12px;
+          padding: 18px;
+          background: white;
+          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+
+        .import-item:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        .import-item-selected {
+          border-color: #f97316;
+          background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
+          box-shadow: 0 4px 12px rgba(249, 115, 22, 0.15);
+        }
+
+        .import-item-header {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          margin-bottom: 10px;
+          margin-bottom: 14px;
         }
 
-        .chk {
-          width: 18px;
-          height: 18px;
-          accent-color: #8b5cf6;
+        .import-checkbox {
+          width: 22px;
+          height: 22px;
+          accent-color: #f97316;
           cursor: pointer;
         }
 
-        .badge {
-          font-size: 10px;
-          padding: 3px 8px;
-          background: #fef3c7;
-          border: 1px solid #fcd34d;
-          border-radius: 4px;
-          color: #d97706;
-          font-weight: 600;
-        }
-
-        .item-fields {
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-        }
-
-        .field {
-          display: flex;
-          flex-direction: column;
-        }
-
-        .field.full {
-          grid-column: 1 / -1;
-        }
-
-        .field label {
+        .import-badge {
           font-size: 11px;
-          font-weight: 600;
-          color: #6b7280;
-          margin-bottom: 4px;
+          padding: 5px 12px;
+          background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+          border: 1px solid #fcd34d;
+          border-radius: 8px;
+          color: #92400e;
+          font-weight: 700;
+          letter-spacing: 0.3px;
+          text-transform: uppercase;
+          box-shadow: 0 2px 4px rgba(217, 119, 6, 0.1);
         }
 
-        .field input {
-          padding: 8px 10px;
-          border: 1px solid #e5e7eb;
-          border-radius: 6px;
-          font-size: 13px;
-          background: #f9fafb;
+        .import-item-fields {
+          display: flex;
+          flex-direction: column;
+          gap: 14px;
+        }
+
+        .import-field {
+          display: flex;
+          flex-direction: column;
+        }
+
+        .import-field-full {
+          width: 100%;
+        }
+
+        .import-field label {
+          font-size: 11px;
+          font-weight: 700;
+          color: #6b7280;
+          margin-bottom: 8px;
+          text-transform: uppercase;
+          letter-spacing: 0.8px;
+        }
+
+        .import-field input {
+          padding: 12px 14px;
+          border: 1.5px solid #e5e7eb;
+          border-radius: 10px;
+          font-size: 14px;
+          background: #fafafa;
           outline: none;
           transition: all 0.2s;
+          font-weight: 500;
         }
 
-        .field input:focus {
-          border-color: #8b5cf6;
+        .import-field input:focus {
+          border-color: #f97316;
           background: white;
+          box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
         }
 
-        .field-row {
+        .import-field-row {
           display: grid;
           grid-template-columns: 1fr 1fr;
-          gap: 8px;
+          gap: 14px;
         }
 
-        .price-wrap {
+        .import-price {
           display: flex;
           align-items: center;
-          padding: 8px 10px;
-          border: 1px solid #e5e7eb;
-          border-radius: 6px;
-          background: #f9fafb;
+          padding: 12px 14px;
+          border: 1.5px solid #e5e7eb;
+          border-radius: 10px;
+          background: #fafafa;
           transition: all 0.2s;
         }
 
-        .price-wrap:focus-within {
-          border-color: #8b5cf6;
+        .import-price:focus-within {
+          border-color: #f97316;
           background: white;
+          box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
         }
 
-        .price-wrap span {
-          font-size: 13px;
-          font-weight: 600;
+        .import-price span {
+          font-size: 15px;
+          font-weight: 700;
           color: #6b7280;
-          margin-right: 4px;
+          margin-right: 8px;
         }
 
-        .price-wrap input {
+        .import-price input {
           flex: 1;
           border: none;
           background: transparent;
-          font-size: 13px;
+          font-size: 14px;
           font-weight: 600;
           outline: none;
-          color: #111;
+          color: #0b1220;
           padding: 0;
         }
 
-        .footer {
-          padding: 12px 16px;
+        .import-footer {
+          padding: 18px 24px;
           border-top: 1px solid #e5e7eb;
           display: flex;
           justify-content: flex-end;
-          gap: 8px;
+          gap: 12px;
+          background: white;
+          box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.03);
         }
 
         @media (max-width: 640px) {
-          .modal {
+          .import-modal {
             max-width: 100%;
-            max-height: 92vh;
+            max-height: 95vh;
+            border-radius: 16px 16px 0 0;
           }
-          .field-row {
+          .import-field-row {
             grid-template-columns: 1fr;
+          }
+          .import-content {
+            padding: 20px;
+          }
+          .import-dropzone {
+            padding: 48px 24px;
           }
         }
       `}</style>

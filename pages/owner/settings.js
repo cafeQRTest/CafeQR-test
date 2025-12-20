@@ -939,35 +939,39 @@ export default function SettingsPage() {
                 </FormField>
               )}
 
-              <FormField>
-                <Label>Default Tax Rate (%)</Label>
-                <NiceSelect
-                  value={form.default_tax_rate}
-                  onChange={(val) => setForm({ ...form, default_tax_rate: val })}
-                  options={[
-                    { value: 5, label: '5%' },
-                    { value: 18, label: '18%' },
-                  ]}
-                  placeholder="Select tax rate"
-                />
-                <HelperText>Applied to items without specific tax rates</HelperText>
-              </FormField>
-
-              <FormField>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px 0' }}>
-                  <input 
-                    type="checkbox" 
-                    id="prices-include-tax" 
-                    checked={form.prices_include_tax} 
-                    onChange={onChange('prices_include_tax')}
-                    style={{ width: 20, height: 20, cursor: 'pointer', accentColor: '#f97316' }}
+              {form.gst_enabled && (
+                <FormField>
+                  <Label>Default Tax Rate (%)</Label>
+                  <NiceSelect
+                    value={form.default_tax_rate}
+                    onChange={(val) => setForm({ ...form, default_tax_rate: val })}
+                    options={[
+                      { value: 5, label: '5%' },
+                      { value: 18, label: '18%' },
+                    ]}
+                    placeholder="Select tax rate"
                   />
-                  <label htmlFor="prices-include-tax" style={{ fontSize: 16, fontWeight: 600, color: '#0f172a', cursor: 'pointer' }}>
-                    Prices Include Tax
-                  </label>
-                </div>
-                <HelperText>Check if menu prices already include tax</HelperText>
-              </FormField>
+                  <HelperText>Applied to items without specific tax rates</HelperText>
+                </FormField>
+              )}
+
+              {form.gst_enabled && (
+                <FormField>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px 0' }}>
+                    <input 
+                      type="checkbox" 
+                      id="prices-include-tax" 
+                      checked={form.prices_include_tax} 
+                      onChange={onChange('prices_include_tax')}
+                      style={{ width: 20, height: 20, cursor: 'pointer', accentColor: '#f97316' }}
+                    />
+                    <label htmlFor="prices-include-tax" style={{ fontSize: 16, fontWeight: 600, color: '#0f172a', cursor: 'pointer' }}>
+                      Prices Include Tax
+                    </label>
+                  </div>
+                  <HelperText>Check if menu prices already include tax</HelperText>
+                </FormField>
+              )}
             </SectionBody>
           </SectionCard>
 

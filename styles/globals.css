@@ -882,3 +882,249 @@ input, select, textarea { font-size: 16px; } /* keep ≥16px */
   overflow-wrap: anywhere;
 }
 
+
+/* ============================================
+   RESPONSIVE TABLE UTILITIES
+   Transform tables into cards on mobile
+   ============================================ */
+
+/* Mobile-first: Show table on desktop only */
+@media (max-width: 768px) {
+  .responsive-table-wrapper table {
+    display: none;
+  }
+}
+
+/* Desktop: Hide cards, show table */
+@media (min-width: 769px) {
+  .responsive-table-cards {
+    display: none;
+  }
+}
+
+/* Mobile Card Layout */
+.responsive-table-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0;
+}
+
+.responsive-table-card {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s;
+}
+
+.responsive-table-card:active {
+  transform: scale(0.98);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.responsive-table-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.responsive-table-card-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.responsive-table-card-title input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--brand);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.responsive-table-card-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #111827;
+  overflow-wrap: break-word;
+  flex: 1;
+}
+
+.responsive-table-card-price {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--brand);
+  flex-shrink: 0;
+  margin-left: 12px;
+}
+
+.responsive-table-card-body {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.responsive-table-card-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.responsive-table-card-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.responsive-table-card-value {
+  font-size: 14px;
+  color: #374151;
+  font-weight: 500;
+}
+
+.responsive-table-card-footer {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-top: 12px;
+  border-top: 1px solid #f3f4f6;
+}
+
+.responsive-table-card-footer button {
+  flex: 1;
+  min-width: calc(33.333% - 6px);
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 8px;
+}
+
+/* Badge styles for cards */
+.card-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.card-badge-veg {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.card-badge-available {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.card-badge-out {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.card-badge-menu {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.card-badge-packaged {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+/* Image thumbnail in card */
+.card-image {
+  width: 50px;
+  height: 50px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid #e5e7eb;
+}
+
+/* Responsive table improvements for desktop */
+@media (min-width: 769px) {
+  .responsive-table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 10px;
+    border: 1px solid #e5e7eb;
+    background: white;
+  }
+
+  .responsive-table-wrapper table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 900px;
+  }
+
+  .responsive-table-wrapper thead {
+    background: #f9fafb;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  .responsive-table-wrapper th {
+    padding: 14px 12px;
+    text-align: left;
+    font-size: 12px;
+    font-weight: 700;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 2px solid #e5e7eb;
+    white-space: nowrap;
+  }
+
+  .responsive-table-wrapper td {
+    padding: 14px 12px;
+    border-bottom: 1px solid #f3f4f6;
+    font-size: 14px;
+    vertical-align: middle;
+  }
+
+  .responsive-table-wrapper tbody tr:hover {
+    background: #fafafa;
+  }
+
+  .responsive-table-wrapper tbody tr:last-child td {
+    border-bottom: none;
+  }
+}
+
+/* Tablet optimization */
+@media (max-width: 1024px) and (min-width: 769px) {
+  .hide-tablet {
+    display: none !important;
+  }
+}
+
+/* Small screens - stack cards more compactly */
+@media (max-width: 480px) {
+  .responsive-table-card {
+    padding: 14px;
+  }
+
+  .responsive-table-card-body {
+    gap: 10px;
+  }
+
+  .responsive-table-card-footer button {
+    padding: 9px 10px;
+    font-size: 12px;
+  }
+}
