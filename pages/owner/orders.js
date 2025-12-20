@@ -1,6 +1,7 @@
 //pages/owner/orders.js 
 
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import styled, { keyframes, css } from 'styled-components';
 import { useRouter } from 'next/router'; // <-- Import useRouter at the top!
 import { Capacitor } from '@capacitor/core';
 import { getSupabase } from '../../services/supabase';
@@ -13,10 +14,317 @@ import { downloadInvoicePdf } from '../../lib/downloadInvoicePdf'
 import VariantSelector from '../../components/VariantSelector'
 import { round2 } from '../../lib/qty'
 
+const BRAND = {
+  orange: '#f97316',
+  white: '#ffffff',
+  slate: '#f8fafc',
+  gray: '#64748b',
+  border: '#e2e8f0'
+};
+
+/* --- Styled Components --- */
+const fadeIn = keyframes`
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+`;
+
+const pulse = keyframes`
+  0% { box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.4); }
+  70% { box-shadow: 0 0 0 6px rgba(249, 115, 22, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(249, 115, 22, 0); }
+`;
+
+const OrdersContainer = styled.div`
+  min-height: 100vh;
+  background: #f8fafc;
+  padding-bottom: 80px;
+
+  @media (min-width: 1024px) {
+    padding-left: 280px; /* Sidebar width */
+  }
+`;
+
+// Live Pulse Dot Component
+const PulseDot = styled.span`
+  width: 8px;
+  height: 8px;
+  background-color: #f97316;
+  border-radius: 50%;
+  display: inline-block;
+  animation: ${pulse} 2s infinite;
+  flex-shrink: 0;
+`;
+const PageWrapper = styled.div`
+  min-height: 100vh;
+  background: ${BRAND.slate};
+  padding: 24px;
+  font-family: 'Inter', sans-serif;
+  padding-bottom: 80px;
+
+  @media (max-width: 768px) {
+    padding: 16px;
+    padding-bottom: 100px; /* Space for bottom nav */
+  }
+`;
+
+const Header = styled.header`
+  margin-bottom: 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+
+  h1 {
+    font-size: 28px;
+    font-weight: 800;
+    color: #0f172a;
+    margin: 0;
+    letter-spacing: -0.02em;
+  }
+  p {
+    color: ${BRAND.gray};
+    font-size: 14px;
+    margin-top: 4px;
+  }
+`;
+
+const SearchWrapper = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px; 
+  border-radius: 9999px;
+  background: white;
+  border: 1px solid #fed7aa; /* Subtle orange tint border */
+  width: 100%;
+  max-width: 600px; /* Larger max width */
+  margin: 0 auto; /* Center it */
+  transition: all 0.2s;
+  box-shadow: 0 2px 4px rgba(249, 115, 22, 0.05);
+  
+  &:focus-within {
+    border-color: ${BRAND.orange};
+    box-shadow: 0 0 0 4px ${BRAND.orange}25;
+    transform: scale(1.01);
+  }
+
+  .search-icon {
+    width: 22px;
+    height: 22px;
+    color: ${BRAND.orange}; /* Orange icon */
+  }
+
+  input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    font-size: 16px; /* Larger font */
+    outline: none;
+    padding: 0;
+    height: 32px;
+    color: #1e293b;
+    &::placeholder {
+      color: #9ca3af;
+    }
+  }
+  
+  .clear-btn {
+    border: none;
+    background: #fff7ed;
+    color: ${BRAND.orange};
+    cursor: pointer;
+    font-size: 12px;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    &:hover {
+      background: ${BRAND.orange};
+      color: white;
+    }
+  }
+`;
+
+const ControlsBar = styled.div`
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+`;
+
+const Board = styled.div`
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  align-items: start;
+  overflow-x: auto;
+  padding-bottom: 20px;
+
+  @media (max-width: 1024px) {
+    grid-template-columns: repeat(3, minmax(300px, 1fr));
+  }
+  @media (max-width: 768px) {
+    display: flex;
+    flex-direction: column;
+    gap: 30px;
+  }
+`;
+
+const Column = styled.div`
+  background: #f1f5f9;
+  border-radius: 16px;
+  min-width: 300px;
+  display: flex;
+  flex-direction: column;
+`;
+
+const ColumnHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 4px;
+  margin-bottom: 4px;
+
+  h3 {
+    font-size: 16px;
+    font-weight: 700;
+    color: #334155;
+    margin: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .count-badge {
+    background: #e2e8f0;
+    color: #475569;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 12px;
+  }
+`;
+
+const OrderCardStyled = styled.div`
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  flex-shrink: 0; /* Prevent collapsing in flex container */
+  width: 100%;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    border-color: ${BRAND.orange}40;
+  }
+
+  &.is-new {
+    border-top: 4px solid #3b82f6;
+  }
+  &.is-progress {
+    border-top: 4px solid #f59e0b;
+  }
+  &.is-ready {
+    border-top: 4px solid #10b981;
+  }
+  &.is-completed {
+    border-top: 4px solid #10b981; /* Green for Done */
+    opacity: 0.85;
+  }
+`;
+
+const OrderHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+
+  .order-id {
+    font-weight: 700;
+    font-size: 15px;
+    color: #1e293b;
+  }
+  .order-time {
+    font-size: 11px;
+    color: #64748b;
+    font-weight: 500;
+  }
+`;
+
+const TableBadge = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #fff7ed;
+  color: ${BRAND.orange};
+  font-weight: 700;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  margin-top: 4px;
+`;
+
+const ItemsList = styled.div`
+  margin: 12px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  .item-row {
+    font-size: 13px;
+    color: #334155;
+    display: flex;
+    justify-content: space-between;
+  }
+  .item-qty {
+    font-weight: 600;
+    color: #0f172a;
+    margin-right: 6px;
+  }
+  .item-name {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .more-items {
+    font-size: 11px;
+    color: #94a3b8;
+    font-style: italic;
+  }
+`;
+
+const CardFooter = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 12px;
+  border-top: 1px dashed #e2e8f0;
+  margin-top: 8px;
+`;
+
+const PriceTag = styled.div`
+  font-weight: 700;
+  color: #0f172a;
+  font-size: 15px;
+`;
+
+
 // Constants
 const STATUSES = ['new','in_progress','ready','completed'];
 const LABELS = { new: 'New', in_progress: 'Cooking', ready: 'Ready', completed: 'Done' };
-const COLORS = { new: '#3b82f6', in_progress: '#f59e0b', ready: '#10b981', completed: '#6b7280' };
+const COLORS = { new: '#3b82f6', in_progress: '#f59e0b', ready: '#10b981', completed: '#10b981' };
 const PAGE_SIZE = 20;
 const UI_COLUMNS = [
   { id: 'new', label: 'New', statuses: ['new'] },
@@ -146,6 +454,20 @@ async function restoreStockForOrder(supabase, restaurantId, orderItems) {
 
 // Helpers
 const money = (v) => `₹${Number(v ?? 0).toFixed(2)}`;
+
+function timeAgo(dateString) {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now - date;
+  const diffMins = Math.floor(diffMs / 60000);
+  
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  const hours = Math.floor(diffMins / 60);
+  const mins = diffMins % 60;
+  return `${hours}h ${mins}m ago`;
+}
 const prefix = (s) => (s ? s.slice(0,24) : '');
 
 function computeOrderTotalDisplay(order) {
@@ -974,17 +1296,25 @@ function EditOrderPanel({ order, onClose, onSave }) {
                 >
                   −
                 </span>
-                <span
+                <input
+                  type="number"
+                  min="1"
+                  value={line.quantity}
+                  onChange={(e) => updateQty(idx, e.target.value)}
                   style={{
-                    minWidth: 24,
+                    width: 40,
                     textAlign: 'center',
                     fontSize: 13,
                     fontWeight: 600,
                     color: '#111827',
+                    border: 'none',
+                    background: 'transparent',
+                    outline: 'none',
+                    padding: 0,
+                    appearance: 'textfield',
+                    margin: '0 4px'
                   }}
-                >
-                  {line.quantity}
-                </span>
+                />
                 <span
                   onClick={() =>
                     updateQty(idx, (Number(line.quantity) || 0) + 1)
@@ -1083,7 +1413,7 @@ function EditOrderPanel({ order, onClose, onSave }) {
               Cancel
             </Button>
             <Button
-              variant="success"
+              variant="primary"
               style={{ flex: 1 }}
               onClick={handleSave}
               disabled={lines.length === 0 || !hasChanges || saving}
@@ -1268,6 +1598,22 @@ function EditOrderPanel({ order, onClose, onSave }) {
 
 function CancelConfirmDialog({ order, onConfirm, onCancel }) {
   const [reason, setReason] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const mounted = useRef(true);
+
+  useEffect(() => {
+    return () => { mounted.current = false; };
+  }, []);
+
+  const handleConfirm = async () => {
+    if (submitting) return;
+    setSubmitting(true);
+    await onConfirm(reason);
+    if (mounted.current) {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div style={{
       position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
@@ -1288,10 +1634,10 @@ function CancelConfirmDialog({ order, onConfirm, onCancel }) {
           />
         </label>
         <div style={{ display: 'flex', gap: 10, marginTop: 16, justifyContent: 'flex-end' }}>
-          <Button onClick={() => onConfirm(reason)} variant="danger" disabled={!reason.trim()}>
-            Confirm Cancel
+          <Button onClick={handleConfirm} variant="danger" disabled={!reason.trim() || submitting}>
+            {submitting ? 'Cancelling...' : 'Confirm Cancel'}
           </Button>
-          <Button onClick={onCancel} variant="outline">
+          <Button onClick={onCancel} variant="outline" disabled={submitting}>
             Cancel
           </Button>
         </div>
@@ -1366,12 +1712,55 @@ export default function OrdersPage() {
   const [ordersByStatus, setOrdersByStatus] = useState({
     new: [], in_progress: [], ready: [], completed: [], mobileFilter: 'new'
   });
+  
   const [completedPage, setCompletedPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [generatingInvoice, setGeneratingInvoice] = useState(null);
   const [paymentConfirmDialog, setPaymentConfirmDialog] = useState(null);
+  const [itemsModalOrder, setItemsModalOrder] = useState(null); // Global state for items modal
   const notificationAudioRef = useRef(null);
+  
+  // Search State
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  // Touch state for swipe 
+  const [touchStart, setTouchStart] = useState(null);
+  const [touchEnd, setTouchEnd] = useState(null);
+  const minSwipeDistance = 50; 
+
+  const onTouchStart = (e) => {
+    setTouchEnd(null); // Reset
+    setTouchStart(e.targetTouches[0].clientX);
+  };
+
+  const onTouchMove = (e) => {
+    setTouchEnd(e.targetTouches[0].clientX);
+  };
+
+  const onTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+    const distance = touchStart - touchEnd;
+    const isLeftSwipe = distance > minSwipeDistance;
+    const isRightSwipe = distance < -minSwipeDistance;
+    
+    // UI_COLUMNS: [0:new, 1:inprogress, 2:completed]
+    const currentIndex = UI_COLUMNS.findIndex(c => c.id === ordersByStatus.mobileFilter);
+    if (currentIndex === -1) return;
+
+    if (isLeftSwipe) {
+      // Next tab (swipe left)
+      if (currentIndex < UI_COLUMNS.length - 1) {
+        setOrdersByStatus(prev => ({...prev, mobileFilter: UI_COLUMNS[currentIndex + 1].id}));
+      }
+    } 
+    if (isRightSwipe) {
+      // Prev tab (swipe right)
+      if (currentIndex > 0) {
+        setOrdersByStatus(prev => ({...prev, mobileFilter: UI_COLUMNS[currentIndex - 1].id}));
+      }
+    }
+  };
 
   // ... all useEffect hooks, loadOrders, realtime subscription, updateStatus, finalize, complete, etc. remain unchanged ...
   // Save token to user profile (optional, unchanged)
@@ -1980,24 +2369,80 @@ if (ordersByStatus.mobileFilter === 'inprogress') {
   );
 }
 
+     // Apply Filters
+     mobileOrders = mobileOrders.filter(o => {
+        if (searchQuery) {
+          const q = searchQuery.toLowerCase().trim();
+          
+          // Strict match for Table Number if query is short numeric
+          const isNumeric = /^\d{1,3}$/.test(q);
+          if (isNumeric) {
+             return String(o.table_number) === q;
+          }
+
+          const matchId = o.id.toLowerCase().includes(q);
+          const matchTable = o.table_number ? String(o.table_number).includes(q) : false;
+          const items = toDisplayItems(o);
+          const matchItem = items.some(it => it.name.toLowerCase().includes(q));
+          return matchId || matchTable || matchItem;
+        }
+        return true;
+     });
+
 
 
   // // Show print modal when state is set
    
   return (
-    <div className="orders-wrap">
+    <div 
+      className="orders-wrap"
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+    >
       <header className="orders-header">
         <h1>Orders Dashboard</h1>
         <div className="header-actions">
-          <span className="muted">
-            {['new','in_progress','ready']
-              .reduce((sum,s) => sum + ordersByStatus[s].length, 0)} live orders
-          </span>
-          <Button variant="outline" onClick={() => { setCompletedPage(1); loadOrders(1); }}>
+          {/* Live Order Count (New + In Progress) */}
+          {(ordersByStatus.new.length + ordersByStatus.in_progress.length) > 0 && (
+            <span 
+              style={{
+                color: '#f97316', 
+                fontSize: 15,
+                fontWeight: 400,
+                marginRight: 8,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6
+              }}
+            >
+              <PulseDot />
+              {ordersByStatus.new.length + ordersByStatus.in_progress.length} Live Orders
+            </span>
+          )}
+          
+           <Button variant="outline" onClick={() => { setCompletedPage(1); loadOrders(1); }}>
             Refresh
           </Button>
         </div>
       </header>
+
+      <ControlsBar>
+        <SearchWrapper>
+          <svg className="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="8" />
+            <path d="M21 21L16.65 16.65" />
+          </svg>
+          <input 
+            placeholder="Search by Order #, Table, or Item..." 
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+          />
+          {searchQuery && (
+            <button className="clear-btn" onClick={() => setSearchQuery('')}>✕</button>
+          )}
+        </SearchWrapper>
+      </ControlsBar>
 
       {error && (
         <Card padding={12} style={{ background:'#fee2e2',border:'1px solid #fecaca',margin:'0 12px 12px' }}>
@@ -2007,18 +2452,49 @@ if (ordersByStatus.mobileFilter === 'inprogress') {
 
      <div className="mobile-filters">
   {UI_COLUMNS.map((col) => {
-    const count =
-      col.id === 'inprogress'
-        ? ordersByStatus.in_progress.length + ordersByStatus.ready.length
-        : (ordersByStatus[col.id] || []).length;
+    // Helper to filter a list
+    const filterList = (list) => {
+      return list.filter(o => {
+        // Search Filter
+        if (searchQuery) {
+          const q = searchQuery.toLowerCase().trim();
+          
+          // Strict match for Table Number if query is short numeric (e.g. "1")
+          // This avoids "1" matching every ID or price
+          const isNumeric = /^\d{1,3}$/.test(q);
+          if (isNumeric) {
+             // ONLY match table number. Don't match ID for short numbers (too noisy)
+             return String(o.table_number) === q;
+          }
+
+          // General search
+          const matchId = o.id.toLowerCase().includes(q);
+          const matchTable = o.table_number ? String(o.table_number).includes(q) : false;
+          // Check items
+          const items = toDisplayItems(o);
+          const matchItem = items.some(it => it.name.toLowerCase().includes(q));
+          
+          return matchId || matchTable || matchItem;
+        }
+
+        return true;
+      });
+    };
+
+    let baseList = [];
+    if (col.id === 'inprogress') {
+       baseList = [...ordersByStatus.in_progress, ...ordersByStatus.ready];
+    } else {
+       baseList = ordersByStatus[col.id] || [];
+    }
+    
+    const count = filterList(baseList).length;
 
     return (
       <button
         key={col.id}
         className={`chip ${col.id === ordersByStatus.mobileFilter ? 'chip--active' : ''}`}
-        onClick={() =>
-          setOrdersByStatus((prev) => ({ ...prev, mobileFilter: col.id }))
-        }
+        onClick={() => setOrdersByStatus((prev) => ({ ...prev, mobileFilter: col.id }))}
       >
         <span className="chip-label">{col.label}</span>
         <span className="chip-count">{count}</span>
@@ -2029,11 +2505,11 @@ if (ordersByStatus.mobileFilter === 'inprogress') {
 
 
 
-      {/* Mobile list */}
       <div className="mobile-list orders-list">
+
   {mobileOrders.length === 0 ? (
     <Card className="muted" padding={12} style={{ textAlign: 'center' }}>
-      No {ordersByStatus.mobileFilter === 'inprogress' ? 'in progress' : ordersByStatus.mobileFilter} orders
+      No orders found matching filters
     </Card>
   ) : (
     mobileOrders.map((order) => (
@@ -2044,6 +2520,7 @@ if (ordersByStatus.mobileFilter === 'inprogress') {
         onChangeStatus={updateStatus}
         onComplete={finalize}
         generatingInvoice={generatingInvoice}
+        onShowItems={(o) => setItemsModalOrder(o)}
         onPrintKot={(orderObj) => {
   window.dispatchEvent(
     new CustomEvent('auto-print-order', {
@@ -2105,7 +2582,27 @@ if (ordersByStatus.mobileFilter === 'inprogress') {
       {/* Kanban grid for desktop */}
    <div className="kanban"> 
   {UI_COLUMNS.map((col) => {
-    let colOrders = col.statuses.flatMap((st) => ordersByStatus[st] || []);
+    let rawColOrders = col.statuses.flatMap((st) => ordersByStatus[st] || []);
+
+    // Apply Filters for Kanban
+    let colOrders = rawColOrders.filter(o => {
+        if (searchQuery) {
+          const q = searchQuery.toLowerCase().trim();
+          
+          // Strict match for Table Number if query is short numeric
+          const isNumeric = /^\d{1,3}$/.test(q);
+          if (isNumeric) {
+             return String(o.table_number) === q;
+          }
+
+          const matchId = o.id.toLowerCase().includes(q);
+          const matchTable = o.table_number ? String(o.table_number).includes(q) : false;
+          const items = toDisplayItems(o);
+          const matchItem = items.some(it => it.name.toLowerCase().includes(q));
+          return matchId || matchTable || matchItem;
+        }
+        return true;
+     });
 
 colOrders =
   col.id === 'completed'
@@ -2125,7 +2622,21 @@ colOrders =
           <strong style={{ color: COLORS[col.statuses[0]] }}>
             {col.label}
           </strong>
-          <span className="pill">{colOrders.length}</span>
+          <span 
+            style={{
+              background: COLORS[col.statuses[0]],
+              color: 'white',
+              borderRadius: '99px',
+              padding: '2px 10px',
+              fontSize: '13px',
+              fontWeight: 700,
+              minWidth: '24px',
+              textAlign: 'center',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+            }}
+          >
+            {colOrders.length}
+          </span>
         </div>
         <div className="kanban-col-body">
           {colOrders.length === 0 ? (
@@ -2192,30 +2703,35 @@ colOrders =
                 onCancelOrderOpen={onCancelOrderOpen}
                 onEditOrder={(order) => setEditingOrder(order)}
                 onEditPax={(order) => setPaxEditOrder(order)}
+                onShowItems={(o) => setItemsModalOrder(o)}
               />
             ))
           )}
 
-          {/* Keep pagination only on Done column */}
-          {col.id === 'completed' &&
-            ordersByStatus.completed.length >= PAGE_SIZE && (
+          {col.id === 'completed' && !searchQuery && (
               <>
-                <div style={{ fontSize: 12, color: '#6b7280' }}>
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: '#64748b',
+                    textAlign: 'center',
+                    marginTop: 16,
+                  }}
+                >
                   Showing latest {ordersByStatus.completed.length} completed
                   orders
                 </div>
-                <div style={{ paddingTop: 8 }}>
+                <div style={{ paddingTop: 8, display: 'flex', justifyContent: 'center' }}>
                   <Button
-  variant="outline"
-  onClick={() => {
-    const next = completedPage + 1;
-    setCompletedPage(next);
-    loadOrders(next);
-  }}
->
-  Load more
-</Button>
-
+                    variant="outline"
+                    onClick={() => {
+                      const next = completedPage + 1;
+                      setCompletedPage(next);
+                      loadOrders(next);
+                    }}
+                  >
+                    Load more
+                  </Button>
                 </div>
               </>
             )}
@@ -2262,6 +2778,66 @@ colOrders =
     />
 )}
 
+    {/* Global "Show All Items" Modal */}
+    {itemsModalOrder && (
+      <div 
+        style={{
+          position:'fixed', top:0, left:0, right:0, bottom:0, width:'100%', height:'100%',
+          background:'rgba(0,0,0,0.5)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:9999
+        }}
+        onClick={(e) => { e.stopPropagation(); setItemsModalOrder(null); }}
+      >
+        <div 
+          style={{
+            background:'white', width:'90%', maxWidth:360, borderRadius:16, padding:20,
+            boxShadow:'0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+            maxHeight:'85vh', display:'flex', flexDirection:'column', animation: 'fadeIn 0.2s', position: 'relative'
+          }}
+          onClick={e => e.stopPropagation()}
+        >
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:16}}>
+              <div>
+                  <strong style={{fontSize:18, display:'block', color:'#0f172a'}}>Order #{itemsModalOrder.id.slice(0,8)}</strong>
+                  <div style={{display:'flex', gap:8, marginTop:8, flexWrap:'wrap'}}>
+                      <div style={{background:'#f1f5f9', padding:'4px 8px', borderRadius:6, fontSize:12, color:'#475569'}}>
+                          <span style={{color:'#94a3b8', marginRight:4}}>Created</span>
+                          <span style={{fontWeight:600}}>
+                            {new Date(itemsModalOrder.created_at).toLocaleString('en-US', {
+                              month:'short', day:'numeric', hour:'numeric', minute:'2-digit'
+                            })}
+                          </span>
+                      </div>
+                      <div style={{background:'#f1f5f9', padding:'4px 8px', borderRadius:6, fontSize:12, color:'#475569'}}>
+                           <span style={{color:'#94a3b8', marginRight:4}}>Updated</span>
+                           <span style={{fontWeight:600}}>
+                             {new Date(itemsModalOrder.updated_at).toLocaleString('en-US', {
+                               month:'short', day:'numeric', hour:'numeric', minute:'2-digit'
+                             })}
+                           </span>
+                      </div>
+                  </div>
+              </div>
+              <div 
+                onClick={() => setItemsModalOrder(null)} 
+                style={{
+                    cursor:'pointer', width:28, height:28, borderRadius:'50%', 
+                    background:'#fef2f2', color:'#991b1b', display:'flex', 
+                    alignItems:'center', justifyContent:'center', fontSize:16, fontWeight:600,
+                    flexShrink:0
+                }}
+              >✕</div>
+            </div>
+            <div style={{overflowY:'auto', flex:1, display:'flex', flexDirection:'column', gap:8, marginBottom: 16}}>
+              {toDisplayItems(itemsModalOrder).map((it, i) => (
+                <div key={i} style={{fontSize:15, borderBottom:'1px dashed #f1f5f9', paddingBottom:6}}>
+                  <span style={{fontWeight:600, color:BRAND.orange}}>{it.quantity}×</span> {it.name}
+                  {it.variant_name && <div style={{fontSize:12, color:'#64748b', marginLeft:20}}>{it.variant_name}</div>}
+                </div>
+              ))}
+            </div>
+        </div>
+      </div>
+    )}
 
       <style jsx>{`
 .orders-wrap { padding:12px 0 32px; }
@@ -2314,202 +2890,125 @@ function OrderCard({
   onPrintBill,
   onCancelOrderOpen,
   onEditOrder,
-  onEditPax
+  onEditPax,
+  onShowItems // New prop to trigger global modal
 }) {
   const items = toDisplayItems(order);
   const total = computeOrderTotalDisplay(order);
 
-  // Removed local state for editingPax
-
   const isCreditOrder = order?.is_credit && order?.credit_customer_id;
   const pm = String(order.payment_method || '').toLowerCase();
-  const isOnlinePaid = pm === 'upi' || pm === 'card' || pm === 'online';
+  
+  // Choose class for accent border
+  const statusClass = 
+    order.status === 'new' ? 'is-new' : 
+    order.status === 'in_progress' ? 'is-progress' :
+    order.status === 'ready' ? 'is-ready' : 'is-completed';
 
-  // remove handlePrintBill here – use callbacks from props instead
+  // Calculate if order is "Late" (> 20 mins and not done)
+  // Logic removed for late coloring, keeping just regular time display
 
   return (
-    <>
-      <div className="order-card-wrapper">
-        <Card padding={12} className="order-card" style={{
-          border:'1px solid #eef2f7',
-          borderRadius:12,
-          boxShadow:'0 1px 2px rgba(0,0,0,0.04)',
-          width:'100%',maxWidth:'100%'
-        }}>
-          <div style={{
-            display:'flex',justifyContent:'space-between',
-            alignItems:'baseline',gap:8,flexWrap:'wrap'
-          }}>
-            <strong>#{order.id.slice(0,8)}</strong>
-            <span style={{ marginLeft:8 }}>
-              <small>{getOrderTypeLabel(order)}</small>
-              {isCreditOrder && <small style={{marginLeft: 8, color: '#f59e0b', fontWeight: 'bold'}}>💳 CREDIT</small>}
-              {order.number_of_customers && (
-                 <small 
-                   style={{marginLeft: 8, cursor: 'pointer'}} 
-                   title="Edit Pax"
-                   onClick={(e) => {
-                     e.stopPropagation();
-                     onEditPax && onEditPax(order);
-                   }}
-                 >
-                   👥 {order.number_of_customers}
-                 </small>
-              )}
-            </span>
-            <span style={{ color:'#6b7280',fontSize:12 }}>
-              {new Date(order.updated_at).toLocaleTimeString()}
-            </span>
+    <OrderCardStyled
+      className={`${statusClass} order-card`} 
+      onClick={() => onShowItems && onShowItems(order)}
+    >
+      <OrderHeader>
+        <div style={{display:'flex', alignItems:'center', gap:8}}>
+          <span className="order-id">#{order.id.slice(0, 6)}</span>
+          
+          <span style={{fontSize:13, fontWeight:600, color:'#334155'}}>{getOrderTypeLabel(order)}</span>
+          
+          {order.number_of_customers && (
+             <span 
+               style={{fontSize:12, cursor:'pointer', color:'#6b7280', display:'flex', alignItems:'center', gap:2}} 
+               title="Edit Pax"
+               onClick={(e) => {
+                 e.stopPropagation();
+                 onEditPax && onEditPax(order);
+               }}
+             >
+               👥 {order.number_of_customers}
+             </span>
+          )}
+
+          {isCreditOrder && <span style={{fontSize:10, background:'#e0f2fe', color:'#0369a1', padding:'2px 6px', borderRadius:4}}>CREDIT</span>}
+        </div>
+        
+        <div className="order-time" style={{marginLeft:'auto', whiteSpace:'nowrap'}}>
+          {timeAgo(order.created_at)}
+        </div>
+      </OrderHeader>
+
+      <div style={{ margin:'8px 0', fontSize:14, display:'flex', flexDirection:'column', gap:4 }}>
+        {/* Show fewer items by default */}
+        {items.slice(0, 3).map((it,i)=>(
+          <div key={i} style={{ display: 'flex', justifyContent: 'space-between' }}>
+             <div>
+               <span style={{fontWeight:600}}>{it.quantity}×</span> {it.name}
+               {it.variant_name && <span style={{fontSize:12, color:'#6b7280', marginLeft:6}}>({it.variant_name})</span>}
+             </div>
           </div>
-
-          <div style={{ margin:'8px 0', fontSize:14 }}>
-            {items.map((it,i)=>(
-              <div key={i}>{it.quantity}× {it.name}</div>
-            ))}
-          </div>
-
-          <div style={{
-            display:'flex',justifyContent:'space-between',
-            alignItems:'center',gap:8,flexWrap:'wrap',width:'100%'
-          }}>
-            <span style={{ fontSize:16,fontWeight:700 }}>{money(total)}</span>
-            <div className="order-actions" style={{
-              display:'flex',gap:6,flexWrap:'wrap',justifyContent:'flex-end',width:'100%'
-            }} onClick={e=>e.stopPropagation()}>
-              
-              {/* NEW orders */}
-{/* NEW orders (unchanged) */}
-{order.status === 'new' && (
-  <>
-    <Button size="sm" onClick={() => onChangeStatus(order.id, 'in_progress')}>
-      Start
-    </Button>
-     <Button
-      size="sm"
-     style={{ backgroundColor: '#eab308', color: '#fff' }}
-      onClick={() => onEditOrder(order)}
-    >
-      Edit
-    </Button>
-
-    <Button
-      size="sm"
-      variant="danger"
-      onClick={() => onCancelOrderOpen(order)}
-    >
-      Cancel
-    </Button>
-    <button
-      onClick={() => onPrintKot && onPrintKot(order)}
-      style={{
-        background: '#10b981',
-        color: '#fff',
-        border: 'none',
-        padding: '6px 12px',
-        borderRadius: '4px',
-        cursor: 'pointer',
-        fontSize: '12px',
-      }}
-    >
-      Print KOT
-    </button>
-  </>
-)}
-
-{(order.status === 'in_progress' || order.status === 'ready') && (
-  <>
-   <Button
-      size="sm"
-      onClick={() => onComplete(order)}
-      disabled={generatingInvoice === order.id}
-      title="Complete order and generate invoice"
-    >
-      {generatingInvoice === order.id ? 'Processing…' : 'Done'}
-    </Button>
-     <Button
-      size="sm"
-     style={{ backgroundColor: '#eab308', color: '#fff' }}
-      onClick={() => onEditOrder(order)}
-    >
-      Edit
-    </Button>
-
-    <Button
-      size="sm"
-      variant="danger"
-      onClick={() => onCancelOrderOpen(order)}
-    >
-      Cancel
-    </Button>
-      <button
-      onClick={() => onPrintBill && onPrintBill(order)}
-      style={{
-        background: '#10b981',
-        color: '#fff',
-        border: 'none',
-        padding: '6px 12px',
-        borderRadius: '4px',
-        cursor: 'pointer',
-        fontSize: '12px',
-      }}
-    >
-      Print Bill
-    </button>
-  </>
-
-)}
-
-{order.status === 'completed' && (
-  <>
-    <Button
-      size="sm"
-      onClick={async () => {
-        try {
-          await downloadInvoicePdf(order.id)
-        } catch (e) {
-          alert(e.message || 'Failed to download invoice')
-        }
-      }}
-      disabled={generatingInvoice === order.id}
-    >
-      Invoice
-    </Button>
-
-    <button
-      onClick={() => onPrintBill && onPrintBill(order)}
-      style={{
-        background: '#10b981',
-        color: '#fff',
-        border: 'none',
-        padding: '6px 12px',
-        borderRadius: '4px',
-        cursor: 'pointer',
-        fontSize: '12px',
-      }}
-    >
-      Print Bill
-    </button>
-  </>
-)}
-
-
-            </div>
-          </div>
-
-          <div style={{
-            height:2,marginTop:10,background:statusColor,
-            opacity:0.2,borderRadius:2
-          }}/>
-        </Card>
+        ))}
+        {items.length > 3 && (
+           <div 
+             onClick={(e) => { e.stopPropagation(); onShowItems && onShowItems(order); }}
+             style={{fontSize:12, color:statusColor, cursor:'pointer', fontWeight:600, marginTop:4}}
+           >
+             Show all {items.length} items
+           </div>
+        )}
       </div>
 
-      <style jsx>{`
-.order-card-wrapper { width:100%; padding:6px 0; }
-.order-card { width:100%; max-width:100%; }
-@media (max-width:480px) {
-  .order-actions { justify-content:flex-start !important; }
-}
-      `}</style>
-    </>
+      <CardFooter>
+        <PriceTag>{money(total)}</PriceTag>
+        <div style={{ display: 'flex', gap: 6 }} onClick={(e) => e.stopPropagation()}>
+           
+            {/* New Orders */}
+            {order.status === 'new' && (
+              <>
+                <Button size="sm" onClick={() => onChangeStatus(order.id, 'in_progress')}>Start</Button>
+                <Button size="sm" variant="outline" onClick={() => onEditOrder(order)}>Edit</Button>
+                <Button size="sm" variant="danger" onClick={() => onCancelOrderOpen(order)}>Cancel</Button>
+                <Button size="sm" style={{background: '#10b981', borderColor: '#10b981', color:'white'}} onClick={() => onPrintKot && onPrintKot(order)}>KOT</Button>
+              </>
+            )}
+
+            {/* In Progress */}
+            {order.status === 'in_progress' && (
+              <>
+                 <Button size="sm" onClick={() => onChangeStatus(order.id, 'ready')}>Ready</Button>
+                 <Button size="sm" variant="outline" onClick={() => onEditOrder(order)}>Edit</Button>
+                 {/* Allow cancel if mistake */}
+                 <Button size="sm" variant="danger" onClick={() => onCancelOrderOpen(order)}>Cancel</Button>
+                 <Button size="sm" style={{background: '#10b981', borderColor: '#10b981', color:'white'}} onClick={() => onPrintBill && onPrintBill(order)}>Print Bill</Button>
+              </>
+            )}
+
+            {/* Ready */}
+            {order.status === 'ready' && (
+              <>
+                <Button size="sm" onClick={() => onComplete(order)} disabled={generatingInvoice === order.id}>
+                   {generatingInvoice === order.id ? '...' : 'Done'}
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => onEditOrder(order)}>Edit</Button>
+                <Button size="sm" variant="danger" onClick={() => onCancelOrderOpen(order)}>Cancel</Button>
+                <Button size="sm" style={{background: '#10b981', borderColor: '#10b981', color:'white'}} onClick={() => onPrintBill && onPrintBill(order)}>Print Bill</Button>
+              </>
+            )}
+
+            {/* Completed Orders */}
+            {order.status === 'completed' && (
+              <>
+                <Button size="sm" onClick={async () => {
+                   try { await downloadInvoicePdf(order.id) } catch (e) { alert(e.message) }
+                }} disabled={generatingInvoice === order.id}>Invoice</Button>
+                <Button size="sm" style={{background: '#10b981', borderColor: '#10b981', color:'white'}} onClick={() => onPrintBill && onPrintBill(order)}>Print Bill</Button>
+              </>
+            )}
+
+        </div>
+      </CardFooter>
+    </OrderCardStyled>
   );
 }
