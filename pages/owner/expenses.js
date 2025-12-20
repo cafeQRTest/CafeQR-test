@@ -46,6 +46,74 @@ export default function ExpensesPage() {
     creditPayments: 0
   });
 
+  const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+  const [showCategoryManager, setShowCategoryManager] = useState(false);
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
+  const [manageCatName, setManageCatName] = useState('');
+  const [manageEditId, setManageEditId] = useState(null);
+  const [manageEditName, setManageEditName] = useState('');
+  const [manageError, setManageError] = useState(null);
+  const [catDeleteConfirmId, setCatDeleteConfirmId] = useState(null);
+
+  // Reset Manager State on Open
+  useEffect(() => {
+    if (showCategoryManager) {
+      setManageEditId(null);
+      setManageCatName('');
+      setManageEditName('');
+      setManageError(null);
+      setCatDeleteConfirmId(null);
+    }
+  }, [showCategoryManager]);
+
+  useEffect(() => {
+    if (showQuickAdd) {
+      setManageCatName('');
+      setManageError(null);
+    }
+  }, [showQuickAdd]);
+
+  // Category Manager Logic
+  async function addCategory() {
+    if (!manageCatName.trim()) return;
+    const { error } = await supabase.from('expense_categories').insert({ restaurant_id: restaurantId, name: manageCatName.trim(), sort_order: 99 });
+    if (error) console.error(error);
+    else { setManageCatName(''); await loadData(); }
+  }
+  async function saveCategoryEdit() {
+    if (!manageEditId || !manageEditName.trim()) return;
+    const { error } = await supabase.from('expense_categories').update({ name: manageEditName.trim() }).eq('id', manageEditId);
+    if (error) console.error(error);
+    else { setManageEditId(null); await loadData(); }
+  }
+  async function deleteCategory(id) {
+    // Check if category is in use
+    const { count, error: checkErr } = await supabase
+      .from('expenses')
+      .select('id', { count: 'exact', head: true })
+      .eq('category_id', id)
+      .eq('restaurant_id', restaurantId);
+
+    if (checkErr) { 
+      console.error(checkErr); 
+      return; 
+    }
+
+    if (count > 0) {
+      setManageError(`Cannot delete: This category is used by ${count} expense(s).`);
+      return;
+    }
+
+    const { error } = await supabase.from('expense_categories').delete().eq('id', id);
+    if (error) { 
+      console.error(error); 
+      setManageError('Failed to delete category.'); 
+    } else {
+      setManageError(null);
+      await loadData();
+    }
+  }
+
   const [showForm, setShowForm] = useState(false);
   const [formDate, setFormDate] = useState(
     new Date().toISOString().split('T')[0]
@@ -324,31 +392,9 @@ async function handleSubmitExpense(e) {
     return;
   }
 
-  let categoryId = formCategoryId || null;
+  let categoryId = formCategoryId;
 
   try {
-    if (formCategoryId === NEW_CATEGORY_SENTINEL) {
-      const name = formNewCategory.trim();
-      if (!name) {
-        alert('Enter a category name');
-        return;
-      }
-      const { data: newCat, error: catErr } = await supabase
-        .from('expense_categories')
-        .insert({
-          restaurant_id: restaurantId,
-          name,
-          sort_order: (categories?.length || 0) + 1
-        })
-        .select('id, name, sort_order, is_active')
-        .maybeSingle();
-      if (catErr) throw catErr;
-      if (newCat) {
-        setCategories((prev) => [...prev, newCat]);
-        categoryId = newCat.id;
-      }
-    }
-
     const payload = {
       restaurant_id: restaurantId,
       category_id: categoryId,
@@ -412,24 +458,30 @@ function openEditExpense(expense) {
   setShowForm(true);
 }
 
-async function handleDeleteExpense(id) {
-  if (!supabase || !restaurantId) return;
-  if (!window.confirm('Delete this expense?')) return;
-
-  const { error } = await supabase
-    .from('expenses')
-    .delete()
-    .eq('id', id)
-    .eq('restaurant_id', restaurantId);
-
-  if (error) {
-    console.error(error);
-    alert(error.message || 'Failed to delete expense');
-    return;
+  // Trigger modal instead of window.confirm
+  function handleDeleteExpense(id) {
+    setDeleteConfirmId(id);
   }
-  setEditingExpense(null);
-  await loadData();
-}
+
+  // Actual delete logic
+  async function performDelete() {
+    if (!supabase || !restaurantId || !deleteConfirmId) return;
+
+    const { error } = await supabase
+      .from('expenses')
+      .delete()
+      .eq('id', deleteConfirmId)
+      .eq('restaurant_id', restaurantId);
+
+    if (error) {
+      console.error(error);
+      // No alert, just log
+    }
+    
+    setDeleteConfirmId(null);
+    setEditingExpense(null);
+    await loadData();
+  }
 
   if (checking || restLoading) return <div style={{ padding: 16 }}>Loading…</div>;
   if (!restaurantId) return <div style={{ padding: 16 }}>No restaurant selected</div>;
@@ -449,8 +501,24 @@ async function handleDeleteExpense(id) {
             end={range.end}
             onChange={setRange}
           />
-          <Button onClick={handleExportCSV}>📥 CSV</Button>
-          <Button onClick={openAddExpense}>+ Add Expense</Button>
+          <Button 
+            onClick={openAddExpense}
+            style={{ padding: '6px 16px', fontSize: '0.9rem', background: '#f97316', borderColor: '#f97316', color: 'white' }}
+          >
+            + Expense
+          </Button>
+          <Button
+            onClick={handleExportCSV}
+            style={{ background: '#fff7ed', border: '1px solid #fed7aa', color: '#ea580c', padding: '6px 12px', fontSize: '0.9rem' }}
+          >
+            CSV
+          </Button>
+          <Button
+            onClick={() => setShowCategoryManager(true)}
+            style={{ background: 'white', border: '1px solid #d1d5db', color: '#374151', padding: '6px 12px', fontSize: '0.9rem' }}
+          >
+            Categories
+          </Button>
 
         </div>
       </div>
@@ -467,25 +535,36 @@ async function handleDeleteExpense(id) {
         <>
           {/* KPI strip */}
           <div className="expenses-kpis grid grid-3">
-            <Card className="expenses-kpi">
+            {/* Gross Sales */}
+            <Card className="expenses-kpi" style={{ borderTop: '4px solid #10b981' }}>
               <div className="label">Gross Sales</div>
-              <div className="value">{formatMoney(summary.grossSales)}</div>
+              <div className="value" style={{ color: '#059669' }}>{formatMoney(summary.grossSales)}</div>
             </Card>
-            <Card className="expenses-kpi">
+
+            {/* Total Expenses */}
+            <Card className="expenses-kpi" style={{ borderTop: '4px solid #ef4444' }}>
               <div className="label">Total Expenses</div>
-              <div className="value">{formatMoney(summary.totalExpenses)}</div>
+              <div className="value" style={{ color: '#dc2626' }}>{formatMoney(summary.totalExpenses)}</div>
             </Card>
-            <Card className="expenses-kpi">
+
+            {/* Net Profit */}
+            <Card className="expenses-kpi" style={{ borderTop: `4px solid ${netProfitAccrual >= 0 ? '#10b981' : '#ef4444'}` }}>
               <div className="label">Net Profit (Accrual)</div>
-              <div className="value">{formatMoney(netProfitAccrual)}</div>
+              <div className="value" style={{ color: netProfitAccrual >= 0 ? '#059669' : '#dc2626' }}>
+                {formatMoney(netProfitAccrual)}
+              </div>
             </Card>
-            <Card className="expenses-kpi">
+
+            {/* Credit */}
+            <Card className="expenses-kpi" style={{ borderTop: '4px solid #f59e0b' }}>
               <div className="label">Credit Outstanding</div>
-              <div className="value">{formatMoney(creditOutstanding)}</div>
+              <div className="value" style={{ color: '#d97706' }}>{formatMoney(creditOutstanding)}</div>
             </Card>
-            <Card className="expenses-kpi">
-              <div className="label">Net Cash Profit</div>
-              <div className="value">{formatMoney(netCashProfit)}</div>
+
+            {/* Net Cash */}
+            <Card className="expenses-kpi" style={{ borderTop: '4px solid #10b981' }}>
+              <div className="label" style={{ color: '#047857' }}>Net Cash Profit</div>
+              <div className="value" style={{ color: '#047857', fontSize: '1.5rem' }}>{formatMoney(netCashProfit)}</div>
             </Card>
           </div>
 
@@ -541,94 +620,58 @@ async function handleDeleteExpense(id) {
             </div>
 
             {/* On phones show a simple stacked list; on tablets/desktop show table */}
-            <div className="expenses-mobile-list only-mobile">
-  {filteredExpenses.length === 0 ? (
-    <div className="expenses-empty">No expenses for this period.</div>
-  ) : (
-    filteredExpenses.map((e) => (
-      <div key={e.id} className="expenses-tile">
-        <div className="tile-row">
-          <span className="tile-date">{e.expense_date}</span>
-          <span className="tile-amount">{formatMoney(e.amount)}</span>
-        </div>
-        <div className="tile-row">
-          <span className="tile-category">
-            {e.category?.name || 'Uncategorized'}
-          </span>
-          {e.payment_method && (
-            <span className="tile-method">{e.payment_method}</span>
-          )}
-        </div>
-        {e.description && <div className="tile-desc">{e.description}</div>}
-
-        <div className="tile-row tile-actions">
-          <button
-            type="button"
-            className="link-button"
-            onClick={() => openEditExpense(e)}
-          >
-            Edit
-          </button>
-          <button
-            type="button"
-            className="link-button danger"
-            onClick={() => handleDeleteExpense(e.id)}
-          >
-            Delete
-          </button>
-        </div>
-      </div>
-    ))
-  )}
-</div>
 
 
-            <div className="expenses-table-wrapper hide-mobile">
-  <Table
-    columns={[
-      { header: 'Date', accessor: 'expense_date' },
-      { header: 'Category', accessor: 'category_name' },
-      { header: 'Description', accessor: 'description' },
-      { header: 'Pay Method', accessor: 'payment_method' },
-      {
-        header: 'Amount',
-        accessor: 'amount',
-        cell: (r) => formatMoney(r.amount)
-      },
-      {
-        header: 'Actions',
-        accessor: 'actions',
-        cell: (r) => (
-          <div className="expenses-actions">
-            <button
-              type="button"
-              className="link-button"
-              onClick={() => openEditExpense(r._raw)}
-            >
-              Edit
-            </button>
-            <button
-              type="button"
-              className="link-button danger"
-              onClick={() => handleDeleteExpense(r.id)}
-            >
-              Delete
-            </button>
-          </div>
-        )
-      }
-    ]}
-    data={filteredExpenses.map((e) => ({
-      id: e.id,
-      expense_date: e.expense_date,
-      category_name: e.category?.name || 'Uncategorized',
-      description: e.description || '',
-      payment_method: e.payment_method || '',
-      amount: e.amount,
-      _raw: e
-    }))}
-  />
-</div>
+            {/* Table View (for all devices) */}
+            <div className="expenses-table-wrapper">
+              <Table
+                columns={[
+                  { header: 'Date', accessor: 'expense_date', cell: (r) => new Date(r.expense_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) },
+                  { header: 'Category', accessor: 'category_name' },
+                  { header: 'Description', accessor: 'description' },
+                  { header: 'Pay Method', accessor: 'payment_method', cell: (r) => prettyMethod(r.payment_method) },
+                  {
+                    header: 'Amount',
+                    accessor: 'amount',
+                    cell: (r) => formatMoney(r.amount)
+                  },
+                  {
+                    header: 'Actions',
+                    accessor: 'actions',
+                    cell: (r) => (
+                      <div className="expenses-actions">
+                        <button
+                          type="button"
+                          className="link-button"
+                          onClick={() => openEditExpense(r._raw)}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          className="link-button danger"
+                          onClick={() => handleDeleteExpense(r.id)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    )
+                  }
+                ]}
+                data={filteredExpenses.map((e) => ({
+                  id: e.id,
+                  expense_date: e.expense_date,
+                  category_name: e.category?.name || 'Uncategorized',
+                  description: e.description || '',
+                  payment_method: e.payment_method || '',
+                  amount: e.amount,
+                  _raw: e
+                }))}
+              />
+            </div>
+
+
+
 
           </Card>
         </>
@@ -659,7 +702,7 @@ async function handleDeleteExpense(id) {
 
             <form onSubmit={handleSubmitExpense} className="expenses-form">
               <label>
-                Date
+                <span>Date <span style={{ color: '#ef4444' }}>*</span></span>
                 <input
                   type="date"
                   value={formDate}
@@ -669,29 +712,34 @@ async function handleDeleteExpense(id) {
               </label>
 
               <label>
-                Category
-                <NiceSelect
-                  options={formCategoryOptions}
-                  value={formCategoryId}
-                  onChange={setFormCategoryId}
-                  placeholder="Select..."
-                />
+                <span>Category <span style={{ color: '#ef4444' }}>*</span></span>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <div style={{ flex: 1 }}>
+                    <NiceSelect
+                      options={[{ value: '', label: 'Select Category' }, ...categories.map(c => ({ value: c.id, label: c.name }))]}
+                      value={formCategoryId}
+                      onChange={setFormCategoryId}
+                      placeholder="Select Category"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowQuickAdd(true)}
+                    title="Add Category"
+                    style={{
+                      height: '42px', width: '42px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      background: '#f97316', border: 'none', borderRadius: '6px',
+                      color: 'white', fontSize: '1.5rem', lineHeight: '1', cursor: 'pointer', padding: 0,
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
+                    }}
+                  >
+                    +
+                  </button>
+                </div>
               </label>
 
-              {formCategoryId === NEW_CATEGORY_SENTINEL && (
-                <label>
-                  New category name
-                  <input
-                    type="text"
-                    value={formNewCategory}
-                    onChange={(e) => setFormNewCategory(e.target.value)}
-                    required
-                  />
-                </label>
-              )}
-
               <label>
-                Amount
+                <span>Amount <span style={{ color: '#ef4444' }}>*</span></span>
                 <input
                   type="number"
                   min="0"
@@ -723,54 +771,249 @@ async function handleDeleteExpense(id) {
                 />
               </label>
 
-              <div className="expenses-modal-actions">
-  <Button type="submit" variant="success">
-    {editingExpense ? 'Update' : 'Save'}
-  </Button>
-  <Button
-    type="button"
-    variant="outline"
-    onClick={() => {
-      setShowForm(false);
-      setEditingExpense(null);
-    }}
-  >
-    Cancel
-  </Button>
-</div>
+              <div className="expenses-modal-actions" style={{ gap: '24px' }}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setShowForm(false);
+                    setEditingExpense(null);
+                  }}
+                  style={{ padding: '10px 24px' }}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  type="submit" 
+                  disabled={!formDate || !formCategoryId || !formAmount || !formMethod}
+                  style={{ 
+                    padding: '10px 32px', 
+                    background: (!formDate || !formCategoryId || !formAmount || !formMethod) ? '#d1d5db' : '#f97316', 
+                    borderColor: (!formDate || !formCategoryId || !formAmount || !formMethod) ? '#d1d5db' : '#f97316', 
+                    color: 'white',
+                    cursor: (!formDate || !formCategoryId || !formAmount || !formMethod) ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  {editingExpense ? 'Update' : 'Save'}
+                </Button>
+              </div>
 
             </form>
           </div>
         </div>
       )}
 
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmId && (
+        <div className="expenses-modal-backdrop" onClick={() => setDeleteConfirmId(null)}>
+          <div className="expenses-modal" style={{ maxWidth: '360px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="expenses-modal-header" style={{ marginBottom: '16px', borderBottom: 'none', paddingBottom: 0 }}>
+              <h3 style={{ margin: 0, fontSize: '1.25rem' }}>Confirm Delete</h3>
+              <button className="x" onClick={() => setDeleteConfirmId(null)}>×</button>
+            </div>
+            <p style={{ color: '#4b5563', marginBottom: '24px', lineHeight: '1.5', fontSize: '0.95rem' }}>
+              Are you sure you want to delete this expense? This action cannot be undone.
+            </p>
+            <div className="expenses-modal-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', border: 'none', padding: 0 }}>
+              <button
+                type="button"
+                className="link-button"
+                style={{
+                  padding: '8px 16px', borderRadius: '8px', border: '1px solid #d1d5db',
+                  background: 'white', cursor: 'pointer', fontWeight: 500, color: '#374151',
+                  textDecoration: 'none', fontSize: '0.9rem'
+                }}
+                onClick={() => setDeleteConfirmId(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="link-button danger"
+                style={{
+                  padding: '8px 16px', borderRadius: '8px', border: 'none',
+                  background: '#ef4444', color: 'white', cursor: 'pointer', fontWeight: 600,
+                  fontSize: '0.9rem'
+                }}
+                onClick={performDelete}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Category Manager Modal */}
+      {showCategoryManager && (
+        <div className="expenses-modal-backdrop" onClick={() => setShowCategoryManager(false)}>
+          <div className="expenses-modal" style={{ maxWidth: '400px', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }} onClick={(e) => e.stopPropagation()}>
+            <div className="expenses-modal-header">
+              <h3>Manage Categories</h3>
+              <button className="x" onClick={() => setShowCategoryManager(false)}>×</button>
+            </div>
+            
+            <div style={{ padding: '24px' }}>
+              {manageError && (
+                <div style={{ background: '#fee2e2', border: '1px solid #fecaca', color: '#ef4444', padding: '12px', borderRadius: '6px', marginBottom: '16px', fontSize: '0.9rem' }}>
+                  {manageError}
+                </div>
+              )}
+              
+              {/* Create Section */}
+              <div style={{ marginBottom: '24px' }}>
+                <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#374151', marginBottom: '8px' }}>Create New Category</div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="text"
+                    placeholder="New Category Name"
+                    value={manageCatName}
+                    onChange={(e) => setManageCatName(e.target.value)}
+                    style={{ flex: 1, padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: '8px', fontSize: '0.9rem', outline: 'none' }}
+                    onKeyDown={(e) => e.key === 'Enter' && addCategory()}
+                  />
+                  <Button onClick={addCategory} disabled={!manageCatName.trim()} style={{ background: '#f97316', borderColor: '#f97316' }}>
+                    Add
+                  </Button>
+                </div>
+              </div>
+
+              <div style={{ borderTop: '1px solid #e5e7eb', margin: '24px 0' }}></div>
+
+              {/* Edit Section */}
+              <div>
+                <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#374151', marginBottom: '8px' }}>Edit Existing Category</div>
+                <NiceSelect 
+                   value={manageEditId || ''}
+                   onChange={val => {
+                      const c = categories.find(x => x.id === val);
+                      if (c) { setManageEditId(c.id); setManageEditName(c.name); setCatDeleteConfirmId(null); }
+                      else { setManageEditId(null); }
+                   }}
+                   options={categories.map(c => ({ value: c.id, label: c.name }))}
+                   placeholder="Select a category to manage..."
+                />
+
+                {manageEditId && (
+                   <div style={{ marginTop: '20px', padding: '20px', border: '1px solid #e5e7eb', borderRadius: '12px', background: '#fafafa' }}>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#374151', marginBottom: '8px' }}>Edit Name</div>
+                      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
+                         <input 
+                            value={manageEditName} 
+                            onChange={e=>setManageEditName(e.target.value)} 
+                            style={{ flex: 1, padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: '8px', fontSize: '0.9rem', outline: 'none' }} 
+                         />
+                         <Button onClick={saveCategoryEdit} style={{ background: '#f97316', borderColor: '#f97316', color: 'white' }}>Save</Button>
+                      </div>
+
+                      <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '16px', display: 'flex', justifyContent: 'flex-end' }}>
+                         {catDeleteConfirmId === manageEditId ? (
+                            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', background: '#fee2e2', padding: '8px 12px', borderRadius: '8px' }}>
+                               <span style={{ color: '#991b1b', fontSize: '0.85rem', fontWeight: 600 }}>Confirm Delete?</span>
+                               <button onClick={() => deleteCategory(manageEditId)} style={{ background: '#dc2626', color: 'white', border: 'none', borderRadius: '6px', padding: '6px 12px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}>Yes</button>
+                               <button onClick={() => setCatDeleteConfirmId(null)} style={{ background: 'white', border: '1px solid #fecaca', color: '#991b1b', borderRadius: '6px', padding: '6px 12px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}>No</button>
+                            </div>
+                         ) : (
+                            <button 
+                              onClick={() => setCatDeleteConfirmId(manageEditId)} 
+                              style={{ background: 'none', border: 'none', color: '#dc2626', fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer', padding: '4px 8px' }}
+                            >
+                              Delete Category
+                            </button>
+                         )}
+                      </div>
+                   </div>
+                )}
+              </div>
+            </div>
+            
+            <div className="expenses-modal-actions" style={{ marginTop: '16px' }}>
+              <Button onClick={() => setShowCategoryManager(false)} variant="outline">Close</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Add Category Modal */}
+      {showQuickAdd && (
+        <div className="expenses-modal-backdrop" onClick={() => setShowQuickAdd(false)}>
+          <div className="expenses-modal" style={{ maxWidth: '360px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="expenses-modal-header">
+              <h3>Add Category</h3>
+              <button className="x" onClick={() => setShowQuickAdd(false)}>×</button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
+              <input
+                type="text"
+                placeholder="Category Name"
+                value={manageCatName}
+                onChange={(e) => setManageCatName(e.target.value)}
+                style={{ padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px' }}
+                autoFocus
+              />
+            </div>
+            <div className="expenses-modal-actions" style={{ gap: '16px', paddingTop: '8px' }}>
+              <Button 
+                onClick={async () => { await addCategory(); setShowQuickAdd(false); }} 
+                disabled={!manageCatName.trim()}
+                style={{ padding: '8px 32px' }}
+              >
+                Create
+              </Button>
+              <Button 
+                onClick={() => setShowQuickAdd(false)} 
+                variant="outline"
+                style={{ padding: '8px 24px' }}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <style jsx>{`
+        /* Premium Expenses Page Styling */
+        .only-mobile { display: block; }
+        .hide-mobile { display: none; }
+
+        @media (min-width: 768px) {
+          .only-mobile { display: none; }
+          .hide-mobile { display: block; }
+        }
+
         .expenses-page {
           width: 100%;
+          background: #f9fafb;
+          min-height: 100vh;
+          padding-bottom: 40px;
         }
 
         .expenses-header-row {
           display: flex;
           flex-direction: column;
-          gap: 6px;
-          margin-bottom: 12px;
+          gap: 12px;
+          margin-bottom: 24px;
         }
 
         .expenses-title {
           margin: 0;
-          font-size: 1.4rem;
+          font-size: 1.5rem;
+          color: #111827;
+          font-weight: 700;
+          letter-spacing: -0.025em;
         }
 
         .expenses-sub {
-          margin: 2px 0 0;
-          font-size: 0.85rem;
+          margin: 4px 0 0;
+          font-size: 0.9rem;
           color: #6b7280;
         }
 
         .expenses-header-actions {
           display: flex;
           flex-wrap: wrap;
-          gap: 8px;
+          gap: 12px;
           margin-top: 6px;
         }
 
@@ -785,179 +1028,306 @@ async function handleDeleteExpense(id) {
           }
         }
 
+        .expenses-filter-row {
+          display: flex;
+          justify-content: flex-end;
+          align-items: center;
+          gap: 12px;
+          margin-bottom: 16px;
+        }
+
+        /* nice-select styling removed as requested */
+
         .expenses-kpis {
-          margin-bottom: 12px;
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+          gap: 16px;
+          margin-bottom: 24px;
         }
 
         .expenses-kpi {
-          padding: 10px;
+          background: white;
+          padding: 20px;
+          border-radius: 12px;
+          border: 1px solid #e5e7eb;
+          box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          transition: transform 0.2s;
         }
+        
+        .expenses-kpi:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
         .expenses-kpi .label {
-          font-size: 0.75rem;
+          font-size: 0.8rem;
           text-transform: uppercase;
+          letter-spacing: 0.05em;
           color: #6b7280;
-          margin-bottom: 4px;
+          font-weight: 600;
         }
         .expenses-kpi .value {
-          font-size: 1rem;
+          font-size: 1.5rem;
           font-weight: 700;
+          color: #1f2937;
+          line-height: 1.2;
         }
 
         .expenses-card {
-          padding: 10px;
+          background: white;
+          padding: 20px;
+          border-radius: 16px;
+          border: 1px solid #f3f4f6;
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02);
+          margin-bottom: 24px;
         }
 
         .expenses-list-head {
           display: flex;
           flex-wrap: wrap;
           align-items: center;
-          gap: 8px;
-          margin-bottom: 8px;
+          justify-content: space-between;
+          gap: 16px;
+          margin-bottom: 16px;
+          padding-bottom: 16px;
+          border-bottom: 1px solid #f3f4f6;
         }
         .expenses-list-head h3 {
           margin: 0;
-          font-size: 0.95rem;
+          font-size: 1.1rem;
+          color: #111827;
+          font-weight: 600;
         }
 
         .expenses-filters {
           display: flex;
           flex-wrap: wrap;
-          gap: 8px;
-          margin-left: auto;
-        }
-
-        .expenses-select {
-          padding: 6px 10px;
-          border-radius: 6px;
-          border: 1px solid #d1d5db;
-          font-size: 0.85rem;
+          align-items: center;
+          gap: 12px;
         }
 
         .expenses-total-pill {
-          padding: 4px 10px;
+          padding: 6px 12px;
           border-radius: 999px;
-          background: #f3f4f6;
-          font-size: 0.8rem;
-          color: #374151;
+          background: #fff7ed;
+          border: 1px solid #ffedd5;
+          font-size: 0.85rem;
+          color: #c2410c;
+          font-weight: 600;
         }
 
         .expenses-table-wrapper {
-          max-height: 60vh;
           overflow: auto;
         }
 
         .expenses-error {
-          margin-bottom: 10px;
-          border-color: #fecaca;
+          border-radius: 12px;
+          border: 1px solid #fecaca;
           background: #fef2f2;
           color: #991b1b;
-          padding: 10px;
+          padding: 16px;
+          margin-bottom: 24px;
         }
 
         /* Mobile list tiles */
+        /* Mobile list tiles */
+        .expenses-mobile-list {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+
         .expenses-tile {
-          border-radius: 10px;
-          border: 1px solid #e5e7eb;
-          padding: 10px;
+          border-radius: 12px;
+          border: 1px solid #f3f4f6;
+          padding: 16px;
           background: #fff;
           display: flex;
           flex-direction: column;
-          gap: 4px;
+          gap: 8px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.02);
         }
+        
         .tile-row {
           display: flex;
           justify-content: space-between;
-          gap: 8px;
-          font-size: 0.85rem;
+          align-items: center;
+          gap: 12px;
         }
         .tile-date {
-          color: #6b7280;
+          color: #9ca3af;
+          font-size: 0.85rem;
         }
         .tile-amount {
           font-weight: 700;
+          font-size: 1.1rem;
+          color: #111827;
         }
+        
         .tile-category {
+          display: inline-block;
+          padding: 4px 10px;
+          background: #eff6ff;
+          color: #1d4ed8;
+          border-radius: 6px;
+          font-size: 0.75rem;
           font-weight: 600;
         }
+        
         .tile-method {
-          font-size: 0.8rem;
-          color: #6b7280;
+          display: inline-block;
+          padding: 4px 10px;
+          background: #fdf2f8;
+          color: #be185d;
+          border-radius: 6px;
+          font-size: 0.75rem;
+          font-weight: 600;
         }
+
         .tile-desc {
-          font-size: 0.8rem;
-          color: #4b5563;
-        }
-        .expenses-empty {
+          background: #f9fafb;
+          padding: 8px;
+          border-radius: 6px;
           font-size: 0.85rem;
-          color: #6b7280;
+          color: #4b5563;
+          margin-top: 4px;
+        }
+
+        .tile-actions {
+          margin-top: 8px;
+          padding-top: 12px;
+          border-top: 1px solid #f3f4f6;
+          justify-content: flex-end;
+          gap: 12px;
+        }
+        
+        .link-button {
+          background: none;
+          border: none;
+          color: #f97316;
+          font-weight: 600;
+          font-size: 0.9rem;
+          cursor: pointer;
+          padding: 4px 8px;
+        }
+        
+        .link-button.danger {
+          color: #ef4444;
+        }
+
+        .expenses-empty {
+          text-align: center;
+          padding: 40px;
+          color: #9ca3af;
+          background: white;
+          border-radius: 12px;
+          border: 1px dashed #e5e7eb;
         }
 
         /* Modal */
         .expenses-modal-backdrop {
           position: fixed;
           inset: 0;
-          background: rgba(0, 0, 0, 0.35);
+          background: rgba(0, 0, 0, 0.4);
+          backdrop-filter: blur(2px);
           display: flex;
           justify-content: center;
           align-items: center;
           z-index: 999;
-          padding: 12px;
+          padding: 16px;
         }
         .expenses-modal {
           background: #ffffff;
-          border-radius: 10px;
-          max-width: 420px;
-          width: 100%;
+          border-radius: 16px;
+          max-width: 480px;
+          width: 95%;
           max-height: 90vh;
           overflow-y: auto;
-          padding: 12px 14px 14px;
+          box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+          padding: 24px;
         }
         .expenses-modal-header {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          margin-bottom: 8px;
+          margin-bottom: 20px;
+          padding-bottom: 16px;
+          border-bottom: 1px solid #f3f4f6;
         }
         .expenses-modal-header h3 {
           margin: 0;
-          font-size: 1rem;
+          font-size: 1.25rem;
+          font-weight: 700;
+          color: #111827;
         }
         .expenses-modal-header .x {
           border: none;
-          background: transparent;
-          font-size: 20px;
+          background: #f3f4f6;
+          color: #6b7280;
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          font-size: 18px;
           cursor: pointer;
-          line-height: 1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.2s;
         }
+        .expenses-modal-header .x:hover {
+          background: #e5e7eb;
+          color: #111827;
+        }
+
         .expenses-form {
           display: flex;
           flex-direction: column;
-          gap: 8px;
-          font-size: 0.9rem;
+          gap: 16px;
         }
         .expenses-form label {
           display: flex;
           flex-direction: column;
-          gap: 4px;
-        }
-        .expenses-form input,
-        .expenses-form select,
-        .expenses-form textarea {
-          border-radius: 6px;
-          border: 1px solid #d1d5db;
-          padding: 6px 8px;
+          gap: 6px;
+          font-weight: 500;
+          color: #374151;
           font-size: 0.9rem;
         }
+        .expenses-form input,
+        .expenses-form textarea {
+          border-radius: 8px;
+          border: 1px solid #d1d5db;
+          padding: 10px 12px;
+          font-size: 0.95rem;
+          transition: border-color 0.15s;
+          outline: none;
+        }
+        .expenses-form input:focus,
+        .expenses-form textarea:focus {
+          border-color: #f97316;
+          box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
+        }
+        
         .expenses-modal-actions {
+          margin-top: 16px;
+          padding-top: 20px;
+          border-top: 1px solid #f3f4f6;
           display: flex;
           justify-content: flex-end;
-          gap: 8px;
-          margin-top: 6px;
+          gap: 16px;
         }
 
         @media (max-width: 480px) {
-          .expenses-modal {
-            max-width: 100%;
+          .expenses-page {
+            padding: 12px;
+          }
+          .expenses-title {
+            font-size: 1.25rem;
+          }
+          .expenses-kpis {
+            grid-template-columns: 1fr;
           }
         }
       `}</style>

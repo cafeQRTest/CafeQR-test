@@ -1,26 +1,50 @@
 import React from 'react'
 
 export default function DateRangePicker({ start, end, onChange }) {
-  const handleStart = e => onChange({ start: new Date(e.target.value), end })
-  const handleEnd   = e => onChange({ start, end: new Date(e.target.value) })
+  const handleStart = e => {
+    const d = new Date(e.target.value);
+    if (!isNaN(d.getTime())) onChange({ start: d, end });
+  }
+  const handleEnd = e => {
+    const d = new Date(e.target.value);
+    if (!isNaN(d.getTime())) onChange({ start, end: d });
+  }
 
   const fmt = d => d.toISOString().slice(0, 10)
   return (
-    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-      <label>
-        From{' '}
+    <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem', color: '#374151', fontWeight: 500 }}>
+        From
         <input
           type="date"
           value={fmt(start)}
           onChange={handleStart}
+          style={{ 
+             accentColor: '#f97316', 
+             padding: '6px 10px', 
+             borderRadius: '6px', 
+             border: '1px solid #f97316', /* Always Orange */
+             fontFamily: 'inherit',
+             outline: 'none',
+             color: '#374151'
+          }}
         />
       </label>
-      <label>
-        To{' '}
+      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem', color: '#374151', fontWeight: 500 }}>
+        To
         <input
           type="date"
           value={fmt(end)}
           onChange={handleEnd}
+           style={{ 
+             accentColor: '#f97316', 
+             padding: '6px 10px', 
+             borderRadius: '6px', 
+             border: '1px solid #f97316', /* Always Orange */
+             fontFamily: 'inherit',
+             outline: 'none',
+             color: '#374151'
+          }}
         />
       </label>
     </div>

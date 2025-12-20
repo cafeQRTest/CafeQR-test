@@ -31,6 +31,8 @@ export default function NiceSelect({ value, onChange, options, placeholder = "Se
           justifyContent: "space-between",
           cursor: disabled ? "not-allowed" : selectInput.cursor,
           opacity: disabled ? 0.7 : 1,
+          borderColor: open ? '#f97316' : '#d1d5db',
+          boxShadow: open ? '0 0 0 3px rgba(249, 115, 22, 0.1)' : '0 0 0 1px transparent',
         }}
       >
         <span style={{ color: current ? "#111827" : "#9ca3af" }}>

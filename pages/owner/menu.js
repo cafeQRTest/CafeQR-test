@@ -45,8 +45,8 @@ const ToolBar = styled.div`
     font-size: 16px;
     &:focus {
       outline: none;
-      border-color: #652ae2;
-      box-shadow: 0 0 0 2px rgba(101, 42, 226, 0.2);
+      border-color: #f97316;
+      box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.2);
     }
   }
 
@@ -103,7 +103,7 @@ const ToolBar = styled.div`
     input[type="checkbox"] {
       width: 18px;
       height: 18px;
-      accent-color: #652ae2;
+      accent-color: #f97316;
       cursor: pointer;
     }
 
