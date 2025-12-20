@@ -147,7 +147,7 @@ export default function OrderPage() {
         // 1. Fetch Restaurant Info
         const { data: rest, error: restErr } = await supabase
           .from('restaurants')
-          .select('id, name, online_paused, restaurant_profiles(brand_color, phone, features_menu_images_enabled)')
+          .select('id, name, online_paused, store_notice_enabled, store_notice_msg, restaurant_profiles(brand_color, phone, features_menu_images_enabled)')
           .eq('id', restaurantId)
           .single()
         
@@ -501,6 +501,28 @@ export default function OrderPage() {
         </div>
         <AlertRestaurantButton restaurantId={restaurantId} tableNumber={tableNumber} brandColor={brandColor} />
       </header>
+
+      {/* Public Store Notice Banner */}
+      {restaurant?.store_notice_enabled && restaurant?.store_notice_msg && (
+        <div style={{
+          background: '#fff7ed', 
+          borderBottom: '1px solid #ffedd5',
+          padding: '12px 16px',
+          display: 'flex',
+          gap: 12,
+          alignItems: 'flex-start'
+        }}>
+           <span style={{ fontSize: 18 }}>📢</span>
+           <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#9a3412', marginBottom: 2, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Store Notice
+              </div>
+              <div style={{ fontSize: 14, color: '#ea580c', lineHeight: 1.4, fontWeight: 500 }}>
+                {restaurant.store_notice_msg}
+              </div>
+           </div>
+        </div>
+      )}
 
       <div
         style={{
