@@ -12,7 +12,7 @@ export default function DateRangePicker({ start, end, onChange }) {
 
   const fmt = d => d.toISOString().slice(0, 10)
   return (
-    <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+    <div className="date-picker-wrap" style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
       <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem', color: '#374151', fontWeight: 500 }}>
         From
         <input
@@ -23,10 +23,11 @@ export default function DateRangePicker({ start, end, onChange }) {
              accentColor: '#f97316', 
              padding: '6px 10px', 
              borderRadius: '6px', 
-             border: '1px solid #f97316', /* Always Orange */
+             border: '1px solid #f97316',
              fontFamily: 'inherit',
              outline: 'none',
-             color: '#374151'
+             color: '#374151',
+             minWidth: '130px'
           }}
         />
       </label>
@@ -40,10 +41,11 @@ export default function DateRangePicker({ start, end, onChange }) {
              accentColor: '#f97316', 
              padding: '6px 10px', 
              borderRadius: '6px', 
-             border: '1px solid #f97316', /* Always Orange */
+             border: '1px solid #f97316',
              fontFamily: 'inherit',
              outline: 'none',
-             color: '#374151'
+             color: '#374151',
+             minWidth: '130px'
           }}
         />
       </label>

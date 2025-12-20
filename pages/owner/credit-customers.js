@@ -334,44 +334,62 @@ const handleViewOrder = async (order) => {
                   </div>
                 </div>
 
-                <div className="cc-actions">
-                  <button
+                <div className="cc-actions" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, padding: '0 12px 12px' }}>
+                  <Button
+                    size="sm"
                     onClick={() => { setSelectedCustomer(c); setShowPaymentModal(true) }}
-                    style={{ background: BRAND.orange, borderRadius: 8 }}
+                    style={{ padding: '8px 4px', fontSize: 13 }}
                   >
-                    Payment
-                  </button>
-                  <button
+                    <FaWallet style={{ marginRight: 4 }} /> Pay
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
                     onClick={() => toggleOrderExpand(c.id)}
-                    style={{ background: BRAND.black, borderRadius: 8 }}
+                    style={{ padding: '8px 4px', fontSize: 13 }}
                   >
-                    {expandedCustomerId === c.id ? 'Hide Orders' : 'Show Orders'}
-                  </button>
-                  <button
+                    {expandedCustomerId === c.id ? <FaEyeSlash /> : <FaEye />} {expandedCustomerId === c.id ? 'Hide' : 'Orders'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
                     onClick={() => c.status === 'active' && setPendingSuspendId(c.id)}
-                    style={{ background: '#dc2626', borderRadius: 8 }}
+                    style={{ padding: '8px 4px', fontSize: 12, color: '#dc2626', borderColor: '#fee2e2' }}
                     disabled={c.status !== 'active'}
                   >
-                    Suspend
-                  </button>
+                    <FaBan style={{ marginRight: 4 }} /> Suspend
+                  </Button>
                 </div>
 
                  {expandedCustomerId === c.id && (
                   <div className="cc-orders">
                     {customerOrders[c.id]?.length ? (
                       customerOrders[c.id].map(o => (
-                        <div key={o.id} className="cc-order-row" onClick={() => handleViewOrder(o)} style={{ cursor: 'pointer' }}>
-                          <span style={{ fontWeight: 700 }}>#{o.id.substring(0, 8)}</span>
-                          <span>{formatDisplayDate(o.created_at)}</span>
-                          <span style={{ fontWeight: 700 }}>{fmt.format(Number(o.total_inc_tax || o.total_amount || 0))}</span>
-                          <span>
+                        <div 
+                          key={o.id} 
+                          className="cc-order-row" 
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleViewOrder(o);
+                          }} 
+                          style={{ cursor: 'pointer', padding: '12px', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                        >
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            <span style={{ fontWeight: 800, fontSize: 14 }}>#{o.id.substring(0, 8)}</span>
+                            <span style={{ fontSize: 12, color: '#6b7280' }}>{formatDisplayDate(o.created_at)}</span>
+                          </div>
+                          <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            <span style={{ fontWeight: 800, color: BRAND.orange }}>{fmt.format(Number(o.total_inc_tax || o.total_amount || 0))}</span>
                             <span className="cc-status-badge" style={{
-                              background: o.status === 'completed' ? '#dcfce7' : '#fef3c7',
-                              color: o.status === 'completed' ? '#166534' : '#92400e'
+                              padding: '2px 8px',
+                              fontSize: 10,
+                              background: o.status === 'completed' ? '#ecfdf5' : '#fff7ed',
+                              color: o.status === 'completed' ? '#059669' : '#d97706'
                             }}>
                               {o.status}
                             </span>
-                          </span>
+                          </div>
                         </div>
                       ))
                     ) : (
