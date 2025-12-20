@@ -2977,7 +2977,7 @@ function OrderCard({
             {/* In Progress */}
             {order.status === 'in_progress' && (
               <>
-                 <Button size="sm" onClick={() => onChangeStatus(order.id, 'ready')}>Ready</Button>
+                 <Button size="sm" onClick={() => onComplete(order)} disabled={generatingInvoice === order.id}>Done</Button>
                  <Button size="sm" variant="outline" onClick={() => onEditOrder(order)}>Edit</Button>
                  {/* Allow cancel if mistake */}
                  <Button size="sm" variant="danger" onClick={() => onCancelOrderOpen(order)}>Cancel</Button>
