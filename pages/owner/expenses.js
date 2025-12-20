@@ -562,9 +562,9 @@ function openEditExpense(expense) {
             </Card>
 
             {/* Net Cash */}
-            <Card className="expenses-kpi" style={{ borderTop: '4px solid #10b981' }}>
-              <div className="label" style={{ color: '#047857' }}>Net Cash Profit</div>
-              <div className="value" style={{ color: '#047857', fontSize: '1.5rem' }}>{formatMoney(netCashProfit)}</div>
+            <Card className="expenses-kpi" style={{ borderTop: `4px solid ${netCashProfit >= 0 ? '#10b981' : '#ef4444'}` }}>
+              <div className="label" style={{ color: netCashProfit >= 0 ? '#047857' : '#b91c1c' }}>Net Cash Profit</div>
+              <div className="value" style={{ color: netCashProfit >= 0 ? '#047857' : '#dc2626', fontSize: '1.5rem' }}>{formatMoney(netCashProfit)}</div>
             </Card>
           </div>
 

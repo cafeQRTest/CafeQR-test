@@ -3,10 +3,14 @@
 import React, { useEffect, useState } from 'react'
 import { useRequireAuth } from '../../lib/useRequireAuth'
 import { useRestaurant } from '../../context/RestaurantContext'
+import Link from 'next/link'
 import Card from '../../components/ui/Card'
 import Table from '../../components/ui/Table'
 import DateRangePicker from '../../components/ui/DateRangePicker'
+import Button from '../../components/ui/Button'
+import NiceSelect from '../../components/NiceSelect'
 import { getSupabase } from '../../services/supabase'
+import { FaCalendarAlt, FaReceipt, FaMoneyBillWave, FaPercentage, FaShoppingBag } from 'react-icons/fa'
 import { printSalesReport } from '../../utils/printSalesReport'
 import { exportSalesReportToCSV, exportSalesReportToExcel } from '../../utils/exportSalesReport'
 import { istSpanFromDatesUtcISO } from '../../utils/istTime';
@@ -329,54 +333,40 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
   }
 
   const handleExportCSV = async () => {
-  try {
-    const success = exportSalesReportToCSV({
-      range,
-      summaryStats,
-      salesData: allSalesData,
-      paymentBreakdown,
-      orderTypeBreakdown,
-      taxBreakdown,
-      hourlyBreakdown,
-      categoryBreakdown,
-      restaurantProfile
-    })
-
-    if (success) {
-      alert('✅ CSV exported successfully!')
-    } else {
-      alert('❌ CSV export failed')
+    try {
+      await exportSalesReportToCSV({
+        range,
+        summaryStats,
+        salesData: allSalesData,
+        paymentBreakdown,
+        orderTypeBreakdown,
+        taxBreakdown,
+        hourlyBreakdown,
+        categoryBreakdown,
+        restaurantProfile
+      })
+    } catch (error) {
+      console.error('CSV export error:', error)
     }
-  } catch (error) {
-    console.error('CSV export error:', error)
-    alert(`Error exporting CSV: ${error.message}`)
   }
-}
 
-const handleExportExcel = async () => {
-  try {
-    const success = exportSalesReportToExcel({
-      range,
-      summaryStats,
-      salesData: allSalesData,
-      paymentBreakdown,
-      orderTypeBreakdown,
-      taxBreakdown,
-      hourlyBreakdown,
-      categoryBreakdown,
-      restaurantProfile
-    })
-
-    if (success) {
-      alert('✅ Excel exported successfully!')
-    } else {
-      alert('❌ Excel export failed')
+  const handleExportExcel = async () => {
+    try {
+      await exportSalesReportToExcel({
+        range,
+        summaryStats,
+        salesData: allSalesData,
+        paymentBreakdown,
+        orderTypeBreakdown,
+        taxBreakdown,
+        hourlyBreakdown,
+        categoryBreakdown,
+        restaurantProfile
+      })
+    } catch (error) {
+      console.error('Excel export error:', error)
     }
-  } catch (error) {
-    console.error('Excel export error:', error)
-    alert(`Error exporting Excel: ${error.message}`)
   }
-}
 
 
   if (checking || restLoading) return <div style={{ padding: 16 }}>Loading…</div>
@@ -388,9 +378,9 @@ const handleExportExcel = async () => {
         <h1>Sales Reports</h1>
         <div className="sales-controls">
           <DateRangePicker start={range.start} end={range.end} onChange={setRange} />
-          <button className="sales-print-btn" onClick={handlePrint}>🖨️ Print</button>
-      <button className="sales-print-btn" onClick={handleExportCSV}>📥 CSV</button>
-  <button className="sales-print-btn" onClick={handleExportExcel}>📊 Excel</button>
+          <Button onClick={handlePrint} variant="outline" style={{ padding: '8px 16px' }}>Print</Button>
+          <Button onClick={handleExportCSV} style={{ background: '#fff7ed', border: '1px solid #fed7aa', color: '#ea580c', padding: '8px 16px' }}>CSV</Button>
+          <Button onClick={handleExportExcel} style={{ background: '#fff7ed', border: '1px solid #fed7aa', color: '#ea580c', padding: '8px 16px' }}>Excel</Button>
         </div>
       </div>
 
@@ -400,28 +390,90 @@ const handleExportExcel = async () => {
         <div style={{ textAlign: 'center', padding: 32 }}>Loading reports…</div>
       ) : (
         <>
-          <div className="sales-totals-grid">
-            <Card className="sales-total-card">
-              <div className="sales-label">Total Orders</div>
-              <div className="sales-value">{summaryStats.totalOrders}</div>
-            </Card>
-            <Card className="sales-total-card">
-              <div className="sales-label">Total Revenue</div>
-              <div className="sales-value">{formatCurrency(summaryStats.totalRevenue)}</div>
-            </Card>
-            <Card className="sales-total-card">
-              <div className="sales-label">Avg Order</div>
-              <div className="sales-value">{formatCurrency(summaryStats.avgOrderValue)}</div>
-            </Card>
-            <Card className="sales-total-card">
-              <div className="sales-label">Items Sold</div>
-              <div className="sales-value">{summaryStats.totalItems}</div>
-            </Card>
-            <Card className="sales-total-card">
-              <div className="sales-label">Total Tax</div>
-              <div className="sales-value">{formatCurrency(summaryStats.totalTax)}</div>
-            </Card>
-          </div>
+          {activeReport !== 0 && (
+            <div className="sales-totals-grid">
+              <div className="sales-kpi">
+                <div className="sales-label">Total Orders</div>
+                <div className="sales-value">{summaryStats.totalOrders}</div>
+              </div>
+              <div className="sales-kpi">
+                <div className="sales-label">Total Revenue</div>
+                <div className="sales-value">{formatCurrency(summaryStats.totalRevenue)}</div>
+              </div>
+              <div className="sales-kpi">
+                <div className="sales-label">Avg Order</div>
+                <div className="sales-value">{formatCurrency(summaryStats.avgOrderValue)}</div>
+              </div>
+              <div className="sales-kpi">
+                <div className="sales-label">Items Sold</div>
+                <div className="sales-value">{summaryStats.totalItems}</div>
+              </div>
+              <div className="sales-kpi">
+                <div className="sales-label">Total Tax</div>
+                <div className="sales-value">{formatCurrency(summaryStats.totalTax)}</div>
+              </div>
+            </div>
+          )}
+          <style jsx>{`
+            .sales-kpi {
+              background: white;
+              padding: 16px 24px;
+              border-radius: 12px;
+              border: 1px solid #e5e7eb;
+              border-top: 4px solid #f97316;
+              box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+              display: flex;
+              flex-direction: column;
+              gap: 4px;
+              text-align: left;
+              transition: transform 0.2s;
+            }
+            .sales-kpi:hover {
+              transform: translateY(-2px);
+              box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            }
+            .sales-label { font-size: 0.75rem; text-transform: uppercase; color: #6b7280; font-weight: 700; letter-spacing: 0.05em; margin: 0; }
+            .sales-value { font-size: 1.8rem; font-weight: 800; color: #1f2937; letter-spacing: -0.02em; }
+            
+            /* Override Global Carousel Button Active Color */
+            :global(.sales-carousel-btn.active) {
+              background: #f97316 !important;
+              border-color: #f97316 !important;
+              box-shadow: 0 2px 8px rgba(249, 115, 22, 0.25) !important;
+            }
+            :global(.sales-totals-grid) {
+               gap: 16px; 
+            }
+            :global(.sales-total-card) {
+              display: none; /* Hide old cards if any leak */
+            }
+            
+            /* Dynamic Summary Card Styles */
+            .summary-card {
+              background: white;
+              padding: 16px 20px;
+              border-radius: 8px; /* Tighter radius */
+              border: 1px solid #e5e7eb;
+              border-top: 4px solid #f97316;
+              box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+              transition: all 0.2s ease-out;
+              cursor: default;
+              position: relative;
+              overflow: hidden;
+            }
+            .summary-card:hover {
+              transform: translateY(-2px);
+              box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+              border-color: #fb923c;
+            }
+            .summary-card-hero {
+              margin-bottom: 24px;
+              padding: 24px;
+              text-align: center;
+              border-top-width: 4px;
+            }
+          `}</style>
+
 
           <div className="sales-carousel">
             {reports.map((name, idx) => (
@@ -436,21 +488,83 @@ const handleExportExcel = async () => {
           </div>
 
           {activeReport === 0 && (
-            <Card style={{ marginTop: 10, padding: 12 }}>
-              <h3 style={{ marginTop: 0, fontSize: '1rem' }}>Sales Summary</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: '13px' }}>
-                <div><strong>Period:</strong></div>
-                <div>{range.start.toLocaleDateString()} - {range.end.toLocaleDateString()}</div>
-                <div><strong>Total Orders:</strong></div>
-                <div>{summaryStats.totalOrders}</div>
-                <div><strong>Total Revenue:</strong></div>
-                <div>{formatCurrency(summaryStats.totalRevenue)}</div>
-                <div><strong>Avg Order:</strong></div>
-                <div>{formatCurrency(summaryStats.avgOrderValue)}</div>
-                <div><strong>Total Tax:</strong></div>
-                <div>{formatCurrency(summaryStats.totalTax)}</div>
-              </div>
-            </Card>
+            <div style={{ background: 'white', borderRadius: '16px', border: '1px solid #e5e7eb', padding: '24px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
+               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', borderBottom: '1px solid #f3f4f6', paddingBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+                 <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#1f2937', fontWeight: 700 }}>Sales Summary</h3>
+                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center', background: '#fff7ed', color: '#ea580c', padding: '6px 16px', borderRadius: '20px', fontSize: '0.9rem', fontWeight: 600 }}>
+                   <FaCalendarAlt style={{ color: '#f97316' }} /> {range.start.toLocaleDateString('en-GB').replace(/\//g, '-')} - {range.end.toLocaleDateString('en-GB').replace(/\//g, '-')}
+                 </div>
+               </div>
+               
+               {/* Hero Revenue Card */}
+               <div className="summary-card summary-card-hero">
+                 <div style={{ fontSize: '0.85rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px', fontWeight: 600 }}>Total Revenue</div>
+                 <div style={{ fontSize: '2.5rem', fontWeight: 800, color: '#1f2937', lineHeight: 1 }}>{formatCurrency(summaryStats.totalRevenue)}</div>
+               </div>
+
+               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+                 
+                 {/* Orders */}
+                 <div 
+                    className="summary-card"
+                    onClick={() => setActiveReport(3)}
+                    style={{ cursor: 'pointer' }}
+                 >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                         <span style={{ fontSize: '0.75rem', color: '#6b7280', textTransform: 'uppercase', fontWeight: 700, marginBottom: '2px' }}>Orders</span>
+                         <span style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1f2937', letterSpacing: '-0.02em' }}>{summaryStats.totalOrders}</span>
+                      </div>
+                      <div style={{ fontSize: '1.5rem', color: '#fed7aa' }}><FaReceipt /></div>
+                    </div>
+                 </div>
+
+                 {/* Avg Order */}
+                 <div 
+                    className="summary-card"
+                    onClick={() => setActiveReport(5)}
+                    style={{ cursor: 'pointer' }}
+                 >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                         <span style={{ fontSize: '0.75rem', color: '#6b7280', textTransform: 'uppercase', fontWeight: 700, marginBottom: '2px' }}>Avg Order</span>
+                         <span style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1f2937', letterSpacing: '-0.02em' }}>{formatCurrency(summaryStats.avgOrderValue)}</span>
+                      </div>
+                      <div style={{ fontSize: '1.5rem', color: '#fed7aa' }}><FaPercentage /></div>
+                    </div>
+                 </div>
+
+                 {/* Tax */}
+                 <div 
+                    className="summary-card"
+                    onClick={() => setActiveReport(4)}
+                    style={{ cursor: 'pointer' }}
+                 >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                         <span style={{ fontSize: '0.75rem', color: '#6b7280', textTransform: 'uppercase', fontWeight: 700, marginBottom: '2px' }}>Tax Collected</span>
+                         <span style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1f2937', letterSpacing: '-0.02em' }}>{formatCurrency(summaryStats.totalTax)}</span>
+                      </div>
+                      <div style={{ fontSize: '1.5rem', color: '#fed7aa' }}><FaMoneyBillWave /></div>
+                    </div>
+                 </div>
+
+                 {/* Items */}
+                 <div 
+                    className="summary-card"
+                    onClick={() => setActiveReport(1)}
+                    style={{ cursor: 'pointer' }}
+                 >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                         <span style={{ fontSize: '0.75rem', color: '#6b7280', textTransform: 'uppercase', fontWeight: 700, marginBottom: '2px' }}>Items Sold</span>
+                         <span style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1f2937', letterSpacing: '-0.02em' }}>{summaryStats.totalItems}</span>
+                      </div>
+                      <div style={{ fontSize: '1.5rem', color: '#fed7aa' }}><FaShoppingBag /></div>
+                    </div>
+                 </div>
+               </div>
+            </div>
           )}
 
           {activeReport === 1 && (
@@ -458,14 +572,17 @@ const handleExportExcel = async () => {
               <div style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <h3 style={{ margin: 0, fontSize: '0.95rem' }}>Item-wise Sales</h3>
                 {menuCategories.length > 0 && (
-                  <select
-                    className="sales-category-select"
-                    value={selectedCategory}
-                    onChange={e => setSelectedCategory(e.target.value)}
-                  >
-                    <option value="">All Categories</option>
-                    {menuCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                  </select>
+                  <div style={{ width: 200 }}>
+                    <NiceSelect
+                      options={[
+                        { value: '', label: 'All Categories' },
+                        ...menuCategories.map(c => ({ value: c, label: c }))
+                      ]}
+                      value={selectedCategory}
+                      onChange={setSelectedCategory}
+                      placeholder="All Categories"
+                    />
+                  </div>
                 )}
               </div>
               <div className="sales-table-wrapper">
