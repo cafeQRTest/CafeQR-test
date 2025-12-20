@@ -13,7 +13,7 @@ import MenuImageImport from "../../components/MenuImageImport";
 import NiceSelect from "../../components/NiceSelect";
 import { getSupabase } from "../../services/supabase";
 import { useAlert } from "../../context/AlertContext";
-import styled from "styled-components";
+import styled, { keyframes } from "styled-components";
 const ToolBar = styled.div`
   display: flex;
   flex-direction: column;
@@ -118,6 +118,30 @@ const ToolBar = styled.div`
     flex-wrap: wrap;
     gap: 8px;
   }
+`;
+
+const pulse = keyframes`
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(234, 88, 12, 0.4); }
+  70% { transform: scale(1.1); box-shadow: 0 0 0 4px rgba(234, 88, 12, 0); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(234, 88, 12, 0); }
+`;
+
+const AIBadge = styled.span`
+  position: absolute;
+  top: -10px;
+  left: -6px;
+  background: white;
+  border: 1px solid #ea580c;
+  color: #ea580c;
+  font-size: 9px;
+  font-weight: 900;
+  padding: 1px 5px;
+  border-radius: 6px;
+  line-height: 1.2;
+  z-index: 10;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  animation: ${pulse} 2s infinite;
+  pointer-events: none;
 `;
 
 import { useRouter } from "next/router";
@@ -574,7 +598,10 @@ export default function MenuPage() {
         {/* Actions Row */}
         <div className="toolbar-cta">
           <Button onClick={() => openEditor({})}>Add New Item</Button>
-          <Button onClick={() => setShowImageImport(true)}>Import from Image</Button>
+          <Button onClick={() => setShowImageImport(true)} style={{ position: 'relative', overflow: 'visible' }}>
+            Import from Image
+            <AIBadge>AI</AIBadge>
+          </Button>
           <Button onClick={() => setShowLibrary(true)}>Add from Library</Button>
           <Button variant="outline" onClick={() => setShowCategoryManager(true)}>Categories</Button>
           <Button variant="outline" onClick={() => setShowVariantManager(true)}>Variants</Button>
