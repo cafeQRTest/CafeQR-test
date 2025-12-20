@@ -239,3 +239,15 @@ html, body {
   .cc-status-active { background:#ecfdf5; color:#059669; }
   .cc-status-suspended { background:#fef2f2; color:#dc2626; }
 }
+
+/* Mobile: keep content full width and comfortable */
+@media (max-width: 600px) {
+  .main-content {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+}
+
+/* Drawer should be above everything */
+.drawer { z-index: 1000; }
+.drawer-backdrop { z-index: 999; }

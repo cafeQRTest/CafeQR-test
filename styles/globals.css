@@ -6,8 +6,8 @@ html, body {
   background: var(--bg);
   color: var(--text);
   font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-  width: 100vw !important;
-  max-width: 100vw !important;
+  width: 100%;          /* was 100vw */
+  max-width: 100%;  
   overflow-x: hidden;
 }
 *, *::before, *::after { box-sizing: border-box; }
@@ -331,9 +331,12 @@ body.kitchen-dashboard .sidebar {
 
 /* Give main content full width on kitchen dashboard */
 body.kitchen-dashboard .main-content {
-  width: 100vw !important;
-  margin: 0 !important;
+  width: 100% !important;     /* was 100vw */
+  max-width: 100% !important;  margin: 0 !important;
   padding: 0 !important;
+}
+@media (max-width: 412px) {
+  .main-content { max-width: 100%; overflow-x: clip; }
 }
 
 /* ============================================
@@ -859,3 +862,23 @@ input, select, textarea { font-size: 16px; } /* keep ≥16px */
   align-items: center;
   justify-content: center;
 }
+
+/* Prevent grid/flex children from forcing overflow */
+.main-wrapper,
+.container,
+.main-content {
+  min-width: 0;
+}
+
+/* If you have grids with cards */
+.grid > *,
+.kpi-grid > *,
+.two-col > *,
+.table-wrap {
+  min-width: 0;
+}
+
+.card, .table td, .table th {
+  overflow-wrap: anywhere;
+}
+

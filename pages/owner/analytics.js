@@ -188,8 +188,6 @@ const fetchAiSuggestions = async () => {
       {aiLoading ? 'Asking AI…' : 'Ask AI for ideas'}
     </Button>
 
-
-
           </div>
         </div>
 
