@@ -5,6 +5,10 @@ import { useRequireAuth } from '../../lib/useRequireAuth'
 import { useRestaurant } from '../../context/RestaurantContext'
 import { getSupabase } from '../../services/supabase'
 import { istSpanUtcISO } from '../../utils/istTime';
+import Button from '../../components/ui/Button'
+import Card from '../../components/ui/Card'
+import DateRangePicker from '../../components/ui/DateRangePicker'
+import { FaMoneyBillWave, FaHandHoldingUsd, FaExclamationTriangle, FaUserFriends, FaFileInvoiceDollar, FaExchangeAlt, FaClipboardList } from 'react-icons/fa'
 
 export default function CreditSalesReportPage() {
   const supabase = getSupabase()
@@ -26,6 +30,15 @@ export default function CreditSalesReportPage() {
   (reportData?.customersNow || []).forEach(c => m.set(c.id, c));
   return m;
 }, [reportData?.customersNow]);
+
+const formatDisplayDate = (dateStr) => {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}-${month}-${year}`;
+};
 
 // Build per-customer rollups for the selected period
 const customerTiles = useMemo(() => {
@@ -145,16 +158,20 @@ const customerTiles = useMemo(() => {
 
   return (
   <div className="container page cr-page">
-    <h1 className="cr-title">💳 Credit Sales Report</h1>
-
-    <div className="cr-filters">
-      <div className="cr-filter">
-        <label className="cr-filter-label">From</label>
-        <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
+    <div className="page-header">
+      <div>
+        <h1 className="cr-title">Credit Sales Report</h1>
+        <p className="subtitle">Track credit orders and customer balances</p>
       </div>
-      <div className="cr-filter">
-        <label className="cr-filter-label">To</label>
-        <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+      <div className="time-filters">
+        <DateRangePicker 
+          start={new Date(startDate)} 
+          end={new Date(endDate)} 
+          onChange={({start, end}) => {
+            setStartDate(start.toISOString().split('T')[0]);
+            setEndDate(end.toISOString().split('T')[0]);
+          }} 
+        />
       </div>
     </div>
 
@@ -166,21 +183,44 @@ const customerTiles = useMemo(() => {
       <>
         {/* Summary */}
         <div className="cr-summary-grid">
-          <div className="cr-kpi">
-            <div className="cr-kpi-label">Total Credit Sales</div>
-            <div className="cr-kpi-value">₹{Number(reportData?.summary?.totalExtended ?? 0).toFixed(2)}</div>
+          <div className="summary-card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+               <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span className="kpi-label">Credit Extended</span>
+                  <span className="kpi-value">₹{Number(reportData?.summary?.totalExtended ?? 0).toFixed(2)}</span>
+               </div>
+               <div className="kpi-icon"><FaExchangeAlt /></div>
+            </div>
           </div>
-          <div className="cr-kpi">
-            <div className="cr-kpi-label">Payments Received</div>
-            <div className="cr-kpi-value">₹{Number(reportData?.summary?.totalPayments ?? 0).toFixed(2)}</div>
+
+          <div className="summary-card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+               <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span className="kpi-label">Payments Recv.</span>
+                  <span className="kpi-value" style={{ color: '#16a34a' }}>₹{Number(reportData?.summary?.totalPayments ?? 0).toFixed(2)}</span>
+               </div>
+               <div className="kpi-icon"><FaMoneyBillWave /></div>
+            </div>
           </div>
-          <div className="cr-kpi">
-            <div className="cr-kpi-label">Outstanding</div>
-            <div className="cr-kpi-value cr-kpi-danger">₹{Number(reportData?.summary?.outstanding ?? 0).toFixed(2)}</div>
+
+          <div className="summary-card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+               <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span className="kpi-label">Outstanding</span>
+                  <span className="kpi-value" style={{ color: '#dc2626' }}>₹{Number(reportData?.summary?.outstanding ?? 0).toFixed(2)}</span>
+               </div>
+               <div className="kpi-icon" style={{ color: '#fee2e2' }}><FaExclamationTriangle /></div>
+            </div>
           </div>
-          <div className="cr-kpi">
-            <div className="cr-kpi-label">Orders/Customers</div>
-            <div className="cr-kpi-value">{reportData?.summary?.ordersCount ?? 0}/{reportData?.summary?.uniqueCustomers ?? 0}</div>
+
+          <div className="summary-card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+               <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span className="kpi-label">Orders / Cust</span>
+                  <span className="kpi-value">{reportData?.summary?.ordersCount ?? 0} / {reportData?.summary?.uniqueCustomers ?? 0}</span>
+               </div>
+               <div className="kpi-icon"><FaUserFriends /></div>
+            </div>
           </div>
         </div>
 {/* Mobile segmented control (render once) */}
@@ -215,7 +255,7 @@ const customerTiles = useMemo(() => {
           <div className="cr-tile-head">
             <div>
               <div className="cr-tile-title">#{o.id.substring(0, 8)}</div>
-              <div className="cr-tile-sub">{new Date(o.created_at).toLocaleDateString()}</div>
+              <div className="cr-tile-sub">{formatDisplayDate(o.created_at)}</div>
             </div>
             <span className={`cr-badge ${o.status === 'completed' ? 'cr-badge-success' : 'cr-badge-warn'}`}>
               {o.status}
@@ -322,7 +362,7 @@ const customerTiles = useMemo(() => {
                     <td className="cr-right">₹{Number(order.total_amount || 0).toFixed(2)}</td>
                     <td className="cr-right">₹{Number(order.total_tax || 0).toFixed(2)}</td>
                     <td className="cr-right cr-strong">₹{Number(order.total_inc_tax || 0).toFixed(2)}</td>
-                    <td>{new Date(order.created_at).toLocaleDateString()}</td>
+                    <td>{formatDisplayDate(order.created_at)}</td>
                     <td className="cr-center">
                       <span className={`cr-badge ${order.status === 'completed' ? 'cr-badge-success' : 'cr-badge-warn'}`}>
                         {order.status}
@@ -349,7 +389,7 @@ const customerTiles = useMemo(() => {
       <div key={t.id} className="cr-tile">
         <div className="cr-tile-head">
           <div>
-            <div className="cr-tile-title">{new Date(t.transaction_date).toLocaleDateString()}</div>
+            <div className="cr-tile-title">{formatDisplayDate(t.transaction_date)}</div>
             <div className="cr-tile-sub">{t.payment_method || 'N/A'}</div>
           </div>
           <span
@@ -391,7 +431,7 @@ const customerTiles = useMemo(() => {
                 <tbody>
                   {reportData.transactions.map((txn, idx) => (
                     <tr key={txn.id} className={idx % 2 ? 'cr-row-alt' : ''}>
-                      <td>{new Date(txn.transaction_date).toLocaleDateString()}</td>
+                      <td>{formatDisplayDate(txn.transaction_date)}</td>
                       <td>
                         <span className={`cr-badge ${txn.transaction_type === 'payment' ? 'cr-badge-success' : 'cr-badge-danger'}`}>
                           {txn.transaction_type}
@@ -409,6 +449,82 @@ const customerTiles = useMemo(() => {
         )}
       </>
     ) : null}
+
+    <style jsx>{`
+      .page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }
+      .page-header h1 { margin: 0; font-size: 2rem; }
+      .subtitle { color: #6b7280; margin: 4px 0 0 0; }
+      .time-filters { display: flex; gap: 8px; flex-wrap: wrap; }
+
+      .cr-summary-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 16px;
+        margin-bottom: 32px;
+      }
+
+      /* Standard Dashboard Card Style */
+      .summary-card {
+        background: white;
+        padding: 16px 20px;
+        border-radius: 12px;
+        border: 1px solid #e5e7eb;
+        border-top: 4px solid #f97316;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        transition: all 0.2s ease-out;
+        position: relative;
+        overflow: hidden;
+      }
+      .summary-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        border-color: #fb923c;
+      }
+
+      .kpi-label { font-size: 0.75rem; color: #6b7280; text-transform: uppercase; font-weight: 700; margin-bottom: 4px; letter-spacing: 0.05em; }
+      .kpi-value { font-size: 1.5rem; font-weight: 800; color: #1f2937; letter-spacing: -0.02em; }
+      .kpi-icon { font-size: 1.5rem; color: #fed7aa; }
+
+      .cr-section-title { margin: 32px 0 16px; font-size: 1.25rem; font-weight: 700; color: #1f2937; }
+      
+      .cr-table-wrap {
+        background: white;
+        border-radius: 12px;
+        border: 1px solid #e5e7eb;
+        overflow-x: auto;
+        margin-bottom: 24px;
+        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+      }
+      .cr-table { width: 100%; border-collapse: collapse; min-width: 800px; }
+      .cr-table th { 
+        background: linear-gradient(to bottom, #ffffff 0%, #fafafa 100%) !important;
+        padding: 14px 16px; 
+        text-align: left; 
+        font-size: 11px; 
+        text-transform: uppercase; 
+        color: #1f2937 !important; 
+        font-weight: 700; 
+        border-bottom: 2px solid #f97316 !important; 
+        letter-spacing: 0.5px;
+        white-space: nowrap;
+      }
+      .cr-table td { padding: 14px 16px; border-bottom: 1px solid #f3f4f6; font-size: 14px; color: #374151; transition: all 0.2s ease; }
+      .cr-table tbody tr { transition: all 0.2s ease; }
+      .cr-table tbody tr:hover { 
+        background: linear-gradient(to right, #fff7ed 0%, #ffffff 100%);
+        transform: translateY(-1px);
+        box-shadow: 0 2px 8px rgba(249, 115, 22, 0.08);
+      }
+      .cr-row-alt { background: #fafafa; }
+      .cr-right { text-align: right; }
+      .cr-center { text-align: center; }
+      .cr-strong { font-weight: 700; color: #111827; }
+
+      @media (max-width: 640px) {
+        .page-header { flex-direction: column; gap: 16px; }
+        .cr-summary-grid { grid-template-columns: 1fr; }
+      }
+    `}</style>
   </div>
 );
 
