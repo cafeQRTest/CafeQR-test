@@ -163,7 +163,7 @@ const customerTiles = useMemo(() => {
         <h1 className="cr-title">Credit Sales Report</h1>
         <p className="subtitle">Track credit orders and customer balances</p>
       </div>
-      <div className="time-filters">
+      <div className="time-filters" style={{ marginTop: '12px', width: '100%' }}>
         <DateRangePicker 
           start={new Date(startDate)} 
           end={new Date(endDate)} 
@@ -451,9 +451,9 @@ const customerTiles = useMemo(() => {
     ) : null}
 
     <style jsx>{`
-      .page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }
-      .page-header h1 { margin: 0; font-size: 2rem; }
-      .subtitle { color: #6b7280; margin: 4px 0 0 0; }
+      .page-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 24px; gap: 16px; flex-wrap: wrap; }
+      .page-header h1 { margin: 0; font-size: 1.75rem; font-weight: 800; letter-spacing: -0.01em; color: #111827; }
+      .subtitle { color: #6b7280; font-size: 0.95rem; margin-top: 4px; }
       .time-filters { display: flex; gap: 8px; flex-wrap: wrap; }
 
       .cr-summary-grid {

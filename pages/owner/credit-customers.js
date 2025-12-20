@@ -373,7 +373,6 @@ const handleViewOrder = async (order) => {
                             e.stopPropagation();
                             handleViewOrder(o);
                           }} 
-                          style={{ cursor: 'pointer', padding: '12px', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
                         >
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                             <span style={{ fontWeight: 800, fontSize: 14 }}>#{o.id.substring(0, 8)}</span>
@@ -731,6 +730,39 @@ const handleViewOrder = async (order) => {
         .cr-right { text-align: right; }
         .cr-center { text-align: center; }
 
+        .cc-mobile-list { display: none; }
+        .cr-table-wrap { display: block; }
+        
+        .cc-card { 
+          background: white; border-radius: 12px; border: 1px solid #e5e7eb; 
+          margin-bottom: 16px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05); 
+        }
+        .cc-row { padding: 16px; display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid #f3f4f6; }
+        .cc-name { font-weight: 800; font-size: 16px; color: #111827; }
+        .cc-phone { font-size: 13px; color: #6b7280; margin-top: 2px; }
+        .cc-metrics { display: flex; divide-x: 1px solid #f3f4f6; background: #fafafa; }
+        .cc-metric { flex: 1; padding: 12px; text-align: center; border-right: 1px solid #f3f4f6; }
+        .cc-metric:last-child { border-right: none; }
+        .cc-metric .l { font-size: 10px; font-weight: 700; color: #9ca3af; text-transform: uppercase; margin-bottom: 2px; }
+        .cc-metric .v { font-size: 14px; font-weight: 800; }
+        .cc-orders { background: #fff; border-top: 1px solid #f3f4f6; max-height: 300px; overflow-y: auto; }
+
+        .cc-status-badge {
+          padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 800; text-transform: uppercase;
+        }
+        .cc-status-active { background: #ecfdf5; color: #059669; }
+        .cc-status-suspended { background: #fef2f2; color: #dc2626; }
+        
+        .cc-order-row { 
+          cursor: pointer; padding: 14px 16px; border-bottom: 1px solid #f3f4f6; 
+          display: flex; justify-content: space-between; align-items: center;
+          transition: background 0.2s;
+        }
+        .cc-order-row:hover { background: #fff7ed; }
+        .cc-order-row:active { background: #ffedd5; }
+        
+        .table-wrap { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
         /* Modal Styles */
         .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); backdrop-filter: blur(2px); display: flex; align-items: center; justify-content: center; z-index: 1000; animation: fadeIn 0.2s ease; }
         .modal-panel { background: white; border-radius: 16px; width: 92%; maxWidth: 460px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); overflow: hidden; animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
@@ -756,9 +788,12 @@ const handleViewOrder = async (order) => {
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
-        @media (max-width: 640px) {
+        @media (max-width: 768px) {
+          .cc-mobile-list { display: block; }
+          .cr-table-wrap { display: none; }
           .cr-summary-grid { grid-template-columns: 1fr; }
           .modal-footer { flex-direction: column; }
+          .page-header { flex-direction: column; gap: 8px; align-items: flex-start; }
         }
       `}</style>
     </div>
