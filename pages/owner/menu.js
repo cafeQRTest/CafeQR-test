@@ -472,7 +472,7 @@ export default function MenuPage() {
             </svg>
             <input
               className="input search-input-premium"
-              placeholder="Search by name or code..."
+              placeholder="Search..."
               value={filterText}
               onChange={(e) => setFilterText(e.target.value)}
             />
@@ -622,8 +622,74 @@ export default function MenuPage() {
         </div>
       </ToolBar>
 
-      <div className="card" style={{ padding: 0, width: 'fit-content', maxWidth: '100%' }}>
-        <div className="table-scroll">
+      <div className="card" style={{ padding: 0, width: '100%', maxWidth: '100%' }}>
+        
+        {/* Mobile List View */}
+        <div className="only-mobile">
+          {loading ? (
+             <div style={{ padding: 20, textAlign: 'center' }}>Loading...</div>
+          ) : visible.length === 0 ? (
+             <div style={{ padding: 20, textAlign: 'center', color: '#666' }}>No items found.</div>
+          ) : (
+             <div style={{ display: 'flex', flexDirection: 'column' }}>
+               {visible.map(item => {
+                 const available = item.status === "available";
+                 return (
+                   <div key={item.id} style={{ padding: 16, borderBottom: '1px solid #f3f4f6', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                       <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                         <input
+                           type="checkbox"
+                           checked={selected.has(item.id)}
+                           onChange={() => toggleSelect(item.id)}
+                           style={{ marginTop: 4, width: 18, height: 18, accentColor: '#f97316' }}
+                         />
+                         <div>
+                           <div style={{ fontWeight: 600, fontSize: 15, color: '#111827', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                             {item.name}
+                             {item.veg && (
+                               <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#dcfce7', color: '#166534', fontWeight: 700 }}>VEG</span>
+                             )}
+                           </div>
+                           <div style={{ fontSize: 13, color: '#6b7280', marginTop: 2 }}>
+                             {item.category} {item.code_number && `• ${item.code_number}`}
+                           </div>
+                         </div>
+                       </div>
+                       <div style={{ textAlign: 'right' }}>
+                         <div style={{ fontWeight: 700, color: '#f97316', fontSize: 15 }}>₹{Number(item.price ?? 0).toFixed(2)}</div>
+                         <div style={{ fontSize: 11, marginTop: 4 }}>
+                            <span style={{ 
+                              padding: '2px 6px', borderRadius: 4, 
+                              background: available ? '#d1fae5' : '#fee2e2',
+                              color: available ? '#065f46' : '#991b1b',
+                              fontWeight: 600
+                            }}>
+                              {available ? 'Available' : 'Out'}
+                            </span>
+                         </div>
+                       </div>
+                     </div>
+
+                     <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
+                       <Button size="sm" variant="outline" onClick={() => openEditor(item)}>Edit</Button>
+                       <Button size="sm" variant="outline" onClick={() => toggleStatus(item.id, item.status)}>
+                         {available ? "Mark Out" : "Mark Avail"}
+                       </Button>
+                       <Button size="sm" variant="ghost" onClick={async () => {
+                          const ok = await showConfirm("Delete this item?");
+                          if (!ok) return;
+                          handleDelete([item.id]); // Assuming bulk delete logic or usage of single delete
+                       }} style={{ color: '#ef4444' }}>Del</Button>
+                     </div>
+                   </div>
+                 );
+               })}
+             </div>
+          )}
+        </div>
+
+        <div className="table-scroll hide-mobile">
           <table className="menu-items-table">
             <thead>
               <tr>
@@ -2273,6 +2339,32 @@ export default function MenuPage() {
             display: flex;
           }
         }
+      /* Mobile Toolbar Horizontal Scroll & Tweaks */
+@media (max-width: 640px) {
+  .toolbar-cta {
+    display: flex;
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    padding-bottom: 8px;
+    width: 100%;
+    gap: 8px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .toolbar-cta::-webkit-scrollbar {
+    display: none;
+  }
+  /* Ensure buttons don't shrink */
+  .toolbar-cta > * {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+  
+  /* Ensure mobile-only view is actually visible */
+  .only-mobile {
+    display: block !important;
+  }
+}
       `}</style>
       {showImageImport && (
         <MenuImageImport

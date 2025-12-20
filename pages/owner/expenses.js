@@ -7,6 +7,7 @@ import Card from '../../components/ui/Card';
 import Table from '../../components/ui/Table';
 import DateRangePicker from '../../components/ui/DateRangePicker';
 import Button from '../../components/ui/Button';
+import NiceSelect from '../../components/NiceSelect';
 import { istSpanFromDatesUtcISO } from '../../utils/istTime';
 import { exportExpensesToCSV } from '../../utils/exportExpenses';
 
@@ -81,6 +82,16 @@ const [paymentProfit, setPaymentProfit] = useState([]);
 
 
   const NEW_CATEGORY_SENTINEL = '__NEW__';
+
+  const filterCategoryOptions = useMemo(() => [
+    { value: '', label: 'All categories' },
+    ...categories.map((c) => ({ value: c.id, label: c.name }))
+  ], [categories]);
+
+  const formCategoryOptions = useMemo(() => [
+     ...categories.map((c) => ({ value: c.id, label: c.name })),
+     { value: NEW_CATEGORY_SENTINEL, label: '+ New category…' }
+  ], [categories]);
 
   const startDateStr = useMemo(
     () => range.start.toISOString().slice(0, 10),
@@ -304,6 +315,15 @@ async function handleSubmitExpense(e) {
     return;
   }
 
+  if (!formCategoryId) {
+    alert('Please select a category');
+    return;
+  }
+  if (!formMethod) {
+    alert('Please select a payment method');
+    return;
+  }
+
   let categoryId = formCategoryId || null;
 
   try {
@@ -506,18 +526,14 @@ async function handleDeleteExpense(id) {
 
               <h3>Expense entries</h3>
               <div className="expenses-filters">
-                <select
-                  className="expenses-select"
-                  value={selectedCategoryId}
-                  onChange={(e) => setSelectedCategoryId(e.target.value)}
-                >
-                  <option value="">All categories</option>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
+                <div style={{ width: 220 }}>
+                  <NiceSelect
+                    options={filterCategoryOptions}
+                    value={selectedCategoryId}
+                    onChange={setSelectedCategoryId}
+                    placeholder="All categories"
+                  />
+                </div>
                 <span className="expenses-total-pill">
                   In view: {formatMoney(totalExpensesVisible)}
                 </span>
@@ -654,19 +670,12 @@ async function handleDeleteExpense(id) {
 
               <label>
                 Category
-                <select
+                <NiceSelect
+                  options={formCategoryOptions}
                   value={formCategoryId}
-                  onChange={(e) => setFormCategoryId(e.target.value)}
-                  required
-                >
-                  <option value="">Select…</option>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                  <option value={NEW_CATEGORY_SENTINEL}>+ New category…</option>
-                </select>
+                  onChange={setFormCategoryId}
+                  placeholder="Select..."
+                />
               </label>
 
               {formCategoryId === NEW_CATEGORY_SENTINEL && (
@@ -695,18 +704,12 @@ async function handleDeleteExpense(id) {
 
               <label>
   Payment method
-  <select
+  <NiceSelect
+    options={PAYMENT_METHOD_OPTIONS}
     value={formMethod}
-    onChange={(e) => setFormMethod(e.target.value)}
-    required
-  >
-    <option value="">Select…</option>
-    {PAYMENT_METHOD_OPTIONS.map((opt) => (
-      <option key={opt.value} value={opt.value}>
-        {opt.label}
-      </option>
-    ))}
-  </select>
+    onChange={setFormMethod}
+    placeholder="Select..."
+  />
 </label>
 
 
