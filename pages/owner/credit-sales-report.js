@@ -241,7 +241,7 @@ const customerTiles = useMemo(() => {
           <div className="summary-card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <span className="kpi-label">Payments Recv.</span>
+                  <span className="kpi-label">Payments Received</span>
                   <span className="kpi-value" style={{ color: '#16a34a' }}>₹{Number(reportData?.summary?.totalPayments ?? 0).toFixed(2)}</span>
                </div>
                <div className="kpi-icon"><FaMoneyBillWave /></div>
