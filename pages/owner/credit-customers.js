@@ -1,6 +1,6 @@
 // pages/owner/credit-customers.js
 import { useRouter } from 'next/router'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, Fragment } from 'react'
 import { useRequireAuth } from '../../lib/useRequireAuth'
 import { useRestaurant } from '../../context/RestaurantContext'
 import { getSupabase } from '../../services/supabase'
@@ -36,6 +36,8 @@ export default function CreditCustomersPage() {
   const [paymentMethod, setPaymentMethod] = useState('cash')
   const [expandedCustomerId, setExpandedCustomerId] = useState(null)
   const [customerOrders, setCustomerOrders] = useState({})
+  // Pagination state for expanded customer order tables: { [customerId]: pageNumber }
+  const [customerOrdersPages, setCustomerOrdersPages] = useState({});
   const [pendingSuspendId, setPendingSuspendId] = useState(null)
   const [selectedOrder, setSelectedOrder] = useState(null)
   
@@ -412,7 +414,7 @@ const handleViewOrder = async (order) => {
                   <th>Name</th>
                   <th>Phone</th>
                   <th className="cr-right">Balance</th>
-                  <th className="cr-right">Total Ext.</th>
+                  <th className="cr-right">Total Credit Extended</th>
                   <th className="cr-center">Status</th>
                   <th className="cr-center">Actions</th>
                 </tr>
@@ -475,33 +477,72 @@ const handleViewOrder = async (order) => {
                                     </tr>
                                   </thead>
                                   <tbody>
-                                    {customerOrders[c.id].map(o => {
-                                      const totalIncl = Number(o.total_inc_tax || o.total_amount || 0);
-                                      const taxAmt = Number(o.total_tax || 0);
-                                      const amtExcl = totalIncl - taxAmt;
+                                    {(() => {
+                                      const page = customerOrdersPages[c.id] || 1;
+                                      const ITEMS = 5;
+                                      const totalLen = customerOrders[c.id].length;
+                                      const start = (page - 1) * ITEMS;
+                                      const visibleOrders = customerOrders[c.id].slice(start, start + ITEMS);
+                                      
                                       return (
-                                        <tr key={o.id} onClick={() => handleViewOrder(o)} style={{ cursor: 'pointer' }} className="clickable-order-row">
-                                          <td><strong style={{ color: '#111827' }}>#{o.id.substring(0, 8)}</strong></td>
-                                          <td>{formatDisplayDate(o.created_at)}</td>
-                                          <td style={{ textAlign: 'right' }}>{fmt.format(amtExcl)}</td>
-                                          <td style={{ textAlign: 'right' }}>{fmt.format(taxAmt)}</td>
-                                          <td style={{ textAlign: 'right', fontWeight: 800, color: '#f97316' }}>{fmt.format(totalIncl)}</td>
-                                          <td>
-                                            <span style={{
-                                              padding: '2px 8px',
-                                              borderRadius: 999,
-                                              fontSize: 10,
-                                              textTransform: 'uppercase',
-                                              fontWeight: 800,
-                                              background: o.status === 'completed' ? '#dcfce7' : '#fef3c7',
-                                              color: o.status === 'completed' ? '#166534' : '#92400e'
-                                            }}>
-                                              {o.status}
-                                            </span>
-                                          </td>
-                                        </tr>
+                                        <>
+                                          {visibleOrders.map(o => {
+                                            const totalIncl = Number(o.total_inc_tax || o.total_amount || 0);
+                                            const taxAmt = Number(o.total_tax || 0);
+                                            const baseAmt = totalIncl - taxAmt; 
+                                            return (
+                                              <tr key={o.id} onClick={() => handleViewOrder(o)} style={{ cursor: 'pointer' }} className="clickable-order-row">
+                                                <td><strong style={{ color: '#111827' }}>#{o.id.substring(0, 8)}</strong></td>
+                                                <td>{formatDisplayDate(o.created_at)}</td>
+                                                <td style={{ textAlign: 'right' }}>{fmt.format(baseAmt)}</td>
+                                                <td style={{ textAlign: 'right' }}>{fmt.format(taxAmt)}</td>
+                                                <td style={{ textAlign: 'right', fontWeight: 800, color: '#f97316' }}>{fmt.format(totalIncl)}</td>
+                                                <td>
+                                                  <span style={{
+                                                    padding: '2px 8px',
+                                                    borderRadius: 999,
+                                                    fontSize: 10,
+                                                    textTransform: 'uppercase',
+                                                    fontWeight: 800,
+                                                    background: o.status === 'completed' ? '#dcfce7' : '#fef3c7',
+                                                    color: o.status === 'completed' ? '#166534' : '#92400e'
+                                                  }}>
+                                                    {o.status}
+                                                  </span>
+                                                </td>
+                                              </tr>
+                                            );
+                                          })}
+                                          {totalLen > ITEMS && (
+                                            <tr>
+                                              <td colSpan={6}>
+                                                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, padding: '8px 0' }}>
+                                                  <Button 
+                                                    size="sm" 
+                                                    variant="outline"
+                                                    disabled={page === 1}
+                                                    onClick={() => setCustomerOrdersPages(prev => ({ ...prev, [c.id]: page - 1 }))}
+                                                  >
+                                                    Previous
+                                                  </Button>
+                                                  <span style={{ fontSize: 12, color: '#6b7280' }}>
+                                                    Page {page} of {Math.ceil(totalLen / ITEMS)}
+                                                  </span>
+                                                  <Button 
+                                                    size="sm" 
+                                                    variant="outline"
+                                                    disabled={page >= Math.ceil(totalLen / ITEMS)}
+                                                    onClick={() => setCustomerOrdersPages(prev => ({ ...prev, [c.id]: page + 1 }))}
+                                                  >
+                                                    Next
+                                                  </Button>
+                                                </div>
+                                              </td>
+                                            </tr>
+                                          )}
+                                        </>
                                       );
-                                    })}
+                                    })()}
                                   </tbody>
                                 </table>
                               </div>
@@ -746,17 +787,37 @@ const handleViewOrder = async (order) => {
         .search-input-premium { border: none; outline: none; width: 100%; font-size: 14px; }
 
         .cr-table-wrap { background: white; border-radius: 12px; border: 1px solid #e5e7eb; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-        .cr-table { width: 100%; border-collapse: collapse; }
+        .cr-table { width: 100%; border-collapse: separate; border-spacing: 0; }
         .cr-table th { 
-          background: linear-gradient(to bottom, #ffffff 0%, #fafafa 100%);
-          padding: 14px 16px; text-align: left; font-size: 11px; text-transform: uppercase;
-          color: #6b7280; font-weight: 700; border-bottom: 2px solid #f97316; letter-spacing: 0.5px;
+          background: #fafafa;
+          padding: 16px; 
+          text-align: left; 
+          font-size: 11px; 
+          text-transform: uppercase;
+          color: #6b7280; 
+          font-weight: 700; 
+          border-bottom: 2px solid #f97316; 
+          letter-spacing: 0.5px;
+          white-space: nowrap;
+          position: sticky; top: 0; z-index: 10;
         }
-        .cr-table td { padding: 14px 16px; border-bottom: 1px solid #f3f4f6; font-size: 14px; color: #374151; }
+        .cr-table td { 
+            padding: 16px; 
+            border-bottom: 1px solid #f3f4f6; 
+            font-size: 14px; 
+            color: #374151; 
+            white-space: nowrap;
+            vertical-align: middle;
+        }
         .cr-table tr:hover { background: #fff7ed; }
         .clickable-order-row:hover { background: #fff1f2 !important; }
+        .cr-row-alt { background: #fafafa; }
         .cr-right { text-align: right; }
         .cr-center { text-align: center; }
+        .cr-table th.cr-right { text-align: right; }
+        .cr-table th.cr-center { text-align: center; }
+        .cr-wrap { white-space: normal !important; max-width: 300px; }
+        .cr-strong { font-weight: 700; color: #111827; }
 
         .cc-mobile-list { display: none; }
         .cr-table-wrap { display: block; }
@@ -828,4 +889,3 @@ const handleViewOrder = async (order) => {
   )
 }
 
-import { Fragment } from 'react'

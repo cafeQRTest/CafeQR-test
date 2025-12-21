@@ -308,18 +308,42 @@ const formatAIResponse = (text) => {
               </Card>
 
               {timeRange === 'today' && (
-                <Card padding="20px" className="chart-card">
-                  <h3 className="chart-title">Hourly Revenue</h3>
+                <Card padding="0" className="chart-card">
+                  <div style={{ padding: '20px 24px', borderBottom: '1px solid #e5e7eb' }}>
+                    <h3 className="chart-title" style={{ margin: 0 }}>Hourly Revenue</h3>
+                  </div>
+                  
                   {stats.hourlyData.length === 0 || stats.hourlyData.every(d => d.revenue === 0) ? (
                     <div className="empty-chart">No orders today</div>
                   ) : (
-                    <div className="hourly-chart">
-                      {stats.hourlyData.filter(d => d.revenue > 0).slice(0, 12).map(d => (
-                        <div key={d.hour} className="hour-bar">
-                          <div className="hour-label">{d.hour}</div>
-                          <div className="revenue-amount">₹{d.revenue}</div>
-                        </div>
-                      ))}
+                    <div className="hourly-scroll-container">
+                      <div className="hourly-chart-wrapper">
+                         {stats.hourlyData.map((d, i) => {
+                           const maxRev = Math.max(...stats.hourlyData.map(x => x.revenue)) || 1;
+                           const heightPct = (d.revenue / maxRev) * 100;
+                           const isZero = d.revenue === 0;
+                           
+                           return (
+                             <div key={d.hour} className="hour-col-group">
+                                <div className="bar-area">
+                                   <div 
+                                     className="revenue-bar" 
+                                     style={{ 
+                                       height: isZero ? '4px' : `${Math.max(heightPct, 4)}%`,
+                                       background: isZero ? '#f3f4f6' : 'linear-gradient(180deg, #f97316 0%, #fb923c 100%)',
+                                       opacity: isZero ? 1 : 1
+                                     }} 
+                                   >
+                                      {!isZero && (
+                                        <div className="bar-tooltip">₹{Number(d.revenue).toFixed(2)}</div>
+                                      )}
+                                   </div>
+                                </div>
+                                <div className="hour-axis-label">{d.hour.slice(0, 5)}</div>
+                             </div>
+                           );
+                         })}
+                      </div>
                     </div>
                   )}
                 </Card>
@@ -431,10 +455,75 @@ const formatAIResponse = (text) => {
         .item-count { font-size: 0.85rem; font-weight: 600; color: #1f2937; }
         .item-bar-bg { height: 6px; background: #f3f4f6; border-radius: 99px; width: 100%; overflow: hidden; }
         .progress-fill { height: 100%; background: #f97316; border-radius: 99px; transition: width 0.5s ease; }
-        .hourly-chart { display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 8px; }
-        .hour-bar { text-align: center; }
-        .hour-label { font-size: 12px; color: #6b7280; margin-bottom: 4px; }
-        .revenue-amount { font-size: 14px; font-weight: 600; color: #111827; }
+        .hourly-scroll-container {
+          overflow-x: auto;
+          padding: 24px;
+          /* Hide scrollbar for clean look */
+          scrollbar-width: thin;
+          scrollbar-color: #cbd5e1 transparent;
+        }
+        .hourly-chart-wrapper {
+          display: flex;
+          align-items: flex-end;
+          gap: 12px;
+          height: 200px;
+          min-width: max-content;
+          padding-top: 30px; /* Space for tooltip */
+        }
+        .hour-col-group {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 8px;
+          width: 48px;
+          height: 100%;
+        }
+        .bar-area {
+          flex: 1;
+          width: 100%;
+          display: flex;
+          align-items: flex-end;
+          justify-content: center;
+          position: relative;
+        }
+        .revenue-bar {
+          width: 12px;
+          border-radius: 99px;
+          position: relative;
+          transition: height 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .revenue-bar:hover .bar-tooltip {
+          opacity: 1; transform: translateX(-50%) translateY(-6px);
+        }
+        
+        .bar-tooltip {
+          position: absolute;
+          bottom: 100%;
+          left: 50%;
+          transform: translateX(-50%) translateY(0);
+          background: #ffffff;
+          color: #ea580c;
+          padding: 6px 10px;
+          border: 1px solid #fed7aa;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+          border-radius: 8px;
+          font-size: 12px;
+          font-weight: 800;
+          white-space: nowrap;
+          opacity: 0;
+          pointer-events: none;
+          transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+          margin-bottom: 8px;
+          z-index: 10;
+        }
+        .hour-axis-label {
+          font-size: 11px;
+          color: #9ca3af;
+          font-weight: 600;
+          transform: rotate(-45deg);
+          transform-origin: center;
+          margin-top: 8px;
+        }
           @media (max-width: 768px) {
             .analytics-page { padding: 0.5rem; }
             .page-header { flex-direction: column; gap: 16px; align-items: stretch; }

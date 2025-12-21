@@ -35,6 +35,11 @@ const pulse = keyframes`
   100% { box-shadow: 0 0 0 0 rgba(249, 115, 22, 0); }
 `;
 
+const tooltipFade = keyframes`
+  from { opacity: 0; transform: translateX(-50%) translateY(0); }
+  to { opacity: 1; transform: translateX(-50%) translateY(-5px); }
+`;
+
 const OrdersContainer = styled.div`
   min-height: 100vh;
   background: #f8fafc;
@@ -319,6 +324,41 @@ const PriceTag = styled.div`
   font-weight: 700;
   color: #0f172a;
   font-size: 15px;
+`;
+
+const TooltipSpan = styled.span`
+  position: relative;
+  
+  &[data-tip]:hover::before {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%) translateY(-5px);
+    background: #f97316; /* Brand Orange */
+    color: white;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 20;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    animation: ${tooltipFade} 0.2s ease-out;
+  }
+
+  &[data-tip]:hover::after {
+    content: '';
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%) translateY(1px);
+    border: 4px solid transparent;
+    border-top-color: #f97316;
+    pointer-events: none;
+    z-index: 20;
+  }
 `;
 
 
@@ -1530,6 +1570,49 @@ function PaxEditDialog({ order, onSave, onClose }) {
   );
 }
 
+
+function TableEditDialog({ order, onSave, onClose }) {
+  const [val, setVal] = useState(order.table_number || '');
+  return (
+    <div style={{
+      position: 'fixed', inset: 0,
+      backgroundColor: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(5px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: 12
+    }}>
+      <div style={{ 
+        backgroundColor: 'white', padding: 20, borderRadius: 16, width: '100%', maxWidth: 280,
+        boxShadow: '0 12px 24px -10px rgba(0, 0, 0, 0.15)',
+        animation: 'fadeIn 0.2s ease-out'
+      }}>
+        <h3 style={{ fontSize: 16, fontWeight: 800, color: '#0f172a', margin: '0 0 4px 0', letterSpacing: '-0.01em' }}>Update Table</h3>
+        <p style={{ fontSize: 11, color: '#64748b', marginBottom: 12 }}>
+            Assign table for Order <strong>#{order.id.slice(0,6)}</strong>
+        </p>
+        
+        <label style={{ fontSize: 9, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Table Number</label>
+        <input 
+            type="text"
+            autoFocus
+            value={val}
+            onChange={e => setVal(e.target.value)}
+            placeholder="e.g. 5 or A1"
+            style={{ 
+                width: '100%', padding: '10px', fontSize: 16, fontWeight: 700,
+                border: '1.5px solid #e2e8f0', borderRadius: 10,
+                outline: 'none', background: '#f8fafc', color: '#0f172a',
+                marginBottom: 16, textAlign: 'center'
+            }}
+        />
+        
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Button onClick={onClose} variant="outline" style={{ flex: 1, height: 38, borderRadius: 10, fontSize: 13 }}>Cancel</Button>
+          <Button onClick={() => onSave(val)} style={{ flex: 1.5, height: 38, borderRadius: 10, background: BRAND.orange, color: 'white', fontSize: 13 }}>Update</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 async function fetchFullOrder(supabase, orderId) {
   const { data, error } = await supabase
     .from('orders')
@@ -1551,6 +1634,7 @@ export default function OrdersPage() {
   const [cancelOrderDialog, setCancelOrderDialog] = useState(null);
   const [editingOrder, setEditingOrder] = useState(null);
   const [paxEditOrder, setPaxEditOrder] = useState(null);
+  const [tableEditOrder, setTableEditOrder] = useState(null);
 
 
   const [ordersByStatus, setOrdersByStatus] = useState({
@@ -1842,6 +1926,7 @@ const handleEditSave = async (edited) => {
         order_id: edited.id,
         restaurant_id: restaurantId,
         lines: edited.lines,
+        table_number: edited.table_number, // Pass table number update
         reason: 'Order edited from dashboard',
       }),
     });
@@ -2048,6 +2133,25 @@ useEffect(() => {
       setError(e.message);
     }
   }
+
+  async function updateTableNumber(id, val) {
+    if (!supabase || !restaurantId) return;
+    try {
+      const tableNum = val ? String(val).trim() : null;
+      const updateData = { table_number: tableNum };
+      if (tableNum) updateData.order_type = 'dine-in'; 
+
+      const { error } = await supabase.from('orders').update(updateData).eq('id', id).eq('restaurant_id', restaurantId);
+      if (error) throw error;
+      
+      // Reload current page if we are looking at completed orders, or just reload default
+      loadOrders(completedPage); 
+    } catch (e) {
+      console.error("Failed to update table:", e);
+      alert("Failed to update table number: " + e.message);
+    }
+  }
+
 
   const finalize = async (order) => {
 
@@ -2416,6 +2520,7 @@ if (ordersByStatus.mobileFilter === 'inprogress') {
         onCancelOrderOpen={onCancelOrderOpen}
         onEditOrder={(order) => setEditingOrder(order)}
         onEditPax={(order) => setPaxEditOrder(order)}
+        onEditTable={(order) => setTableEditOrder(order)}
       />
     ))
   )}
@@ -2547,6 +2652,7 @@ colOrders =
                 onCancelOrderOpen={onCancelOrderOpen}
                 onEditOrder={(order) => setEditingOrder(order)}
                 onEditPax={(order) => setPaxEditOrder(order)}
+                onEditTable={(order) => setTableEditOrder(order)}
                 onShowItems={(o) => setItemsModalOrder(o)}
               />
             ))
@@ -2618,6 +2724,17 @@ colOrders =
         onSave={(val) => {
             updateCustomerCount(paxEditOrder.id, val);
             setPaxEditOrder(null);
+        }}
+    />
+)}
+
+{tableEditOrder && (
+    <TableEditDialog 
+        order={tableEditOrder}
+        onClose={() => setTableEditOrder(null)}
+        onSave={(val) => {
+            updateTableNumber(tableEditOrder.id, val);
+            setTableEditOrder(null);
         }}
     />
 )}
@@ -2796,6 +2913,7 @@ colOrders =
   .header-actions { width:100%; justify-content:flex-start; }
   .orders-header h1 { font-size:20px; }
   .mobile-list { padding:0 6px; gap:8px; }
+  .mobile-list { padding:0 6px; gap:8px; }
 }
       `}</style>
     </div>
@@ -2828,6 +2946,7 @@ function OrderCard({
   onCancelOrderOpen,
   onEditOrder,
   onEditPax,
+  onEditTable,
   onShowItems // New prop to trigger global modal
 }) {
   const items = toDisplayItems(order);
@@ -2850,30 +2969,56 @@ function OrderCard({
       className={`${statusClass} order-card`} 
       onClick={() => onShowItems && onShowItems(order)}
     >
-      <OrderHeader>
-        <div style={{display:'flex', alignItems:'center', gap:8}}>
+      <OrderHeader style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
+        {/* Top Row: ID and Time */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span className="order-id">#{order.id.slice(0, 6)}</span>
-          
-          <span style={{fontSize:13, fontWeight:600, color:'#334155'}}>{getOrderTypeLabel(order)}</span>
+          <span className="order-time" style={{ whiteSpace: 'nowrap' }}>
+            {timeAgo(order.created_at)}
+          </span>
+        </div>
+
+        {/* Bottom Row: Metadata (Table, Pax, Credit) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginTop: 2 }}>
+           <TooltipSpan 
+            data-tip={order.status !== 'completed' ? "Edit Table" : undefined}
+            style={{
+              fontSize: 13, fontWeight: 600, color: '#334155', display: 'flex', alignItems: 'center', gap: 6,
+              cursor: order.status === 'completed' ? 'default' : 'pointer',
+              padding: '2px 0'
+            }}
+            onClick={(e) => { 
+               if (order.status === 'completed') return;
+               e.stopPropagation(); 
+               onEditTable && onEditTable(order); 
+            }}
+          >
+            {getOrderTypeLabel(order)}
+            {/* Show edit icon only if not completed */}
+            {order.status !== 'completed' && <span style={{fontSize:11, opacity:0.5}}>✎</span>}
+          </TooltipSpan>
           
           {order.number_of_customers && (
-             <span 
-               style={{fontSize:12, cursor:'pointer', color:'#6b7280', display:'flex', alignItems:'center', gap:2}} 
-               title="Edit Pax"
+             <TooltipSpan 
+               data-tip={order.status !== 'completed' ? "Edit Pax" : undefined}
+               style={{
+                 fontSize: 13, color: '#64748b', display: 'flex', alignItems: 'center', gap: 4,
+                 cursor: order.status === 'completed' ? 'default' : 'pointer',
+                 padding: '2px 0'
+               }} 
                onClick={(e) => {
+                 if (order.status === 'completed') return;
                  e.stopPropagation();
                  onEditPax && onEditPax(order);
                }}
              >
-               👥 {order.number_of_customers}
-             </span>
+               <span style={{fontSize:14}}>👥</span> 
+               <span style={{fontWeight:600}}>{order.number_of_customers}</span>
+               {order.status !== 'completed' && <span style={{fontSize:11, opacity:0.5}}>✎</span>}
+             </TooltipSpan>
           )}
 
-          {isCreditOrder && <span style={{fontSize:10, background:'#e0f2fe', color:'#0369a1', padding:'2px 6px', borderRadius:4}}>CREDIT</span>}
-        </div>
-        
-        <div className="order-time" style={{marginLeft:'auto', whiteSpace:'nowrap'}}>
-          {timeAgo(order.created_at)}
+          {isCreditOrder && <span style={{fontSize:10, background:'#e0f2fe', color:'#0369a1', padding:'2px 6px', borderRadius:4, fontWeight: 700}}>CREDIT</span>}
         </div>
       </OrderHeader>
 

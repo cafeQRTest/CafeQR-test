@@ -78,7 +78,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { order_id, restaurant_id, lines, reason = 'Order edited from dashboard' } = req.body || {};
+    const { order_id, restaurant_id, lines, table_number, reason = 'Order edited from dashboard' } = req.body || {};
 
     // 1) Basic validation
     if (!order_id || !restaurant_id || !Array.isArray(lines)) {
@@ -439,6 +439,7 @@ export default async function handler(req, res) {
         total_tax: newTotals.total_tax,
         total_inc_tax: newTotals.total_inc_tax,
         total_amount: newTotals.total_amount,
+        ...(table_number !== undefined && { table_number, ...(table_number ? { order_type: 'dine-in' } : {}) }) 
       })
       .eq('id', order_id)
       .eq('restaurant_id', restaurant_id);
