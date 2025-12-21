@@ -4,6 +4,7 @@ import Link from "next/link";
 // 1. IMPORT the singleton function
 import { getSupabase } from "../../services/supabase";
 import AlertRestaurantButton from '../../components/AlertRestaurantButton';
+import MenuItemCard from '../../components/MenuItemCard';
 
 // 2. REMOVE the supabase prop
 export default function CartSummary() {
@@ -17,6 +18,7 @@ export default function CartSummary() {
   const [restaurant, setRestaurant] = useState(null);
   const [cart, setCart] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [cartUpsells, setCartUpsells] = useState([]);
 
   useEffect(() => {
     // The loadRestaurantData function now safely uses the singleton instance
@@ -73,7 +75,8 @@ export default function CartSummary() {
           use_own_gateway,
           gst_enabled,
           default_tax_rate,
-          prices_include_tax
+          prices_include_tax,
+          features_menu_images_enabled
         `
         )
         .eq("restaurant_id", id)
@@ -137,6 +140,71 @@ export default function CartSummary() {
     if (typeof window !== "undefined" && restaurantId && tableNumber) {
       const cartKey = `cart_${restaurantId}_${tableNumber}`;
       localStorage.removeItem(cartKey);
+    }
+  };
+
+  // Fetch upsells on cart change
+  useEffect(() => {
+    if (cart.length === 0) {
+      setCartUpsells([]);
+      return;
+    }
+
+    const fetchUpsells = async () => {
+      const itemIds = [...new Set(cart.map(i => i.id))];
+      const { data } = await supabase
+        .from('menu_items_with_upsells')
+        .select('upsells')
+        .in('menu_item_id', itemIds);
+
+      // Aggregate
+      const allUpsells = [];
+      data?.forEach(row => {
+          if (Array.isArray(row.upsells)) {
+             allUpsells.push(...row.upsells);
+          }
+      });
+      
+      // Dedupe by ID and remove if already in cart
+      const uniqueMap = new Map();
+      allUpsells.forEach(u => uniqueMap.set(u.id, u));
+      
+      // Filter out items already in cart
+      const final = [];
+      uniqueMap.forEach(u => {
+         if (!cart.some(c => c.id === u.id)) {
+            final.push(u);
+         }
+      });
+      
+      setCartUpsells(final);
+    };
+
+    fetchUpsells();
+  }, [cart, supabase]);
+
+  const addToCartDirect = (item) => {
+    // Check if exists (simple check, no variants)
+    const exists = cart.find(c => c.id === item.id);
+    if (exists) {
+       updateQuantity(exists, exists.quantity + 1);
+    } else {
+       // Add new
+       const newItem = {
+          id: item.id,
+          name: item.name,
+          price: item.price,
+          veg: item.veg,
+          image_url: item.image_url,
+          quantity: 1,
+          is_upsell: true,
+          status: item.status
+       };
+       setCart(prev => {
+          const next = [...prev, newItem];
+          persistCart(next);
+          return next;
+       });
     }
   };
 
@@ -219,6 +287,8 @@ export default function CartSummary() {
       <div style={{ padding: 40, textAlign: "center" }}>Loading cart...</div>
     );
 
+  const brandColor = restaurant?.restaurant_profiles?.brand_color || "#f59e0b";
+
   if (cart.length === 0) {
     return (
       <div
@@ -241,7 +311,7 @@ export default function CartSummary() {
           <Link
             href={`/order?r=${restaurantId}&t=${tableNumber}`}
             style={{
-              background: "#f59e0b",
+              background: brandColor,
               color: "#fff",
               textDecoration: "none",
               padding: "12px 24px",
@@ -255,8 +325,6 @@ export default function CartSummary() {
       </div>
     );
   }
-
-  const brandColor = restaurant?.restaurant_profiles?.brand_color || "#f59e0b";
 
   return (
     <div
@@ -330,12 +398,25 @@ export default function CartSummary() {
             key={item.id}
             style={{
               display: "flex",
-              alignItems: "center",
+              alignItems: "flex-start",
               gap: "16px",
               padding: "16px 20px",
               borderBottom: "1px solid #f3f4f6",
             }}
           >
+            {item.image_url && (
+              <img
+                src={item.image_url}
+                alt={item.name}
+                style={{
+                  width: "60px",
+                  height: "60px",
+                  borderRadius: "8px",
+                  objectFit: "cover",
+                  flexShrink: 0
+                }}
+              />
+            )}
             <div style={{ flex: 1 }}>
               <div
                 style={{
@@ -495,6 +576,61 @@ export default function CartSummary() {
           <span>₹{totalInc.toFixed(2)}</span>
         </div>
       </div>
+      
+      {/* Complete Your Meal Upsells */}
+      {cartUpsells.length > 0 && (() => {
+        const [currentPage, setCurrentPage] = React.useState(0);
+        const itemsPerPage = 2;
+        const totalPages = Math.ceil(cartUpsells.length / itemsPerPage);
+        const startIdx = currentPage * itemsPerPage;
+        const visibleItems = cartUpsells.slice(startIdx, startIdx + itemsPerPage);
+
+        return (
+          <div style={{ background: "#fff", marginTop: "8px", padding: "16px 20px" }}>
+            <h3 style={{ margin: "0 0 16px 0", fontSize: "18px", fontWeight: 700, color: "#1e293b" }}>
+              🍽️ Complete your meal
+            </h3>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+              {visibleItems.map(u => (
+                <div key={u.id}>
+                  <MenuItemCard
+                    item={u}
+                    quantity={0}
+                    onAdd={() => addToCartDirect(u)}
+                    showImage={!!restaurant?.restaurant_profiles?.features_menu_images_enabled}
+                    highlightColor={brandColor}
+                    compact={true}
+                  />
+                </div>
+              ))}
+            </div>
+
+            {/* Pagination Dots */}
+            {totalPages > 1 && (
+              <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', alignItems: 'center' }}>
+                {Array.from({ length: totalPages }).map((_, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setCurrentPage(idx)}
+                    style={{
+                      width: currentPage === idx ? '24px' : '8px',
+                      height: '8px',
+                      borderRadius: '4px',
+                      border: 'none',
+                      background: currentPage === idx ? brandColor : '#e2e8f0',
+                      cursor: 'pointer',
+                      transition: 'all 0.3s ease',
+                      padding: 0
+                    }}
+                    aria-label={`Go to page ${idx + 1}`}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       <div
         style={{

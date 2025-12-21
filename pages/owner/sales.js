@@ -897,10 +897,6 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
 
             {/* Summary Box */}
             <div style={{ background: '#FFF9F2', borderRadius: 8, padding: 16 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 13, fontWeight: 600, color: '#64748b' }}>
-                <span>Amount (Excl. Tax)</span>
-                <span style={{ color: '#334155' }}>₹{Number(itemsModalOrder.total_amount || 0).toFixed(2)}</span>
-              </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12, fontSize: 13, fontWeight: 600, color: '#64748b' }}>
                 <span>Tax Amount</span>
                 <span style={{ color: '#334155' }}>₹{Number(itemsModalOrder.total_tax || 0).toFixed(2)}</span>

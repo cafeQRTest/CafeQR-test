@@ -245,21 +245,63 @@ export default function OrderPage() {
                 if (!vp.menu_item_id || !vp.variant_options) return;
                 
                 if (!vMap.has(vp.menu_item_id)) vMap.set(vp.menu_item_id, []);
-                vMap.get(vp.menu_item_id).push({
-                  variant_id: vp.variant_options.id,
-                  variant_name: vp.variant_options.name,
-                  price: vp.price,
-                  is_available: vp.is_available,
-                  display_order: vp.variant_options.display_order
-                });
-             });
+                 vMap.get(vp.menu_item_id).push({
+                   variant_id: vp.variant_options.id,
+                   variant_name: vp.variant_options.name,
+                   price: vp.price,
+                   is_available: vp.is_available,
+                   display_order: vp.variant_options.display_order
+                 });
+              });
            }
         }
 
-        // 5. Transform
+        // 5. Fetch Upsells (Add-ons)
+        const { data: upsellsData } = await supabase
+          .from('menu_items_with_upsells')
+          .select('menu_item_id, upsells')
+          .in('menu_item_id', finalItems.map(i => i.id));
+        
+        const upsellMap = new Map();
+        (upsellsData || []).forEach(row => {
+            upsellMap.set(row.menu_item_id, row.upsells);
+        });
+
+        // 6. Merge Variants and Upsells
+        finalItems.forEach(item => {
+            if (vMap.has(item.id)) {
+                // Attach variants
+                item.variants = vMap.get(item.id).sort((a,b) => (a.display_order || 0) - (b.display_order || 0));
+            }
+            // Attach upsells (treat as addon_groups for compatibility if VariantSelector expects it, or update it)
+            // The new Upsells view returns [{ id, name, price, ... }]
+            // VariantSelector might need update. For now, let's map it to a "Suggested Extras" group.
+            const rawUpsells = upsellMap.get(item.id) || [];
+            if (rawUpsells.length > 0) {
+               item.addon_groups = [{
+                 id: 'upsells-group',
+                 name: 'Suggested Extras',
+                 min_selections: 0,
+                 max_selections: null,
+                 options: rawUpsells.map(u => ({
+                    id: u.id,
+                    name: u.name,
+                    price: u.price,
+                    is_active: u.status === 'available',
+                    veg: u.veg,
+                    image_url: u.image_url
+                 }))
+               }];
+               item.has_addons = true;
+            } else {
+               item.addon_groups = [];
+               item.has_addons = false;
+            }
+        });
+
+        // 7. Transform (add static data, etc.)
         const transformed = finalItems.map(item => {
            if (!item) return null;
-           const variants = vMap.get(item.id) || [];
            
            let tName = 'Options';
            if (item.menu_item_variants && item.menu_item_variants[0] && item.menu_item_variants[0].variant_templates) {
@@ -268,7 +310,6 @@ export default function OrderPage() {
 
            return {
              ...item,
-             variants: variants.sort((a, b) => (a.display_order || 0) - (b.display_order || 0)),
              variant_template_name: item.has_variants ? tName : null,
              rating: 4.8, // Static rating to prevent hydration mismatch errors
              popular: !!item.ispopular
@@ -386,29 +427,34 @@ export default function OrderPage() {
       return
     }
 
-    if (item.has_variants) {
-      setSelectedItem(item)
-      setShowVariantSelector(true)
-      return
-    }
-
     setCart(prev => {
       const existing = prev.find(c => c.id === item.id && !c.selectedVariant)
       if (existing) return prev.map(c => c.id === item.id && !c.selectedVariant ? { ...c, quantity: c.quantity + 1 } : c)
       return [...prev, { ...item, quantity: 1 }]
     })
-
-    // Lightweight "added to cart" feedback
-    const name = item.name || 'Item'
-    setJustAddedItem(name)
-    if (addToastTimeoutRef.current) {
-      clearTimeout(addToastTimeoutRef.current)
-    }
-    addToastTimeoutRef.current = setTimeout(() => {
-      setJustAddedItem('')
-    }, 1500)
   }
 
+  const handleAddItem = (item) => {
+    // If item has variants OR add-ons, open selector
+    if ((item.has_variants && item.variants?.length > 0) || item.has_addons) {
+      setSelectedItem(item)
+      setShowVariantSelector(true)
+    } else {
+      addToCart(item)
+      
+      // Show simple toast feedback
+      const toast = document.getElementById('toast-feedback');
+      if (toast) {
+        toast.textContent = `Added ${item.name}`;
+        toast.className = "show";
+        // Clear existing timeout to restart duration
+        if (addToastTimeoutRef.current) clearTimeout(addToastTimeoutRef.current);
+        addToastTimeoutRef.current = setTimeout(() => { 
+          toast.className = toast.className.replace("show", ""); 
+        }, 2000);
+      }
+    }
+  }
   const updateCartItem = (itemId, quantity) => {
     if (quantity === 0) setCart(prev => prev.filter(c => c.id !== itemId))
     else setCart(prev => prev.map(c => c.id === itemId ? { ...c, quantity } : c))
@@ -780,7 +826,7 @@ export default function OrderPage() {
                         item={item}
                         quantity={passQty}
                         badge={badge}
-                        onAdd={() => addToCart(item)}
+                        onAdd={() => handleAddItem(item)}
                         onRemove={() => updateCartItem(item.id, passQty - 1)}
                         onEdit={item.has_variants ? () => setEditingVariantItem(item) : undefined}
                         showImage={true}
@@ -930,7 +976,7 @@ export default function OrderPage() {
                           </div>
                         ) : !showStepper ? (
                           <button
-                            onClick={(e) => { e.stopPropagation(); addToCart(item); }}
+                            onClick={(e) => { e.stopPropagation(); handleAddItem(item); }}
                             style={{
                               padding: '10px 24px',
                               background: '#ffffff',

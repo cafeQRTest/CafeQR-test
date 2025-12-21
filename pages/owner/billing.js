@@ -42,7 +42,7 @@ export default function BillingPage() {
   const { restaurant, loading: restLoading } = useRestaurant();
   
   const [range, setRange] = useState({
-    start: new Date(new Date().setHours(0, 0, 0, 0)),
+    start: new Date(new Date().setDate(new Date().getDate() - 30)),
     end: new Date()
   });
 
@@ -101,15 +101,15 @@ export default function BillingPage() {
     setLoading(true);
     setError('');
     try {
-      const from = range.start.toISOString().slice(0, 10);
-      const to = range.end.toISOString().slice(0, 10);
+      // Convert IST date range to UTC for database query
+      const { startUtc, endUtc } = istSpanFromDatesUtcISO(range.start, range.end);
       
       const { data, error } = await supabase
         .from('invoices')
         .select('*')
         .eq('restaurant_id', restaurant.id)
-        .gte('invoice_date', from)
-        .lte('invoice_date', to)
+        .gte('invoice_date', startUtc)
+        .lte('invoice_date', endUtc)
         .order('invoice_date', { ascending: false });
 
       if (error) throw error;
@@ -570,10 +570,6 @@ const exportHsnSummary = async () => {
                   </div>
 
                   <div className="summary-section">
-                    <div className="sum-row">
-                      <span>Subtotal (Ex. Tax)</span>
-                      <span>{formatMoney(selectedInvoice.subtotal_ex_tax)}</span>
-                    </div>
                     <div className="sum-row tax">
                       <span>GST Total</span>
                       <span>{formatMoney(selectedInvoice.total_tax)}</span>

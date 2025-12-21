@@ -2407,19 +2407,7 @@ export default function MenuPage() {
   }
 }
       `}</style>
-      {showImageImport && (
-        <MenuImageImport
-          restaurantId={restaurantId}
-          existingItems={items}
-          onClose={() => setShowImageImport(false)}
-          onImported={(newItems) => {
-            if (newItems && newItems.length) {
-              setItems(prev => [...newItems, ...prev]);
-              // Also refresh cache/categories if implicit
-            }
-          }}
-        />
-      )}
     </div>
   );
 }
+

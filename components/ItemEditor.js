@@ -44,6 +44,10 @@ export default function ItemEditor({
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [variantPrices, setVariantPrices] = useState([]);
 
+  // Upsells State (formerly Add-ons)
+  const [upsellCandidates, setUpsellCandidates] = useState([]); // All other active menu items
+  const [selectedUpsells, setSelectedUpsells] = useState(new Set()); // Set of item IDs
+
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
@@ -87,6 +91,11 @@ export default function ItemEditor({
   const [newVariantName, setNewVariantName] = useState("");
   const [newVariantOptions, setNewVariantOptions] = useState([""]);
   const [newVariantErr, setNewVariantErr] = useState("");
+
+  // Upsell Picker Modal State
+  const [showUpsellModal, setShowUpsellModal] = useState(false);
+  const [upsellSearch, setUpsellSearch] = useState("");
+  const [tempSelectedUpsells, setTempSelectedUpsells] = useState(new Set());
 
   useEffect(() => {
 // ... existing code ...
@@ -169,6 +178,42 @@ export default function ItemEditor({
     fetchTemplates();
   }, [open, supabase]);
 
+  // Fetch Upsell Candidates (other menu items)
+  useEffect(() => {
+    if (!supabase || !open || !restaurantId) return;
+    const fetchCandidates = async () => {
+      let q = supabase
+        .from('menu_items')
+        .select('id, name, price, category')
+        .eq('restaurant_id', restaurantId)
+        .eq('status', 'available'); // Only available items as candidates? Or all? Let's say available.
+      
+      // If editing, exclude self
+      if (item?.id) {
+        q = q.neq('id', item.id);
+      }
+
+      const { data } = await q.order('category').order('name');
+      if (data) setUpsellCandidates(data);
+    };
+    fetchCandidates();
+  }, [open, supabase, restaurantId, item?.id]);
+
+  // Load existing Upsell Links
+  useEffect(() => {
+    if (!supabase || !open || !item?.id) return;
+    const fetchLinks = async () => {
+       const { data } = await supabase
+         .from('menu_item_upsells')
+         .select('upsell_menu_item_id')
+         .eq('parent_menu_item_id', item.id);
+       if (data) {
+         setSelectedUpsells(new Set(data.map(d => d.upsell_menu_item_id)));
+       }
+    };
+    fetchLinks();
+  }, [open, item?.id, supabase]);
+
   // Initialize form data when modal opens
   useEffect(() => {
     if (open && !hasInitialized.current) {
@@ -202,6 +247,13 @@ export default function ItemEditor({
             setSelectedTemplate(data.selectedTemplate || null);
             setVariantPrices(data.variantPrices || []);
             
+            // Restore addons/upsells
+            if (data.selectedUpsells) {
+               setSelectedUpsells(new Set(data.selectedUpsells));
+            } else if (data.selectedAddons) {
+                // migration from draft? Just ignore
+            }
+
             restored = true;
           }
         } catch (e) {
@@ -224,8 +276,10 @@ export default function ItemEditor({
         setCessRate(item?.compensation_cess_rate ?? 0);
         setImageUrl(item?.image_url || "");
         setHasVariants(!!item?.has_variants);
+        setHasVariants(!!item?.has_variants);
         setSelectedTemplate(null);
         setVariantPrices([]);
+        setSelectedUpsells(new Set());
         setImageFile(null);
       }
       setErr("");
@@ -242,11 +296,17 @@ export default function ItemEditor({
         id: item?.id || null,
         code, name, price, category, status, veg, isPopular,
         hsn, taxRate, isPackaged, cessRate, imageUrl, hasVariants,
-        selectedTemplate, variantPrices
+        id: item?.id || null,
+        code, name, price, category, status, veg, isPopular,
+        hsn, taxRate, isPackaged, cessRate, imageUrl, hasVariants,
+        id: item?.id || null,
+        code, name, price, category, status, veg, isPopular,
+        hsn, taxRate, isPackaged, cessRate, imageUrl, hasVariants,
+        selectedTemplate, variantPrices, selectedUpsells: Array.from(selectedUpsells)
       };
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(formData));
     }
-  }, [open, item, code, name, price, category, status, veg, isPopular, hsn, taxRate, isPackaged, cessRate, imageUrl, hasVariants, selectedTemplate, variantPrices]);
+  }, [open, item, code, name, price, category, status, veg, isPopular, hsn, taxRate, isPackaged, cessRate, imageUrl, hasVariants, selectedTemplate, variantPrices, selectedUpsells]);
 
   const clearDraft = () => {
     sessionStorage.removeItem(STORAGE_KEY);
@@ -391,6 +451,25 @@ export default function ItemEditor({
     await supabase.from('variant_pricing').insert(pricingData);
   };
 
+  const saveUpsells = async (menuItemId) => {
+    // Current links
+    const { data: existing } = await supabase.from('menu_item_upsells').select('upsell_menu_item_id').eq('parent_menu_item_id', menuItemId);
+    const existingIds = new Set((existing || []).map(e => e.upsell_menu_item_id));
+
+    const toAdd = [...selectedUpsells].filter(id => !existingIds.has(id));
+    const toRemove = [...existingIds].filter(id => !selectedUpsells.has(id));
+
+    if (toRemove.length > 0) {
+      await supabase.from('menu_item_upsells').delete().eq('parent_menu_item_id', menuItemId).in('upsell_menu_item_id', toRemove);
+    }
+    if (toAdd.length > 0) {
+      await supabase.from('menu_item_upsells').insert(toAdd.map(uid => ({
+        parent_menu_item_id: menuItemId,
+        upsell_menu_item_id: uid
+      })));
+    }
+  };
+
   const save = async (e) => {
     e.preventDefault();
     
@@ -483,6 +562,7 @@ if (code.trim()) {
       // Save variants
       if (savedItemId) {
         await saveVariants(savedItemId);
+        await saveUpsells(savedItemId);
       }
 
       if (!isEdit && savedItemId) {
@@ -884,6 +964,89 @@ if (code.trim()) {
           )}
         </div>
 
+        {/* Upsells (Add-ons) Section Minimal Premium */}
+        <div style={{ marginTop: 24 }}>
+           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 16 }}>
+             <div className="ie-label" style={{ margin: 0, fontSize: 15, color: '#1f2937' }}>Recommended Add-ons</div>
+             {selectedUpsells.size === 0 && (
+                <span style={{ fontSize: 12, color: '#9ca3af' }}>Optional</span>
+             )}
+           </div>
+           
+           {/* Selected List - Premium Dynamic Chips */}
+           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: selectedUpsells.size > 0 ? 12 : 0 }}>
+             {[...selectedUpsells].map((id) => {
+               const uItem = upsellCandidates.find(u => u.id === id);
+               if (!uItem) return null;
+               return (
+                 <div key={id} style={{
+                   display: 'inline-flex', alignItems: 'center', gap: 8,
+                   padding: '8px 16px', 
+                   background: 'white',
+                   border: '1px solid #fdba74',
+                   borderRadius: 99,
+                   fontSize: 15,
+                   color: '#334155',
+                   transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                   cursor: 'default',
+                   boxShadow: '0 1px 2px rgba(249, 115, 22, 0.05)'
+                 }}
+                 onMouseEnter={(e) => { 
+                   e.currentTarget.style.background = '#fff7ed';
+                   e.currentTarget.style.boxShadow = '0 4px 12px rgba(249, 115, 22, 0.15)'; 
+                   e.currentTarget.style.transform = 'translateY(-1px)';
+                 }}
+                 onMouseLeave={(e) => { 
+                   e.currentTarget.style.background = 'white';
+                   e.currentTarget.style.boxShadow = '0 1px 2px rgba(249, 115, 22, 0.05)'; 
+                   e.currentTarget.style.transform = 'none';
+                 }}
+                 >
+                   <span style={{ fontWeight: 600, color: '#0f172a', letterSpacing: '-0.01em' }}>{uItem.name}</span>
+                   <span style={{ fontSize: 13, color: '#94a3b8', fontWeight: 500 }}>₹{uItem.price}</span>
+                   <button 
+                     type="button" 
+                     onClick={() => {
+                        setSelectedUpsells(prev => {
+                          const next = new Set(prev);
+                          next.delete(id);
+                          return next;
+                        });
+                     }}
+                     style={{ 
+                       border: 'none', background: '#e2e8f0', color: '#64748b', 
+                       cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                       width: 22, height: 22, borderRadius: '50%', padding: 0, marginLeft: 6,
+                       transition: 'all 0.2s',
+                       fontSize: 16, lineHeight: 0.5
+                     }}
+                     onMouseEnter={(e) => { e.currentTarget.style.background = '#cbd5e1'; e.currentTarget.style.color = '#1e293b'; }}
+                     onMouseLeave={(e) => { e.currentTarget.style.background = '#e2e8f0'; e.currentTarget.style.color = '#64748b'; }}
+                   >
+                     &times;
+                   </button>
+                 </div>
+               );
+             })}
+           </div>
+
+           <button 
+             type="button" 
+             onClick={() => {
+               setTempSelectedUpsells(new Set(selectedUpsells));
+               setShowUpsellModal(true);
+             }}
+             style={{ 
+               background: 'none', border: 'none', padding: 0,
+               color: '#f97316', fontSize: 14, fontWeight: 500,
+               cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+               marginTop: 8
+             }}
+           >
+             <span style={{ fontSize: 18 }}>+</span> Add Add-ons from Menu
+           </button>
+        </div>
+
 
         </div>
 
@@ -979,6 +1142,94 @@ if (code.trim()) {
               >
                 Add
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showUpsellModal && (
+        <div className="ie-overlay-inner" onClick={() => setShowUpsellModal(false)}>
+          <div className="ie-modal-inner" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 450, height: '70vh', display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }}>
+            
+            {/* Header */}
+            <div style={{ padding: '12px 16px', borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', background: '#f8fafc' }}>
+              <button 
+                onClick={() => setShowUpsellModal(false)}
+                style={{ background: 'none', border: 'none', fontSize: 22, color: '#94a3b8', cursor: 'pointer', padding: 4, display: 'flex', lineHeight: 1 }}
+              >
+                &times;
+              </button>
+            </div>
+
+            <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+                <input
+                  value={upsellSearch}
+                  onChange={(e) => setUpsellSearch(e.target.value)}
+                  className="ie-input ie-search-focus"
+                  placeholder="Search menu items..."
+                  autoFocus
+                  style={{ marginBottom: 16, borderRadius: 99, paddingLeft: 16, border: '1px solid #fdba74', outline: 'none', boxShadow: '0 0 0 1px #fdba74' }}
+                />
+                
+                <div style={{ flex: 1, overflowY: 'auto', paddingRight: 4 }}>
+                  {upsellCandidates
+                    .filter(u => !upsellSearch || u.name.toLowerCase().includes(upsellSearch.toLowerCase()))
+                    .length === 0 ? (
+                      <div style={{ padding: 40, textAlign: 'center', color: '#9ca3af', fontSize: 14 }}>
+                        No items found.
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        {upsellCandidates
+                          .filter(u => !upsellSearch || u.name.toLowerCase().includes(upsellSearch.toLowerCase()))
+                          .map(u => {
+                            const isSelected = tempSelectedUpsells.has(u.id);
+                            return (
+                              <div 
+                                key={u.id}
+                                onClick={() => {
+                                  setTempSelectedUpsells(prev => {
+                                    const next = new Set(prev);
+                                    next.has(u.id) ? next.delete(u.id) : next.add(u.id);
+                                    return next;
+                                  });
+                                }}
+                                style={{ 
+                                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                  padding: '10px 4px', 
+                                  borderBottom: '1px solid #f1f5f9',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                                   <span style={{ fontSize: 14, color: '#334155' }}>{u.name}</span>
+                                   <span style={{ fontSize: 12, color: '#94a3b8' }}>₹{u.price}</span>
+                                 </div>
+                                 
+                                 <div style={{ width: 20, display: 'flex', justifyContent: 'center' }}>
+                                   {isSelected && (
+                                     <span style={{ color: '#16a34a', fontSize: 16 }}>✓</span>
+                                   )}
+                                 </div>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    )}
+                </div>
+            </div>
+
+            <div style={{ padding: '16px 20px', borderTop: '1px solid #f3f4f6', background: 'white' }}>
+               <button 
+                 onClick={() => {
+                   setSelectedUpsells(new Set(tempSelectedUpsells));
+                   setShowUpsellModal(false);
+                 }} 
+                 className="ie-btn-primary" 
+                 style={{ width: '100%', borderRadius: 12, background: '#f97316', border: 'none', padding: '12px', fontSize: 16, fontWeight: 600, color: 'white' }}
+               >
+                 Done
+               </button>
             </div>
           </div>
         </div>
@@ -1429,8 +1680,15 @@ if (code.trim()) {
         .ie-price-input-wrapper:focus-within { border-color: #652ae2; background: white; }
         .ie-price-input-wrapper .prefix { font-size: 15px; color: #6b7280; font-weight: 600; }
         .ie-price-input { width: 90px; padding: 6px 8px; border-radius: 6px; border: none; font-size: 14px; font-weight: 600; outline: none; background: transparent; color: #111827; }
+        .ie-price-input { width: 90px; padding: 6px 8px; border-radius: 6px; border: none; font-size: 14px; font-weight: 600; outline: none; background: transparent; color: #111827; }
         .ie-avail-label { display: flex; align-items: center; gap: 7px; font-size: 13px; color: #4b5563; cursor: pointer; user-select: none; font-weight: 500; padding: 4px 8px; border-radius: 6px; transition: background 0.15s ease; }
         .ie-avail-label:hover { background: #f3f4f6; }
+
+        .ie-addons-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin-top: 8px; }
+        .ie-addon-item { display: flex; align-items: center; gap: 10px; background: #f9fafb; padding: 10px 14px; border-radius: 8px; border: 1px solid #e5e7eb; cursor: pointer; transition: all 0.2s; }
+        .ie-addon-item:hover { border-color: #d1d5db; background: white; }
+        .ie-addon-checkbox { width: 16px; height: 16px; accent-color: #059669; }
+        .ie-addon-name { font-size: 14px; font-weight: 500; color: #374151; }
       `}</style>
     </div>
   );

@@ -29,10 +29,19 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false, mode 
   const total = Number(amount || 0);
   const disabled = busy || submitting;
 
-
   const choiceBox = (active) => ({
-    display: 'flex', gap: 10, alignItems: 'center', padding: 12, borderRadius: 8, cursor: disabled ? 'not-allowed' : 'pointer',
-    border: `2px solid ${active ? BRAND.orange : BRAND.border}`, background: active ? BRAND.bgSoft : '#fff', color: BRAND.text
+    display: 'flex',
+    gap: 12,
+    alignItems: 'center',
+    padding: '16px 18px',
+    borderRadius: 12,
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    border: `2px solid ${active ? BRAND.orange : '#e5e7eb'}`,
+    background: active ? `linear-gradient(135deg, ${BRAND.bgSoft} 0%, #ffffff 100%)` : '#fff',
+    color: BRAND.text,
+    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+    boxShadow: active ? `0 4px 12px ${BRAND.orange}20` : '0 1px 3px rgba(0,0,0,0.05)',
+    transform: active ? 'translateY(-2px)' : 'none'
   });
 
   const handleMethodSelect = (method) => {
@@ -68,79 +77,266 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false, mode 
     } finally { setSubmitting(false); }
   };
 
-
-
-
-
   return (
-    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000}}>
-      <div style={{background:'#fff',padding:20,borderRadius:12,maxWidth:480,width:'92%',maxHeight:'90vh',overflowY:'auto',boxShadow:'0 20px 50px rgba(0,0,0,.25)'}}>
-        <h3 style={{margin:'0 0 6px',color:'#111827'}}>Payment Confirmation</h3>
-        <p style={{margin:'0 0 12px',color:'#111827'}}>Amount: ₹{total.toFixed(2)}</p>
+    <div style={{
+      position: 'fixed',
+      inset: 0,
+      background: 'rgba(15, 23, 42, 0.6)',
+      backdropFilter: 'blur(4px)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 1000,
+      padding: '20px',
+      animation: 'fadeIn 0.2s ease-out'
+    }}>
+      <div style={{
+        background: '#fff',
+        padding: '20px',
+        borderRadius: 16,
+        maxWidth: 440,
+        width: '100%',
+        maxHeight: '90vh',
+        overflowY: 'auto',
+        boxShadow: '0 20px 40px -12px rgba(0, 0, 0, 0.2)',
+        animation: 'slideUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)'
+      }}>
+        <div style={{ marginBottom: 16 }}>
+          <h3 style={{
+            margin: '0 0 8px',
+            fontSize: '18px',
+            fontWeight: 700,
+            color: '#0f172a'
+          }}>
+            Payment Confirmation
+          </h3>
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            background: `linear-gradient(135deg, ${BRAND.bgSoft} 0%, #ffffff 100%)`,
+            padding: '6px 12px',
+            borderRadius: 8,
+            border: `2px solid ${BRAND.orange}`
+          }}>
+            <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>Amount:</span>
+            <span style={{ fontSize: '16px', fontWeight: 700, color: BRAND.orange }}>₹{total.toFixed(2)}</span>
+          </div>
+        </div>
 
-        <div style={{display:'grid',gap:10,margin:'12px 0'}}>
-          <label style={choiceBox(paymentMethod==='cash')}>
-            <input type="radio" value="cash" checked={paymentMethod==='cash'} onChange={(e)=>handleMethodSelect(e.target.value)} disabled={disabled}/>
-            <span>Cash</span>
+        <div style={{ display: 'grid', gap: 10, marginBottom: 16 }}>
+          <label style={choiceBox(paymentMethod === 'cash')} onClick={() => handleMethodSelect('cash')}>
+            <div style={{
+              width: 18,
+              height: 18,
+              borderRadius: '50%',
+              border: `2px solid ${paymentMethod === 'cash' ? BRAND.orange : '#cbd5e1'}`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0
+            }}>
+              {paymentMethod === 'cash' && (
+                <div style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  background: BRAND.orange
+                }} />
+              )}
+            </div>
+            <span style={{ fontSize: '14px', fontWeight: 600 }}>💵 Cash</span>
           </label>
-          <label style={choiceBox(paymentMethod==='online')}>
-            <input type="radio" value="online" checked={paymentMethod==='online'} onChange={(e)=>handleMethodSelect(e.target.value)} disabled={disabled}/>
-            <span>Online (UPI/Card)</span>
+
+          <label style={choiceBox(paymentMethod === 'online')} onClick={() => handleMethodSelect('online')}>
+            <div style={{
+              width: 18,
+              height: 18,
+              borderRadius: '50%',
+              border: `2px solid ${paymentMethod === 'online' ? BRAND.orange : '#cbd5e1'}`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0
+            }}>
+              {paymentMethod === 'online' && (
+                <div style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  background: BRAND.orange
+                }} />
+              )}
+            </div>
+            <span style={{ fontSize: '14px', fontWeight: 600 }}>💳 Online (UPI/Card)</span>
           </label>
-          <label style={choiceBox(paymentMethod==='mixed')}>
-            <input type="radio" value="mixed" checked={paymentMethod==='mixed'} onChange={(e)=>handleMethodSelect(e.target.value)} disabled={disabled}/>
-            <span>Mixed (Cash + Online)</span>
+
+          <label style={choiceBox(paymentMethod === 'mixed')} onClick={() => handleMethodSelect('mixed')}>
+            <div style={{
+              width: 18,
+              height: 18,
+              borderRadius: '50%',
+              border: `2px solid ${paymentMethod === 'mixed' ? BRAND.orange : '#cbd5e1'}`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0
+            }}>
+              {paymentMethod === 'mixed' && (
+                <div style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  background: BRAND.orange
+                }} />
+              )}
+            </div>
+            <span style={{ fontSize: '14px', fontWeight: 600 }}>🔀 Mixed (Cash + Online)</span>
           </label>
         </div>
 
         {showMixedForm && (
-          <div style={{background:'#fff',border:`1px solid ${BRAND.border}`,borderRadius:10,padding:12,marginBottom:10}}>
-            <div style={{display:'grid',gap:10}}>
-              <div><label>Cash Amount (₹)</label>
-                <input type="number" min="0" step="0.01" value={cashAmount} onChange={(e)=>setCashAmount(e.target.value)} style={{width:'100%'}} disabled={disabled}/>
+          <div style={{
+            background: '#f8fafc',
+            border: '1px solid #e2e8f0',
+            borderRadius: 10,
+            padding: 12,
+            marginBottom: 16
+          }}>
+            <div style={{ display: 'grid', gap: 10 }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: 4, fontSize: '12px', fontWeight: 600, color: '#475569' }}>
+                  Cash Amount (₹)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={cashAmount}
+                  onChange={(e) => setCashAmount(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '8px 10px',
+                    border: '2px solid #e2e8f0',
+                    borderRadius: 6,
+                    fontSize: '14px',
+                    fontWeight: 600
+                  }}
+                  disabled={disabled}
+                />
               </div>
-              <div><label>Online Amount (₹)</label>
-                <input type="number" min="0" step="0.01" value={onlineAmount} onChange={(e)=>setOnlineAmount(e.target.value)} style={{width:'100%'}} disabled={disabled}/>
+              <div>
+                <label style={{ display: 'block', marginBottom: 4, fontSize: '12px', fontWeight: 600, color: '#475569' }}>
+                  Online Amount (₹)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={onlineAmount}
+                  onChange={(e) => setOnlineAmount(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '8px 10px',
+                    border: '2px solid #e2e8f0',
+                    borderRadius: 6,
+                    fontSize: '14px',
+                    fontWeight: 600
+                  }}
+                  disabled={disabled}
+                />
               </div>
-              <div><label>Online Method</label>
-                <div style={{marginTop: 4}}>
-                  <NiceSelect
-                    value={onlineMethod}
-                    onChange={setOnlineMethod}
-                    options={[
-                      { value: 'upi', label: 'UPI' },
-                      { value: 'card', label: 'Card' },
-                      { value: 'netbanking', label: 'Net Banking' },
-                      { value: 'wallet', label: 'Wallet' }
-                    ]}
-                  />
-                </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: 4, fontSize: '12px', fontWeight: 600, color: '#475569' }}>
+                  Online Method
+                </label>
+                <NiceSelect
+                  value={onlineMethod}
+                  onChange={setOnlineMethod}
+                  options={[
+                    { value: 'upi', label: 'UPI' },
+                    { value: 'card', label: 'Card' },
+                    { value: 'netbanking', label: 'Net Banking' },
+                    { value: 'wallet', label: 'Wallet' }
+                  ]}
+                />
               </div>
-              <div style={{background:BRAND.bgSoft,padding:8,borderLeft:`4px solid ${BRAND.orange}`,borderRadius:6,color:BRAND.text}}>
-                Total ₹{total.toFixed(2)} → ₹{cashAmount||0} + ₹{onlineAmount||0} ({onlineMethod.toUpperCase()})
+              <div style={{
+                background: `linear-gradient(135deg, ${BRAND.bgSoft} 0%, #ffffff 100%)`,
+                padding: 10,
+                borderLeft: `3px solid ${BRAND.orange}`,
+                borderRadius: 6,
+                fontSize: '13px',
+                fontWeight: 600,
+                color: '#1e293b'
+              }}>
+                Total ₹{total.toFixed(2)} → ₹{cashAmount || 0} + ₹{onlineAmount || 0} ({onlineMethod.toUpperCase()})
               </div>
             </div>
           </div>
         )}
 
-        <div style={{display:'flex',gap:10,marginTop:10}}>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button
+            onClick={onCancel}
+            disabled={disabled}
+            style={{
+              flex: 1,
+              background: '#fff',
+              color: '#64748b',
+              border: '2px solid #e2e8f0',
+              padding: '10px',
+              borderRadius: 10,
+              fontSize: '14px',
+              fontWeight: 600,
+              cursor: disabled ? 'not-allowed' : 'pointer',
+              transition: 'all 0.2s'
+            }}
+            onMouseEnter={(e) => {
+              if (!disabled) {
+                e.currentTarget.style.background = '#f8fafc';
+                e.currentTarget.style.borderColor = '#cbd5e1';
+              }
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = '#fff';
+              e.currentTarget.style.borderColor = '#e2e8f0';
+            }}
+          >
+            Cancel
+          </button>
           <button
             onClick={handleConfirm}
             disabled={disabled}
             style={{
-              flex:1, background: disabled ? '#fdba74' : BRAND.orange, color:'#fff', border:'none', padding:12, borderRadius:10,
-              cursor: disabled ? 'not-allowed' : 'pointer', fontWeight:700
+              flex: 2,
+              background: disabled ? '#cbd5e1' : `linear-gradient(135deg, ${BRAND.orange} 0%, ${BRAND.orangeDark} 100%)`,
+              color: '#fff',
+              border: 'none',
+              padding: '10px',
+              borderRadius: 10,
+              fontSize: '14px',
+              fontWeight: 700,
+              cursor: disabled ? 'not-allowed' : 'pointer',
+              boxShadow: disabled ? 'none' : `0 6px 12px ${BRAND.orange}40`,
+              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.3px'
+            }}
+            onMouseEnter={(e) => {
+              if (!disabled) {
+                e.currentTarget.style.transform = 'translateY(-1px)';
+                e.currentTarget.style.boxShadow = `0 8px 16px ${BRAND.orange}50`;
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!disabled) {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = `0 6px 12px ${BRAND.orange}40`;
+              }
             }}
           >
-            {disabled ? 'Processing…' : 'Confirm'}
-          </button>
-          <button
-            onClick={onCancel}
-            disabled={disabled}
-            style={{ flex:1, background:'#fff', color:BRAND.text, border:`1px solid ${BRAND.border}`, padding:12, borderRadius:10,
-              cursor: disabled ? 'not-allowed' : 'pointer' }}
-          >
-            Cancel
+            {disabled ? 'Processing…' : 'Confirm Payment'}
           </button>
         </div>
       </div>
@@ -448,6 +644,9 @@ const [orderMode, setOrderMode] = useState('settle');
     prices_include_tax: true
   });
 
+  // Upsells for cart
+  const [cartUpsells, setCartUpsells] = useState([]);
+
   const menuMapRef = useRef(new Map());
 
   // Helpers
@@ -583,16 +782,52 @@ const [orderMode, setOrderMode] = useState('settle');
             });
           });
         }
+
+        // Fetch Upsells (Add-ons)
+        const { data: upsellsData } = await supabase
+          .from('menu_items_with_upsells')
+          .select('menu_item_id, upsells')
+          .in('menu_item_id', (menu || []).map(i => i.id));
         
-        // Transform menu data with variants
+        const upsellMap = new Map();
+        (upsellsData || []).forEach(row => {
+            upsellMap.set(row.menu_item_id, row.upsells);
+        });
+        
+        // Transform menu data with variants and upsells
         const transformedMenu = (menu || []).map(item => {
           const variants = variantDataMap.get(item.id) || [];
           const templateName = item.menu_item_variants?.[0]?.variant_templates?.name || 'Options';
+
+          // Attach upsells
+          const rawUpsells = upsellMap.get(item.id) || [];
+          let addonGroups = [];
+          let hasAddons = false;
+
+          if (rawUpsells.length > 0) {
+             addonGroups = [{
+               id: 'upsells-group',
+               name: 'Suggested Extras',
+               min_selections: 0,
+               max_selections: null,
+               options: rawUpsells.map(u => ({
+                  id: u.id,
+                  name: u.name,
+                  price: u.price,
+                  is_active: u.status === 'available',
+                  veg: u.veg,
+                  image_url: u.image_url
+               }))
+             }];
+             hasAddons = true;
+          }
           
           return {
             ...item,
             variants: variants.sort((a, b) => a.display_order - b.display_order),
-            variant_template_name: item.has_variants ? templateName : null
+            variant_template_name: item.has_variants ? templateName : null,
+            addon_groups: addonGroups,
+            has_addons: hasAddons
           };
         });
         
@@ -686,6 +921,57 @@ if (profile?.features_credit_enabled) {
       localStorage.setItem('counter_orderMode', orderMode);
     }
   }, [orderMode]);
+
+  // Fetch upsells on cart change
+  useEffect(() => {
+    if (cart.length === 0) {
+      setCartUpsells([]);
+      return;
+    }
+
+    const fetchUpsells = async () => {
+      const itemIds = [...new Set(cart.map(i => i.id))];
+      const { data } = await supabase
+        .from('menu_items_with_upsells')
+        .select('upsells')
+        .in('menu_item_id', itemIds);
+
+      // Aggregate
+      const allUpsells = [];
+      data?.forEach(row => {
+          if (Array.isArray(row.upsells)) {
+             allUpsells.push(...row.upsells);
+          }
+      });
+      
+      // Dedupe by ID and remove if already in cart
+      const uniqueMap = new Map();
+      allUpsells.forEach(u => uniqueMap.set(u.id, u));
+      
+      // Filter out items already in cart
+      const final = [];
+      uniqueMap.forEach(u => {
+         if (!cart.some(c => c.id === u.id)) {
+            final.push(u);
+         }
+      });
+      
+      setCartUpsells(final);
+    };
+
+    fetchUpsells();
+  }, [cart, supabase]);
+
+  const addToCartDirect = (item) => {
+    // Check if exists (simple check, no variants)
+    const exists = cart.find(c => c.id === item.id);
+    if (exists) {
+       updateCartItem(exists.cartId, exists.quantity + 1);
+    } else {
+       // Add new
+       addItemToCart(item);
+    }
+  };
 
   useEffect(() => {
   if (!restaurantId) return;
@@ -921,16 +1207,16 @@ const loadCreditCustomers = async () => {
       return;
     }
     
-    // Check if item has variants
-    if (item.has_variants && item.variants?.length > 0) {
-      setSelectedItem(item);
-      setShowVariantSelector(true);
-      return;
-    }
-    
-    // No variants - add directly
-    addItemToCart(item);
-  };
+    // Check if item has variants OR add-ons
+  if ((item.has_variants && item.variants?.length > 0) || item.has_addons) {
+    setSelectedItem(item);
+    setShowVariantSelector(true);
+    return;
+  }
+  
+  // No variants - add directly
+  addItemToCart(item);
+};
   
   const addItemToCart = (itemWithVariant) => {
     // Create unique cart ID
@@ -1797,28 +2083,47 @@ const isVariantItem = !!item.hasvariants && (item.variants?.length || 0) > 0;
                         borderRadius: 8,
                       }}
                     >
-                      {/* Top Row: Name and Quantity Controls */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-                        <div style={{ flex: 1, paddingRight: 8 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                            <div style={{ fontSize: 15, fontWeight: 600, color: '#111827', lineHeight: 1.3 }}>
-                              {i.name}
-                            </div>
-                            {/* Variant badge inline */}
-                            {i.variant_name && (
-                              <span style={{ 
-                                fontSize: 11, 
-                                fontWeight: 600, 
-                                color: THEME.main,
-                                background: THEME.soft,
-                                padding: '2px 8px',
-                                borderRadius: 4,
-                              }}>
-                                {i.variant_name}
-                              </span>
-                            )}
+                      {/* Flex container for Image + Details */}
+                      <div style={{ display: 'flex', gap: 12 }}>
+                        {i.image_url && (
+                          <div style={{ flexShrink: 0 }}>
+                            <img 
+                              src={i.image_url} 
+                              alt={i.name} 
+                              style={{ 
+                                width: 48, 
+                                height: 48, 
+                                borderRadius: 8, 
+                                objectFit: 'cover',
+                                border: '1px solid #f3f4f6'
+                              }} 
+                            />
                           </div>
-                        </div>
+                        )}
+                        
+                        <div style={{ flex: 1 }}>
+                          {/* Top Row: Name and Quantity Controls */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                            <div style={{ flex: 1, paddingRight: 8 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                <div style={{ fontSize: 15, fontWeight: 600, color: '#111827', lineHeight: 1.3 }}>
+                                  {i.name}
+                                </div>
+                                {/* Variant badge inline */}
+                                {i.variant_name && (
+                                  <span style={{ 
+                                    fontSize: 11, 
+                                    fontWeight: 600, 
+                                    color: THEME.main,
+                                    background: THEME.soft,
+                                    padding: '2px 8px',
+                                    borderRadius: 4,
+                                  }}>
+                                    {i.variant_name}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
                         
                         {/* Quantity Controls - Compact */}
                         <div style={{
@@ -1940,7 +2245,82 @@ onClick={() => {
                         </div>
                       </div>
                     </div>
+                  </div>
+                </div>
                   ))}
+                </div>
+              )}
+
+              {/* Complete Your Meal Upsells */}
+              {cartUpsells.length > 0 && (
+                <div style={{ padding: '12px 20px', background: '#fafafa', borderTop: '1px solid #e5e7eb' }}>
+                  <h4 style={{ margin: '0 0 10px 0', fontSize: '14px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Suggested Add-ons
+                  </h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {cartUpsells.map(u => (
+                      <div 
+                        key={u.id} 
+                        style={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          justifyContent: 'space-between',
+                          padding: '8px 12px',
+                          background: '#fff',
+                          borderRadius: '8px',
+                          border: '1px solid #e5e7eb',
+                          transition: 'all 0.2s'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.borderColor = THEME.main;
+                          e.currentTarget.style.boxShadow = `0 2px 8px ${THEME.main}20`;
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.borderColor = '#e5e7eb';
+                          e.currentTarget.style.boxShadow = 'none';
+                        }}
+                      >
+                        <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontSize: '12px' }}>
+                            {u.veg ? '🟢' : '🔺'}
+                          </span>
+                          <div>
+                            <div style={{ fontSize: '14px', fontWeight: 600, color: '#1e293b' }}>
+                              {u.name}
+                            </div>
+                            <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 600 }}>
+                              ₹{Number(u.price).toFixed(2)}
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => addToCartDirect(u)}
+                          style={{
+                            padding: '6px 16px',
+                            background: THEME.main,
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '6px',
+                            fontSize: '13px',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            transition: 'all 0.2s',
+                            boxShadow: `0 2px 4px ${THEME.main}30`
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = THEME.dark;
+                            e.currentTarget.style.transform = 'scale(1.05)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = THEME.main;
+                            e.currentTarget.style.transform = 'scale(1)';
+                          }}
+                        >
+                          ADD
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

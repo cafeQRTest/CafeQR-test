@@ -31,7 +31,8 @@ export default function MenuItemCard({
   maxQuantity = 999,
   decimalPlaces = 2,
   isActive = false,
-  highlightColor
+  highlightColor,
+  compact = false
 }) {
   const hasImage = !!item.image_url;
   const isOutOfStock =
@@ -64,7 +65,6 @@ export default function MenuItemCard({
     // Round to required decimal places only
     return Number(value.toFixed(decimalPlaces));
   };
-
 
   const handleQtyInputChange = (e) => {
     const raw = e.target.value.replace(',', '.');
@@ -149,24 +149,35 @@ export default function MenuItemCard({
       onAdd(item);
     }
   };
+  
+  // Dynamic styles based on usage
+  const cardStyle = {
+    ...styles.card,
+    ...(compact ? {
+      minHeight: 'auto',
+      maxHeight: 'none', // Allow it to shrink
+      borderRadius: '16px',
+    } : {}),
+    ...(isActive || quantity > 0 ? {
+      borderColor: 'var(--brand)',
+      boxShadow: '0 0 0 1px var(--brand) inset, 0 4px 12px rgba(0,0,0,0.05)',
+      background: 'linear-gradient(to bottom, var(--surface), var(--brand-50) 150%)'
+    } : {}),
+    ...(!showImage ? {
+      borderTop: `4px solid ${highlightColor || (isOutOfStock ? '#f97316' : '#16a34a')}`
+    } : (highlightColor ? {
+      borderBottom: `3px solid ${isOutOfStock ? '#cbd5e1' : highlightColor}`
+    } : {}))
+  };
 
-  const activeStyle = (isActive || quantity > 0) ? {
-    borderColor: 'var(--brand)',
-    boxShadow: '0 0 0 1px var(--brand) inset, 0 4px 12px rgba(0,0,0,0.05)',
-    background: 'linear-gradient(to bottom, var(--surface), var(--brand-50) 150%)'
-  } : {};
+  const imageContainerStyle = {
+    ...styles.imageContainer,
+    ...(compact ? { height: '100px' } : {})
+  };
 
   return (
     <div 
-      style={{
-        ...styles.card, 
-        ...activeStyle,
-        ...(!showImage ? {
-          borderTop: `4px solid ${highlightColor || (isOutOfStock ? '#f97316' : '#16a34a')}`
-        } : (highlightColor ? {
-          borderBottom: `3px solid ${isOutOfStock ? '#cbd5e1' : highlightColor}`
-        } : {}))
-      }}
+      style={cardStyle}
       onMouseEnter={(e) => {
         e.currentTarget.style.transform = 'translateY(-4px)';
         e.currentTarget.style.boxShadow = '0 12px 30px rgba(0,0,0,0.08)';
@@ -177,7 +188,7 @@ export default function MenuItemCard({
       }}
     >
       {showImage && (
-        <div style={styles.imageContainer}>
+        <div style={imageContainerStyle}>
           {hasImage ? (
             <img
               src={item.image_url}
@@ -192,7 +203,7 @@ export default function MenuItemCard({
             />
           ) : (
             <div style={styles.placeholder}>
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <svg width={compact ? "32" : "48"} height={compact ? "32" : "48"} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 {/* Fork */}
                 <path d="M5 4V10C5 11.1 5.9 12 7 12V20" stroke="#cbd5e1" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                 <path d="M5 4H7M9 4H7M7 4V8" stroke="#cbd5e1" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -219,7 +230,7 @@ export default function MenuItemCard({
         </div>
       )}
 
-      <div style={styles.content}>
+      <div style={{...styles.content, ...(compact ? { padding: '12px' } : {})}}>
         <div style={styles.header}>
           <div
             style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}
@@ -229,11 +240,17 @@ export default function MenuItemCard({
                 {item.veg ? vegIcon : nonVegIcon}
               </div>
             )}
-            <h3 style={styles.title} title={item.name}>
+            <h3 style={{
+               ...styles.title, 
+               ...(compact ? { fontSize: '13px', lineHeight: '1.3', height: '34px' } : {}) 
+            }} title={item.name}>
               {item.name}
             </h3>
           </div>
-          <span style={styles.price}>
+          <span style={{
+             ...styles.price, 
+             ...(compact ? { fontSize: '14px' } : {})
+          }}>
             {item.has_variants && item.variants?.length > 0
               ? `₹${Number(item.variants[0]?.price || item.price).toFixed(
                   2
@@ -242,12 +259,15 @@ export default function MenuItemCard({
           </span>
         </div>
 
-        {item.category && <div style={styles.category}>{item.category}</div>}
+        {item.category && !compact && <div style={styles.category}>{item.category}</div>}
 
         <div style={styles.actions}>
           {isVariantItem ? (
             <button
-              style={styles.addButton}
+              style={{
+                ...styles.addButton,
+                ...(compact ? { padding: '8px', fontSize: '12px' } : {})
+              }}
               onClick={() => !isOutOfStock && onAdd?.(item)}
               disabled={isOutOfStock}
             >
@@ -280,7 +300,11 @@ export default function MenuItemCard({
                  </button>
               )}
               <button
-                style={{ ...styles.addButton, flex: 1 }}
+                style={{ 
+                  ...styles.addButton, 
+                  flex: 1,
+                  ...(compact ? { padding: '8px', fontSize: '13px' } : {})
+                }}
                 onClick={handleInitialAdd}
                 aria-label={`Add ${item.name}`}
                 disabled={isOutOfStock}

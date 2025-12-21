@@ -279,18 +279,10 @@ export default function OwnerOverview() {
 
                 <div style={{ marginTop: 24, padding: 16, background: BRAND.soft, borderRadius: 12, border: '1px solid #ffedd5' }}>
                    {Number(selectedOrder.total_tax || 0) > 0 && (
-                     <>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                           <span style={{ fontSize: 13, color: '#6b7280', fontWeight: 600 }}>Amount (Excl. Tax)</span>
-                           <span style={{ fontSize: 14, fontWeight: 700, color: '#374151' }}>
-                             {formatCurrency((Number(selectedOrder.total_inc_tax || 0)) - (Number(selectedOrder.total_tax || 0)))}
-                           </span>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-                           <span style={{ fontSize: 13, color: '#6b7280', fontWeight: 600 }}>Tax Amount</span>
-                           <span style={{ fontSize: 14, fontWeight: 700, color: '#374151' }}>{formatCurrency(Number(selectedOrder.total_tax || 0))}</span>
-                        </div>
-                     </>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+                         <span style={{ fontSize: 13, color: '#6b7280', fontWeight: 600 }}>Tax Amount</span>
+                         <span style={{ fontSize: 14, fontWeight: 700, color: '#374151' }}>{formatCurrency(Number(selectedOrder.total_tax || 0))}</span>
+                      </div>
                    )}
                    <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: Number(selectedOrder.total_tax || 0) > 0 ? 12 : 0, borderTop: Number(selectedOrder.total_tax || 0) > 0 ? '1px dashed #fdba74' : 'none' }}>
                       <span style={{ fontSize: 15, fontWeight: 800, color: '#111827' }}>Total Amount</span>
