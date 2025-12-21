@@ -157,13 +157,25 @@ export default function MenuItemCard({
   } : {};
 
   return (
-    <div style={{
-      ...styles.card, 
-      ...activeStyle,
-      ...(!showImage ? {
-        borderTop: `4px solid ${highlightColor || (isOutOfStock ? '#f97316' : '#16a34a')}`
-      } : {})
-    }}>
+    <div 
+      style={{
+        ...styles.card, 
+        ...activeStyle,
+        ...(!showImage ? {
+          borderTop: `4px solid ${highlightColor || (isOutOfStock ? '#f97316' : '#16a34a')}`
+        } : (highlightColor ? {
+          borderBottom: `3px solid ${isOutOfStock ? '#cbd5e1' : highlightColor}`
+        } : {}))
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = 'translateY(-4px)';
+        e.currentTarget.style.boxShadow = '0 12px 30px rgba(0,0,0,0.08)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = 'none';
+        e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.03)';
+      }}
+    >
       {showImage && (
         <div style={styles.imageContainer}>
           {hasImage ? (
@@ -180,7 +192,20 @@ export default function MenuItemCard({
             />
           ) : (
             <div style={styles.placeholder}>
-              <span style={{ fontSize: 32, opacity: 0.3 }}>🍽️</span>
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                {/* Fork */}
+                <path d="M5 4V10C5 11.1 5.9 12 7 12V20" stroke="#cbd5e1" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M5 4H7M9 4H7M7 4V8" stroke="#cbd5e1" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M9 4V10C9 11.1 8.1 12 7 12" stroke="#cbd5e1" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                
+                {/* Plate */}
+                <circle cx="12" cy="12" r="5" stroke="#cbd5e1" strokeWidth="1.5" fill="#cbd5e120"/>
+                <circle cx="12" cy="12" r="3" stroke="#cbd5e1" strokeWidth="1" opacity="0.5"/>
+
+                {/* Spoon */}
+                <path d="M17 12C18.1 12 19 11.1 19 10V6C19 4.9 18.1 4 17 4C15.9 4 15 4.9 15 6V10C15 11.1 15.9 12 17 12Z" stroke="#cbd5e1" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M17 12V20" stroke="#cbd5e1" strokeWidth="1.5" strokeLinecap="round"/>
+              </svg>
             </div>
           )}
           {isOutOfStock && (
@@ -331,10 +356,9 @@ export default function MenuItemCard({
 const styles = {
   card: {
     background: 'var(--surface)',
-    border: '1px solid var(--border)',
-    borderTop: '4px solid var(--brand)',
-    borderRadius: '16px',
-    boxShadow: '0 4px 20px -2px rgba(0, 0, 0, 0.03), 0 2px 6px -1px rgba(0, 0, 0, 0.02)',
+    border: '1px solid #f1f5f9',
+    borderRadius: '20px',
+    boxShadow: '0 4px 20px rgba(0,0,0,0.03)',
     overflow: 'hidden',
     display: 'flex',
     flexDirection: 'column',
@@ -408,19 +432,23 @@ const styles = {
   },
   price: {
     fontWeight: '800',
-    color: 'var(--brand)',
-    fontSize: '15px',
+    color: '#0f172a',
+    fontSize: '16px',
     whiteSpace: 'nowrap',
     letterSpacing: '-0.02em',
   },
   category: {
-    fontSize: '11px',
-    color: '#94a3b8',
+    fontSize: '10px',
+    color: '#64748b',
     textTransform: 'uppercase',
-    letterSpacing: '0.06em',
-    fontWeight: 600,
-    marginTop: 'auto', // push to bottom of flex content section
-    marginBottom: '12px',
+    letterSpacing: '0.04em',
+    fontWeight: 700,
+    background: '#f1f5f9',
+    padding: '2px 8px',
+    borderRadius: '99px',
+    alignSelf: 'flex-start',
+    marginTop: 'auto',
+    marginBottom: '8px',
   },
   variantsStart: {
     fontSize: '10px',
@@ -434,45 +462,46 @@ const styles = {
   addButton: {
     width: '100%',
     padding: '10px',
-    background: '#ffffff',
-    border: '1px solid var(--border)',
-    borderRadius: '100px', // pill
+    background: '#fff',
+    border: '1.5px solid var(--brand)',
+    borderRadius: '14px',
     color: 'var(--brand)',
-    fontWeight: '700',
-    fontSize: '13px',
+    fontWeight: '800',
+    fontSize: '14px',
     cursor: 'pointer',
-    boxShadow: '0 2px 5px rgba(0,0,0,0.03)',
-    transition: 'all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1)',
+    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     gap: '6px',
+    boxShadow: '0 4px 12px var(--brand)15',
   },
   counter: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    background: '#ffffff',
-    borderRadius: '100px', // pill
-    border: '1px solid var(--brand)',
-    padding: '2px',
-    boxShadow: '0 2px 8px -2px rgba(0, 0, 0, 0.08)',
+    background: '#f8fafc',
+    borderRadius: '14px',
+    border: '1px solid #e2e8f0',
+    padding: '4px',
+    gap: '4px',
   },
   counterBtn: {
-    width: '36px',
-    height: '34px',
+    width: '32px',
+    height: '32px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     border: 'none',
-    background: 'transparent',
+    background: '#fff',
     color: 'var(--brand)',
-    fontWeight: '500',
+    fontWeight: '800',
     fontSize: '18px',
     cursor: 'pointer',
     padding: 0,
-    borderRadius: '100px',
-    transition: 'background 0.2s',
+    borderRadius: '10px',
+    boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+    transition: 'all 0.2s',
   },
   countInput: {
     flex: 1,
@@ -481,7 +510,7 @@ const styles = {
     border: 'none',
     background: 'transparent',
     fontSize: '15px',
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#0f172a',
     outline: 'none',
     height: '100%',

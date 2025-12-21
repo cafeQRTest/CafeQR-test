@@ -1522,7 +1522,7 @@ const isVariantItem = !!item.hasvariants && (item.variants?.length || 0) > 0;
         }}
   onQuantityChange={isVariantItem ? undefined : handleQuantityChange}
   showImage={enableMenuImages}
-  highlightColor={THEME.main}
+  highlightColor={enableMenuImages ? undefined : THEME.main}
 />
     </div>
   );

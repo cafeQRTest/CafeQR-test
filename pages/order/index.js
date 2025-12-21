@@ -8,6 +8,8 @@ import HorizontalScrollRow from '../../components/HorizontalScrollRow'
 import VariantSelector from '../../components/VariantSelector'
 import VariantEditModal from '../../components/VariantEditModal'
 
+import Head from 'next/head'
+
 export default function OrderPage() {
   const router = useRouter()
   const { r: restaurantId, t: tableNumber } = router.query
@@ -39,6 +41,8 @@ export default function OrderPage() {
   const [showVariantSelector, setShowVariantSelector] = useState(false)
   const [selectedItem, setSelectedItem] = useState(null)
   const [editingVariantItem, setEditingVariantItem] = useState(null)
+  
+  const [dismissedNotice, setDismissedNotice] = useState(false);
   
   // Carousel Logic
   const carouselRef = useRef(null);
@@ -466,162 +470,189 @@ export default function OrderPage() {
   }
 
   return (
-    <div className="cust-page">
+    <div className="cust-page" style={{ '--brand': brandColor }}>
+      <Head>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+        <title>{restaurant?.name || 'Cafe QR Menu'}</title>
+      </Head>
       <header className="cust-header">
         <button
           onClick={() => router.back()}
-          style={{ background: 'none', border: 'none', padding: 8, cursor: 'pointer' }}
+          className="header-back-btn"
         >
-          {'<'}
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
         </button>
-        <div style={{ flex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <h1 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 600 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <h1 style={{ 
+              margin: 0, 
+              fontSize: 20, 
+              fontWeight: 900, 
+              color: '#0f172a', 
+              letterSpacing: '-0.03em',
+              lineHeight: 1.2,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
+            }}>
               {restaurant?.name || 'Restaurant'}
             </h1>
             {tableNumber && (
-              <span
-                style={{
-                  fontSize: 12,
-                  padding: '2px 8px',
-                  borderRadius: 999,
-                  border: '1px solid #e5e7eb',
-                  color: '#4b5563',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                Table {tableNumber}
+              <span className="table-badge">
+                T-{tableNumber}
               </span>
             )}
           </div>
-          <div style={{ fontSize: 14, color: '#666', marginTop: 4 }}>
-            <span style={{ color: brandColor, fontWeight: 500 }}>⏱️ 15-20 mins</span>
-            <span style={{ marginLeft: 16, color: '#f59e0b' }}>⭐ 4.3 (500+ orders)</span>
+          <div style={{ fontSize: 13, color: '#64748b', marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#f0fdf4', color: '#15803d', padding: '2px 8px', borderRadius: 99, fontWeight: 700, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.02em' }}>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+              15-20 min
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#fffbeb', color: '#b45309', padding: '2px 8px', borderRadius: 99, fontWeight: 700, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.02em' }}>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="#b45309" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+              4.3 (500+)
+            </div>
           </div>
         </div>
         <AlertRestaurantButton restaurantId={restaurantId} tableNumber={tableNumber} brandColor={brandColor} />
       </header>
 
       {/* Public Store Notice Banner */}
-      {restaurant?.store_notice_enabled && restaurant?.store_notice_msg && (
+      {restaurant?.store_notice_enabled && restaurant?.store_notice_msg && !dismissedNotice && (
         <div style={{
-          background: '#fff7ed', 
-          borderBottom: '1px solid #ffedd5',
-          padding: '12px 16px',
+          margin: '12px 16px 4px',
+          padding: '16px',
+          background: `linear-gradient(135deg, ${brandColor}08 0%, ${brandColor}15 100%)`,
+          borderRadius: '24px',
+          border: `1.5px solid ${brandColor}20`,
+          boxShadow: `0 4px 15px ${brandColor}10`,
           display: 'flex',
-          gap: 12,
-          alignItems: 'flex-start'
+          gap: 14,
+          alignItems: 'flex-start',
+          position: 'relative',
+          animation: 'slideInDown 0.5s ease-out'
         }}>
-           <span style={{ fontSize: 18 }}>📢</span>
-           <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: '#9a3412', marginBottom: 2, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+           <div style={{
+             background: 'var(--brand)15',
+             width: 42,
+             height: 42,
+             borderRadius: 12,
+             display: 'flex',
+             alignItems: 'center',
+             justifyContent: 'center',
+             flexShrink: 0
+           }}>
+             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+               <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+               <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+             </svg>
+           </div>
+           
+           <div style={{ flex: 1, paddingRight: 24 }}>
+              <div style={{ 
+                fontSize: 12, 
+                fontWeight: 800, 
+                color: 'var(--brand)', 
+                marginBottom: 4, 
+                textTransform: 'uppercase', 
+                letterSpacing: '0.08em',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6
+              }}>
                 Store Notice
+                <span style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--brand)' }}></span>
               </div>
-              <div style={{ fontSize: 14, color: '#ea580c', lineHeight: 1.4, fontWeight: 500 }}>
+              <div style={{ 
+                fontSize: 15, 
+                color: '#475569', 
+                lineHeight: 1.5, 
+                fontWeight: 500,
+                letterSpacing: '-0.01em'
+              }}>
                 {restaurant.store_notice_msg}
               </div>
            </div>
+
+           <button 
+             onClick={() => setDismissedNotice(true)}
+             style={{
+               position: 'absolute',
+               top: 12,
+               right: 12,
+               background: 'rgba(0,0,0,0.05)',
+               border: 'none',
+               width: 24,
+               height: 24,
+               borderRadius: 99,
+               display: 'flex',
+               alignItems: 'center',
+               justifyContent: 'center',
+               cursor: 'pointer',
+               color: 'var(--brand)',
+               fontSize: 12,
+               padding: 0,
+             }}
+             onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.1)'}
+             onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.05)'}
+           >
+             ✕
+           </button>
         </div>
       )}
 
-      <div
-        style={{
-          padding: '1rem',
-          background: '#fff',
-        }}
-      >
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            padding: '6px 10px',
-            borderRadius: 9999,
-            background: '#f9fafb',
-            border: '1px solid #e5e7eb',
-          }}
-        >
-          <span
-            style={{
-              fontSize: 14,
-              color: '#9ca3af',
-            }}
-          >
-            🔍
-          </span>
-          <input
-            type="text"
-            placeholder="Search for dishes..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            style={{
-              flex: 1,
-              border: 'none',
-              height: 32,
-              paddingLeft: 0,
-              background: 'transparent',
-              fontSize: 14,
-              outline: 'none',
-            }}
-          />
-          {searchQuery && (
-            <button
-              type="button"
-              onClick={() => setSearchQuery('')}
-              aria-label="Clear search"
-              style={{
-                border: 'none',
-                background: 'transparent',
-                color: '#9ca3af',
-                borderRadius: 9999,
-                width: 26,
-                height: 26,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                fontSize: 13,
-                padding: 0,
-              }}
-            >
-              ✕
-            </button>
-          )}
-        </div>
-      </div>
+      <style jsx>{`
+        @keyframes slideInDown {
+          from { transform: translateY(-10px); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+      `}</style>
 
-      <div
-        style={{
-          display: 'flex',
-          gap: 8,
-          padding: '1rem',
-          background: '#fff',
-          borderBottom: '1px solid #f3f4f6',
-          overflowX: 'auto'
-        }}
-      >
-        {[
-          { id: 'all', label: 'All Items' },
-          { id: 'veg', label: '🟢 Veg Only' },
-          { id: 'popular', label: '🔥 Offers' }
-        ].map((m) => (
-          <button
-            key={m.id}
-            onClick={() => setFilterMode(m.id)}
-            style={{
-              padding: '8px 16px',
-              border: '1px solid #e5e7eb',
-              borderRadius: 20,
-              background: filterMode === m.id ? brandColor : '#fff',
-              color: filterMode === m.id ? '#fff' : '#000',
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-              fontSize: 14
-            }}
-          >
-            {m.label}
-          </button>
-        ))}
+      <div style={{ background: '#fff' }}>
+        <div style={{ padding: '8px 16px 16px' }}>
+          <div className="search-box premium-search">
+             <div className="search-icon-wrapper">
+               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                 <circle cx="11" cy="11" r="8"></circle>
+                 <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+               </svg>
+             </div>
+             <input
+               type="text"
+               placeholder="Search for dishes, cuisines..."
+               value={searchQuery}
+               onChange={(e) => setSearchQuery(e.target.value)}
+             />
+             {searchQuery && (
+               <button 
+                 onClick={() => setSearchQuery('')} 
+                 className="search-clear-btn"
+                 style={{ animation: 'popIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)' }}
+               >
+                 ✕
+               </button>
+             )}
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 10, padding: '0 16px 16px', overflowX: 'auto', scrollbarWidth: 'none' }}>
+          {[
+            { id: 'all', label: 'All Items' },
+            { id: 'veg', label: 'Veg Only' },
+            { id: 'popular', label: 'Offers' }
+          ].map((m) => (
+            <button
+              key={m.id}
+              onClick={() => setFilterMode(m.id)}
+              className={`mode-filter-btn ${filterMode === m.id ? 'active' : ''}`}
+              style={filterMode === m.id ? { background: 'var(--brand)', color: '#fff' } : {}}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {categoryChips.length > 1 && (
@@ -753,6 +784,7 @@ export default function OrderPage() {
                         onRemove={() => updateCartItem(item.id, passQty - 1)}
                         onEdit={item.has_variants ? () => setEditingVariantItem(item) : undefined}
                         showImage={true}
+                        highlightColor={brandColor}
                       />
                     </div>
                   )
@@ -763,10 +795,26 @@ export default function OrderPage() {
         ) : (
           // OLD LAYOUT: Simple vertical list (when images disabled)
           Object.entries(groupedItems).map(([category, items]) => (
-            <section key={category} style={{ background: '#fff', marginBottom: 8, padding: '12px 16px' }}>
-              <h3 style={{ fontSize: 16, fontWeight: 600, margin: '0 0 12px 0', color: '#111827' }}>
-                {category} ({items.length})
-              </h3>
+            <section key={category} style={{ background: 'transparent', marginBottom: 24, padding: '0 16px' }}>
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: 12, 
+                marginBottom: 16,
+                marginTop: 8
+              }}>
+                <div style={{ width: 4, height: 24, background: brandColor, borderRadius: 4 }}></div>
+                <h3 style={{ 
+                  fontSize: 18, 
+                  fontWeight: 800, 
+                  margin: 0, 
+                  color: '#1e293b', 
+                  letterSpacing: '-0.02em',
+                  textTransform: 'capitalize'
+                }}>
+                  {category} <span style={{ color: '#94a3b8', fontSize: 14, fontWeight: 500, marginLeft: 4 }}>({items.length})</span>
+                </h3>
+              </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {items.map((item) => {
                   const totalQty = getItemQuantity(item.id);
@@ -781,63 +829,150 @@ export default function OrderPage() {
                       key={item.id}
                       style={{
                         display: 'flex',
-                        gap: 12,
-                        padding: 12,
-                        border: '1px solid #e5e7eb',
-                        borderTop: `4px solid ${isOutOfStock ? '#f97316' : '#16a34a'}`,
-                        borderRadius: 8,
-                        background: isOutOfStock ? '#f9fafb' : '#fff',
+                        gap: 16,
+                        padding: '16px',
+                        background: isOutOfStock ? '#fcfcfc' : '#ffffff',
+                        border: '1px solid #f1f5f9',
+                        borderLeft: `3px solid ${isOutOfStock ? '#cbd5e1' : brandColor}`,
+                        borderRadius: '16px',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
                         overflow: 'hidden',
+                        transition: 'transform 0.2s, box-shadow 0.2s',
+                        cursor: 'pointer',
+                        position: 'relative'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                        e.currentTarget.style.boxShadow = '0 8px 20px rgba(0,0,0,0.04)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = 'none';
+                        e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.02)';
                       }}
                     >
                       <div style={{ flex: 1 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                          <span style={{ flexShrink: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                          <span style={{ 
+                            flexShrink: 0, 
+                            display: 'flex', 
+                            padding: 2, 
+                            borderRadius: 4, 
+                            border: `0.5px solid ${item.veg ? '#16653433' : '#991b1b33'}`, 
+                            background: item.veg ? '#16a34a08' : '#dc262608' 
+                          }}>
                             {item.veg ? (
-                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                                <rect x="1" y="1" width="22" height="22" stroke="#166534" strokeWidth="2" />
-                                <circle cx="12" cy="12" r="6" fill="#166534" />
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                                <rect x="1" y="1" width="22" height="22" stroke="#10b981" strokeWidth="2" />
+                                <circle cx="12" cy="12" r="6" fill="#10b981" />
                               </svg>
                             ) : (
-                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                                <rect x="1" y="1" width="22" height="22" stroke="#991b1b" strokeWidth="2" />
-                                <path d="M12 6L18 16H6L12 6Z" fill="#991b1b" />
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                                <rect x="1" y="1" width="22" height="22" stroke="#ef4444" strokeWidth="2" />
+                                <path d="M12 6L18 16H6L12 6Z" fill="#ef4444" />
                               </svg>
                             )}
                           </span>
-                          <h4 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: '#111827' }}>
+                          <h4 style={{ 
+                            margin: 0, 
+                            fontSize: 16, 
+                            fontWeight: 700, 
+                            color: '#1e293b', 
+                            letterSpacing: '-0.02em',
+                            lineHeight: 1.2
+                          }}>
                             {item.name}
                           </h4>
                         </div>
+
                         {item.category && (
-                          <div style={{ fontSize: 11, color: '#6b7280', textTransform: 'uppercase', marginBottom: 4 }}>
-                            [{item.category}]
+                          <div style={{ 
+                            fontSize: 10, 
+                            color: '#64748b', 
+                            fontWeight: 700,
+                            background: '#f1f5f9',
+                            padding: '2px 8px',
+                            borderRadius: 99,
+                            display: 'inline-block',
+                            marginBottom: 8,
+                            letterSpacing: '0.02em'
+                          }}>
+                            {item.category.toUpperCase()}
                           </div>
                         )}
-                        <div style={{ fontSize: 16, fontWeight: 700, color: brandColor }}>
-                          ₹{Number(item.price).toFixed(2)}
+
+                        <div style={{ 
+                          fontSize: 18, 
+                          fontWeight: 800, 
+                          color: '#0f172a', 
+                          display: 'flex', 
+                          alignItems: 'baseline',
+                          gap: 2
+                        }}>
+                          <span style={{ fontSize: 13, fontWeight: 600 }}>₹</span>
+                          {Number(item.price).toFixed(2)}
                         </div>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center' }}>
-                        {isOutOfStock || !showStepper ? (
+
+                      <div style={{ display: 'flex', alignItems: 'center', minWidth: 100, justifyContent: 'flex-end' }}>
+                        {isOutOfStock ? (
+                          <div style={{
+                            padding: '8px 12px',
+                            background: '#f1f5f9',
+                            color: '#94a3b8',
+                            borderRadius: '12px',
+                            fontSize: 11,
+                            fontWeight: 800,
+                            letterSpacing: '0.04em',
+                            textAlign: 'center',
+                            width: '100%'
+                          }}>
+                            OUT OF STOCK
+                          </div>
+                        ) : !showStepper ? (
                           <button
-                            onClick={() => addToCart(item)}
-                            disabled={isOutOfStock}
+                            onClick={(e) => { e.stopPropagation(); addToCart(item); }}
                             style={{
-                              padding: '8px 16px',
-                              background: isOutOfStock ? '#e5e7eb' : brandColor,
-                              color: '#fff',
-                              border: 'none',
-                              borderRadius: 6,
-                              fontWeight: 700,
-                              fontSize: 13,
-                              cursor: isOutOfStock ? 'not-allowed' : 'pointer',
-                              opacity: isOutOfStock ? 0.6 : 1,
+                              padding: '10px 24px',
+                              background: '#ffffff',
+                              color: brandColor,
+                              border: `1.5px solid ${brandColor}`,
+                              borderRadius: '14px',
+                              fontWeight: 800,
+                              fontSize: 14,
+                              cursor: 'pointer',
+                              transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                              boxShadow: `0 4px 12px ${brandColor}15`,
+                              width: '100%',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: 8
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.background = brandColor;
+                              e.currentTarget.style.color = '#fff';
+                              e.currentTarget.style.transform = 'scale(1.02)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = '#ffffff';
+                              e.currentTarget.style.color = brandColor;
+                              e.currentTarget.style.transform = 'scale(1)';
                             }}
                           >
-                            {isOutOfStock ? 'OUT OF STOCK' : 'ADD'}
+                            ADD
                             {item.has_variants && totalQty > 0 && (
-                                <span style={{marginLeft: 6, fontSize: 11, background: '#f97316', color: 'white', padding: '1px 6px', borderRadius: 99}}>
+                                <span style={{
+                                  fontSize: 11, 
+                                  background: brandColor, 
+                                  color: 'white', 
+                                  width: 20, 
+                                  height: 20, 
+                                  display: 'flex', 
+                                  alignItems: 'center', 
+                                  justifyContent: 'center', 
+                                  borderRadius: '50%',
+                                  border: '2px solid #fff'
+                                }}>
                                   {totalQty}
                                 </span>
                             )}
@@ -846,47 +981,76 @@ export default function OrderPage() {
                           <div style={{
                             display: 'flex',
                             alignItems: 'center',
-                            gap: 8,
-                            background: `${brandColor}10`,
-                            padding: 4,
-                            borderRadius: 6,
-                            border: `1px solid ${brandColor}`,
+                            background: '#f8fafc',
+                            padding: '4px',
+                            borderRadius: '14px',
+                            border: '1px solid #e2e8f0',
+                            gap: 4
                           }}>
                             <button
-                              onClick={() => updateCartItem(item.id, totalQty - 1)}
+                              onClick={(e) => { e.stopPropagation(); updateCartItem(item.id, totalQty - 1); }}
                               style={{
-                                width: 28,
-                                height: 28,
+                                width: 32,
+                                height: 32,
                                 border: 'none',
-                                background: 'transparent',
+                                background: '#fff',
                                 color: brandColor,
-                                fontWeight: 'bold',
-                                fontSize: 16,
+                                fontWeight: 800,
+                                fontSize: 18,
                                 cursor: 'pointer',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
+                                borderRadius: '10px',
+                                boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+                                transition: 'all 0.2s'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.background = '#fee2e2';
+                                e.currentTarget.style.color = '#ef4444';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.background = '#fff';
+                                e.currentTarget.style.color = brandColor;
                               }}
                             >
                               −
                             </button>
-                            <span style={{ fontSize: 14, fontWeight: 700, color: brandColor, minWidth: 20, textAlign: 'center' }}>
+                            <span style={{ 
+                              fontSize: 15, 
+                              fontWeight: 800, 
+                              color: '#1e293b', 
+                              minWidth: 32, 
+                              textAlign: 'center',
+                              fontVariantNumeric: 'tabular-nums'
+                            }}>
                               {totalQty}
                             </span>
                             <button
-                              onClick={() => addToCart(item)}
+                              onClick={(e) => { e.stopPropagation(); addToCart(item); }}
                               style={{
-                                width: 28,
-                                height: 28,
+                                width: 32,
+                                height: 32,
                                 border: 'none',
-                                background: 'transparent',
-                                color: brandColor,
-                                fontWeight: 'bold',
-                                fontSize: 16,
+                                background: brandColor,
+                                color: '#fff',
+                                fontWeight: 800,
+                                fontSize: 18,
                                 cursor: 'pointer',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
+                                borderRadius: '10px',
+                                boxShadow: '0 2px 8px rgba(var(--brand-rgb), 0.25)',
+                                transition: 'all 0.2s'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.transform = 'scale(1.05)';
+                                e.currentTarget.style.filter = 'brightness(1.1)';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.transform = 'scale(1)';
+                                e.currentTarget.style.filter = 'none';
                               }}
                             >
                               +
@@ -907,18 +1071,27 @@ export default function OrderPage() {
         <div
           style={{
             position: 'fixed',
-            bottom: cartItemsCount > 0 ? 56 : 16,
+            bottom: cartItemsCount > 0 ? 94 : 24,
             left: '50%',
             transform: 'translateX(-50%)',
-            background: '#111827',
+            background: '#1e293b',
             color: '#fff',
-            padding: '8px 16px',
-            borderRadius: 999,
-            fontSize: 13,
-            boxShadow: '0 4px 10px rgba(0,0,0,0.2)',
+            padding: '12px 20px',
+            borderRadius: '16px',
+            fontSize: 14,
+            fontWeight: 600,
+            boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
+            zIndex: 200,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            animation: 'slideUpToast 0.3s ease-out'
           }}
         >
-          Added to cart: <span style={{ fontWeight: 600 }}>{justAddedItem}</span>
+          <div style={{ background: '#10b981', width: 20, height: 20, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          </div>
+          <span>Added: <span style={{ color: '#94a3b8' }}>{justAddedItem}</span></span>
         </div>
       )}
 
@@ -928,14 +1101,19 @@ export default function OrderPage() {
           style={{ background: brandColor }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1 }}>
-            <span>🛒</span>
+            <div style={{ background: 'rgba(255,255,255,0.2)', width: 36, height: 36, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="9" cy="21" r="1"></circle>
+                <circle cx="20" cy="21" r="1"></circle>
+                <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+              </svg>
+            </div>
             <div>
-              <div style={{ fontSize: 14 }}>
+              <div style={{ fontSize: 13, fontWeight: 500, opacity: 0.9 }}>
                 {cartItemsCount} Item{cartItemsCount !== 1 ? 's' : ''}
               </div>
-              <div style={{ fontWeight: 700, fontSize: 16 }}>₹{cartTotal.toFixed(2)}</div>
+              <div style={{ fontWeight: 800, fontSize: 18 }}>₹{cartTotal.toFixed(2)}</div>
             </div>
-            <span style={{ fontSize: 12, opacity: 0.9 }}>⏱️ 20 mins</span>
           </div>
           <Link
             href={`/order/cart?r=${restaurantId}&t=${tableNumber}`}
@@ -976,54 +1154,41 @@ export default function OrderPage() {
       )}
 
     <style jsx>{`
-      .cust-page { min-height: 100vh; background: #f8f9fa; font-family: system-ui, -apple-system, sans-serif; padding-bottom: 90px; }
-      @media (min-width: 768px) { .cust-page { padding-bottom: 0; max-width: 800px; margin: 0 auto; background: #fff; box-shadow: 0 0 40px rgba(0,0,0,0.05); min-height: 100vh; position: relative; } }
+      .cust-page { min-height: 100vh; background: #fdfdfd; font-family: 'Inter', system-ui, -apple-system, sans-serif; padding-bottom: 90px; }
+      @media (min-width: 768px) { .cust-page { padding-bottom: 0; max-width: 800px; margin: 0 auto; background: #fff; box-shadow: 0 0 60px rgba(0,0,0,0.08); min-height: 100vh; position: relative; } }
       
-      .cust-header { padding: 16px; background: white; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 50; }
+      .cust-header { padding: 16px; background: rgba(255,255,255,0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid #f1f5f9; display: flex; align-items: center; gap: 16px; position: sticky; top: 0; z-index: 50; }
       
-      .cust-cart-bar { position: fixed; bottom: 0; left: 0; right: 0; color: white; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; z-index: 100; box-shadow: 0 -4px 10px rgba(0,0,0,0.1); }
-      @media (min-width: 768px) { .cust-cart-bar { position: sticky; bottom: 20px; left: 20px; right: 20px; width: calc(100% - 40px); margin: 0 auto 20px auto; border-radius: 12px; } }
-      
-      /* Additional responsive helpers can be added here */
-      
-      .search-container:focus-within {
-        border-color: #d1d5db !important;
-        background: #fff !important;
-        box-shadow: 0 0 0 3px rgba(0,0,0,0.05);
-      }
+      .header-back-btn { background: #f8fafc; border: 1px solid #e2e8f0; width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #0f172a; transition: all 0.2s; padding: 0px; }
+      .header-back-btn:active { transform: scale(0.94); background: #f1f5f9; }
 
-      /* Carousel CSS */
-      .carousel-container {
-        position: relative;
-        display: flex;
-        align-items: center;
-      }
-      .category-carousel {
-        display: flex;
-        gap: 8px;
-        overflow-x: auto;
-        padding: 4px 0;
-        flex-grow: 1;
-        -webkit-overflow-scrolling: touch;
-        scrollbar-width: none;
-        -ms-overflow-style: none;
-        scroll-behavior: smooth;
-      }
+      .table-badge { font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 8px; background: var(--brand)10; border: 1.5px solid var(--brand)20; color: var(--brand); white-space: nowrap; text-transform: uppercase; letter-spacing: 0.05em; }
+
+      .search-box { display: flex; align-items: center; background: #f1f5f9; padding: 12px 20px; border-radius: 100px; border: 1.5px solid #f1f5f9; transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); position: relative; overflow: hidden; }
+      .search-box:focus-within { background: #fff; border-color: ${brandColor}; box-shadow: 0 0 0 4px ${brandColor}15, 0 12px 24px rgba(0, 0, 0, 0.05); }
+      .search-icon-wrapper { color: #94a3b8; margin-right: 12px; display: flex; align-items: center; transition: all 0.3s; }
+      .search-box:focus-within .search-icon-wrapper { color: ${brandColor}; transform: scale(1.1); }
+      .search-box input { flex: 1; border: none; background: transparent; font-size: 16px; font-weight: 600; color: #1e293b; outline: none; letter-spacing: -0.01em; }
+      .search-box input::placeholder { color: #94a3b8; font-weight: 500; }
+      .search-clear-btn { border: none; background: #e2e8f0; color: #64748b; width: 24px; height: 24px; border-radius: 50%; font-size: 10px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; }
+      .search-clear-btn:hover { background: #fee2e2; color: #ef4444; transform: rotate(90deg); }
+      
+      @keyframes popIn { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+      .mode-filter-btn { display: flex; align-items: center; gap: 8px; padding: 10px 18px; border: 1px solid #f1f5f9; border-radius: 100px; background: #fff; color: #64748b; cursor: pointer; white-space: nowrap; font-size: 14px; font-weight: 700; transition: all 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+      .mode-filter-btn.active { border-color: transparent; border-radius: 100px; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+      .mode-filter-btn:active { transform: scale(0.96); }
+
+      .category-carousel { display: flex; gap: 10px; overflow-x: auto; padding: 8px 0; flex-grow: 1; -webkit-overflow-scrolling: touch; scrollbar-width: none; -ms-overflow-style: none; scroll-behavior: smooth; }
       .category-carousel::-webkit-scrollbar { display: none; }
       
-      .category-chip {
-        flex-shrink: 0;
-        padding: 6px 16px;
-        border-radius: 100px;
-        border: 1px solid #e5e7eb;
-        background: #f9fafb;
-        color: #374151;
-        font-size: 13px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        white-space: nowrap;
-      }
+      .category-chip { flex-shrink: 0; padding: 8px 20px; border-radius: 100px; border: 1.5px solid #f1f5f9; background: #fff; color: #64748b; font-size: 14px; font-weight: 700; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+      .category-chip-active { border-radius: 100px; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+
+      .cust-cart-bar { position: fixed; bottom: 16px; left: 16px; right: 16px; color: white; padding: 14px 20px; display: flex; justify-content: space-between; align-items: center; z-index: 100; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); animation: slideUpCart 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+      @keyframes slideUpCart { from { transform: translateY(100px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+      @keyframes slideUpToast { from { transform: translate(-50%, 20px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+      @media (min-width: 768px) { .cust-cart-bar { position: sticky; bottom: 20px; left: 20px; right: 20px; width: calc(100% - 40px); margin: 0 auto 20px auto; } }
       
       .carousel-btn {
         position: absolute;
@@ -1034,10 +1199,10 @@ export default function OrderPage() {
         border-radius: 50%;
         border: 1px solid #e5e7eb;
         background: white;
-        color: #f97316;
+        color: var(--brand);
         display: flex;
-        align-items: center;
-        justify-content: center;
+        alignItems: center;
+        justifyContent: center;
         cursor: pointer;
         flex-shrink: 0;
         z-index: 10;
@@ -1046,8 +1211,8 @@ export default function OrderPage() {
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
       }
       .carousel-btn:hover {
-        background: #fff7ed;
-        border-color: #f97316;
+        background: var(--brand)10;
+        border-color: var(--brand);
         box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
       }
       .carousel-btn.left { 
