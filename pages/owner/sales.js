@@ -15,6 +15,59 @@ import { printSalesReport } from '../../utils/printSalesReport'
 import { exportSalesReportToCSV, exportSalesReportToExcel } from '../../utils/exportSalesReport'
 import { istSpanFromDatesUtcISO } from '../../utils/istTime';
 
+const BRAND = {
+  orange: '#f97316',
+  white: '#ffffff',
+  slate: '#f8fafc',
+  gray: '#64748b',
+  border: '#e2e8f0'
+};
+
+function computeOrderTotalDisplay(order) {
+  const toNum = (v) => (v == null ? null : Number(v));
+  const a = toNum(order?.total_inc_tax);
+  if (Number.isFinite(a) && a>0) return a;
+  const b = toNum(order?.total_amount);
+  if (Number.isFinite(b) && b>0) return b;
+  const c = toNum(order?.total);
+  if (Number.isFinite(c) && c>0) return c;
+  return 0;
+}
+
+function toDisplayItems(order) {
+  if (Array.isArray(order.items) && order.items.length > 0) {
+    return order.items.map((item) => ({
+      ...item,
+      menu_item_id: item.menu_item_id || item.id,
+    }));
+  }
+  if (Array.isArray(order.order_items)) {
+    return order.order_items.map((oi) => ({
+      menu_item_id: oi.menu_item_id,
+      name: oi.item_name || oi.menu_items?.name || 'Item',
+      quantity: oi.quantity,
+      price: oi.price,
+      is_packaged_good: oi.is_packaged_good,
+      variant_id: oi.variant_option_id || null,
+      variant_name: oi.variant_name || null,
+    }));
+  }
+  return [];
+}
+
+function getOrderTypeLabel(order) {
+  if (!order) return '';
+  let label = '';
+  if (order.order_type === 'parcel') label = 'Parcel';
+  else if (order.order_type === 'dine-in') label = 'Dine-in';
+  else if (order.order_type === 'counter') label = 'Counter';
+  else label = order.order_type || 'Order';
+
+  if (order.table_number) {
+    return `${label} • Table ${order.table_number}`;
+  }
+  return label;
+}
 
 export default function SalesPage() {
   const supabase = getSupabase()
@@ -49,8 +102,14 @@ export default function SalesPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [restaurantProfile, setRestaurantProfile] = useState(null)
+  const [ordersList, setOrdersList] = useState([])
+  const [itemsModalOrder, setItemsModalOrder] = useState(null)
+  
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 15
 
-  const reports = ['Summary', 'Item-wise', 'Payment Methods', 'Order Types', 'Tax Report', 'Hourly Sales', 'Categories']
+  const reports = ['Summary', 'Orders', 'Item-wise', 'Payment Methods', 'Order Types', 'Tax Report', 'Hourly Sales', 'Categories']
 
   useEffect(() => {
     if (!restaurantId || !supabase) return
@@ -127,7 +186,9 @@ export default function SalesPage() {
           total_inc_tax,
           total_tax,
           created_at,
+          updated_at,
           status,
+          customer_name,
           items,
           payment_method,
           actual_payment_method,
@@ -142,6 +203,10 @@ export default function SalesPage() {
 
       if (ordersError) throw ordersError
       const orderData = Array.isArray(orders) ? orders : []
+      // Sort orders by date desc initially if not already
+      orderData.sort((a,b) => new Date(b.created_at) - new Date(a.created_at))
+      setOrdersList(orderData)
+      setCurrentPage(1) // Reset to page 1 on new data
 
       let totalOrders = orderData.length
       let totalRevenue = 0
@@ -507,7 +572,7 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
                  {/* Orders */}
                  <div 
                     className="summary-card"
-                    onClick={() => setActiveReport(3)}
+                    onClick={() => setActiveReport(1)}
                     style={{ cursor: 'pointer' }}
                  >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -522,7 +587,7 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
                  {/* Avg Order */}
                  <div 
                     className="summary-card"
-                    onClick={() => setActiveReport(5)}
+                    onClick={() => setActiveReport(6)}
                     style={{ cursor: 'pointer' }}
                  >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -537,7 +602,7 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
                  {/* Tax */}
                  <div 
                     className="summary-card"
-                    onClick={() => setActiveReport(4)}
+                    onClick={() => setActiveReport(5)}
                     style={{ cursor: 'pointer' }}
                  >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -552,7 +617,7 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
                  {/* Items */}
                  <div 
                     className="summary-card"
-                    onClick={() => setActiveReport(1)}
+                    onClick={() => setActiveReport(2)}
                     style={{ cursor: 'pointer' }}
                  >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -568,6 +633,79 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
           )}
 
           {activeReport === 1 && (
+            <Card style={{ marginTop: 10, padding: 10 }}>
+              <h3 style={{ marginTop: 0, fontSize: '0.95rem' }}>Sales Orders</h3>
+              <div className="sales-table-wrapper">
+                <Table
+                  columns={[
+                    { 
+                      header: 'Order ID', 
+                      accessor: 'id', 
+                      cell: (r) => (
+                        <span 
+                          onClick={() => setItemsModalOrder(r)}
+                          style={{ color: '#334155', cursor: 'pointer', fontWeight: 700 }}
+                        >
+                          #{r.id.slice(0, 8)}
+                        </span>
+                      )
+                    },
+                    { 
+                      header: 'Ordered Date', 
+                      accessor: 'created_at', 
+                      cell: (r) => new Date(r.created_at).toLocaleString('en-IN', {
+                        day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true
+                      })
+                    },
+                    { 
+                      header: 'Edited Date', 
+                      accessor: 'updated_at', 
+                      cell: (r) => new Date(r.updated_at).toLocaleString('en-IN', {
+                        day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true
+                      })
+                    },
+                    { header: 'Status', accessor: 'status', cell: (r) => (
+                      <span style={{ 
+                        textTransform: 'capitalize', 
+                        color: r.status === 'completed' ? '#10b981' : '#f97316',
+                        fontWeight: 600
+                      }}>{r.status}</span>
+                    )},
+                    { header: 'Grand Total', accessor: 'total_inc_tax', cell: (r) => formatCurrency(r.total_inc_tax ?? r.total_amount) },
+                    { header: 'Total Tax', accessor: 'total_tax', cell: (r) => formatCurrency(r.total_tax) },
+                    { header: 'Customer', accessor: 'customer_name', cell: (r) => r.customer_name || '' }
+                  ]}
+                  data={ordersList.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)}
+                />
+
+                {ordersList.length > itemsPerPage && (
+                  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16, marginTop: 16 }}>
+                    <Button 
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      variant="outline"
+                      style={{ padding: '6px 12px', fontSize: '0.85rem' }}
+                    >
+                      Previous
+                    </Button>
+                    <span style={{ fontSize: '0.9rem', color: '#64748b', fontWeight: 600 }}>
+                      Page {currentPage} of {Math.ceil(ordersList.length / itemsPerPage)}
+                    </span>
+                    <Button 
+                      onClick={() => setCurrentPage(p => Math.min(Math.ceil(ordersList.length / itemsPerPage), p + 1))}
+                      disabled={currentPage >= Math.ceil(ordersList.length / itemsPerPage)}
+                      variant="outline"
+                      style={{ padding: '6px 12px', fontSize: '0.85rem' }}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </Card>
+          )}
+
+          {activeReport === 2 && (
             <Card style={{ marginTop: 10, padding: 10 }}>
               <div style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <h3 style={{ margin: 0, fontSize: '0.95rem' }}>Item-wise Sales</h3>
@@ -598,7 +736,7 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
             </Card>
           )}
 
-          {activeReport === 2 && (
+          {activeReport === 3 && (
             <Card style={{ marginTop: 10, padding: 10 }}>
               <h3 style={{ marginTop: 0, fontSize: '0.95rem' }}>Payment Methods</h3>
               <div className="sales-table-wrapper">
@@ -615,7 +753,7 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
             </Card>
           )}
 
-          {activeReport === 3 && (
+          {activeReport === 4 && (
             <Card style={{ marginTop: 10, padding: 10 }}>
               <h3 style={{ marginTop: 0, fontSize: '0.95rem' }}>Order Types</h3>
               <div className="sales-table-wrapper">
@@ -632,7 +770,7 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
             </Card>
           )}
 
-          {activeReport === 4 && (
+          {activeReport === 5 && (
             <Card style={{ marginTop: 10, padding: 10 }}>
               <h3 style={{ marginTop: 0, fontSize: '0.95rem' }}>GST Tax Report</h3>
               <div className="sales-table-wrapper">
@@ -647,7 +785,7 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
             </Card>
           )}
 
-          {activeReport === 5 && (
+          {activeReport === 6 && (
             <Card style={{ marginTop: 10, padding: 10 }}>
               <h3 style={{ marginTop: 0, fontSize: '0.95rem' }}>Hourly Sales</h3>
               <div className="sales-table-wrapper">
@@ -663,7 +801,7 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
             </Card>
           )}
 
-          {activeReport === 6 && (
+          {activeReport === 7 && (
             <Card style={{ marginTop: 10, padding: 10 }}>
               <h3 style={{ marginTop: 0, fontSize: '0.95rem' }}>Categories</h3>
               <div className="sales-table-wrapper">
@@ -680,6 +818,107 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
           )}
         </>
       )}
+
+      {/* Global "Show All Items" Modal */}
+    {itemsModalOrder && (
+      <div 
+        style={{
+          position:'fixed', inset: 0,
+          background:'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(5px)', 
+          display:'flex', alignItems:'center', justifyContent:'center', zIndex:10000,
+          padding: 12
+        }}
+        onClick={(e) => { e.stopPropagation(); setItemsModalOrder(null); }}
+      >
+        <div 
+          style={{
+            background:'white', width:'100%', maxWidth:400, borderRadius:12, padding: 24,
+            boxShadow:'0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+            maxHeight:'90vh', display:'flex', flexDirection:'column', position: 'relative'
+          }}
+          onClick={e => e.stopPropagation()}
+        >
+            {/* Header */}
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20}}>
+              <h3 style={{fontSize: 18, fontWeight: 700, color:'#0f172a', margin:0}}>
+                Order Details #{itemsModalOrder.id.slice(0,8)}
+              </h3>
+              <div 
+                onClick={() => setItemsModalOrder(null)}
+                onMouseEnter={(e) => e.currentTarget.style.opacity = '0.7'}
+                onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+                style={{
+                    cursor:'pointer', color: BRAND.orange, fontSize: 18, fontWeight: 900,
+                    lineHeight: 1, transition: 'opacity 0.2s'
+                }}
+              >X</div>
+            </div>
+
+            {/* Meta Info Row */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 4 }}>TIME ORDERED</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#1e293b' }}>
+                  {new Date(itemsModalOrder.created_at).toLocaleString('en-IN', {
+                    day: '2-digit', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true
+                  })}
+                </div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 4 }}>ORDER STATUS</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: BRAND.orange, textTransform: 'uppercase' }}>
+                  {itemsModalOrder.status}
+                </div>
+              </div>
+            </div>
+
+            {/* Items Header */}
+            <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', paddingBottom: 8, borderBottom: '1px solid #e2e8f0', marginBottom: 12 }}>
+              ORDER ITEMS
+            </div>
+
+            {/* Items List */}
+            <div style={{ overflowY: 'auto', flex: 1, marginBottom: 20 }}>
+              {toDisplayItems(itemsModalOrder).map((it, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#1e293b' }}>{it.name}</div>
+                    <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                       ₹{Number(it.price).toFixed(2)} x {it.quantity}
+                       {it.variant_name && <span style={{ marginLeft: 8, fontStyle: 'italic' }}>({it.variant_name})</span>}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: '#1e293b' }}>
+                    ₹{((it.quantity || 1) * (it.price || 0)).toFixed(2)}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Summary Box */}
+            <div style={{ background: '#FFF9F2', borderRadius: 8, padding: 16 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 13, fontWeight: 600, color: '#64748b' }}>
+                <span>Amount (Excl. Tax)</span>
+                <span style={{ color: '#334155' }}>₹{Number(itemsModalOrder.total_amount || 0).toFixed(2)}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12, fontSize: 13, fontWeight: 600, color: '#64748b' }}>
+                <span>Tax Amount</span>
+                <span style={{ color: '#334155' }}>₹{Number(itemsModalOrder.total_tax || 0).toFixed(2)}</span>
+              </div>
+              
+              <div style={{ borderTop: '1px dashed #fdba74', margin: '8px 0 12px 0' }}></div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 15, fontWeight: 800, color: '#1e293b' }}>Total Amount</span>
+                <span style={{ fontSize: 18, fontWeight: 800, color: BRAND.orange }}>
+                  ₹{computeOrderTotalDisplay(itemsModalOrder).toFixed(2)}
+                </span>
+              </div>
+            </div>
+        </div>
+      </div>
+    )}
+
     </div>
   )
 }

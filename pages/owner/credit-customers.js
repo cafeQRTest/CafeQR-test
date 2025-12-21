@@ -38,6 +38,10 @@ export default function CreditCustomersPage() {
   const [customerOrders, setCustomerOrders] = useState({})
   const [pendingSuspendId, setPendingSuspendId] = useState(null)
   const [selectedOrder, setSelectedOrder] = useState(null)
+  
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 10
 
   const formatDisplayDate = (dateStr) => {
     if (!dateStr) return '';
@@ -309,7 +313,7 @@ const handleViewOrder = async (order) => {
         <>
           {/* Mobile list */}
           <div className="cc-mobile-list">
-            {filtered.map(c => (
+            {filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map(c => (
               <div key={c.id} className="cc-card">
                 <div className="cc-row">
                   <div>
@@ -414,7 +418,7 @@ const handleViewOrder = async (order) => {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((c, idx) => (
+                {filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((c, idx) => (
                   <Fragment key={c.id}>
                     <tr style={{ background: idx % 2 ? '#fff' : '#f9fafb' }}>
                       <td><strong>{c.name}</strong></td>
@@ -513,6 +517,30 @@ const handleViewOrder = async (order) => {
               </tbody>
             </table>
           </div>
+
+          {filtered.length > itemsPerPage && (
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: 24, paddingBottom: 24 }}>
+              <Button 
+                variant="outline"
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                style={{ fontSize: 13, padding: '8px 16px' }}
+              >
+                Previous
+              </Button>
+              <span style={{ fontSize: 14, fontWeight: 600, color: '#64748b' }}>
+                 Page {currentPage} of {Math.ceil(filtered.length / itemsPerPage)}
+              </span>
+              <Button 
+                variant="outline"
+                onClick={() => setCurrentPage(p => Math.min(Math.ceil(filtered.length / itemsPerPage), p + 1))}
+                disabled={currentPage >= Math.ceil(filtered.length / itemsPerPage)}
+                style={{ fontSize: 13, padding: '8px 16px' }}
+              >
+                Next
+              </Button>
+            </div>
+          )}
         </>
       )}
 

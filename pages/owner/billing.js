@@ -76,6 +76,9 @@ export default function BillingPage() {
     credit_sales: 0,
   });
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
   const formatMoney = (n) => `₹${Number(n || 0).toFixed(2)}`;
   const isMixed = (inv) => inv?.payment_method === 'mixed' && inv?.mixed_payment_details;
 
@@ -147,6 +150,7 @@ export default function BillingPage() {
       };
 
       setStats(computed);
+      setCurrentPage(1); // Reset page on data load
     } catch (e) {
       setError(e.message || 'Failed to load invoices');
     } finally {
@@ -462,8 +466,32 @@ const exportHsnSummary = async () => {
                     )
                   }
                 ]}
-                data={invoices}
+                data={invoices.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)}
               />
+
+              {invoices.length > itemsPerPage && (
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: 24 }}>
+                  <Button 
+                    variant="outline"
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    style={{ fontSize: 13, padding: '8px 16px' }}
+                  >
+                    Previous
+                  </Button>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: '#64748b' }}>
+                     Page {currentPage} of {Math.ceil(invoices.length / itemsPerPage)}
+                  </span>
+                  <Button 
+                    variant="outline"
+                    onClick={() => setCurrentPage(p => Math.min(Math.ceil(invoices.length / itemsPerPage), p + 1))}
+                    disabled={currentPage >= Math.ceil(invoices.length / itemsPerPage)}
+                    style={{ fontSize: 13, padding: '8px 16px' }}
+                  >
+                    Next
+                  </Button>
+                </div>
+              )}
             </div>
           </Card>
 

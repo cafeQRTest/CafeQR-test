@@ -75,6 +75,7 @@ export default function Layout({
 }) {
   if (hideChrome) return <main style={{ padding: 20 }}>{children}</main>;
 
+  const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const MOBILE_BREAKPOINT = 1024; // use drawer up to 1024px wide (phones + tablets)
@@ -102,10 +103,20 @@ export default function Layout({
     setSigningOut(true);
     const supabase = getSupabase();
     try {
-      await signOutAndRedirect(supabase, router.replace);
+      // 1. Trigger the sign out logic
+      await signOutAndRedirect(supabase, async (url) => {
+        // Use router.replace but also ensure we have a fallback
+        await router.replace(url);
+        // Fallback catchall just in case router navigation is blocked
+        setTimeout(() => {
+          if (typeof window !== 'undefined') window.location.href = url;
+        }, 1500);
+      });
     } catch (err) {
       console.error('Sign out error:', err);
       alert(`Sign out failed: ${err.message}`);
+    } finally {
+      // Always cleanup state in case redirection is delayed
       setSigningOut(false);
       setShowLogoutConfirm(false);
     }

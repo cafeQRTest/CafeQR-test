@@ -523,7 +523,60 @@ const customerTiles = useMemo(() => {
       @media (max-width: 640px) {
         .page-header { flex-direction: column; gap: 16px; }
         .cr-summary-grid { grid-template-columns: 1fr; }
+        .hide-mobile { display: none !important; }
+        .only-mobile { display: block !important; }
       }
+      @media (min-width: 641px) {
+        .only-mobile { display: none !important; }
+      }
+
+      .cr-seg {
+        display: flex;
+        background: #f1f5f9;
+        padding: 4px;
+        border-radius: 12px;
+        margin-bottom: 20px;
+        border: 1px solid #e2e8f0;
+      }
+      .cr-seg button {
+        flex: 1;
+        padding: 10px;
+        border: none;
+        background: transparent;
+        color: #64748b;
+        font-weight: 700;
+        font-size: 13px;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s;
+        text-transform: uppercase;
+        letter-spacing: 0.025em;
+      }
+      .cr-seg button.active {
+        background: white;
+        color: #f97316;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+      }
+
+      .cr-tiles { display: flex; flexDirection: column; gap: 12px; margin-bottom: 30px; }
+      .cr-tile { 
+        background: white; 
+        border: 1px solid #e5e7eb; 
+        border-radius: 12px; 
+        padding: 16px; 
+        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+      }
+      .cr-tile-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+      .cr-tile-title { font-weight: 800; color: #111827; font-size: 15px; }
+      .cr-tile-sub { font-size: 12px; color: #6b7280; }
+      .cr-tile-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px dashed #f1f5f9; }
+      .cr-label { font-size: 10px; text-transform: uppercase; color: #94a3b8; font-weight: 700; margin-bottom: 2px; }
+      .cr-num { font-size: 13px; color: #334155; font-weight: 600; }
+      .cr-badge { padding: 4px 8px; border-radius: 6px; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+      .cr-badge-success { background: #f0fdf4; color: #16a34a; }
+      .cr-badge-warn { background: #fffbeb; color: #d97706; }
+      .cr-badge-danger { background: #fef2f2; color: #dc2626; }
+      .cr-empty { text-align: center; padding: 40px 20px; color: #94a3b8; font-size: 14px; background: #f8fafc; border-radius: 12px; border: 2px dashed #e2e8f0; }
     `}</style>
   </div>
 );

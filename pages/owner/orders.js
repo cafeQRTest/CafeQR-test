@@ -12,6 +12,7 @@ import Card from '../../components/ui/Card';
 import { subscribeOwnerDevice } from '../../helpers/subscribePush';
 import { downloadInvoicePdf } from '../../lib/downloadInvoicePdf'
 import VariantSelector from '../../components/VariantSelector'
+import NiceSelect from '../../components/NiceSelect'
 import { round2 } from '../../lib/qty'
 
 const BRAND = {
@@ -511,25 +512,13 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
   const [onlineAmount, setOnlineAmount] = useState('');
   const [onlineMethod, setOnlineMethod] = useState('upi');
 
-  // Mode info from order (paymentConfirmDialog)
-  const mode = order.mode || null; // 'collect' | 'refund' | null
+  const mode = order.mode || null;
   const originalTotal = computeOrderTotalDisplay(order);
 
-  // Decide effective total to validate against
   const effectiveTotal =
     mode === 'collect'
       ? Number(order.remainingAmount ?? originalTotal)
-      : originalTotal;
-
-  const alreadyPaid =
-    mode && order.alreadyPaidAmount != null
-      ? Number(order.alreadyPaidAmount)
-      : 0;
-
-  const refundAmount =
-    mode === 'refund' && order.refundAmount != null
-      ? Number(order.refundAmount)
-      : 0;
+      : (mode === 'refund' ? Number(order.refundAmount ?? 0) : originalTotal);
 
   const handleMethodSelect = (method) => {
     setPaymentMethod(method);
@@ -546,34 +535,25 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
     const cash = Number(cashAmount || 0);
     const online = Number(onlineAmount || 0);
     const sum = cash + online;
-
     if (cash <= 0 || online <= 0) {
-      alert('Both cash and online amounts must be greater than 0');
+      alert('Amounts must be greater than 0');
       return false;
     }
-
     if (Math.abs(sum - effectiveTotal) > 0.01) {
-      alert(
-        `Amounts must equal ₹${effectiveTotal.toFixed(
-          2
-        )}. Currently: ₹${sum.toFixed(2)}`
-      );
+      alert(`Total should be ₹${effectiveTotal.toFixed(2)}`);
       return false;
     }
-
     return true;
   };
 
   const handleConfirm = () => {
     if (paymentMethod === 'mixed') {
       if (!validateMixedPayment()) return;
-
       onConfirm(paymentMethod, {
         cash_amount: Number(cashAmount).toFixed(2),
         online_amount: Number(onlineAmount).toFixed(2),
         online_method: onlineMethod,
         is_mixed: true,
-        // optional: include mode info if you want to treat collect / refund differently later
         mode,
       });
     } else {
@@ -582,322 +562,168 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
   };
 
   const titlePrefix =
-    mode === 'collect'
-      ? 'Collect remaining payment'
-      : mode === 'refund'
-      ? 'Refund extra payment'
-      : 'Payment Confirmation';
+    mode === 'collect' ? 'Payment Collection' : 
+    mode === 'refund' ? 'Process Refund' : 
+    'Complete Payment';
 
   return (
     <div
       style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 1000,
+        position: 'fixed', inset: 0,
+        backgroundColor: 'rgba(15, 23, 42, 0.4)',
+        backdropFilter: 'blur(5px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        zIndex: 10000, padding: 12
       }}
+      onClick={(e) => { e.stopPropagation(); onCancel(); }}
     >
       <div
         style={{
-          backgroundColor: 'white',
-          padding: 20,
-          borderRadius: 8,
-          maxWidth: 450,
-          margin: 16,
-          maxHeight: '90vh',
-          overflowY: 'auto',
+          background: 'white', width: '100%', maxWidth: 340,
+          borderRadius: 16, padding: 20,
+          boxShadow: '0 12px 24px -10px rgba(0, 0, 0, 0.15)',
+          maxHeight: '90vh', overflowY: 'auto',
+          position: 'relative',
+          animation: 'fadeIn 0.2s ease-out',
         }}
+        onClick={e => e.stopPropagation()}
       >
-        <h3 style={{ margin: '0 0 16px 0' }}>{titlePrefix}</h3>
-        <p>
-          <strong>Order #{order.id.slice(0, 8)}</strong> - {getOrderTypeLabel(order)}
-        </p>
-
-        {/* Amount summary depending on mode */}
-        {mode ? (
-          <div style={{ marginBottom: 12, fontSize: 13 }}>
-            <div>
-              Total bill:{' '}
-              <strong>₹{(order.totalAmount ?? originalTotal).toFixed(2)}</strong>
-            </div>
-            <div>
-              Already paid:{' '}
-              <strong>₹{alreadyPaid.toFixed(2)}</strong>
-            </div>
-            {mode === 'collect' && (
-              <div style={{ marginTop: 4, color: '#16a34a', fontWeight: 600 }}>
-                Remaining to collect:{' '}
-                ₹{(order.remainingAmount ?? 0).toFixed(2)}
-              </div>
-            )}
-            {mode === 'refund' && (
-              <div style={{ marginTop: 4, color: '#b91c1c', fontWeight: 600 }}>
-                Refund to customer:{' '}
-                ₹{refundAmount.toFixed(2)}
-              </div>
-            )}
+        <div style={{ marginBottom: 16 }}>
+          <h3 style={{ fontSize: 18, fontWeight: 800, color: '#0f172a', margin: '0 0 2px 0', letterSpacing: '-0.01em' }}>{titlePrefix}</h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 600, color: '#94a3b8' }}>
+             <span>#{order.id.slice(0, 8)}</span>
+             <div style={{ width: 3, height: 3, borderRadius: '50%', background: '#f1f5f9' }}></div>
+             <span>{getOrderTypeLabel(order)}</span>
           </div>
-        ) : (
-          <p>
-            <strong>Amount: {money(originalTotal)}</strong>
-          </p>
-        )}
-
-        <p style={{ marginBottom: 16 }}>
-          <strong>
-            {mode === 'refund'
-              ? 'How will you adjust/refund the payment?'
-              : 'How did the customer pay?'}
-          </strong>
-        </p>
-
-        {/* Payment method selection */}
-        <div
-          style={{
-            margin: '16px 0',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '10px',
-          }}
-        >
-          {/* Cash Option */}
-          <label
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px',
-              padding: '12px',
-              border:
-                paymentMethod === 'cash'
-                  ? '2px solid #2563eb'
-                  : '1px solid #e5e7eb',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              backgroundColor:
-                paymentMethod === 'cash' ? '#eff6ff' : 'white',
-            }}
-          >
-            <input
-              type="radio"
-              value="cash"
-              checked={paymentMethod === 'cash'}
-              onChange={(e) => handleMethodSelect(e.target.value)}
-            />
-            <span>
-              💵 {mode === 'refund' ? 'Refund in Cash' : 'Full Cash Payment'}
-            </span>
-          </label>
-
-          {/* Online Option */}
-          <label
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px',
-              padding: '12px',
-              border:
-                paymentMethod === 'online'
-                  ? '2px solid #2563eb'
-                  : '1px solid #e5e7eb',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              backgroundColor:
-                paymentMethod === 'online' ? '#eff6ff' : 'white',
-            }}
-          >
-            <input
-              type="radio"
-              value="online"
-              checked={paymentMethod === 'online'}
-              onChange={(e) => handleMethodSelect(e.target.value)}
-            />
-            <span>
-              🔗{' '}
-              {mode === 'refund'
-                ? 'Refund Online (UPI/Card)'
-                : 'Full Online (UPI/Card)'}
-            </span>
-          </label>
-
-          {/* Mixed Payment Option (only makes sense for collecting, not refund) */}
-          {mode !== 'refund' && (
-            <label
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                padding: '12px',
-                border:
-                  paymentMethod === 'mixed'
-                    ? '2px solid #2563eb'
-                    : '1px solid #e5e7eb',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                backgroundColor:
-                  paymentMethod === 'mixed' ? '#eff6ff' : 'white',
-              }}
-            >
-              <input
-                type="radio"
-                value="mixed"
-                checked={paymentMethod === 'mixed'}
-                onChange={(e) => handleMethodSelect(e.target.value)}
-              />
-              <span>🔀 Mixed (Part Cash + Part Online)</span>
-            </label>
-          )}
         </div>
 
-        {/* Mixed Payment Details Form (only when collecting) */}
+        {/* Financial Highlights - Minimal */}
+        <div style={{ marginBottom: 16, borderBottom: '1px solid #f8fafc', paddingBottom: 12 }}>
+           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: 12, color: '#94a3b8' }}>
+              <span>Total Bill</span>
+              <span style={{ fontWeight: 600, color: '#64748b' }}>₹{(order.totalAmount ?? originalTotal).toFixed(2)}</span>
+           </div>
+           
+           {order.alreadyPaidAmount > 0.01 && (
+             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: 12, color: '#94a3b8' }}>
+                <span>Already Paid</span>
+                <span style={{ fontWeight: 600, color: '#64748b' }}>₹{Number(order.alreadyPaidAmount).toFixed(2)}</span>
+             </div>
+           )}
+           
+           {(mode === 'collect' || mode === 'refund') && (
+             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                <span style={{ fontSize: 11, color: mode === 'collect' ? '#10b981' : '#ef4444', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                   {mode === 'collect' ? 'Collect' : 'Refund'}
+                </span>
+                <span style={{ fontSize: 18, fontWeight: 900, color: mode === 'collect' ? '#0f172a' : '#ef4444' }}>
+                   ₹{(mode === 'collect' ? (order.remainingAmount ?? 0) : (order.refundAmount ?? 0)).toFixed(2)}
+                </span>
+             </div>
+           )}
+        </div>
+
+        {/* Method Selection Cards - Slim */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
+           {[
+             { id: 'cash', label: 'Cash', icon: '💵' },
+             { id: 'online', label: 'Online', icon: '💳' },
+             mode !== 'refund' && { id: 'mixed', label: 'Mixed', icon: '🔀' }
+           ].filter(Boolean).map(opt => (
+             <div 
+               key={opt.id}
+               onClick={() => handleMethodSelect(opt.id)}
+               style={{
+                 padding: '8px 12px', borderRadius: 10, cursor: 'pointer',
+                 border: `1.5px solid ${paymentMethod === opt.id ? BRAND.orange : '#f8fafc'}`,
+                 background: paymentMethod === opt.id ? `${BRAND.orange}05` : 'white',
+                 display: 'flex', alignItems: 'center', gap: 10,
+                 transition: 'all 0.1s ease'
+               }}
+             >
+                <div style={{ 
+                  width: 28, height: 28, borderRadius: 8, background: paymentMethod === opt.id ? BRAND.orange : '#f1f5f9',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14
+                }}>
+                   <span style={{ color: paymentMethod === opt.id ? 'white' : '#64748b' }}>{opt.icon}</span>
+                </div>
+                <div style={{ flex: 1 }}>
+                   <div style={{ fontSize: 13, fontWeight: 700, color: paymentMethod === opt.id ? '#0f172a' : '#64748b' }}>{opt.label}</div>
+                </div>
+                <div style={{ 
+                  width: 14, height: 14, borderRadius: '50%', border: `1.5px solid ${paymentMethod === opt.id ? BRAND.orange : '#cbd5e1'}`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}>
+                   {paymentMethod === opt.id && <div style={{ width: 6, height: 6, borderRadius: '50%', background: BRAND.orange }} />}
+                </div>
+             </div>
+           ))}
+        </div>
+
+        {/* Mixed Split Form - Light & Compact */}
         {showMixedForm && mode !== 'refund' && (
-          <div
-            style={{
-              marginTop: '16px',
-              padding: '16px',
-              backgroundColor: '#f9fafb',
-              borderRadius: '8px',
-              border: '1px solid #e5e7eb',
-            }}
-          >
-            <div style={{ marginBottom: '12px' }}>
-              <label
-                style={{
-                  fontSize: '14px',
-                  fontWeight: '600',
-                  display: 'block',
-                  marginBottom: '6px',
-                }}
-              >
-                Cash Amount (₹)
-              </label>
-              <input
-                type="number"
-                value={cashAmount}
-                onChange={(e) => setCashAmount(e.target.value)}
-                placeholder="0.00"
-                min="0"
-                max={effectiveTotal}
-                step="0.01"
-                style={{
-                  width: '100%',
-                  padding: '8px 12px',
-                  border: '1px solid #d1d5db',
-                  borderRadius: '6px',
-                  fontSize: '14px',
-                  boxSizing: 'border-box',
-                }}
-              />
-            </div>
-
-            <div style={{ marginBottom: '12px' }}>
-              <label
-                style={{
-                  fontSize: '14px',
-                  fontWeight: '600',
-                  display: 'block',
-                  marginBottom: '6px',
-                }}
-              >
-                Online Amount (₹)
-              </label>
-              <input
-                type="number"
-                value={onlineAmount}
-                onChange={(e) => setOnlineAmount(e.target.value)}
-                placeholder="0.00"
-                min="0"
-                max={effectiveTotal}
-                step="0.01"
-                style={{
-                  width: '100%',
-                  padding: '8px 12px',
-                  border: '1px solid #d1d5db',
-                  borderRadius: '6px',
-                  fontSize: '14px',
-                  boxSizing: 'border-box',
-                }}
-              />
-            </div>
-
-            <div style={{ marginBottom: '12px' }}>
-              <label
-                style={{
-                  fontSize: '14px',
-                  fontWeight: '600',
-                  display: 'block',
-                  marginBottom: '6px',
-                }}
-              >
-                Online Payment Method
-              </label>
-              <select
-                value={onlineMethod}
-                onChange={(e) => setOnlineMethod(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '8px 12px',
-                  border: '1px solid #d1d5db',
-                  borderRadius: '6px',
-                  fontSize: '14px',
-                  boxSizing: 'border-box',
-                }}
-              >
-                <option value="upi">UPI</option>
-                <option value="card">Credit/Debit Card</option>
-                <option value="netbanking">Net Banking</option>
-                <option value="wallet">Digital Wallet</option>
-              </select>
-            </div>
-
-            <div
-              style={{
-                padding: '10px 12px',
-                backgroundColor: '#eff6ff',
-                borderLeft: '4px solid #2563eb',
-                borderRadius: '4px',
-                fontSize: '13px',
-                color: '#1e40af',
-              }}
-            >
-              <strong>
-                Total to collect now: ₹{effectiveTotal.toFixed(2)}
-              </strong>
-              <br />
-              <strong>Split:</strong> ₹{cashAmount || '0'} (Cash) + ₹
-              {onlineAmount || '0'} ({onlineMethod.toUpperCase()})
-            </div>
+          <div style={{ 
+            marginTop: -10, marginBottom: 16, padding: 12, background: '#f8fafc', 
+            borderRadius: 12, border: '1px solid #f1f5f9'
+          }}>
+             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                <div>
+                   <label style={{ fontSize: 8, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', display: 'block', marginBottom: 2 }}>Cash</label>
+                   <input 
+                     type="number" value={cashAmount} onChange={e => setCashAmount(e.target.value)}
+                     placeholder="0.00" style={{ 
+                        width: '100%', padding: '6px 10px', borderRadius: 6, border: '1px solid #e2e8f0',
+                        fontSize: 12, fontWeight: 600, outline: 'none'
+                     }}
+                   />
+                </div>
+                <div>
+                   <label style={{ fontSize: 8, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', display: 'block', marginBottom: 2 }}>Online</label>
+                   <input 
+                     type="number" value={onlineAmount} onChange={e => setOnlineAmount(e.target.value)}
+                     placeholder="0.00" style={{ 
+                        width: '100%', padding: '6px 10px', borderRadius: 6, border: '1px solid #e2e8f0',
+                        fontSize: 12, fontWeight: 600, outline: 'none'
+                     }}
+                   />
+                </div>
+             </div>
+             <div style={{ marginBottom: 110 }}>
+                <label style={{ fontSize: 8, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', display: 'block', marginBottom: 2 }}>Channel</label>
+                <NiceSelect
+                  value={onlineMethod}
+                  onChange={setOnlineMethod}
+                  options={[
+                    { value: 'upi', label: 'UPI' },
+                    { value: 'card', label: 'Card' },
+                    { value: 'wallet', label: 'Wallet' }
+                  ]}
+                />
+             </div>
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
-          <Button
-            onClick={handleConfirm}
-            variant="success"
-            style={{ flex: 1 }}
-          >
-            {mode === 'refund'
-              ? 'Confirm refund & complete'
-              : `Yes, ${
-                  paymentMethod === 'mixed'
-                    ? 'Mixed'
-                    : paymentMethod === 'cash'
-                    ? 'Cash'
-                    : 'Online'
-                } received`}
-          </Button>
-          <Button
-            onClick={onCancel}
-            variant="outline"
-            style={{ flex: 1 }}
-          >
-            Cancel
-          </Button>
+        <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
+           <Button
+             onClick={onCancel}
+             variant="outline"
+             style={{ 
+               flex: 1, padding: '8px', borderRadius: 10, fontSize: 13, fontWeight: 700, height: 38,
+               borderColor: '#f1f5f9', color: '#94a3b8'
+             }}
+           >
+             Cancel
+           </Button>
+           <Button
+             onClick={handleConfirm}
+             style={{ 
+               flex: 1.5, padding: '8px', borderRadius: 10, 
+               background: BRAND.orange, color: 'white',
+               fontSize: 13, fontWeight: 700, height: 38
+             }}
+           >
+             Finish
+           </Button>
         </div>
       </div>
     </div>
@@ -1616,29 +1442,38 @@ function CancelConfirmDialog({ order, onConfirm, onCancel }) {
 
   return (
     <div style={{
-      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex',
-      alignItems: 'center', justifyContent: 'center', zIndex: 1000
+      position: 'fixed', inset: 0,
+      backgroundColor: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(5px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: 12
     }}>
-      <div style={{ backgroundColor: 'white', padding: 20, borderRadius: 8, maxWidth: 400, margin: 16 }}>
-        <h3 style={{ margin: '0 0 16px 0' }}>Cancel Order Confirmation</h3>
-        <p>Are you sure you want to cancel order #{order.id.slice(0, 8)} - Table {order.table_number}?</p>
-        <label>
-          Reason for cancellation:
-          <textarea
-            value={reason}
-            onChange={e => setReason(e.target.value)}
-            rows={3}
-            style={{ width: '100%', marginTop: 8 }}
-            placeholder="Enter cancellation reason"
-          />
-        </label>
-        <div style={{ display: 'flex', gap: 10, marginTop: 16, justifyContent: 'flex-end' }}>
-          <Button onClick={handleConfirm} variant="danger" disabled={!reason.trim() || submitting}>
-            {submitting ? 'Cancelling...' : 'Confirm Cancel'}
+      <div style={{ 
+        backgroundColor: 'white', padding: 20, borderRadius: 16, maxWidth: 320, width: '100%',
+        boxShadow: '0 12px 24px -10px rgba(0, 0, 0, 0.15)',
+        animation: 'fadeIn 0.2s ease-out'
+      }}>
+        <h3 style={{ fontSize: 17, fontWeight: 800, color: '#0f172a', margin: '0 0 8px 0', letterSpacing: '-0.01em' }}>Cancel Order</h3>
+        <p style={{ fontSize: 12, color: '#64748b', lineHeight: 1.4, marginBottom: 16 }}>
+          Are you sure you want to cancel order <strong>#{order.id.slice(0, 8)}</strong>? This cannot be undone.
+        </p>
+        
+        <label style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Reason</label>
+        <textarea
+          value={reason}
+          onChange={e => setReason(e.target.value)}
+          rows={2}
+          style={{ 
+            width: '100%', padding: '10px', fontSize: 12, borderRadius: 10, border: '1.5px solid #e2e8f0',
+            outline: 'none', background: '#f8fafc', color: '#1e293b', marginBottom: 20
+          }}
+          placeholder="e.g. Mistake in order"
+        />
+        
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Button onClick={onCancel} variant="outline" style={{ flex: 1, height: 38, borderRadius: 10, fontSize: 13 }} disabled={submitting}>
+            Keep
           </Button>
-          <Button onClick={onCancel} variant="outline" disabled={submitting}>
-            Cancel
+          <Button onClick={handleConfirm} variant="danger" style={{ flex: 1.5, height: 38, borderRadius: 10, fontSize: 13 }} disabled={!reason.trim() || submitting}>
+            {submitting ? '...' : 'Confirm'}
           </Button>
         </div>
       </div>
@@ -1650,15 +1485,21 @@ function PaxEditDialog({ order, onSave, onClose }) {
   const [val, setVal] = useState(order.number_of_customers || '');
   return (
     <div style={{
-      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex',
-      alignItems: 'center', justifyContent: 'center', zIndex: 1100
+      position: 'fixed', inset: 0,
+      backgroundColor: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(5px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: 12
     }}>
-      <div style={{ backgroundColor: 'white', padding: 24, borderRadius: 12, width: 300, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}>
-        <h3 style={{ margin: '0 0 16px 0', fontSize: 18 }}>Update Pax</h3>
-        <p style={{ margin: '0 0 12px 0', color: '#6b7280', fontSize: 14 }}>
-            Enter number of customers for Table {order.table_number || 'Counter'}:
+      <div style={{ 
+        backgroundColor: 'white', padding: 20, borderRadius: 16, width: '100%', maxWidth: 280,
+        boxShadow: '0 12px 24px -10px rgba(0, 0, 0, 0.15)',
+        animation: 'fadeIn 0.2s ease-out'
+      }}>
+        <h3 style={{ fontSize: 16, fontWeight: 800, color: '#0f172a', margin: '0 0 4px 0', letterSpacing: '-0.01em' }}>Update Pax</h3>
+        <p style={{ fontSize: 11, color: '#64748b', marginBottom: 12 }}>
+            Set count for <strong>{order.table_number ? `T-${order.table_number}` : 'Counter'}</strong>
         </p>
+        
+        <label style={{ fontSize: 9, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Number of Pax</label>
         <input 
             type="number"
             autoFocus
@@ -1668,18 +1509,21 @@ function PaxEditDialog({ order, onSave, onClose }) {
               if (v === '') setVal('');
               else {
                 const n = parseInt(v, 10);
-                if (n > 0) setVal(n);
+                if (n >= 0) setVal(n);
               }
             }}
+            placeholder="0"
             style={{ 
-                width: '100%', padding: '10px', fontSize: 16, 
-                border: '1px solid #d1d5db', borderRadius: 8,
-                marginBottom: 20
+                width: '100%', padding: '10px', fontSize: 16, fontWeight: 700,
+                border: '1.5px solid #e2e8f0', borderRadius: 10,
+                outline: 'none', background: '#f8fafc', color: '#0f172a',
+                marginBottom: 16, textAlign: 'center'
             }}
         />
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-          <Button onClick={onClose} variant="outline">Cancel</Button>
-          <Button onClick={() => onSave(val)} variant="primary">Save</Button>
+        
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Button onClick={onClose} variant="outline" style={{ flex: 1, height: 38, borderRadius: 10, fontSize: 13 }}>Cancel</Button>
+          <Button onClick={() => onSave(val)} style={{ flex: 1.5, height: 38, borderRadius: 10, background: BRAND.orange, color: 'white', fontSize: 13 }}>Update</Button>
         </div>
       </div>
     </div>
@@ -2782,58 +2626,145 @@ colOrders =
     {itemsModalOrder && (
       <div 
         style={{
-          position:'fixed', top:0, left:0, right:0, bottom:0, width:'100%', height:'100%',
-          background:'rgba(0,0,0,0.5)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:9999
+          position:'fixed', inset: 0,
+          background:'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(5px)', 
+          display:'flex', alignItems:'center', justifyContent:'center', zIndex:10000,
+          padding: 12
         }}
         onClick={(e) => { e.stopPropagation(); setItemsModalOrder(null); }}
       >
         <div 
           style={{
-            background:'white', width:'90%', maxWidth:360, borderRadius:16, padding:20,
-            boxShadow:'0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-            maxHeight:'85vh', display:'flex', flexDirection:'column', animation: 'fadeIn 0.2s', position: 'relative'
+            background:'white', width:'100%', maxWidth:340, borderRadius:16, padding: 20,
+            boxShadow:'0 15px 30px -10px rgba(0, 0, 0, 0.15)',
+            maxHeight:'85vh', display:'flex', flexDirection:'column', animation: 'fadeIn 0.2s ease-out', position: 'relative',
           }}
           onClick={e => e.stopPropagation()}
         >
-            <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:16}}>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:8}}>
               <div>
-                  <strong style={{fontSize:18, display:'block', color:'#0f172a'}}>Order #{itemsModalOrder.id.slice(0,8)}</strong>
-                  <div style={{display:'flex', gap:8, marginTop:8, flexWrap:'wrap'}}>
-                      <div style={{background:'#f1f5f9', padding:'4px 8px', borderRadius:6, fontSize:12, color:'#475569'}}>
-                          <span style={{color:'#94a3b8', marginRight:4}}>Created</span>
-                          <span style={{fontWeight:600}}>
-                            {new Date(itemsModalOrder.created_at).toLocaleString('en-US', {
-                              month:'short', day:'numeric', hour:'numeric', minute:'2-digit'
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <h3 style={{fontSize:20, fontWeight: 900, color:'#0f172a', margin: 0, letterSpacing: '-0.02em'}}>Order #{itemsModalOrder.id.slice(0,8)}</h3>
+                    {itemsModalOrder.status === 'completed' && (
+                      <span style={{ 
+                        background: '#10b981', color: 'white', fontSize: 8, fontWeight: 700, 
+                        padding: '2px 6px', borderRadius: 4, textTransform: 'uppercase', letterSpacing: '0.04em'
+                      }}>Paid</span>
+                    )}
+                  </div>
+                  
+                  <div style={{
+                    display:'flex', gap:10, marginTop:10, alignItems: 'center', flexWrap: 'wrap',
+                    fontSize: 9, color: '#94a3b8', lineHeight: 1
+                  }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <span style={{fontWeight:700, textTransform: 'uppercase', letterSpacing: '0.04em', fontSize: 7.5, color: '#cbd5e1'}}>Placed</span>
+                          <span style={{fontWeight:600, color: '#475569'}}>
+                            {new Date(itemsModalOrder.created_at).toLocaleString('en-IN', {
+                              month:'short', day:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit', hour12: true
                             })}
                           </span>
                       </div>
-                      <div style={{background:'#f1f5f9', padding:'4px 8px', borderRadius:6, fontSize:12, color:'#475569'}}>
-                           <span style={{color:'#94a3b8', marginRight:4}}>Updated</span>
-                           <span style={{fontWeight:600}}>
-                             {new Date(itemsModalOrder.updated_at).toLocaleString('en-US', {
-                               month:'short', day:'numeric', hour:'numeric', minute:'2-digit'
-                             })}
-                           </span>
+
+                      {new Date(itemsModalOrder.updated_at) - new Date(itemsModalOrder.created_at) > 5000 && (
+                        <>
+                          <div style={{ width: 3, height: 3, borderRadius: '50%', background: '#cbd5e1' }}></div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <span style={{fontWeight:700, textTransform: 'uppercase', letterSpacing: '0.04em', fontSize: 7.5, color: '#cbd5e1'}}>Edited</span>
+                              <span style={{fontWeight:600, color: '#475569'}}>
+                                {new Date(itemsModalOrder.updated_at).toLocaleString('en-IN', {
+                                  hour:'2-digit', minute:'2-digit', second:'2-digit', hour12: true
+                                })}
+                              </span>
+                          </div>
+                        </>
+                      )}
+
+                      {itemsModalOrder.number_of_customers && (
+                         <>
+                           <div style={{ width: 3, height: 3, borderRadius: '50%', background: '#cbd5e1' }}></div>
+                           <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                              <span style={{fontSize: 10, opacity: 0.8}}>👥</span>
+                              <span style={{fontWeight:700, color: '#475569', fontSize: 10}}>{itemsModalOrder.number_of_customers}</span>
+                           </div>
+                         </>
+                      )}
+
+                      <div style={{ width: 3, height: 3, borderRadius: '50%', background: '#cbd5e1' }}></div>
+                      <div style={{
+                        background:'#f8fafc', padding:'2px 8px', borderRadius:6, border: '1px solid #f1f5f9',
+                        fontSize:9, fontWeight: 700, color: '#64748b'
+                      }}>
+                          {getOrderTypeLabel(itemsModalOrder)}
                       </div>
                   </div>
               </div>
               <div 
+                className="dynamic-close-btn"
                 onClick={() => setItemsModalOrder(null)} 
                 style={{
-                    cursor:'pointer', width:28, height:28, borderRadius:'50%', 
-                    background:'#fef2f2', color:'#991b1b', display:'flex', 
-                    alignItems:'center', justifyContent:'center', fontSize:16, fontWeight:600,
-                    flexShrink:0
+                    cursor:'pointer', width:28, height:28, 
+                    background:'transparent', color: BRAND.orange, display:'flex', 
+                    alignItems:'center', justifyContent:'center', fontSize:22, fontWeight:300,
+                    flexShrink:0, marginTop: -4, marginRight: -8
                 }}
               >✕</div>
             </div>
-            <div style={{overflowY:'auto', flex:1, display:'flex', flexDirection:'column', gap:8, marginBottom: 16}}>
-              {toDisplayItems(itemsModalOrder).map((it, i) => (
-                <div key={i} style={{fontSize:15, borderBottom:'1px dashed #f1f5f9', paddingBottom:6}}>
-                  <span style={{fontWeight:600, color:BRAND.orange}}>{it.quantity}×</span> {it.name}
-                  {it.variant_name && <div style={{fontSize:12, color:'#64748b', marginLeft:20}}>{it.variant_name}</div>}
+
+            {(itemsModalOrder.customer_name || itemsModalOrder.customer_phone) && (
+              <div style={{ 
+                padding: '12px', background: '#f8fafc', borderRadius: 12, border: '1px solid #f1f5f9',
+                marginBottom: 16, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12
+              }}>
+                {itemsModalOrder.customer_name && (
+                  <div>
+                    <div style={{ fontSize: 8, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>Customer</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{itemsModalOrder.customer_name}</div>
+                  </div>
+                )}
+                {itemsModalOrder.customer_phone && (
+                  <div>
+                    <div style={{ fontSize: 8, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>Contact</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{itemsModalOrder.customer_phone}</div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div style={{overflowY:'auto', flex:1, display:'flex', flexDirection:'column', gap:0, marginBottom: 12}}>
+               <div style={{ fontSize: 8.5, fontWeight: 800, color: '#cbd5e1', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8, borderBottom: '1.5px solid #f1f5f9', paddingBottom: 6 }}>Order Details</div>
+               {toDisplayItems(itemsModalOrder).map((it, i) => (
+                <div key={i} style={{ padding: '8px 0', borderBottom: '1px solid #f8fafc' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 12, fontWeight: 500, color: '#334155' }}>
+                        <span style={{ color: BRAND.orange, fontWeight: 700, marginRight: 5 }}>{it.quantity}×</span>
+                        {it.name}
+                      </div>
+                      {it.variant_name && <div style={{ fontSize: 9, color: '#94a3b8', marginTop: 1, marginLeft: 20 }}>{it.variant_name}</div>}
+                    </div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: '#1e293b' }}>
+                      ₹{((it.quantity || 1) * (it.price || 0)).toFixed(2)}
+                    </div>
+                  </div>
                 </div>
               ))}
+            </div>
+
+            <div style={{ padding: '12px 0 0', borderTop: '1px solid #f1f5f9' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11 }}>
+                  <span style={{ color: '#94a3b8', fontWeight: 500 }}>Tax</span>
+                  <span style={{ fontWeight: 600, color: '#64748b' }}>₹{Number(itemsModalOrder.total_tax || itemsModalOrder.tax_amount || itemsModalOrder.tax || 0).toFixed(2)}</span>
+                </div>
+                
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 1 }}>
+                  <span style={{ fontSize : 14, fontWeight: 800, color: '#0f172a', letterSpacing: '-0.01em' }}>Grand Total</span>
+                  <span style={{ fontSize: 20, fontWeight: 900, color: BRAND.orange }}>
+                    ₹{computeOrderTotalDisplay(itemsModalOrder).toFixed(2)}
+                  </span>
+                </div>
+              </div>
             </div>
         </div>
       </div>
@@ -2841,6 +2772,9 @@ colOrders =
 
       <style jsx>{`
 .orders-wrap { padding:12px 0 32px; }
+.dynamic-close-btn { transition: opacity 0.2s ease; }
+.dynamic-close-btn:hover { opacity: 0.6; }
+.dynamic-close-btn:active { opacity: 0.9; }
 .orders-header { display:flex; justify-content:space-between; align-items:center; padding:0 12px 12px; gap:10px; }
 .orders-header h1 { margin:0; font-size:clamp(20px,2.6vw,28px); }
 .header-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
@@ -2870,13 +2804,16 @@ colOrders =
 
 function getOrderTypeLabel(order) {
   if (!order) return '';
-  if (order.order_type === 'parcel') return 'Parcel';
-  if (order.order_type === 'dine-in') return 'Dine-in';
-  if (order.order_type === 'counter') {
-    if (order.table_number) return `Table ${order.table_number}`;
-    else return 'Counter';
+  let label = '';
+  if (order.order_type === 'parcel') label = 'Parcel';
+  else if (order.order_type === 'dine-in') label = 'Dine-in';
+  else if (order.order_type === 'counter') label = 'Counter';
+  else label = order.order_type || 'Order';
+
+  if (order.table_number) {
+    return `${label} • Table ${order.table_number}`;
   }
-  return '';
+  return label;
 }
 
 // OrderCard component (with print button)
