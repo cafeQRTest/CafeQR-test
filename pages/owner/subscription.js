@@ -123,7 +123,7 @@ export default function SubscriptionPage() {
               
               // Redirect to dashboard after short delay
               setTimeout(() => {
-                router.replace('/owner/overview')
+                router.replace('/owner')
               }, 1000)
             } catch (err) {
               console.error('Activation error:', err)

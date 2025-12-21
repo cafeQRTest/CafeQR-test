@@ -107,12 +107,21 @@ function GlobalSubscriptionGate({ children }) {
     let mounted = true
     async function checkAndRedirect() {
       if (!router.isReady || loading) return
+      
       const supabase = getSupabase()
       const { data } = await supabase.auth.getSession()
       const session = data?.session
+      
       const isOwner = path.startsWith(OWNER_PREFIX)
-      if (isOwner && !onSubPage && session && !subscription?.is_active) {
-        if (mounted) router.replace(`/owner/subscription${window.location.search}`)
+      
+      // If we have a session but NO subscription object yet, wait (context might be catching up)
+      if (session && !subscription && !loading) return;
+
+      if (isOwner && !onSubPage && session && subscription?.is_active === false) {
+        if (mounted) {
+          console.log('[Gate] Redirecting to subscription (Inactive)');
+          router.replace(`/owner/subscription${window.location.search}`)
+        }
       }
     }
     checkAndRedirect()

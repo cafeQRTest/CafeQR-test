@@ -14,7 +14,17 @@ export function SubscriptionProvider({ children }) {
   const [state, setState] = useState({ subscription: null, loading: true, error: '' });
 
   const fetchStatus = async () => {
-    if (!restaurant?.id) return setState({ subscription: null, loading: false, error: '' });
+    // If restaurant context is still resolving, we must stay in loading state
+    if (restLoading) {
+       setState(s => ({ ...s, loading: true }));
+       return;
+    }
+
+    if (!restaurant?.id) {
+       // Only stop loading if we are sure there is no restaurant to fetch for
+       return setState({ subscription: null, loading: false, error: '' });
+    }
+
     setState(s => ({ ...s, loading: true, error: '' }));
     try {
       const res = await fetch(`/api/subscription/status?restaurant_id=${restaurant.id}`);

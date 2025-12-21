@@ -117,6 +117,11 @@ const ToolBar = styled.div`
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
+
+    @media (max-width: 768px) {
+      margin-top: 20px;
+      padding-top: 12px; /* Ample space for the floating AI badge */
+    }
   }
 `;
 
@@ -129,19 +134,28 @@ const pulse = keyframes`
 const AIBadge = styled.span`
   position: absolute;
   top: -10px;
-  left: -6px;
+  left: -2px;
   background: white;
-  border: 1px solid #ea580c;
+  border: 1.5px solid #ea580c;
   color: #ea580c;
   font-size: 9px;
   font-weight: 900;
   padding: 1px 5px;
-  border-radius: 6px;
-  line-height: 1.2;
-  z-index: 10;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  border-radius: 4px;
+  line-height: 1;
+  z-index: 20;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.15);
   animation: ${pulse} 2s infinite;
   pointer-events: none;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+
+  @media (max-width: 600px) {
+    top: -11px;
+    left: 0px;
+    font-size: 8px;
+    padding: 1px 4px;
+  }
 `;
 
 import { useRouter } from "next/router";

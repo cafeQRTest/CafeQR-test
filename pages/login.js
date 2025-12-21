@@ -1,12 +1,13 @@
-// pages/login.js
 import { useState } from 'react'
 import { useRouter } from 'next/router'
 import Link from 'next/link'
 import { getSupabase } from '../services/supabase'
+import { useSubscription } from '../context/SubscriptionContext'
 
 export default function LoginPage() {
   const router = useRouter()
   const supabase = getSupabase()
+  const { refresh } = useSubscription() // Use refresh from context
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -38,24 +39,49 @@ export default function LoginPage() {
       }
 
       // NEW: Ensure trial started on login
-      // After successful login
-if (data?.user?.id) {
-  try {
-    await fetch('/api/subscription/start-trial', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        restaurant_id: data.user.id,
-        owner_email: data.user.email,      // NEW
-      }),
-    });
-  } catch (e) {
-    console.error('Trial check failed:', e);
-  }
-}
+      if (data?.user?.id) {
+        try {
+          await fetch('/api/subscription/start-trial', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              restaurant_id: data.user.id,
+              owner_email: data.user.email,
+            }),
+          });
+          
+          // CRITICAL: Refresh the global subscription context so the Gate knows we are active
+          await refresh();
+          
+        } catch (e) {
+          console.error('Trial check failed:', e);
+        }
+      }
 
+      // Check subscription status
+      let dest = '/owner'
+      try {
+        const subRes = await fetch(`/api/subscription/status?restaurant_id=${data.user.id}`)
+        if (subRes.ok) {
+          const subData = await subRes.json()
+          
+          if (!subData.is_active) {
+             // Expired/Inactive -> MUST go to subscription
+             dest = '/owner/subscription'
+          } else {
+             // Active -> Default to /owner
+             // Honor redirect parameter ONLY if it's not pointing to subscription page
+             let paramRedirect = router.query?.redirect ? String(router.query.redirect) : null;
+             
+             if (paramRedirect && !paramRedirect.includes('/owner/subscription')) {
+                dest = paramRedirect
+             }
+          }
+        }
+      } catch (err) {
+        console.error('Sub check fail', err)
+      }
 
-      const dest = router.query?.redirect ? String(router.query.redirect) : '/owner'
       router.push(dest)
     } catch (e) {
       setLoading(false)

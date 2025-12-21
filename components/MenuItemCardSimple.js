@@ -24,6 +24,7 @@ export default function MenuItemCardSimple({
   minQuantity = 0,
   maxQuantity = 999,
   decimalPlaces = 2,
+  highlightColor,
 }) {
   const isOutOfStock =
     item.status === 'out_of_stock' ||
@@ -118,7 +119,11 @@ export default function MenuItemCardSimple({
   };
 
   return (
-    <div style={styles.card}>
+    <div style={{
+      ...styles.card,
+      borderTop: `4px solid ${highlightColor || (isOutOfStock ? '#f97316' : '#16a34a')}`,
+      overflow: 'hidden'
+    }}>
       <div style={styles.header}>
         <div style={styles.iconAndName}>
           <div style={styles.icon}>{item.veg ? vegIcon : nonVegIcon}</div>

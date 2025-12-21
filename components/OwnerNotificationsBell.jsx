@@ -23,7 +23,7 @@ export default function OwnerNotificationsBell() {
       beep.play().catch(() => {
         // Autoplay blocked by browser - user needs to interact first
       });
-    } catch (e) {}
+    } catch (e) { }
   };
 
   // Get latest alerts from backend REST API
@@ -72,7 +72,7 @@ export default function OwnerNotificationsBell() {
             try {
               const row = payload.new || payload.old;
               if (!row || row.restaurant_id !== restaurantId) return;
-              
+
               // Handle INSERT events - new alert created
               if (payload.eventType === 'INSERT') {
                 playSound();
@@ -83,7 +83,7 @@ export default function OwnerNotificationsBell() {
                   return updated;
                 });
               }
-              
+
               // Handle UPDATE events - alert status changed
               if (payload.eventType === 'UPDATE') {
                 setAlerts(prev => {
@@ -159,7 +159,7 @@ export default function OwnerNotificationsBell() {
       });
 
       if (!response.ok) throw new Error('Failed to update alert');
-      
+
       // Reload to get fresh top 10 (prioritizes pending over acknowledged)
       await loadAlerts();
     } catch (e) {
@@ -175,127 +175,188 @@ export default function OwnerNotificationsBell() {
     <div style={{ position: 'relative', marginLeft: 20 }} ref={dropdownRef}>
       <button
         aria-label="Alerts"
+        className={pendingCount > 0 ? 'bell-ringing' : ''}
         style={{
-          background: '#fff',
+          background: 'transparent',
           border: 'none',
           cursor: 'pointer',
           padding: 0,
-          position: 'relative'
+          position: 'relative',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          transition: 'transform 0.2s ease'
         }}
         onClick={() => setIsOpen((v) => !v)}
       >
-        <FaBell size={28} color="#ef4444" />
+        <div className="bell-icon-wrapper">
+          <FaBell size={26} color={pendingCount > 0 ? "#ef4444" : "#64748b"} />
+        </div>
         {pendingCount > 0 && (
           <span style={{
             position: 'absolute',
-            top: -4,
-            right: -4,
-            minWidth: 22,
-            height: 22,
+            top: -2,
+            right: -2,
+            minWidth: 20,
+            height: 20,
             background: '#ef4444',
             color: '#fff',
             borderRadius: '50%',
             fontWeight: 700,
-            fontSize: 13,
+            fontSize: 12,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            boxShadow: '0 2px 4px #ef444444'
+            boxShadow: '0 2px 4px rgba(239, 68, 68, 0.4)',
+            border: '2px solid #fff',
+            animation: 'pulse 2s infinite'
           }}>
             {pendingCount}
           </span>
         )}
       </button>
+
       {isOpen && (
         <div style={{
           position: 'absolute',
-          right: 0,
-          top: 38,
-          minWidth: 295,
-          maxWidth: 390,
+          right: -10,
+          top: 45,
+          minWidth: 320,
           background: '#fff',
-          border: '1px solid #e5e7eb',
-          borderRadius: 10,
+          border: '1px solid #e2e8f0',
+          borderRadius: 16,
           zIndex: 1001,
-          boxShadow: '0 14px 32px -8px #3730a322',
-          padding: '8px 6px',
-          maxHeight: 480,
-          overflowY: 'auto'
+          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+          overflow: 'hidden',
+          animation: 'slideDown 0.2s ease-out'
         }}>
-          <div style={{ fontWeight: 700, padding: '5px 10px', borderBottom: '1px solid #f3f4f6', color: '#db2777' }}>
-            Latest Service Calls
+          <div style={{
+            padding: '16px',
+            borderBottom: '1px solid #f1f5f9',
+            background: '#f8fafc',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}>
+            <span style={{ fontWeight: 700, color: '#1e293b', fontSize: 15 }}>Notifications</span>
+            {pendingCount > 0 && (
+              <span style={{ fontSize: 11, background: '#fee2e2', color: '#dc2626', padding: '2px 8px', borderRadius: 99, fontWeight: 600 }}>
+                {pendingCount} New
+              </span>
+            )}
           </div>
-          {alerts.length === 0 ? (
-            <div style={{ padding: '14px 8px', color: '#737373', textAlign: 'center', fontSize: 14 }}>No requests</div>
-          ) :
-            [...alerts]
-              .sort((a, b) => {
-                if (a.status !== b.status) return a.status === 'pending' ? -1 : 1;
-                return new Date(b.created_at) - new Date(a.created_at);
-              })
-              .map((alert) => (
-                <div
-                  key={alert.id}
-                  style={{
-                    padding: '10px 9px',
-                    borderBottom: '1px solid #f3f4f6',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10,
-                    opacity: alert.status === 'acknowledged' ? 0.45 : 1,
-                    filter: alert.status === 'acknowledged' ? 'grayscale(0.55)' : 'none',
-                    background: alert.status === 'pending' ? '#fff' : '#f7fafc'
-                  }}
-                >
-                  <span style={{
-                    background:
-                      Number(alert.table_number) === 0
-                        ? (alert.status === 'pending' ? '#bfdbfe' : '#e5e7eb')
-                        : (alert.status === 'pending' ? '#fde68a' : '#e5e7eb'),
-                    color:
-                      Number(alert.table_number) === 0
-                        ? (alert.status === 'pending' ? '#1d4ed8' : '#4b5563')
-                        : (alert.status === 'pending' ? '#78350f' : '#737373'),
-                    fontWeight: 600,
-                    borderRadius: 12,
-                    fontSize: 13,
-                    padding: '3px 11px'
-                  }}>
-                    {Number(alert.table_number) === 0 ? 'Low Stock' : `Table ${alert.table_number}`}
-                  </span>
-                  <span style={{ fontSize: 13, color: '#6b7280', flex: 1 }}>
-                    {Number(alert.table_number) === 0
-                      ? (alert.message || 'Stock alert')
-                      : (alert.message || 'Staff called')}
-                  </span>
-                  <span style={{ fontSize: 11, color: '#737373', opacity: 0.7 }}>
-                    {new Date(alert.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                  {alert.status === 'pending' && (
-                    <button
-                      style={{
-                        background: '#10b981',
-                        color: '#fff',
-                        borderRadius: 8,
-                        border: 'none',
-                        padding: '6px 13px',
-                        fontWeight: 700,
-                        fontSize: 13,
-                        marginLeft: 8,
-                        cursor: ackLoading === alert.id ? 'not-allowed' : 'pointer',
-                        opacity: ackLoading === alert.id ? 0.6 : 1,
-                        transition: 'opacity 0.18s'
-                      }}
-                      disabled={ackLoading === alert.id}
-                      onClick={() => handleAck(alert.id)}
-                    >
-                      {ackLoading === alert.id ? '...' : 'Acknowledge'}
-                    </button>
-                  )}
-                </div>
-              ))}
+
+          <div style={{ maxHeight: 400, overflowY: 'auto' }}>
+            {alerts.length === 0 ? (
+              <div style={{ padding: '32px 16px', color: '#94a3b8', textAlign: 'center', fontSize: 14 }}>
+                <div style={{ fontSize: 24, marginBottom: 8, opacity: 0.5 }}>🔔</div>
+                No notifications
+              </div>
+            ) :
+              [...alerts]
+                .sort((a, b) => {
+                  if (a.status !== b.status) return a.status === 'pending' ? -1 : 1;
+                  return new Date(b.created_at) - new Date(a.created_at);
+                })
+                .map((alert) => (
+                  <div
+                    key={alert.id}
+                    style={{
+                      padding: '16px',
+                      borderBottom: '1px solid #f1f5f9',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 8,
+                      background: alert.status === 'pending' ? '#fff' : '#ffffff',
+                      transition: 'background 0.2s',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (alert.status !== 'pending') e.currentTarget.style.background = '#f8fafc';
+                    }}
+                    onMouseLeave={(e) => {
+                      if (alert.status !== 'pending') e.currentTarget.style.background = '#ffffff';
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{
+                          background: '#fff7ed',
+                          color: '#ea580c',
+                          fontWeight: 700,
+                          borderRadius: 6,
+                          fontSize: 12,
+                          padding: '4px 8px',
+                          border: '1px solid #ffedd5'
+                        }}>
+                          {(Number(alert.table_number) === 0 || alert.message?.toLowerCase().includes('stock')) ? 'Low Stock' : `Table ${alert.table_number}`}
+                        </span>
+                        <span style={{ fontSize: 12, color: '#94a3b8' }}>
+                          {new Date(alert.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                      {alert.status === 'pending' && (
+                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444' }}></div>
+                      )}
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+                      <span style={{ fontSize: 14, color: '#334155', fontWeight: 500, lineHeight: 1.4 }}>
+                        {alert.message || (Number(alert.table_number) === 0 ? 'Low stock alert' : 'Staff assistance requested')}
+                      </span>
+
+                      {alert.status === 'pending' ? (
+                        <button
+                          style={{
+                            background: '#10b981',
+                            color: '#fff',
+                            borderRadius: 8,
+                            border: 'none',
+                            padding: '6px 16px',
+                            fontWeight: 600,
+                            fontSize: 13,
+                            cursor: ackLoading === alert.id ? 'not-allowed' : 'pointer',
+                            opacity: ackLoading === alert.id ? 0.7 : 1,
+                            transition: 'all 0.2s',
+                            boxShadow: '0 2px 4px rgba(16, 185, 129, 0.2)'
+                          }}
+                          disabled={ackLoading === alert.id}
+                          onClick={() => handleAck(alert.id)}
+                        >
+                          {ackLoading === alert.id ? '...' : 'Done'}
+                        </button>
+                      ) : (
+                        <span style={{ fontSize: 12, color: '#94a3b8', fontStyle: 'italic' }}>Resolved</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+          </div>
         </div>
-      )}
-    </div>
+      )
+      }
+      <style jsx>{`
+        @keyframes swing {
+          0% { transform: rotate(0deg); }
+          20% { transform: rotate(15deg); }
+          40% { transform: rotate(-10deg); }
+          60% { transform: rotate(5deg); }
+          80% { transform: rotate(-5deg); }
+          100% { transform: rotate(0deg); }
+        }
+        @keyframes pulse {
+          0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+          70% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+          100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .bell-ringing .bell-icon-wrapper {
+          animation: swing 2s infinite ease-in-out;
+          transform-origin: top center;
+        }
+      `}</style>
+    </div >
   );
 }

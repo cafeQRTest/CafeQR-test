@@ -81,15 +81,15 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false, mode 
         <div style={{display:'grid',gap:10,margin:'12px 0'}}>
           <label style={choiceBox(paymentMethod==='cash')}>
             <input type="radio" value="cash" checked={paymentMethod==='cash'} onChange={(e)=>handleMethodSelect(e.target.value)} disabled={disabled}/>
-            <span>💵 Cash</span>
+            <span>Cash</span>
           </label>
           <label style={choiceBox(paymentMethod==='online')}>
             <input type="radio" value="online" checked={paymentMethod==='online'} onChange={(e)=>handleMethodSelect(e.target.value)} disabled={disabled}/>
-            <span>🔗 Online (UPI/Card)</span>
+            <span>Online (UPI/Card)</span>
           </label>
           <label style={choiceBox(paymentMethod==='mixed')}>
             <input type="radio" value="mixed" checked={paymentMethod==='mixed'} onChange={(e)=>handleMethodSelect(e.target.value)} disabled={disabled}/>
-            <span>🔀 Mixed (Cash + Online)</span>
+            <span>Mixed (Cash + Online)</span>
           </label>
         </div>
 
@@ -147,6 +147,194 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false, mode 
     </div>
   );
 }
+
+const NewCreditCustomerModal = ({ visible, onClose, onSave, name, setName, phone, setPhone, processing, theme, error }) => {
+  if (!visible) return null;
+  
+  const isValidPhone = /^\d{10}$/.test(phone.trim());
+  const canSave = name.trim().length >= 2 && isValidPhone;
+
+  const handlePhoneChange = (e) => {
+    const val = e.target.value.replace(/\D/g, ''); // only digits
+    if (val.length <= 10) setPhone(val);
+  };
+
+  return (
+    <div 
+      style={{ 
+        position: 'fixed', inset: 0, 
+        background: 'rgba(15, 23, 42, 0.45)', 
+        display: 'flex', alignItems: 'center', justifyContent: 'center', 
+        padding: '24px', zIndex: 2000, 
+        backdropFilter: 'blur(2px)',
+        animation: 'fadeIn 0.2s ease-out'
+      }}
+      onClick={onClose}
+    >
+      <div 
+        style={{ 
+          background: '#ffffff', borderRadius: '16px', 
+          width: '100%', maxWidth: '440px', 
+          boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.25)', 
+          border: '1px solid #e5e7eb', 
+          animation: 'slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+          overflow: 'hidden'
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ padding: '24px 24px 0' }}>
+          <h3 style={{ margin: '0 0 8px', fontSize: '20px', fontWeight: 800, color: '#111827' }}>New Credit Customer</h3>
+          <p style={{ margin: '0 0 24px', fontSize: '14px', color: '#64748b' }}>Enter customer details to establish a credit account.</p>
+        </div>
+        
+        <div style={{ padding: '0 24px 24px', display: 'grid', gap: '20px' }}>
+          {error && (
+            <div style={{ 
+              background: '#fef2f2', border: '1px solid #fecaca', 
+              color: '#dc2626', padding: '12px', borderRadius: '8px', 
+              fontSize: '13px', fontWeight: 500, lineHeight: 1.4
+            }}>
+              {error}
+            </div>
+          )}
+
+          <div>
+            <SectionLabel>Full Name</SectionLabel>
+            <input 
+              type="text" 
+              value={name} onChange={(e) => setName(e.target.value)} 
+              style={{ 
+                width: '100%', padding: '12px 16px', background: '#f9fafb', 
+                border: '1px solid #d1d5db', borderRadius: '8px', outline: 'none', 
+                fontSize: '15px', transition: 'all 0.2s'
+              }} 
+              onFocus={(e) => {
+                e.target.style.borderColor = theme.main;
+                e.target.style.background = '#ffffff';
+                e.target.style.boxShadow = `0 0 0 3px ${theme.main}15`;
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = '#d1d5db';
+                e.target.style.background = '#f9fafb';
+                e.target.style.boxShadow = 'none';
+              }}
+            />
+          </div>
+          <div>
+            <SectionLabel>Phone Number</SectionLabel>
+            <input 
+              type="tel" 
+              value={phone} onChange={handlePhoneChange} 
+              style={{ 
+                width: '100%', padding: '12px 16px', background: '#f9fafb', 
+                border: '1px solid #d1d5db', borderRadius: '8px', outline: 'none', 
+                fontSize: '15px', transition: 'all 0.2s'
+              }} 
+              onFocus={(e) => {
+                e.target.style.borderColor = theme.main;
+                e.target.style.background = '#ffffff';
+                e.target.style.boxShadow = `0 0 0 3px ${theme.main}15`;
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = '#d1d5db';
+                e.target.style.background = '#f9fafb';
+                e.target.style.boxShadow = 'none';
+              }}
+            />
+            {phone.trim().length > 0 && phone.trim().length < 10 && (
+              <div style={{ fontSize: '11px', color: '#ef4444', marginTop: '4px', fontWeight: 500 }}>
+                Please enter a 10-digit phone number
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div style={{ 
+          padding: '20px 24px 24px', 
+          borderTop: '1px solid #f3f4f6', 
+          display: 'flex', justifyContent: 'flex-end', gap: '12px', 
+          background: '#fafafa' 
+        }}>
+          <button 
+            onClick={onClose}
+            style={{ 
+              padding: '10px 20px', background: '#ffffff', color: '#4b5563', 
+              border: '1px solid #d1d5db', borderRadius: '99px', fontWeight: 500, 
+              fontSize: '14px', cursor: 'pointer', transition: 'all 0.2s'
+            }}
+          >
+            Cancel
+          </button>
+          <button 
+            onClick={onSave}
+            disabled={processing || !canSave}
+            style={{ 
+              padding: '10px 24px', 
+              background: processing || !canSave ? '#cbd5e1' : theme.main, 
+              color: '#ffffff', border: 'none', 
+              borderRadius: '99px', fontWeight: 600, fontSize: '14px', 
+              cursor: processing || !canSave ? 'not-allowed' : 'pointer',
+              boxShadow: processing || !canSave ? 'none' : `0 4px 6px -1px ${theme.main}40`,
+              transition: 'all 0.2s'
+            }}
+          >
+            {processing ? 'Saving...' : 'Create Account'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const PulseAnimation = () => (
+  <style>{`
+    @keyframes pulse-soft {
+      0% { box-shadow: 0 0 0 0 rgba(var(--brand-rgb), 0.4); }
+      70% { box-shadow: 0 0 0 10px rgba(var(--brand-rgb), 0); }
+      100% { box-shadow: 0 0 0 0 rgba(var(--brand-rgb), 0); }
+    }
+    .cart-pulse {
+      animation: pulse-soft 2s infinite;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    @keyframes slideUp {
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+  `}</style>
+);
+
+const ControlsCard = ({ children, theme }) => (
+  <div style={{
+    background: '#ffffff',
+    borderRadius: '16px',
+    padding: '20px',
+    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+    border: '1px solid #f1f5f9',
+    marginBottom: '24px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '20px'
+  }}>
+    {children}
+  </div>
+);
+
+const SectionLabel = ({ children }) => (
+  <div style={{ 
+    fontSize: '12px', 
+    fontWeight: 700, 
+    color: '#64748b', 
+    textTransform: 'uppercase', 
+    letterSpacing: '0.05em',
+    marginBottom: '8px'
+  }}>
+    {children}
+  </div>
+);
 
 // -------------------------------
 // Counter Sale Page
@@ -209,6 +397,7 @@ const getDraftOrQtyNumber = (cartId, fallbackQty) => {
   const [cart, setCart] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [modalError, setModalError] = useState('');
   const [success, setSuccess] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -246,8 +435,8 @@ const getDraftOrQtyNumber = (cartId, fallbackQty) => {
 const [orderMode, setOrderMode] = useState('settle');
   // inside CounterSale component
   const THEME = orderMode === 'kitchen'
-  ? { main: '#f97316', dark: '#ea580c', soft: '#fff7ed' }  // orange
-  : { main: '#16a34a', dark: '#15803d', soft: '#ecfdf3' }; // green
+  ? { main: '#f97316', dark: '#ea580c', soft: '#fff7ed', rgb: '249, 115, 22' }  // orange
+  : { main: '#16a34a', dark: '#15803d', soft: '#ecfdf3', rgb: '22, 163, 74' }; // green
 
 
 
@@ -461,11 +650,16 @@ setSendToKitchenEnabled(profile?.features_counter_send_to_kitchen_enabled !== fa
 setEnableMenuImages(!!profile?.features_menu_images_enabled);
 
 // after loading profile
-setOrderMode(
-  profile?.features_counter_send_to_kitchen_enabled === false
-    ? 'settle'
-    : 'kitchen'
-);
+// after loading profile
+const savedMode = localStorage.getItem('counter_orderMode');
+let modeToSet = profile?.features_counter_send_to_kitchen_enabled === false
+  ? 'settle'
+  : 'kitchen';
+
+if (profile?.features_counter_send_to_kitchen_enabled !== false && (savedMode === 'kitchen' || savedMode === 'settle')) {
+  modeToSet = savedMode;
+}
+setOrderMode(modeToSet);
 
 
 // Only load credit customers if feature is enabled
@@ -486,7 +680,14 @@ if (profile?.features_credit_enabled) {
     })();
   }, [checking, loadingRestaurant, restaurantId, supabase]);
 
-useEffect(() => {
+  // Persist orderMode choice
+  useEffect(() => {
+    if (orderMode) {
+      localStorage.setItem('counter_orderMode', orderMode);
+    }
+  }, [orderMode]);
+
+  useEffect(() => {
   if (!restaurantId) return;
   (async () => {
     const since = new Date(); since.setDate(since.getDate() - 30);
@@ -578,28 +779,41 @@ const loadCreditCustomers = async () => {
   };
 
   const handleCreateNewCreditCustomer = async () => {
-    if (!customerName.trim() || !customerPhone.trim()) {
-      setError('❌ Please enter name and phone');
-      setTimeout(() => setError(''), 3000);
+    const trimmedName = customerName.trim();
+    const trimmedPhone = customerPhone.trim();
+
+    if (trimmedName.length < 2 || trimmedPhone.length < 10) {
+      setModalError('Please enter a valid name and 10-digit phone number');
+      setTimeout(() => setModalError(''), 3000);
       return;
     }
-    const phoneRegex = /^[\d\s\-\+\(\)]{10,}$/;
-    if (!phoneRegex.test(customerPhone)) {
-      setError('❌ Please enter a valid phone number');
-      setTimeout(() => setError(''), 3000);
+
+    const phoneRegex = /^\d{10}$/;
+    if (!phoneRegex.test(trimmedPhone)) {
+      setModalError('Please enter a valid 10-digit phone number');
+      setTimeout(() => setModalError(''), 3000);
       return;
     }
+
     try {
+      setProcessing(true);
+      setModalError('');
+      
+      // Check for existing customer with THIS phone number
       const { data: existing } = await supabase
         .from('credit_customers')
-        .select('id, name')
+        .select('id, name, phone')
         .eq('restaurant_id', restaurantId)
-        .eq('phone', customerPhone.trim())
-        .single();
+        .eq('phone', trimmedPhone)
+        .maybeSingle();
 
       if (existing) {
-        setError(`❌ Customer "${existing.name}" already exists with this phone number`);
-        setTimeout(() => setError(''), 3000);
+        if (existing.name.toLowerCase() === trimmedName.toLowerCase()) {
+          setModalError(`A customer with this name and phone number already exists.`);
+        } else {
+          setModalError(`Phone number ${trimmedPhone} is already registered to "${existing.name}".`);
+        }
+        setProcessing(false);
         return;
       }
 
@@ -607,8 +821,8 @@ const loadCreditCustomers = async () => {
         .from('credit_customers')
         .insert({
           restaurant_id: restaurantId,
-          name: customerName.trim(),
-          phone: customerPhone.trim(),
+          name: trimmedName,
+          phone: trimmedPhone,
           current_balance: 0,
           total_credit_extended: 0,
           status: 'active',
@@ -618,26 +832,29 @@ const loadCreditCustomers = async () => {
 
       if (err) {
         if (err.message?.includes('duplicate') || err.message?.includes('unique')) {
-          setError('❌ This phone number is already registered');
+          setModalError('This phone number is already registered');
         } else {
-          setError(`❌ Failed to create customer: ${err.message}`);
+          setModalError(`Failed to create customer: ${err.message}`);
         }
-        setTimeout(() => setError(''), 3000);
+        setProcessing(false);
         return;
       }
 
+      setOrderSelect(''); 
       setCreditCustomers([...creditCustomers, data]);
       setSelectedCreditCustomerId(data.id);
       setCreditCustomerBalance(0);
       setShowNewCreditCustomer(false);
-      setCustomerName('');
-      setCustomerPhone('');
-      setSuccess(`✅ Customer "${data.name}" created successfully`);
+      setCustomerName(data.name);
+      setCustomerPhone(data.phone);
+      setModalError('');
+      setSuccess(`Customer "${data.name}" created successfully`);
       setTimeout(() => setSuccess(''), 2000);
     } catch (err) {
       console.error('Error creating customer:', err);
-      setError(`❌ Error: ${err.message || 'Failed to create customer'}`);
-      setTimeout(() => setError(''), 3000);
+      setModalError(`Error: ${err.message || 'Failed to create customer'}`);
+    } finally {
+      setProcessing(false);
     }
   };
 
@@ -845,7 +1062,7 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
     setOrderSelect(''); setIsCreditSale(false); setSelectedCreditCustomerId(''); setCreditCustomerBalance(0);
     setDrawerOpen(false); setShowPaymentDialog(false);
     await loadCreditCustomers();
-    setSuccess('✅ Sale completed');
+    setSuccess('Sale completed');
     setTimeout(() => setSuccess(''), 2000);
   }
 
@@ -911,7 +1128,7 @@ window.dispatchEvent(
     setCart([]); setCustomerName(''); setCustomerPhone(''); setNumberOfCustomers(''); setPaymentMethod('cash');
     setOrderSelect(''); setIsCreditSale(false); setSelectedCreditCustomerId(''); setCreditCustomerBalance(0);
     setDrawerOpen(false);
-    setSuccess('✅ Order sent to kitchen');
+    setSuccess('Order sent to kitchen');
     setTimeout(() => setSuccess(''), 2000);
   }
 
@@ -943,204 +1160,321 @@ window.dispatchEvent(
   if (error) return <div style={{ padding: 40, textAlign: 'center', color: 'red' }}>{error}</div>;
 
   return (
-    <div className="counter-shell">
-      <header className="counter-header">
-        <div className="counter-header-row">
-          <h1 className="counter-title">Counter Sale</h1>
-          {cartItemsCount > 0 && <div className="counter-cart-info">{cartItemsCount}•₹{cartTotals.totalInc.toFixed(2)}</div>}
+    <div className="counter-shell" style={{
+      '--brand': THEME.main,
+      '--brand-rgb': THEME.rgb,
+      '--brand-50': THEME.soft,
+      '--brand-600': THEME.dark,
+      '--surface': '#ffffff',
+      '--border': '#e5e7eb',
+      '--radius': '12px',
+      '--shadow-1': '0 2px 8px rgba(0,0,0,0.06)',
+      '--text': '#1f2937',
+      '--muted': '#6b7280',
+    }}>
+      <PulseAnimation />
+      <header style={{ padding: '0 12px 20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+          <h1 style={{ margin: 0, fontSize: '28px', fontWeight: 800, color: '#0f172a' }}>Counter Sale</h1>
         </div>
 
-        {/* Credit toggle + Order mode */}
-        <div style={{ padding: '8px 12px', display: 'flex', gap: 12, alignItems: 'center', marginBottom: 8, flexWrap:'wrap' }}>
-  {creditFeatureEnabled && (
-    <label
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        cursor: 'pointer',
-        fontWeight: 600,
-      }}
-    >
-      <input
-        type="checkbox"
-        checked={isCreditSale}
-        onChange={(e) => {
-          setIsCreditSale(e.target.checked);
-          if (!e.target.checked) {
-            setSelectedCreditCustomerId('');
-            setCustomerName('');
-            setCustomerPhone('');
-          }
-        }}
-        style={{ width: 18, height: 18, cursor: 'pointer' }}
-      />
-      💳 Credit Sale
-    </label>
-  )}
-
-  {sendToKitchenEnabled && (
-    <div style={{ display:'flex', border:'1px solid #e5e7eb', borderRadius:8, overflow:'hidden' }}>
-      <button
-        type="button"
-        onClick={() => setOrderMode('kitchen')}
-        style={{
-          padding:'6px 10px',
-          border:'none',
-          cursor:'pointer',
-          background: orderMode === 'kitchen' ? '#eff6ff' : '#fff',
-          color:'#111827',
-        }}
-      >
-        🍳 Send to Kitchen
-      </button>
-      <button
-        type="button"
-        onClick={() => setOrderMode('settle')}
-        style={{
-          padding:'6px 10px',
-          border:'none',
-          cursor:'pointer',
-          background: orderMode === 'settle' ? '#eff6ff' : '#fff',
-          color:'#111827',
-          borderLeft:'1px solid #e5e7eb',
-        }}
-      >
-        ✅ Settle Now
-      </button>
-    </div>
-  )}
-</div>
-
-
-
-
-
-
-        <div className="counter-inputs-row">
-          {isCreditSale ? (
-            <>
-              {!showNewCreditCustomer ? (
-                <>
-                  <div style={{flex: 1}}>
-                    <NiceSelect
-                      value={selectedCreditCustomerId}
-                      onChange={handleSelectCreditCustomer}
-                      placeholder="Select Credit Customer..."
-                      options={creditCustomers.map(c => ({
-                        value: c.id,
-                        label: `${c.name} (${c.phone}) - ₹${c.current_balance.toFixed(2)}`
-                      }))}
-                    />
+        <ControlsCard theme={THEME}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
+            {/* Mode & Type Selection */}
+            <div>
+              <SectionLabel>Order Configuration</SectionLabel>
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                {sendToKitchenEnabled && (
+                  <div style={{ 
+                    display: 'flex', 
+                    background: '#f1f5f9', 
+                    padding: '4px', 
+                    borderRadius: '12px',
+                    width: 'fit-content'
+                  }}>
+                    <button
+                      type="button"
+                      onClick={() => setOrderMode('kitchen')}
+                      style={{
+                        padding: '8px 16px',
+                        border: 'none',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        background: orderMode === 'kitchen' ? '#ffffff' : 'transparent',
+                        color: orderMode === 'kitchen' ? '#0f172a' : '#64748b',
+                        boxShadow: orderMode === 'kitchen' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      Kitchen
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setOrderMode('settle')}
+                      style={{
+                        padding: '8px 16px',
+                        border: 'none',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        background: orderMode === 'settle' ? '#ffffff' : 'transparent',
+                        color: orderMode === 'settle' ? '#0f172a' : '#64748b',
+                        boxShadow: orderMode === 'settle' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      Settle
+                    </button>
                   </div>
-                  <button onClick={() => setShowNewCreditCustomer(true)} className="btn" style={{ padding: '8px 12px', fontSize: 12 }}>
-                    + New Customer
-                  </button>
-                </>
-              ) : (
-                <>
-                  <input type="text" placeholder="Customer name" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="input" />
-                  <input type="tel" placeholder="Phone number" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} className="input" />
-                  <button onClick={handleCreateNewCreditCustomer} className="btn" style={{ padding: '8px 12px', fontSize: 12, background: '#10b981' }}>
-                    Create
-                  </button>
-                  <button onClick={() => { setShowNewCreditCustomer(false); setCustomerName(''); setCustomerPhone(''); }} className="btn btn--outline" style={{ padding: '8px 12px', fontSize: 12 }}>
-                    Cancel
-                  </button>
-                </>
-              )}
-              <div style={{minWidth: 160}}>
-                <NiceSelect
-                  value={orderSelect}
-                  onChange={setOrderSelect}
-                  placeholder="Select Type..."
-                  options={[
-                    { value: 'parcel', label: 'Parcel' },
-                    ...tables.map(n => ({ value: `table:${n}`, label: `Table ${n}` }))
-                  ]}
-                />
-              </div>
-            </>
-          ) : (
-            <>
-              <input type="text" placeholder="Customer name (optional)" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="input" />
-              <input type="tel" placeholder="Phone (optional)" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} className="input" />
-              <div style={{minWidth: 160}}>
-                <NiceSelect
-                  value={orderSelect}
-                  onChange={setOrderSelect}
-                  placeholder="Select Type..."
-                  options={[
-                    { value: 'parcel', label: 'Parcel' },
-                    ...tables.map(n => ({ value: `table:${n}`, label: `Table ${n}` }))
-                  ]}
-                />
-              </div>
-            </>
+                )}
 
-          )}
+                {creditFeatureEnabled && (
+                  <button
+                    onClick={() => {
+                      const next = !isCreditSale;
+                      setIsCreditSale(next);
+                      if (!next) {
+                        setSelectedCreditCustomerId('');
+                        setCustomerName('');
+                        setCustomerPhone('');
+                      }
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '10px 16px',
+                      borderRadius: '10px',
+                      border: '1px solid',
+                      borderColor: THEME.main,
+                      background: isCreditSale ? THEME.main : '#ffffff',
+                      color: isCreditSale ? '#ffffff' : THEME.main,
+                      fontSize: '13px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      boxShadow: isCreditSale ? `0 4px 12px ${THEME.main}40` : 'none'
+                    }}
+                  >
+                    Credit Sale
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Table/Type Selection */}
+            <div>
+              <SectionLabel>Table / Order Type</SectionLabel>
+              <div style={{ maxWidth: '240px' }}>
+                <NiceSelect
+                  value={orderSelect}
+                  onChange={setOrderSelect}
+                  placeholder="Select Type..."
+                  options={[
+                    { value: 'parcel', label: 'Parcel / Takeaway' },
+                    ...tables.map(n => ({ value: `table:${n}`, label: `Table ${n}` }))
+                  ]}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Customer Details */}
+          <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '20px' }}>
+            {isCreditSale ? (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'flex-end' }}>
+                <div style={{ width: '280px' }}>
+                  <SectionLabel>Credit Customer</SectionLabel>
+                  <NiceSelect
+                    value={selectedCreditCustomerId}
+                    onChange={handleSelectCreditCustomer}
+                    placeholder="Choose Customer..."
+                    options={creditCustomers.map(c => ({
+                      value: c.id,
+                      label: `${c.name} (${c.phone}) - ₹${c.current_balance.toFixed(2)}`
+                    }))}
+                  />
+                </div>
+                <button 
+                  onClick={() => setShowNewCreditCustomer(true)} 
+                  style={{ 
+                    height: '42px',
+                    padding: '0 20px', 
+                    background: '#f8fafc', 
+                    border: '1px solid #e2e8f0', 
+                    borderRadius: '10px',
+                    fontWeight: 600,
+                    fontSize: '13px',
+                    color: '#475569',
+                    cursor: 'pointer',
+                    transition: 'background 0.2s'
+                  }}
+                  onMouseEnter={(e) => e.target.style.background = '#f1f5f9'}
+                  onMouseLeave={(e) => e.target.style.background = '#f8fafc'}
+                >
+                  + New
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+                <div style={{ flex: 1 }}>
+                  <SectionLabel>Customer Name (Optional)</SectionLabel>
+                  <input 
+                    type="text" placeholder="e.g. John Doe" 
+                    value={customerName} onChange={(e) => setCustomerName(e.target.value)} 
+                    style={{ 
+                      width: '100%',
+                      padding: '12px 16px', background: '#ffffff', 
+                      border: '1px solid #e2e8f0', borderRadius: '10px', outline: 'none',
+                      fontSize: '14px'
+                    }} 
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <SectionLabel>Phone Number (Optional)</SectionLabel>
+                  <input 
+                    type="tel" placeholder="e.g. 9876543210" 
+                    value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} 
+                    style={{ 
+                      width: '100%',
+                      padding: '12px 16px', background: '#ffffff', 
+                      border: '1px solid #e2e8f0', borderRadius: '10px', outline: 'none',
+                      fontSize: '14px'
+                    }} 
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        </ControlsCard>
+
+        <NewCreditCustomerModal 
+          visible={showNewCreditCustomer}
+          onClose={() => { setShowNewCreditCustomer(false); setCustomerName(''); setCustomerPhone(''); setModalError(''); }}
+          onSave={handleCreateNewCreditCustomer}
+          name={customerName}
+          setName={setCustomerName}
+          phone={customerPhone}
+          setPhone={setCustomerPhone}
+          processing={processing}
+          theme={THEME}
+          error={modalError}
+        />
+
+        {/* Search & Category Tabs */}
+        <div style={{ 
+          background: '#ffffff', 
+          borderRadius: '16px', 
+          padding: '12px', 
+          boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+          border: '1px solid #f1f5f9',
+          marginTop: '20px'
+        }}>
+          <div style={{ position: 'relative', marginBottom: '16px' }}>
+            <input 
+              type="text" 
+              placeholder="Search dishes, drinks, or codes..." 
+              value={searchQuery} 
+              onChange={(e) => setSearchQuery(e.target.value)} 
+              style={{ 
+                width: '100%',
+                padding: '14px 16px', 
+                background: '#f8fafc', 
+                border: '1px solid #eef2f6', 
+                borderRadius: '12px', 
+                outline: 'none',
+                fontSize: '15px',
+                transition: 'all 0.2s',
+              }} 
+              onFocus={(e) => {
+                e.target.style.background = '#ffffff';
+                e.target.style.borderColor = THEME.main;
+                e.target.style.boxShadow = `0 0 0 3px ${THEME.main}15`;
+              }}
+              onBlur={(e) => {
+                e.target.style.background = '#f8fafc';
+                e.target.style.borderColor = '#eef2f6';
+                e.target.style.boxShadow = 'none';
+              }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px', scrollbarWidth: 'none' }}>
+            {[
+              { id: 'all', label: 'All' },
+              { id: 'veg', label: 'Veg Only' },
+              { id: 'popular', label: 'Trending' },
+            ].map((m) => {
+              const active = filterMode === m.id;
+              return (
+                <button
+                  key={m.id}
+                  onClick={() => setFilterMode(m.id)}
+                  style={{
+                    padding: '10px 18px',
+                    borderRadius: '12px',
+                    border: 'none',
+                    background: active ? THEME.main : '#f1f5f9',
+                    color: active ? '#ffffff' : '#475569',
+                    fontWeight: 700,
+                    fontSize: '13px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    whiteSpace: 'nowrap',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    boxShadow: active ? `0 4px 12px ${THEME.main}30` : 'none'
+                  }}
+                >
+                  {m.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </header>
 
-      <div className="counter-search-bar">
-        <input type="text" placeholder="Search by name, code, or description..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="input" />
-        <div className="counter-filters actions-bar">
-          {[
-            { id: 'all', label: 'All', icon: '🍽️' },
-            { id: 'veg', label: 'Veg', icon: '🥬' },
-            { id: 'popular', label: 'Popular', icon: '🔥' },
-          ].map((m) => {
-            const active = filterMode === m.id;
-            return (
-              <button
-                key={m.id}
-                onClick={() => setFilterMode(m.id)}
-                style={{
-                  padding: '8px 14px',
-                  borderRadius: 999,
-                  border: active ? 'none' : '1px solid #e5e7eb',
-                  background: active ? THEME.main : '#fff',      // ← use theme
-                  color: active ? '#fff' : '#111827',
-                  fontWeight: 600,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 8,
-                }}
-              >
-                <span aria-hidden>{m.icon}</span>
-                {m.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
       {categoryChips.length > 1 && (
         <div
           className="sales-carousel"
           style={{
-            padding: '0 12px 0.75rem',
-            background: '#fff',
-            borderBottom: '1px solid #f3f4f6',
+            padding: '12px 12px 20px',
+            background: 'transparent',
+            display: 'flex',
+            gap: '8px',
+            overflowX: 'auto',
+            scrollbarWidth: 'none'
           }}
         >
- {['all', ...categoryChips].map((cat) => {
-  const active = categoryFilter === cat;
-  return (
-    <button
-      key={cat}
-      onClick={() => setCategoryFilter(cat)}
-      className={`sales-carousel-btn${active ? ' active' : ''}`}
-      style={{
-        background: active ? THEME.main : '#f9fafb',
-        color: active ? '#fff' : '#374151',
-        borderColor: active ? THEME.main : '#e5e7eb',
-      }}
-    >
-      {cat === 'all' ? 'All categories' : cat}
-    </button>
-  );
-})}
-
+          {['all', ...categoryChips].map((cat) => {
+            const active = categoryFilter === cat;
+            return (
+              <button
+                key={cat}
+                onClick={() => setCategoryFilter(cat)}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '10px',
+                  background: active ? THEME.main : '#ffffff',
+                  color: active ? '#ffffff' : '#64748b',
+                  border: `1px solid ${active ? THEME.main : '#e2e8f0'}`,
+                  fontWeight: 600,
+                  fontSize: '13px',
+                  whiteSpace: 'nowrap',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  boxShadow: active ? `0 2px 8px ${THEME.main}20` : 'none',
+                  textTransform: 'capitalize'
+                }}
+              >
+                {cat === 'all' ? 'Everything' : cat}
+              </button>
+            );
+          })}
         </div>
       )}
 
@@ -1156,6 +1490,11 @@ window.dispatchEvent(
                 items={items}
 renderItem={(item) => {
   const qty = cart.find((c) => c.id === item.id)?.quantity || 0;
+  
+  // Calculate total quantity for this item (including all variants) to determine active state
+  const totalItemQty = cart
+    .filter(c => c.id === item.id)
+    .reduce((sum, c) => sum + (c.quantity || 0), 0);
 
   const handleQuantityChange = (it, q) => {
     // Only safe for non-variant items because cartId differs for variants
@@ -1175,13 +1514,16 @@ const isVariantItem = !!item.hasvariants && (item.variants?.length || 0) > 0;
       <MenuItemCard
   item={item}
   quantity={isVariantItem ? 0 : qty}
+  isActive={totalItemQty > 0}
   onAdd={() => addToCart(item)}
   onRemove={() => {
           const current = cart.find((c) => c.id === item.id)?.quantity || 0;
           updateCartItem(item.id, current - 1);
         }}
   onQuantityChange={isVariantItem ? undefined : handleQuantityChange}
-  showImage={true}      />
+  showImage={enableMenuImages}
+  highlightColor={THEME.main}
+/>
     </div>
   );
 }}
@@ -1199,67 +1541,106 @@ const isVariantItem = !!item.hasvariants && (item.variants?.length || 0) > 0;
                     const qty = cart.find((c) => c.id === item.id)?.quantity || 0;
                     const avail = !item.status || item.status === 'available';
                     return (
-                      <div key={item.id} className={`counter-item-card${!avail ? ' item-out' : ''}`}>
-                        <div className="counter-item-info">
-                          <span>{item.veg ? '🟢' : '🔺'}</span>
-                          <div>
-                            <h3>{item.name}{item.code_number && <small>[{item.code_number}]</small>}</h3>
-                            <div>₹{item.price.toFixed(2)}</div>
-                          </div>
+                      <div key={item.id} style={{
+                          background: 'var(--surface)',
+                          border: `2px solid ${qty > 0 ? THEME.main : 'var(--border)'}`,
+                          borderTop: `4px solid ${THEME.main}`,
+                          borderRadius: 'var(--radius)',
+                          boxShadow: qty > 0 ? `0 4px 12px ${THEME.main}15` : 'var(--shadow-1)',
+                          display: 'flex', flexDirection: 'column',
+                          justifyContent: 'space-between',
+                          padding: '12px',
+                          minHeight: '110px',
+                          position: 'relative',
+                          opacity: !avail ? 0.7 : 1,
+                          overflow: 'hidden',
+                          transition: 'all 0.2s ease'
+                      }}>
+                         {!avail && (
+                            <div style={{position:'absolute', inset:0, background:'rgba(255,255,255,0.5)', zIndex:10}} />
+                         )}
+                        
+                        <div style={{display:'flex', gap:8, alignItems:'center'}}>
+                           <div style={{flex:1}}>
+                             <h3 style={{fontSize:14, fontWeight:600, margin:0, color:'var(--text)', lineHeight:1.3}}>
+                                {item.name}
+                                {item.code_number && <small style={{color:'var(--muted)', fontWeight:400, marginLeft:4}}>[{item.code_number}]</small>}
+                             </h3>
+                           </div>
                         </div>
-                        <div className="counter-item-actions">
-                          {qty > 0 ? (
-                            <div className="counter-cart-qty">
-  <button
-    onClick={() => updateCartItem(item.id, qty - 1)}
-    style={{ background: THEME.main, color: '#fff' }}
-    type="button"
-  >
-    -
-  </button>
 
-  <input
-    value={qtyDrafts[item.id] ?? formatQty2(qty)}
-    inputMode="decimal"
-    // keep it text so browser doesn't fight decimals/step
-    type="text"
-    onChange={(e) => setDraft(item.id, e.target.value)}
-    onBlur={(e) => commitQtyDraft(item.id, e.target.value)}
-    onKeyDown={(e) => {
-      if (e.key === 'Enter') e.currentTarget.blur();
-      if (e.key === 'Escape') clearDraft(item.id);
-    }}
-    style={{
-      width: 56,
-      textAlign: 'center',
-      border: '1px solid #e5e7eb',
-      borderLeft: 'none',
-      borderRight: 'none',
-      height: 32,
-      outline: 'none',
-    }}
-  />
+                        <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-end', marginTop:12}}>
+                           <div style={{fontSize:15, fontWeight:700, color: THEME.main}}>₹{item.price.toFixed(2)}</div>
+                           
+                           <div style={{position:'relative', zIndex:20}}> {/* zIndex ensures clickability over disabled overlay if needed */}
+                           {qty > 0 ? (
+                             <div style={{
+                               display:'flex', alignItems:'center', 
+                               background: THEME.soft, 
+                               borderRadius: 8, 
+                               border: `1px solid ${THEME.main}`,
+                               overflow: 'hidden',
+                               boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                             }}>
+                               <button
+                                 onClick={() => updateCartItem(item.id, qty - 1)}
+                                 style={{
+                                    width: 32, height: 28, 
+                                    border: 'none', background: 'transparent', 
+                                    color: THEME.main, fontSize: 18, fontWeight: 700,
+                                    cursor: 'pointer', display:'flex', alignItems:'center', justifyContent:'center'
+                                 }}
+                               >-</button>
+                               
+                               <input
+                                  value={qtyDrafts[item.id] ?? formatQty2(qty)}
+                                  inputMode="decimal"
+                                  type="text"
+                                  onChange={(e) => setDraft(item.id, e.target.value)}
+                                  onBlur={(e) => commitQtyDraft(item.id, e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') e.currentTarget.blur();
+                                    if (e.key === 'Escape') clearDraft(item.id);
+                                  }}
+                                  style={{
+                                    width: 40, height: 28,
+                                    border: 'none', background: 'transparent',
+                                    textAlign: 'center', fontSize: 14, fontWeight: 700,
+                                    color: THEME.dark, outline: 'none'
+                                  }}
+                                />
 
-  <button
-    onClick={() => addToCart(item)}
-    disabled={!avail}
-    style={{ background: THEME.main, color: '#fff' }}
-    type="button"
-  >
-    +
-  </button>
-</div>
-
-                          ) : (
-                            <button
-                              onClick={() => addToCart(item)}
-                              disabled={!avail}
-                              className="btn"
-                              style={{ background: THEME.main, borderColor: THEME.main }}
-                            >
-                              Add
-                            </button>
-                          )}
+                               <button
+                                 onClick={() => addToCart(item)}
+                                 disabled={!avail}
+                                 style={{
+                                    width: 32, height: 28, 
+                                    border: 'none', background: 'transparent', 
+                                    color: THEME.main, fontSize: 18, fontWeight: 700,
+                                    cursor: 'pointer', display:'flex', alignItems:'center', justifyContent:'center'
+                                 }}
+                               >+</button>
+                             </div>
+                           ) : (
+                             <button
+                               onClick={() => addToCart(item)}
+                               disabled={!avail}
+                               style={{
+                                 padding: '6px 16px',
+                                 background: '#fff',
+                                 color: !avail ? '#9ca3af' : THEME.main,
+                                 border: `1px solid ${!avail ? '#e5e7eb' : THEME.main}`,
+                                 borderRadius: 8,
+                                 fontWeight: 700,
+                                 fontSize: 13,
+                                 cursor: !avail ? 'not-allowed' : 'pointer',
+                                 boxShadow: !avail ? 'none' : '0 1px 2px rgba(0,0,0,0.05)'
+                               }}
+                             >
+                               {!avail ? 'Out' : 'ADD'}
+                             </button>
+                           )}
+                           </div>
                         </div>
                       </div>
                     );
@@ -1275,9 +1656,16 @@ const isVariantItem = !!item.hasvariants && (item.variants?.length || 0) > 0;
   <button
     onClick={() => setDrawerOpen(true)}
     className="counter-mobile-cart-btn"
-    style={{ background: THEME.main }}
+    style={{ 
+      background: `linear-gradient(135deg, ${THEME.main} 0%, ${THEME.dark} 100%)`,
+      boxShadow: `0 10px 25px -5px ${THEME.main}66`
+    }}
   >
-    View Cart • {cartItemsCount} • ₹{cartTotals.totalInc.toFixed(2)}
+    <span>View Cart</span>
+    <span style={{ opacity: 0.6 }}>|</span>
+    <span>{cartItemsCount} Items</span>
+    <span style={{ opacity: 0.6 }}>|</span>
+    <span>₹{cartTotals.totalInc.toFixed(2)}</span>
   </button>
 )}
 
@@ -1377,7 +1765,6 @@ const isVariantItem = !!item.hasvariants && (item.variants?.length || 0) > 0;
                   border: '1px solid #fef3c7',
                   width: 'fit-content',
                 }}>
-                  <span>💳</span>
                   Credit Balance: ₹{(creditCustomerBalance + cartTotals.totalInc).toFixed(2)}
                 </div>
               )}
@@ -1391,7 +1778,6 @@ const isVariantItem = !!item.hasvariants && (item.variants?.length || 0) > 0;
             }}>
               {cart.length === 0 ? (
                 <div style={{ textAlign: 'center', color: '#9ca3af' }}>
-                  <div style={{ fontSize: 64, marginBottom: 16 }}>🛒</div>
                   <div style={{ fontSize: 18, fontWeight: 600, color: '#6b7280', marginBottom: 8 }}>
                     Your cart is empty
                   </div>
@@ -1415,20 +1801,6 @@ const isVariantItem = !!item.hasvariants && (item.variants?.length || 0) > 0;
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
                         <div style={{ flex: 1, paddingRight: 8 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                            {/* Veg/Non-veg indicator */}
-                            {i.veg !== undefined && (
-                              i.veg ? (
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                                  <rect x="1" y="1" width="22" height="22" stroke="#16a34a" strokeWidth="2.5" />
-                                  <circle cx="12" cy="12" r="6" fill="#16a34a" />
-                                </svg>
-                              ) : (
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                                  <rect x="1" y="1" width="22" height="22" stroke="#dc2626" strokeWidth="2.5" />
-                                  <path d="M12 6L18 16H6L12 6Z" fill="#dc2626" />
-                                </svg>
-                              )
-                            )}
                             <div style={{ fontSize: 15, fontWeight: 600, color: '#111827', lineHeight: 1.3 }}>
                               {i.name}
                             </div>
@@ -1538,11 +1910,11 @@ onClick={() => {
                             <span style={{
                               fontSize: 10,
                               fontWeight: 700,
-                              color: '#f97316',
-                              background: '#fff7ed',
+                              color: THEME.main,
+                              background: THEME.soft,
                               padding: '2px 6px',
                               borderRadius: 4,
-                              border: '1px solid #fed7aa',
+                              border: `1px solid ${THEME.main}30`,
                             }}>
                               +GST
                             </span>
@@ -1556,11 +1928,11 @@ onClick={() => {
                             <span style={{
                               fontSize: 10,
                               fontWeight: 700,
-                              color: '#f97316',
-                              background: '#fff7ed',
+                              color: THEME.main,
+                              background: THEME.soft,
                               padding: '2px 6px',
                               borderRadius: 4,
-                              border: '1px solid #fed7aa',
+                              border: `1px solid ${THEME.main}30`,
                             }}>
                               +GST
                             </span>
@@ -1604,26 +1976,28 @@ onClick={() => {
                   background: '#ffffff',
                   padding: '16px',
                   borderRadius: 12,
-                  border: '2px solid #e5e7eb',
+                  border: `1px solid #f1f5f9`,
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
                   marginBottom: 16,
                 }}>
                   <div style={{ display: 'grid', gap: 10 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#6b7280' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#64748b' }}>
                       <span>Subtotal (ex-tax)</span>
-                      <span style={{ fontWeight: 600 }}>₹{cartTotals.subtotalEx.toFixed(2)}</span>
+                      <span style={{ fontWeight: 600, color: '#1e293b' }}>₹{cartTotals.subtotalEx.toFixed(2)}</span>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#6b7280' }}>
-                      <span>GST</span>
-                      <span style={{ fontWeight: 600 }}>₹{cartTotals.totalTax.toFixed(2)}</span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#64748b' }}>
+                      <span>GST Amount</span>
+                      <span style={{ fontWeight: 600, color: '#1e293b' }}>₹{cartTotals.totalTax.toFixed(2)}</span>
                     </div>
                     <div style={{ 
                       display: 'flex', 
                       justifyContent: 'space-between', 
-                      paddingTop: 10,
-                      borderTop: '2px solid #f3f4f6',
-                      fontSize: 18,
-                      fontWeight: 700,
-                      color: '#111827',
+                      paddingTop: 12,
+                      marginTop: 2,
+                      borderTop: '1px dashed #e2e8f0',
+                      fontSize: '20px',
+                      fontWeight: 800,
+                      color: '#0f172a',
                     }}>
                       <span>Total</span>
                       <span style={{ color: THEME.main }}>₹{cartTotals.totalInc.toFixed(2)}</span>
@@ -1636,37 +2010,45 @@ onClick={() => {
                   disabled={processing}
                   style={{
                     width: '100%',
-                    padding: '16px',
-                    background: processing ? '#d1d5db' : `linear-gradient(135deg, ${THEME.main} 0%, ${THEME.dark} 100%)`,
+                    padding: '18px',
+                    background: processing ? '#cbd5e1' : `linear-gradient(135deg, ${THEME.main} 0%, ${THEME.dark} 100%)`,
                     color: '#fff',
                     border: 'none',
-                    borderRadius: 12,
-                    fontSize: 16,
-                    fontWeight: 700,
+                    borderRadius: '14px',
+                    fontSize: '16px',
+                    fontWeight: 800,
                     cursor: processing ? 'not-allowed' : 'pointer',
-                    boxShadow: processing ? 'none' : '0 4px 12px rgba(0,0,0,0.15)',
-                    transition: 'all 0.2s',
+                    boxShadow: processing ? 'none' : `0 8px 20px -6px ${THEME.main}60`,
+                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '10px'
                   }}
                   onMouseEnter={(e) => {
                     if (!processing) {
                       e.target.style.transform = 'translateY(-2px)';
-                      e.target.style.boxShadow = '0 6px 16px rgba(0,0,0,0.2)';
+                      e.target.style.boxShadow = `0 12px 24px -8px ${THEME.main}80`;
                     }
                   }}
                   onMouseLeave={(e) => {
                     if (!processing) {
                       e.target.style.transform = 'translateY(0)';
-                      e.target.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+                      e.target.style.boxShadow = `0 8px 20px -6px ${THEME.main}60`;
                     }
                   }}
                 >
-                  {processing
-                    ? '⏳ Processing…'
-                    : orderMode === 'kitchen'
-                    ? `🍳 Send to Kitchen • ₹${cartTotals.totalInc.toFixed(2)}`
-                    : isCreditSale
-                    ? `💳 Credit & Settle • ₹${cartTotals.totalInc.toFixed(2)}`
-                    : `✓ Complete & Print • ₹${cartTotals.totalInc.toFixed(2)}`}
+                  {processing ? (
+                    'Processing Transaction...'
+                  ) : (
+                    <span>
+                      {orderMode === 'kitchen'
+                        ? `Send to Kitchen • ₹${cartTotals.totalInc.toFixed(2)}`
+                        : isCreditSale
+                        ? `Credit & Settle • ₹${cartTotals.totalInc.toFixed(2)}`
+                        : `Complete Sale • ₹${cartTotals.totalInc.toFixed(2)}`}
+                    </span>
+                  )}
                 </button>
               </div>
             )}
@@ -1842,7 +2224,9 @@ onClick={() => {
             .counter-cart-qty button { width: 36px; height: 100%; border: none; font-size: 1.25rem; display: flex; align-items: center; justify-content: center; cursor: pointer; }
             .counter-cart-qty div { font-weight: 600; color: #111827; font-size: 0.95rem; }
             
-            .counter-mobile-cart-btn { position: fixed; bottom: 16px; left: 16px; right: 16px; padding: 16px; border-radius: 12px; color: white; border: none; font-weight: 700; font-size: 1rem; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05); z-index: 50; display: flex; justify-content: center; align-items: center; gap: 8px; animation: slideUp 0.3s ease-out; }
+            .counter-mobile-cart-btn { position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%); width: auto; min-width: 220px; padding: 14px 28px; border-radius: 999px; color: white; border: none; font-weight: 700; font-size: 15px; z-index: 100; display: flex; justify-content: center; align-items: center; gap: 10px; animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1); cursor: pointer; transition: transform 0.2s; }
+            .counter-mobile-cart-btn:hover { transform: translateX(-50%) translateY(-2px); }
+            .counter-mobile-cart-btn:active { transform: translateX(-50%) scale(0.98); }
             @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
             
             .counter-drawer-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; display: flex; justify-content: flex-end; backdrop-filter: blur(2px); animation: fadeIn 0.2s ease-out; }

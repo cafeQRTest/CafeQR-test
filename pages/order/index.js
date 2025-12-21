@@ -784,8 +784,10 @@ export default function OrderPage() {
                         gap: 12,
                         padding: 12,
                         border: '1px solid #e5e7eb',
+                        borderTop: `4px solid ${isOutOfStock ? '#f97316' : '#16a34a'}`,
                         borderRadius: 8,
                         background: isOutOfStock ? '#f9fafb' : '#fff',
+                        overflow: 'hidden',
                       }}
                     >
                       <div style={{ flex: 1 }}>

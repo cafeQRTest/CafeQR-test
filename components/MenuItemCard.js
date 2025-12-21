@@ -29,7 +29,9 @@ export default function MenuItemCard({
   quantityStep = 1,
   minQuantity = 0,
   maxQuantity = 999,
-  decimalPlaces = 2
+  decimalPlaces = 2,
+  isActive = false,
+  highlightColor
 }) {
   const hasImage = !!item.image_url;
   const isOutOfStock =
@@ -148,8 +150,20 @@ export default function MenuItemCard({
     }
   };
 
+  const activeStyle = (isActive || quantity > 0) ? {
+    borderColor: 'var(--brand)',
+    boxShadow: '0 0 0 1px var(--brand) inset, 0 4px 12px rgba(0,0,0,0.05)',
+    background: 'linear-gradient(to bottom, var(--surface), var(--brand-50) 150%)'
+  } : {};
+
   return (
-    <div style={styles.card}>
+    <div style={{
+      ...styles.card, 
+      ...activeStyle,
+      ...(!showImage ? {
+        borderTop: `4px solid ${highlightColor || (isOutOfStock ? '#f97316' : '#16a34a')}`
+      } : {})
+    }}>
       {showImage && (
         <div style={styles.imageContainer}>
           {hasImage ? (
@@ -212,7 +226,12 @@ export default function MenuItemCard({
               onClick={() => !isOutOfStock && onAdd?.(item)}
               disabled={isOutOfStock}
             >
-              {isOutOfStock ? 'OUT OF STOCK' : 'ADD'}
+              {isOutOfStock ? 'OUT OF STOCK' : (
+                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span>View Options</span>
+                  <span style={{ fontSize: '18px', lineHeight: 0.5, marginTop: -2 }}>›</span>
+                </span>
+              )}
             </button>
           ) : quantity <= 0 ? (
             <div style={{ display: 'flex', gap: 6, width: '100%' }}>
@@ -313,30 +332,31 @@ const styles = {
   card: {
     background: 'var(--surface)',
     border: '1px solid var(--border)',
-    borderRadius: 'var(--radius)',
-    boxShadow: 'var(--shadow-1)',
+    borderTop: '4px solid var(--brand)',
+    borderRadius: '16px',
+    boxShadow: '0 4px 20px -2px rgba(0, 0, 0, 0.03), 0 2px 6px -1px rgba(0, 0, 0, 0.02)',
     overflow: 'hidden',
     display: 'flex',
     flexDirection: 'column',
-    transition: 'transform 0.2s, box-shadow 0.2s',
+    transition: 'all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
     height: '100%',
-    minHeight: '230px',
-    maxHeight: '230px',
+    minHeight: '280px',
+    maxHeight: '280px',
     position: 'relative',
+    cursor: 'default',
   },
   imageContainer: {
     width: '100%',
-    height: '100px',
-    background: 'linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%)',
+    height: '150px',
+    background: '#f8fafc',
     position: 'relative',
     overflow: 'hidden',
-    borderBottom: '1px solid var(--border)',
   },
   image: {
     width: '100%',
     height: '100%',
     objectFit: 'cover',
-    transition: 'transform 0.3s ease',
+    transition: 'transform 0.5s ease',
   },
   placeholder: {
     width: '100%',
@@ -344,120 +364,127 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    background: 'linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%)',
+    background: '#f1f5f9',
+    color: '#cbd5e1',
   },
   typeBadge: {
     position: 'absolute',
-    top: 6,
-    right: 6,
-    background: 'rgba(255, 255, 255, 0.95)',
+    top: 8,
+    right: 8,
+    background: 'rgba(255, 255, 255, 0.9)',
     padding: '3px',
-    borderRadius: 4,
+    borderRadius: '6px',
     display: 'flex',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
+    boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
     backdropFilter: 'blur(4px)',
+    zIndex: 2,
   },
   content: {
-    padding: '10px',
+    padding: '16px',
     display: 'flex',
     flexDirection: 'column',
     flex: 1,
-    gap: 6,
+    gap: '4px',
   },
   header: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    gap: 8,
+    gap: '12px',
+    marginBottom: '2px',
   },
   title: {
     margin: 0,
-    fontSize: '14px',
-    fontWeight: 600,
-    lineHeight: 1.3,
-    color: 'var(--text)',
+    fontSize: '15px',
+    fontWeight: '700',
+    lineHeight: '1.35',
+    color: '#1e293b',
     display: '-webkit-box',
     WebkitLineClamp: 2,
     WebkitBoxOrient: 'vertical',
     overflow: 'hidden',
     flex: 1,
-    minHeight: '36px',
-    maxHeight: '36px',
+    height: '42px', // fixed height for 2 lines
   },
   price: {
-    fontWeight: 700,
+    fontWeight: '800',
     color: 'var(--brand)',
     fontSize: '15px',
     whiteSpace: 'nowrap',
-  },
-  variantBadge: {
-    fontSize: '11px',
-    color: 'var(--brand)',
-    background: 'var(--brand-50, #eff6ff)',
-    padding: '3px 8px',
-    borderRadius: '4px',
-    fontWeight: 600,
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 4,
-    marginBottom: 4,
+    letterSpacing: '-0.02em',
   },
   category: {
     fontSize: '11px',
-    color: 'var(--muted)',
+    color: '#94a3b8',
     textTransform: 'uppercase',
-    letterSpacing: '0.5px',
+    letterSpacing: '0.06em',
+    fontWeight: 600,
+    marginTop: 'auto', // push to bottom of flex content section
+    marginBottom: '12px',
+  },
+  variantsStart: {
+    fontSize: '10px',
+    color: '#64748b',
     fontWeight: 500,
   },
   actions: {
     marginTop: 'auto',
-    paddingTop: 8,
+    width: '100%',
   },
   addButton: {
     width: '100%',
-    padding: '6px',
-    background: 'var(--surface)',
+    padding: '10px',
+    background: '#ffffff',
     border: '1px solid var(--border)',
-    borderRadius: '8px',
+    borderRadius: '100px', // pill
     color: 'var(--brand)',
-    fontWeight: 700,
+    fontWeight: '700',
     fontSize: '13px',
     cursor: 'pointer',
-    boxShadow: '0 2px 0 rgba(0,0,0,0.02)',
-    transition: 'all 0.2s',
+    boxShadow: '0 2px 5px rgba(0,0,0,0.03)',
+    transition: 'all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '6px',
   },
   counter: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    background: 'var(--brand-50)',
-    borderRadius: '8px',
-    padding: '2px',
+    background: '#ffffff',
+    borderRadius: '100px', // pill
     border: '1px solid var(--brand)',
+    padding: '2px',
+    boxShadow: '0 2px 8px -2px rgba(0, 0, 0, 0.08)',
   },
   counterBtn: {
-    width: '28px',
-    height: '28px',
+    width: '36px',
+    height: '34px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     border: 'none',
     background: 'transparent',
-    color: 'var(--brand-600)',
-    fontWeight: 'bold',
-    fontSize: '16px',
+    color: 'var(--brand)',
+    fontWeight: '500',
+    fontSize: '18px',
     cursor: 'pointer',
     padding: 0,
+    borderRadius: '100px',
+    transition: 'background 0.2s',
   },
   countInput: {
-    width: '52px',
+    flex: 1,
+    minWidth: 0,
     textAlign: 'center',
     border: 'none',
     background: 'transparent',
-    fontSize: '14px',
-    fontWeight: 700,
-    color: 'var(--brand-600)',
+    fontSize: '15px',
+    fontWeight: '700',
+    color: '#0f172a',
     outline: 'none',
+    height: '100%',
   },
   outOfStockImage: {
     filter: 'grayscale(100%)',
@@ -469,15 +496,31 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    background: 'rgba(0,0,0,0.3)',
+    background: 'rgba(255,255,255,0.6)',
+    backdropFilter: 'blur(2px)',
     zIndex: 2,
   },
   outOfStockText: {
     color: '#fff',
-    background: 'rgba(0,0,0,0.6)',
-    padding: '4px 8px',
-    borderRadius: 4,
-    fontSize: 11,
+    background: '#1f2937',
+    padding: '6px 12px',
+    borderRadius: '6px',
+    fontSize: '11px',
+    fontWeight: '800',
+    letterSpacing: '0.05em',
+    boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)',
+  },
+  // Keep badges if referenced
+  variantBadge: {
+    fontSize: '10px',
+    color: 'var(--brand)',
+    background: 'var(--brand-50, #eff6ff)',
+    padding: '2px 6px',
+    borderRadius: '4px',
     fontWeight: 700,
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 4,
   },
 };

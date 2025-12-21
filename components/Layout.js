@@ -21,6 +21,7 @@ import {
   FaCrown,
   FaIdBadge,
   FaFileAlt,
+  FaBookOpen,
 } from 'react-icons/fa';
 import { signOutAndRedirect } from '../lib/authActions';
 import { getSupabase } from '../services/supabase';
@@ -78,12 +79,37 @@ export default function Layout({
   const [mobileOpen, setMobileOpen] = useState(false);
   const MOBILE_BREAKPOINT = 1024; // use drawer up to 1024px wide (phones + tablets)
 
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+
   useEffect(() => {
     const onResize = () => setCollapsed(window.innerWidth < 1160);
     onResize();
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
+
+  // Sync scroll lock
+  useEffect(() => {
+    if (showLogoutConfirm) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+  }, [showLogoutConfirm]);
+
+  const handleConfirmSignOut = async () => {
+    setSigningOut(true);
+    const supabase = getSupabase();
+    try {
+      await signOutAndRedirect(supabase, router.replace);
+    } catch (err) {
+      console.error('Sign out error:', err);
+      alert(`Sign out failed: ${err.message}`);
+      setSigningOut(false);
+      setShowLogoutConfirm(false);
+    }
+  };
 
   const handleHamburger = () => {
     if (typeof window !== 'undefined' && window.innerWidth <= MOBILE_BREAKPOINT) {
@@ -93,8 +119,36 @@ export default function Layout({
     }
   };
 
+  // Swipe detection
+  const touchStartRef = React.useRef(null);
+  
+  const handleTouchStart = (e) => {
+    touchStartRef.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = (e) => {
+    if (touchStartRef.current === null) return;
+    const touchEnd = e.changedTouches[0].clientX;
+    const diff = touchStartRef.current - touchEnd;
+    const isEdgeSwipe = touchStartRef.current < 30; // Start from left edge
+
+    // Swipe Left to Right (Open) - only from edge
+    if (diff < -50 && isEdgeSwipe) {
+      setMobileOpen(true);
+    } 
+    // Swipe Right to Left (Close)
+    else if (diff > 50 && mobileOpen) {
+      setMobileOpen(false);
+    }
+    touchStartRef.current = null;
+  };
+
   return (
-    <div style={{ display: 'grid', gridTemplateRows: 'auto 1fr auto', minHeight: '100svh' }}>
+    <div 
+      style={{ display: 'grid', gridTemplateRows: 'auto 1fr auto', minHeight: '100svh' }}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+    >
       <Header
         showSidebar={showSidebar}
         onHamburger={handleHamburger}
@@ -104,7 +158,11 @@ export default function Layout({
       <div className="main-wrapper">
         {showSidebar && (
           <div className="desktop-sidebar">
-            <Sidebar collapsed={collapsed} />
+            <Sidebar 
+                collapsed={collapsed} 
+                onSignOut={() => setShowLogoutConfirm(true)}
+                isSigningOut={signingOut}
+            />
           </div>
         )}
 
@@ -126,12 +184,100 @@ export default function Layout({
             onClick={() => setMobileOpen(false)}
           />
           <aside className={`drawer ${mobileOpen ? 'drawer--open' : ''}`}>
-            <MobileSidebar onNavigate={() => setMobileOpen(false)} />
+            <MobileSidebar 
+                onNavigate={() => setMobileOpen(false)} 
+                onSignOut={() => setShowLogoutConfirm(true)}
+                isSigningOut={signingOut}
+            />
           </aside>
         </>
       )}
 
       <Footer />
+
+      {/* Logout Confirmation Modal - Rendered at root to cover sticky header */}
+      {showLogoutConfirm && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'rgba(0,0,0,0.5)', /* Darker for better contrast */
+          backdropFilter: 'blur(10px)', /* More blur */
+          animation: 'fadeIn 0.2s ease-out'
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: '24px',
+            padding: '32px',
+            width: '90%',
+            maxWidth: '360px',
+            boxShadow: '0 20px 50px -12px rgba(0,0,0,0.35)',
+            textAlign: 'center',
+            animation: 'slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+            position: 'relative'
+          }}>
+            <div style={{
+              width: '64px',
+              height: '64px',
+              background: '#fee2e2',
+              borderRadius: '50%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 16px',
+              color: '#dc2626',
+              fontSize: '28px'
+            }}>
+              <FaSignOutAlt />
+            </div>
+            <h3 style={{ margin: '0 0 8px', fontSize: '20px', fontWeight: 800, color: '#1e293b' }}>
+              Sign Out?
+            </h3>
+            <p style={{ margin: '0 0 24px', fontSize: '15px', color: '#64748b', lineHeight: 1.5 }}>
+              Are you sure you want to end your session? You will need to log in again.
+            </p>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                onClick={() => setShowLogoutConfirm(false)}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  borderRadius: '12px',
+                  border: '1px solid #e2e8f0',
+                  background: 'white',
+                  color: '#64748b',
+                  fontSize: '15px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmSignOut}
+                disabled={signingOut}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  borderRadius: '12px',
+                  border: 'none',
+                  background: '#dc2626',
+                  color: 'white',
+                  fontSize: '15px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 12px rgba(220, 38, 38, 0.2)'
+                }}
+              >
+                {signingOut ? 'Signing Out...' : 'Yes, Sign Out'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style jsx>{`
         .main-wrapper {
@@ -141,7 +287,7 @@ export default function Layout({
               ? '64px 1fr'
               : '240px 1fr'
             : '1fr'};
-          transition: grid-template-columns 0.18s ease;
+          transition: grid-template-columns 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
           background: var(--bg, #f7f8fa);
         }
 
@@ -161,8 +307,10 @@ export default function Layout({
         .drawer-backdrop {
           position: fixed;
           inset: 0;
-          background: rgba(0, 0, 0, 0.35);
+          background: rgba(0, 0, 0, 0.3);
+          backdrop-filter: blur(4px);
           z-index: 999;
+          transition: opacity 0.3s ease;
         }
 
         .drawer {
@@ -170,15 +318,15 @@ export default function Layout({
           top: 0;
           left: 0;
           bottom: 0;
-          width: min(90vw, 320px);
-          background: #f9fafb;
-          border-right: 1px solid #e5e7eb;
+          width: min(85vw, 320px);
+          background: #ffffff;
           transform: translateX(-100%);
-          transition: transform 0.28s ease-out;
+          transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
           z-index: 1000;
           padding: 12px;
           padding-top: calc(12px + env(safe-area-inset-top));
           overflow-y: auto;
+          box-shadow: 0 0 40px rgba(0,0,0,0.15);
         }
 
         .drawer--open {
@@ -231,53 +379,118 @@ function Header({ showSidebar, onHamburger, isCustomer }) {
     <header
       className="shell-header"
       style={{
-        background: '#fff',
-        borderBottom: '1px solid #e5e7eb',
+        background: 'rgba(255, 255, 255, 0.9)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        borderBottom: '1px solid rgba(226, 232, 240, 0.8)',
         display: 'flex',
         alignItems: 'center',
-        padding: '0 16px',
-        height: 64,
+        justifyContent: 'space-between',
+        padding: '0 24px',
+        height: 72,
         position: 'sticky',
         top: 0,
-        zIndex: 30,
+        zIndex: 40,
+        transition: 'all 0.3s ease',
+        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.01), 0 2px 4px -1px rgba(0, 0, 0, 0.01)'
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
         {showSidebar && (
           <button
             aria-label="Toggle sidebar"
             onClick={onHamburger}
             className="sidebar-toggle"
             style={{
-              display: 'inline-flex',
+              display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              width: 36,
-              height: 36,
-              borderRadius: 8,
-              border: '1px solid #e5e7eb',
-              background: '#fff',
+              width: 42,
+              height: 42,
+              borderRadius: 14,
+              border: 'none',
+              background: 'transparent',
+              color: '#0f172a', // Deep black/navy, not grey
               cursor: 'pointer',
-              marginRight: 12,
+              transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+            }}
+            onMouseEnter={(e) => { 
+                e.currentTarget.style.background = '#fff7ed'; // Brand orange tint
+                e.currentTarget.style.color = '#ea580c'; // Brand orange
+                e.currentTarget.style.transform = 'scale(1.05)';
+            }}
+            onMouseLeave={(e) => { 
+                e.currentTarget.style.background = 'transparent'; 
+                e.currentTarget.style.color = '#0f172a'; 
+                e.currentTarget.style.transform = 'scale(1)';
             }}
           >
-            <FaBars color="#111827" />
+            <FaBars size={20} />
           </button>
         )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <img src="/cafeqr-logo.svg" alt="Cafe QR" width={28} height={28} />
-          <strong style={{ color: '#111827', fontSize: 20 }}>Cafe QR</strong>
+        
+        <div 
+            style={{ display: 'flex', alignItems: 'center', gap: 14, cursor: 'pointer', userSelect: 'none' }}
+            onClick={() => router.push(isCustomer ? '/' : '/owner')}
+        >
+          <img 
+            src="/cafeqr-logo.svg" 
+            alt="Cafe QR" 
+            width={34} 
+            height={34} 
+            style={{ filter: 'drop-shadow(0 4px 6px rgba(234, 88, 12, 0.2))' }} 
+          />
+          <strong style={{ 
+            fontSize: 22, 
+            fontWeight: 800, 
+            letterSpacing: '-0.03em',
+            // Premium Brand Gradient (Orange -> Red)
+            color: '#ea580c'
+          }}>
+            Cafe QR
+          </strong>
         </div>
       </div>
 
-      {!isCustomer && (
-        <nav style={{ display: 'flex', gap: 24 }}>
-          <Link href="/faq" style={{ color: '#374151', textDecoration: 'none' }}>
-            FAQ
-          </Link>
-        </nav>
-      )}
-      {isOwnerRoute && hasSession ? <OwnerNotificationsBell /> : null}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+        {!isCustomer && (
+          <nav style={{ display: 'flex', alignItems: 'center' }}>
+            <Link 
+                href="/faq" 
+                className="header-link"
+                style={{ 
+                    padding: '8px 16px',
+                    borderRadius: 99,
+                    color: '#334155', // Slate 700 - reduced grey-ness
+                    textDecoration: 'none', 
+                    fontWeight: 600, 
+                    fontSize: 14,
+                    background: '#f8fafc',
+                    border: '1px solid #e2e8f0', // lighter border
+                    transition: 'all 0.2s ease'
+                }}
+            >
+              FAQ
+            </Link>
+          </nav>
+        )}
+        
+        {isOwnerRoute && hasSession ? (
+            <>
+                <div style={{ width: 1, height: 24, background: '#e2e8f0' }}></div>
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <OwnerNotificationsBell />
+                </div>
+            </>
+        ) : null}
+      </div>
+      <style jsx>{`
+        .header-link:hover {
+            background: #f1f5f9 !important;
+            color: #334155 !important;
+            border-color: #e2e8f0 !important;
+        }
+      `}</style>
     </header>
   );
 }
@@ -286,48 +499,48 @@ function Header({ showSidebar, onHamburger, isCustomer }) {
 // Desktop sidebar (role-aware)
 // -----------------------------------------------------------------------------
 
-function Sidebar({ collapsed }) {
+function Sidebar({ collapsed, onSignOut, isSigningOut }) {
   const router = useRouter();
   const supabase = getSupabase();
   const { restaurant, role: ctxRole } = useRestaurant();
   const hasAggregatorIntegration = Boolean(
     restaurant?.swiggy_api_key || restaurant?.zomato_api_key
   );
-  const [signingOut, setSigningOut] = useState(false);
 
   const feature = restaurant?.features || {};
   const role = ctxRole || 'admin';
 
   const sectionStyle = {
-    margin: '10px 6px 4px',
+    margin: '16px 16px 8px',
     fontSize: 11,
     fontWeight: 800,
-    color: '#6b7280',
+    color: '#94a3b8',
     textTransform: 'uppercase',
-    letterSpacing: '.03em',
+    letterSpacing: '0.05em',
   };
 
-  const itemStyle = (active) => ({
-    display: 'flex',
-    alignItems: 'center',
-    gap: collapsed ? 0 : 10,
-    padding: '10px 12px',
-    borderRadius: 8,
-    background: active ? '#fef3c7' : 'transparent',
-    color: active ? '#92400e' : '#374151',
-    textDecoration: 'none',
-    justifyContent: collapsed ? 'center' : 'flex-start',
-    transition: 'all .15s ease',
-  });
+
+  /* Haptic helper */
+  const triggerHaptic = () => {
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      navigator.vibrate(5);
+    }
+  };
 
   const renderItem = (it) => {
     if (!canAccess(it.href, role)) return null;
     const active =
-      router.pathname === it.href || router.pathname.startsWith(it.href + '/');
+      router.pathname === it.href || 
+      (it.href !== '/owner' && router.pathname.startsWith(it.href + '/'));
     return (
-      <Link key={it.href} href={it.href} style={itemStyle(active)}>
-        <span style={{ width: 18, textAlign: 'center' }}>{it.icon}</span>
-        {!collapsed && <span>{it.label}</span>}
+      <Link 
+        key={it.href} 
+        href={it.href} 
+        className={`sidebar-link ${active ? 'active' : ''}`}
+        onClick={triggerHaptic}
+      >
+        <div className="icon-box sidebar-icon">{it.icon}</div>
+        {!collapsed && <span className="label sidebar-label">{it.label}</span>}
       </Link>
     );
   };
@@ -335,10 +548,11 @@ function Sidebar({ collapsed }) {
   // Arrange links into sections
   const ops = [
     { href: '/owner', label: 'Overview', icon: <FaHome /> },
-    { href: '/owner/menu', label: 'Menu', icon: <FaBars /> },
+    { href: '/owner/menu', label: 'Menu', icon: <FaBookOpen /> },
     { href: '/owner/orders', label: 'Orders', icon: <FaUtensils /> },
     { href: '/owner/counter', label: 'Counter Sale', icon: <FaCashRegister /> },
   ];
+
 
   const addons = [
     ...(feature.inventory_enabled
@@ -408,38 +622,30 @@ function Sidebar({ collapsed }) {
       ]
     : [];
 
-  const handleSignOut = async () => {
-    setSigningOut(true);
-    try {
-      await signOutAndRedirect(supabase, router.replace);
-    } catch (err) {
-      console.error('Sign out error:', err);
-      alert(`Sign out failed: ${err.message}`);
-      setSigningOut(false);
-    }
+  const handleSignOutClick = () => {
+    triggerHaptic();
+    onSignOut();
   };
 
   return (
     <aside
-      className="sidebar"
+      className={`sidebar ${collapsed ? 'sidebar-collapsed' : ''}`}
       style={{
-        background: '#f9fafb',
-        borderRight: '1px solid #e5e7eb',
+        background: '#ffffff',
+        borderRight: '1px solid #f1f5f9',
         padding: 12,
         position: 'sticky',
         top: 64,
         height: 'calc(100vh - 64px)',
         display: 'flex',
         flexDirection: 'column',
+        boxShadow: '4px 0 24px rgba(0,0,0,0.02)',
+        zIndex: 20
       }}
     >
-      {!collapsed && (
-        <div style={{ fontWeight: 700, margin: '6px 6px 12px', color: '#111827' }}>
-          Owner Panel
-        </div>
-      )}
 
       <nav
+        className="sidebar-nav"
         style={{
           display: 'flex',
           flexDirection: 'column',
@@ -447,6 +653,8 @@ function Sidebar({ collapsed }) {
           flex: 1,
           overflowY: 'auto',
           paddingBottom: 8,
+          // scrollbarWidth: 'none', // Removed to show scrollbar
+          // msOverflowStyle: 'none',  // Removed to show scrollbar
         }}
       >
         {!collapsed && <div style={sectionStyle}>Operations</div>}
@@ -474,32 +682,167 @@ function Sidebar({ collapsed }) {
         )}
       </nav>
 
-      <div style={{ marginTop: 'auto' }}>
-        <button
-          onClick={handleSignOut}
-          disabled={signingOut}
+      <div style={{ marginTop: 'auto', padding: collapsed ? '12px 0' : '16px 12px' }}>
+         <button
+          onClick={handleSignOutClick}
+          className="sidebar-link-logout"
           title="Sign Out"
+          disabled={isSigningOut}
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: collapsed ? 0 : 8,
-            padding: '10px 12px',
-            width: '100%',
-            background: 'transparent',
-            border: '1px solid #e5e7eb',
-            borderRadius: 8,
-            color: signingOut ? '#d1d5db' : '#6b7280',
-            cursor: signingOut ? 'not-allowed' : 'pointer',
-            transition: 'all 0.2s ease',
-            opacity: signingOut ? 0.6 : 1,
+             width: '100%',
+             display: 'flex',
+             alignItems: 'center',
+             justifyContent: collapsed ? 'center' : 'center',
+             gap: collapsed ? 0 : 10,
+             padding: collapsed ? '12px 0' : '12px 20px',
+             background: 'linear-gradient(135deg, #FFFBFC 0%, #FFF1F2 100%)',
+             border: '1px solid #FFE4E6',
+             borderRadius: '16px',
+             color: '#E11D48',
+             cursor: 'pointer',
+             transition: 'all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
+             boxShadow: '0 4px 12px rgba(225, 29, 72, 0.05)',
+             position: 'relative',
+             overflow: 'hidden'
+          }}
+          onMouseEnter={(e) => {
+             e.currentTarget.style.transform = 'translateY(-2px)';
+             e.currentTarget.style.boxShadow = '0 6px 20px rgba(225, 29, 72, 0.12)';
+             e.currentTarget.style.borderColor = '#FECDD3';
+          }}
+          onMouseLeave={(e) => {
+             e.currentTarget.style.transform = 'none';
+             e.currentTarget.style.boxShadow = '0 4px 12px rgba(225, 29, 72, 0.05)';
+             e.currentTarget.style.borderColor = '#FFE4E6';
           }}
         >
-          <FaSignOutAlt />
-          {!collapsed && (
-            <span>{signingOut ? 'Signing Out...' : 'Sign Out'}</span>
-          )}
+           <div style={{ fontSize: 18, display: 'flex' }}>
+             <FaSignOutAlt />
+           </div>
+           {!collapsed && (
+             <span style={{ fontWeight: 700, fontSize: 14, letterSpacing: '0.02em' }}>
+               Sign Out
+             </span>
+           )}
         </button>
       </div>
+      <style jsx global>{`
+        /* Global Sidebar Styles - Premium & Dynamic */
+        .sidebar-nav {
+          scrollbar-width: thin;
+          scrollbar-color: #cbd5e1 transparent;
+        }
+        .sidebar-nav::-webkit-scrollbar {
+          width: 4px;
+        }
+        .sidebar-nav::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .sidebar-nav::-webkit-scrollbar-thumb {
+          background-color: #cbd5e1;
+          border-radius: 20px;
+        }
+        .sidebar-nav::-webkit-scrollbar-thumb:hover {
+          background-color: #94a3b8;
+        }
+
+        .sidebar-link {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+          padding: 12px 20px;
+          margin: 4px 12px;
+          border-radius: 12px;
+          background: transparent;
+          color: #64748b;
+          font-weight: 500;
+          font-size: 15px;
+          text-decoration: none;
+          justify-content: flex-start;
+          transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+          position: relative;
+          overflow: hidden;
+          cursor: pointer;
+          user-select: none; /* App-like feel */
+          -webkit-tap-highlight-color: transparent;
+        }
+
+        .sidebar-link:active {
+          transform: scale(0.98); /* Subtle press effect */
+        }
+
+        .sidebar-link:hover {
+          background: #f1f5f9;
+          color: #1e293b;
+          transform: translateX(4px);
+          box-shadow: 0 2px 12px rgba(0,0,0,0.03);
+        }
+
+        .sidebar-link.active {
+          background: linear-gradient(90deg, var(--brand-50, #fff7ed), rgba(255,255,255,0));
+          color: var(--brand, #ea580c);
+          font-weight: 700;
+        }
+
+        .sidebar-link.active::before {
+          content: '';
+          position: absolute;
+          left: 0;
+          top: 50%;
+          transform: translateY(-50%);
+          height: 24px;
+          width: 4px;
+          background: var(--brand, #ea580c);
+          border-radius: 0 6px 6px 0;
+          box-shadow: 0 0 10px var(--brand-50, #fff7ed);
+        }
+
+        .sidebar-icon {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 24px;
+          height: 24px;
+          font-size: 20px;
+          transition: transform 0.3s ease, color 0.3s ease;
+          flex-shrink: 0;
+        }
+
+        .sidebar-link:hover .sidebar-icon {
+          transform: scale(1.15) rotate(2deg);
+          color: var(--brand, #ea580c);
+        }
+
+        .sidebar-link.active .sidebar-icon {
+          transform: scale(1.05);
+        }
+
+        .sidebar-label {
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        /* Collapsed State Overrides */
+        .sidebar-collapsed .sidebar-link {
+          gap: 0;
+          padding: 12px 0;
+          margin: 4px 0;
+          justify-content: center;
+          border-radius: 12px;
+        }
+        .sidebar-collapsed .sidebar-link:hover {
+          transform: none;
+          background: var(--brand-50, #fff7ed);
+        }
+        .sidebar-collapsed .sidebar-link.active {
+           background: var(--brand-50, #fff7ed);
+        }
+        .sidebar-collapsed .sidebar-link.active::before {
+          display: none;
+        }
+        
+      `}</style>
     </aside>
   );
 }
@@ -508,14 +851,12 @@ function Sidebar({ collapsed }) {
 // Mobile sidebar (role-aware)
 // -----------------------------------------------------------------------------
 
-function MobileSidebar({ onNavigate }) {
+function MobileSidebar({ onNavigate, onSignOut, isSigningOut }) {
   const router = useRouter();
-  const supabase = getSupabase();
   const { restaurant, role: ctxRole } = useRestaurant();
   const hasAggregatorIntegration = Boolean(
     restaurant?.swiggy_api_key || restaurant?.zomato_api_key
   );
-  const [signingOut, setSigningOut] = useState(false);
 
   const feature = restaurant?.features || {};
   const role = ctxRole || 'admin';
@@ -594,15 +935,9 @@ function MobileSidebar({ onNavigate }) {
       ].filter((it) => canAccess(it.href, role))
     : [];
 
-  const handleSignOut = async () => {
-    setSigningOut(true);
-    try {
-      await signOutAndRedirect(supabase, router.replace);
-      onNavigate();
-    } catch (err) {
-      alert(`Sign out failed: ${err.message}`);
-      setSigningOut(false);
-    }
+  const handleSignOut = () => {
+    onNavigate();
+    onSignOut();
   };
 
   const groups = [
@@ -618,9 +953,6 @@ function MobileSidebar({ onNavigate }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
-      <div style={{ fontWeight: 700, margin: '6px 6px 12px', color: '#111827' }}>
-        Owner Panel
-      </div>
 
       <div
         style={{
@@ -636,12 +968,12 @@ function MobileSidebar({ onNavigate }) {
             {g.title && (
               <div
                 style={{
-                  margin: '6px 6px 2px',
+                  margin: '16px 16px 8px',
                   fontSize: 11,
                   fontWeight: 800,
-                  color: '#6b7280',
+                  color: '#94a3b8',
                   textTransform: 'uppercase',
-                  letterSpacing: '.03em',
+                  letterSpacing: '0.05em',
                 }}
               >
                 {g.title}
@@ -652,43 +984,39 @@ function MobileSidebar({ onNavigate }) {
                 key={it.href}
                 href={it.href}
                 onClick={onNavigate}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 12,
-                  padding: '12px',
-                  borderRadius: 8,
-                  color: '#374151',
-                  textDecoration: 'none',
-                }}
+                className={`sidebar-link ${router.pathname === it.href ? 'active' : ''}`}
               >
-                <span style={{ width: 18, textAlign: 'center' }}>{it.icon}</span>
-                <span>{it.label}</span>
+                <div className="icon-box sidebar-icon">{it.icon}</div>
+                <span className="label sidebar-label">{it.label}</span>
               </Link>
             ))}
           </React.Fragment>
         ))}
       </div>
 
-      <div style={{ borderTop: '1px solid #e5e7eb', margin: '12px 0' }} />
-      <button
-        onClick={handleSignOut}
-        disabled={signingOut}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-          padding: '12px',
-          borderRadius: 8,
-          color: signingOut ? '#fca5a5' : '#dc2626',
-          background: 'transparent',
-          border: 'none',
-          cursor: signingOut ? 'not-allowed' : 'pointer',
-        }}
-      >
-        <FaSignOutAlt />
-        <span>{signingOut ? 'Signing Out...' : 'Sign Out'}</span>
-      </button>
+      <div style={{ borderTop: '1px solid #f1f5f9', marginTop: '12px', paddingTop: '12px' }}>
+        <button
+          onClick={handleSignOut}
+          disabled={isSigningOut}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            padding: '12px 16px',
+            borderRadius: 12,
+            color: isSigningOut ? '#dc2626' : '#64748b',
+            background: isSigningOut ? '#fee2e2' : '#f8fafc',
+            border: 'none',
+            cursor: isSigningOut ? 'not-allowed' : 'pointer',
+            width: '100%',
+            fontWeight: 600,
+            justifyContent: 'flex-start',
+          }}
+        >
+          <FaSignOutAlt />
+          <span>{isSigningOut ? 'Signing Out...' : 'Sign Out'}</span>
+        </button>
+      </div>
     </div>
   );
 }

@@ -1,31 +1,69 @@
-// pages/owner/billing.js
-
 import React, { useEffect, useState } from 'react';
 import { getSupabase } from '../../services/supabase';
+import { useRequireAuth } from '../../lib/useRequireAuth';
 import { useRestaurant } from '../../context/RestaurantContext';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
-import { istSpanUtcISO } from '../../utils/istTime';
+import Table from '../../components/ui/Table';
+import NiceSelect from '../../components/NiceSelect';
+import DateRangePicker from '../../components/ui/DateRangePicker';
+import { istSpanFromDatesUtcISO } from '../../utils/istTime';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
-import { downloadInvoicePdf } from '../../lib/downloadInvoicePdf'
-
-
+import { downloadInvoicePdf } from '../../lib/downloadInvoicePdf';
+import { 
+  FaFileDownload, 
+  FaChartBar, 
+  FaClipboardList, 
+  FaFileAlt, 
+  FaFileInvoice,
+  FaMoneyBillWave,
+  FaReceipt,
+  FaFilePdf,
+  FaBan,
+  FaTimes,
+  FaUser,
+  FaTag,
+  FaCalendarDay,
+  FaWallet,
+  FaCheckCircle
+} from 'react-icons/fa';
+const REPORT_TYPE_OPTIONS = [
+  { value: 'sales', label: 'Paid Sales Only' },
+  { value: 'credit', label: 'Credit / Unpaid' },
+  { value: 'all', label: 'Full Audit (All)' },
+  { value: 'voided', label: 'Voided History' },
+];
 
 export default function BillingPage() {
   const supabase = getSupabase();
-  const { restaurant } = useRestaurant();
-  const today = new Date().toISOString().slice(0, 10);
+  const { checking } = useRequireAuth(supabase);
+  const { restaurant, loading: restLoading } = useRestaurant();
+  
+  const [range, setRange] = useState({
+    start: new Date(new Date().setHours(0, 0, 0, 0)),
+    end: new Date()
+  });
 
-  const [from, setFrom] = useState(today);
-  const [to, setTo] = useState(today);
+  const icons = {
+    invoices: <FaFileInvoice style={{ color: '#6366f1', marginRight: '6px' }} />,
+    taxable: <FaChartBar style={{ color: '#10b981', marginRight: '6px' }} />,
+    tax: <FaReceipt style={{ color: '#ef4444', marginRight: '6px' }} />,
+    cash: <FaMoneyBillWave style={{ color: '#f59e0b', marginRight: '6px' }} />,
+    online: <FaClipboardList style={{ color: '#3b82f6', marginRight: '6px' }} />,
+    credit: <FaFileAlt style={{ color: '#8b5cf6', marginRight: '6px' }} />
+  };
+
   // sales = paid, credit = open credit, all = everything, voided = void only
   const [reportType, setReportType] = useState('sales');
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [expandedInvoice, setExpandedInvoice] = useState(null);
+  const [selectedInvoice, setSelectedInvoice] = useState(null);
+  const [invoiceItems, setInvoiceItems] = useState([]);
+  const [detailsLoading, setDetailsLoading] = useState(false);
   const [stats, setStats] = useState({
     total_invoices: 0,
     total_taxable: 0,
@@ -38,52 +76,37 @@ export default function BillingPage() {
     credit_sales: 0,
   });
 
-  // Helpers
-  const shortOrder = (id) => (id ? `#${id.slice(0, 8).toUpperCase()}` : '—');
+  const formatMoney = (n) => `₹${Number(n || 0).toFixed(2)}`;
   const isMixed = (inv) => inv?.payment_method === 'mixed' && inv?.mixed_payment_details;
 
-  const paymentBadge = (inv) => {
-    const pm = inv?.payment_method || 'unknown';
-    if (pm === 'cash') return { cls: 'payment-cash', label: '💵 Cash' };
-    if (pm === 'credit') return { cls: 'payment-credit', label: '💳 Credit' };
-    if (pm === 'upi') return { cls: 'payment-online', label: '🏦 UPI' };
-    if (pm === 'card') return { cls: 'payment-online', label: '🏦 Card' };
-    if (pm === 'online') return { cls: 'payment-online', label: '🏦 Online' };
-    if (pm === 'mixed') {
-      const details = inv?.mixed_payment_details || {};
-      const cash = Number(details.cash_amount || 0).toFixed(2);
-      const onl = Number(details.online_amount || 0).toFixed(2);
-      const om = (details.online_method || 'online').toUpperCase();
-      return { cls: 'payment-online', label: `🔀 Mixed (₹${cash} + ₹${onl} ${om})` };
-    }
-    return { cls: 'payment-online', label: pm };
-  };
-
-  const statusBadge = (inv) => {
-    if (String(inv?.status || '').toLowerCase() === 'void') {
-      return { cls: 'status-void', label: '🚫 Void' };
-    }
-    return {
-      cls: inv?.status === 'open' ? 'status-open' : 'status-paid',
-      label: inv?.status === 'open' ? '⏳ Open' : '✅ Paid',
-    };
+  const prettyMethod = (m) => {
+    if (m === 'none' || m === 'unassigned') return 'Other / Not tagged';
+    if (m === 'upi') return 'UPI';
+    if (m === 'card') return 'Card';
+    if (m === 'online') return 'Online';
+    if (m === 'cash') return 'Cash';
+    if (m === 'credit') return 'Credit';
+    if (m === 'mixed') return 'Mixed';
+    if (m === 'unknown') return 'Unknown';
+    return m || 'Other';
   };
    
   
   const loadInvoices = async () => {
-    if (!restaurant?.id || !supabase) return;
+    if (!restaurant?.id || !supabase || restLoading || checking) return;
 
     setLoading(true);
     setError('');
     try {
-      const { startUtc, endUtc } = istSpanUtcISO(from, to);
+      const from = range.start.toISOString().slice(0, 10);
+      const to = range.end.toISOString().slice(0, 10);
+      
       const { data, error } = await supabase
         .from('invoices')
         .select('*')
         .eq('restaurant_id', restaurant.id)
-        .gte('invoice_date', startUtc)
-        .lt('invoice_date', endUtc)
-        .neq('status', 'unpaid')
+        .gte('invoice_date', from)
+        .lte('invoice_date', to)
         .order('invoice_date', { ascending: false });
 
       if (error) throw error;
@@ -91,9 +114,9 @@ export default function BillingPage() {
       let list = data || [];
       // Filter by report type
       if (reportType === 'sales') {
-        list = list.filter(inv => inv.payment_method !== 'credit' && String(inv.status || '').toLowerCase() !== 'void');
+        list = list.filter(inv => inv.payment_method !== 'credit' && String(inv.status || '').toLowerCase() !== 'void' && String(inv.status || '').toLowerCase() !== 'unpaid');
        } else if (reportType === 'credit') {
-         list = list.filter(inv => inv.payment_method === 'credit' && String(inv.status || '').toLowerCase() !== 'void');
+         list = list.filter(inv => (inv.payment_method === 'credit' || String(inv.status || '').toLowerCase() === 'unpaid') && String(inv.status || '').toLowerCase() !== 'void');
       } else if (reportType === 'voided') {
         list = list.filter(inv => String(inv.status || '').toLowerCase() === 'void');
       } // 'all' shows everything
@@ -132,14 +155,17 @@ export default function BillingPage() {
   };
 
   useEffect(() => {
-    if (supabase && restaurant?.id) {
+    if (supabase && restaurant?.id && !restLoading && !checking) {
       loadInvoices();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [restaurant?.id, from, to, reportType, supabase]);
+  }, [restaurant?.id, range, reportType, supabase, restLoading, checking]);
 
   const exportCSV = async (type) => {
   if (!restaurant?.id) return;
+
+  const from = range.start.toISOString().slice(0, 10);
+  const to = range.end.toISOString().slice(0, 10);
 
   const qs = new URLSearchParams({
     from,
@@ -189,6 +215,9 @@ export default function BillingPage() {
 const exportHsnSummary = async () => {
   if (!restaurant?.id) return;
 
+  const from = range.start.toISOString().slice(0, 10);
+  const to = range.end.toISOString().slice(0, 10);
+
   const qs = new URLSearchParams({
     from,
     to,
@@ -235,17 +264,35 @@ const exportHsnSummary = async () => {
 
 
   const handleViewInvoice = async (invoice) => {
-  if (!invoice?.order_id) {
-    alert('Missing order id for this invoice')
-    return
+    if (!invoice?.order_id) {
+      alert('Missing order id for this invoice')
+      return
+    }
+    try {
+      await downloadInvoicePdf(invoice.order_id)
+    } catch (e) {
+      alert(e.message || 'Failed to open invoice PDF')
+    }
   }
-  try {
-    await downloadInvoicePdf(invoice.order_id)
-  } catch (e) {
-    alert(e.message || 'Failed to open invoice PDF')
-  }
-}
 
+  const handleViewDetails = async (invoice) => {
+    setSelectedInvoice(invoice);
+    setDetailsLoading(true);
+    setInvoiceItems([]);
+    try {
+      const { data, error } = await supabase
+        .from('order_items')
+        .select('*, menu_items(name)')
+        .eq('order_id', invoice.order_id);
+      
+      if (error) throw error;
+      setInvoiceItems(data || []);
+    } catch (err) {
+      console.error('Failed to fetch invoice items:', err);
+    } finally {
+      setDetailsLoading(false);
+    }
+  };
 
   const toggleInvoiceExpand = (invoiceId) => {
     setExpandedInvoice(expandedInvoice === invoiceId ? null : invoiceId);
@@ -276,256 +323,671 @@ const exportHsnSummary = async () => {
     }
   };
 
-  return (
-    <div className="billing-page-wrapper">
-      <style jsx>{`
-        .billing-page-wrapper { padding: 16px; max-width: 1400px; margin: 0 auto; width: 100%; box-sizing: border-box; }
-        .billing-header { margin-bottom: 16px; }
-        .billing-header h1 { font-size: 20px; margin: 0 0 8px 0; font-weight: 700; }
-        .filters-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 16px; }
-        .filter-group label { display: block; font-weight: 600; margin-bottom: 6px; font-size: 13px; color: #374151; }
-        .filter-group input, .filter-group select { width: 100%; padding: 8px 10px; border-radius: 6px; border: 1px solid #d1d5db; font-size: 14px; box-sizing: border-box; }
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 16px; }
-        .stat-card { padding: 12px; background: white; border-radius: 8px; border: 1px solid #e5e7eb; }
-        .stat-label { font-size: 11px; color: #6b7280; margin-bottom: 4px; text-transform: uppercase; font-weight: 600; }
-        .stat-value { font-size: 18px; font-weight: 700; color: #111827; }
-        .export-buttons { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
-        .export-buttons button { flex: 1; min-width: 160px; }
-        .table-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 8px; background: white; }
-        .invoices-table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 960px; }
-        .invoices-table thead { background: #f9fafb; border-bottom: 2px solid #e5e7eb; position: sticky; top: 0; z-index: 10; }
-        .invoices-table th { text-align: left; padding: 12px; font-weight: 600; font-size: 12px; text-transform: uppercase; color: #6b7280; }
-        .invoices-table td { padding: 12px; border-bottom: 1px solid #f3f4f6; }
-        .invoices-table tbody tr:hover { background: #f9fafb; }
-        .payment-badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
-        .payment-cash { background: #dcfce7; color: #166534; }
-        .payment-online { background: #dbeafe; color: #1e40af; }
-        .payment-credit { background: #fef08a; color: #854d0e; }
-        .status-badge { display: inline-block; padding: 6px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; }
-        .status-paid { background: #dcfce7; color: #166534; }
-        .status-open { background: #fef08a; color: #854d0e; }
-        .status-void { background: #fee2e2; color: #991b1b; }
-        .action-btn { padding: 6px 12px; background: #3b82f6; color: white; border: none; border-radius: 4px; font-size: 12px; cursor: pointer; transition: all 0.2s; }
-        .action-btn:hover { background: #2563eb; }
-        .btn-void { background: #ef4444; }
-        .btn-void:hover { background: #dc2626; }
-        .action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .mobile-invoice-list { display: none; }
-        .mobile-invoice-card { background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px; margin-bottom: 12px; }
-        .mobile-invoice-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; cursor: pointer; }
-        .mobile-invoice-number { font-weight: 700; font-size: 14px; color: #111827; }
-        .mobile-expand-icon { font-size: 18px; color: #6b7280; transition: transform 0.2s; }
-        .mobile-expand-icon.expanded { transform: rotate(180deg); }
-        .mobile-invoice-summary { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-        .mobile-invoice-total { font-size: 16px; font-weight: 700; color: #111827; }
-        .mobile-invoice-details { display: none; padding-top: 12px; border-top: 1px solid #f3f4f6; margin-top: 12px; }
-        .mobile-invoice-details.expanded { display: block; }
-        .mobile-detail-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; }
-        .mobile-detail-label { color: #6b7280; font-weight: 500; }
-        .mobile-detail-value { color: #111827; font-weight: 600; }
-        .mobile-action-btn { width: 100%; margin-top: 12px; }
-        @media (max-width: 768px) {
-          .billing-page-wrapper { padding: 12px; }
-          .billing-header h1 { font-size: 18px; }
-          .stats-grid { grid-template-columns: repeat(2, 1fr); }
-          .export-buttons button { min-width: 120px; font-size: 12px; padding: 8px 12px; }
-          .table-wrapper { display: none; }
-          .mobile-invoice-list { display: block; }
-        }
-        @media (max-width: 480px) {
-          .billing-page-wrapper { padding: 8px; }
-          .filters-grid { grid-template-columns: 1fr; }
-          .stats-grid { grid-template-columns: 1fr; }
-          .stat-card { padding: 10px; }
-          .export-buttons { flex-direction: column; }
-          .export-buttons button { width: 100%; min-width: 100%; }
-        }
-      `}</style>
+  if (checking || restLoading) return <div style={{ padding: 16 }}>Loading…</div>;
+  if (!restaurant?.id) return <div style={{ padding: 16 }}>No restaurant selected</div>;
 
-      <div className="billing-header">
-        <h1>📊 Billing & GST Management</h1>
+  return (
+    <div className="expenses-page page">
+      <div className="expenses-header-row">
+        <div>
+          <h1 className="expenses-title">Billing & GST</h1>
+          <p className="expenses-sub">
+            Track your invoices, GST collections and export period audits.
+          </p>
+        </div>
+        <div className="expenses-header-actions">
+          <DateRangePicker
+            start={range.start}
+            end={range.end}
+            onChange={setRange}
+          />
+        </div>
       </div>
 
-      <Card padding={16} style={{ marginBottom: '16px' }}>
-        <div className="filters-grid">
-          <div className="filter-group">
-            <label htmlFor="from-date">From Date:</label>
-            <input id="from-date" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+      {error && (
+        <Card className="expenses-error">
+          {error}
+        </Card>
+      )}
+
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: 32 }}>Loading…</div>
+      ) : (
+        <>
+          {/* KPI strip - 6 Pills style like Sales Reports */}
+          <div className="expenses-kpis">
+            <Card className="kpi-pill" style={{ '--pill-color': '#6366f1' }}>
+              <div className="label">{icons.invoices} Total Invoices</div>
+              <div className="value">{stats.total_invoices}</div>
+            </Card>
+
+            <Card className="kpi-pill" style={{ '--pill-color': '#10b981' }}>
+              <div className="label">{icons.taxable} Taxable Value</div>
+              <div className="value" style={{ color: '#059669' }}>{formatMoney(stats.total_taxable)}</div>
+            </Card>
+
+            <Card className="kpi-pill" style={{ '--pill-color': '#ef4444' }}>
+              <div className="label">{icons.tax} Total Tax (GST)</div>
+              <div className="value" style={{ color: '#dc2626' }}>{formatMoney(stats.total_tax)}</div>
+            </Card>
+
+            <Card className="kpi-pill" style={{ '--pill-color': '#f59e0b' }}>
+              <div className="label">{icons.cash} Cash Sales</div>
+              <div className="value" style={{ color: '#b45309' }}>{formatMoney(stats.cash_sales)}</div>
+            </Card>
+
+            <Card className="kpi-pill" style={{ '--pill-color': '#3b82f6' }}>
+              <div className="label">{icons.online} Online Sales</div>
+              <div className="value" style={{ color: '#1d4ed8' }}>{formatMoney(stats.online_sales)}</div>
+            </Card>
+
+            <Card className="kpi-pill" style={{ '--pill-color': '#8b5cf6' }}>
+              <div className="label">{icons.credit} Credit Sales</div>
+              <div className="value" style={{ color: '#7c3aed' }}>{formatMoney(stats.credit_sales)}</div>
+            </Card>
           </div>
-          <div className="filter-group">
-            <label htmlFor="to-date">To Date:</label>
-            <input id="to-date" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+
+          {/* Export Section - Horizontal Strip */}
+          <div className="export-reports-strip">
+             <div className="strip-info">
+                <FaFileDownload className="info-icon" />
+                <span>Export Reports</span>
+             </div>
+             <div className="export-actions">
+                <button className="exp-pill" onClick={() => exportCSV('sales')} disabled={loading || stats.total_invoices === 0}>
+                   <FaChartBar /> Export Sales CSV
+                </button>
+                <button className="exp-pill" onClick={() => exportCSV('credit')} disabled={loading || stats.total_invoices === 0}>
+                   <FaClipboardList /> Export Credit CSV
+                </button>
+                <button className="exp-pill" onClick={() => exportCSV('all')} disabled={loading || stats.total_invoices === 0}>
+                   <FaFileAlt /> Export All CSV
+                </button>
+                <button className="exp-pill" onClick={exportHsnSummary} disabled={loading || stats.total_invoices === 0}>
+                   <FaFileInvoice /> HSN Summary CSV
+                </button>
+             </div>
           </div>
-          <div className="filter-group">
-            <label htmlFor="report-type">Report Type:</label>
-            <select id="report-type" value={reportType} onChange={(e) => setReportType(e.target.value)}>
-              <option value="sales">Sales (Paid Orders Only)</option>
-              <option value="credit">Credit (Open Invoices)</option>
-              <option value="all">All Invoices</option>
-              <option value="voided">Voided Only</option>
-            </select>
-          </div>
-        </div>
-      </Card>
 
-      <Card padding={16} style={{ marginBottom: '16px', backgroundColor: '#f0fdf4' }}>
-        <h2 style={{ marginTop: 0, marginBottom: '12px', fontSize: '16px' }}>📈 Report Statistics</h2>
-        <div className="stats-grid">
-          <div className="stat-card"><div className="stat-label">Total Invoices</div><div className="stat-value">{stats.total_invoices}</div></div>
-          <div className="stat-card"><div className="stat-label">Taxable Value</div><div className="stat-value">₹{stats.total_taxable.toFixed(2)}</div></div>
-          <div className="stat-card"><div className="stat-label">Total Tax (GST)</div><div className="stat-value" style={{ color: '#dc2626' }}>₹{stats.total_tax.toFixed(2)}</div></div>
-          <div className="stat-card"><div className="stat-label">💵 Cash Sales</div><div className="stat-value">₹{stats.cash_sales.toFixed(2)}</div></div>
-          <div className="stat-card"><div className="stat-label">🏦 Online Sales</div><div className="stat-value">₹{stats.online_sales.toFixed(2)}</div></div>
-          <div className="stat-card"><div className="stat-label">💳 Credit Sales</div><div className="stat-value">₹{stats.credit_sales.toFixed(2)}</div></div>
-        </div>
-      </Card>
-
-      <Card padding={16} style={{ marginBottom: '16px' }}>
-        <h3 style={{ marginTop: 0, marginBottom: '12px', fontSize: '14px' }}>📥 Export Reports</h3>
-        <div className="export-buttons">
-          <Button
-            onClick={() => exportCSV('sales')}
-            variant="primary"
-            disabled={loading || stats.total_invoices === 0}
-          >
-            📊 Export Sales CSV
-          </Button>
-
-          <Button
-            onClick={() => exportCSV('credit')}
-            variant="primary"
-            disabled={loading || stats.credit_sales === 0}
-          >
-            📋 Export Credit CSV
-          </Button>
-
-          <Button
-            onClick={() => exportCSV('all')}
-            variant="primary"
-            disabled={loading || stats.total_invoices === 0}
-          >
-            📄 Export All CSV
-          </Button>
-
-          {/* NEW: HSN-wise GST summary */}
-          <Button
-            onClick={exportHsnSummary}
-            variant="primary"
-            disabled={loading || stats.total_invoices === 0}
-          >
-            🧾 Export HSN Summary CSV
-          </Button>
-        </div>
-        <p style={{ marginTop: '10px', fontSize: '11px', color: '#6b7280', margin: '8px 0 0 0' }}>
-          💡 <strong>Tip:</strong> Payment column shows Cash, UPI, Card, Online, Credit, or Mixed (with split) based on the invoice record. 
-        </p>
-      </Card>
-
-
-      <Card padding={16}>
-        <h3 style={{ marginTop: 0, marginBottom: '12px', fontSize: '16px' }}>
-          📋 {reportType === 'credit' ? 'Open Credit Invoices' : reportType === 'voided' ? 'Voided Invoices' : 'Invoices'}
-        </h3>
-
-        {loading ? (
-          <p>Loading...</p>
-        ) : error ? (
-          <p style={{ color: 'red' }}>Error: {error}</p>
-        ) : invoices.length === 0 ? (
-          <p style={{ textAlign: 'center', color: '#6b7280', padding: '20px' }}>No invoices found</p>
-        ) : (
-          <>
-            <div className="table-wrapper">
-              <table className="invoices-table">
-                <thead>
-                  <tr>
-                    <th>Invoice No</th>
-                    <th>Date</th>
-                    <th>Order</th>
-                    <th>Customer</th>
-                    <th style={{ textAlign: 'right' }}>Taxable</th>
-                    <th style={{ textAlign: 'right' }}>Tax</th>
-                    <th style={{ textAlign: 'right' }}>Total</th>
-                    <th style={{ textAlign: 'center' }}>Payment</th>
-                    <th style={{ textAlign: 'center' }}>Status</th>
-                    <th style={{ textAlign: 'center' }}>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {invoices.map((inv) => {
-                    const pb = paymentBadge(inv);
-                    const sb = statusBadge(inv);
-                    return (
-                      <tr key={inv.id}>
-                        <td style={{ fontWeight: 'bold' }}>{inv.invoice_no}</td>
-                        <td>{new Date(inv.invoice_date).toLocaleDateString('en-IN')}</td>
-                        <td>{shortOrder(inv.order_id)}</td>
-                        <td>{inv.customer_name || 'N/A'}</td>
-                        <td style={{ textAlign: 'right' }}>₹{Number(inv.subtotal_ex_tax || 0).toFixed(2)}</td>
-                        <td style={{ textAlign: 'right', color: '#dc2626' }}>₹{Number(inv.total_tax || 0).toFixed(2)}</td>
-                        <td style={{ textAlign: 'right', fontWeight: 'bold' }}>₹{Number(inv.total_inc_tax || 0).toFixed(2)}</td>
-                        <td style={{ textAlign: 'center' }}>
-                          <span className={`payment-badge ${pb.cls}`} title={isMixed(inv) ? pb.label : undefined}>
-                            {isMixed(inv) ? '🔀 Mixed' : pb.label}
-                          </span>
-                        </td>
-                        <td style={{ textAlign: 'center' }}>
-                          <span className={`status-badge ${sb.cls}`}>{sb.label}</span>
-                        </td>
-                        <td style={{ textAlign: 'center', display: 'flex', gap: 8 }}>
-                          <button className="action-btn" onClick={() => handleViewInvoice(inv)}>👁️ View</button>
-                          <button className="action-btn btn-void" onClick={() => voidInvoice(inv)} disabled={String(inv.status || '').toLowerCase() === 'void'}>
-                            🚫 Void
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+          <Card className="expenses-card">
+            <div className="expenses-list-head">
+              <h3 className="section-title">Recent Invoices ({invoices.length})</h3>
+              <div className="expenses-filters">
+                <div style={{ width: 220 }}>
+                  <NiceSelect
+                    options={REPORT_TYPE_OPTIONS}
+                    value={reportType}
+                    onChange={setReportType}
+                    placeholder="Report Type"
+                  />
+                </div>
+              </div>
             </div>
 
-            <div className="mobile-invoice-list">
-              {invoices.map((inv) => {
-                const pb = paymentBadge(inv);
-                const sb = statusBadge(inv);
-                return (
-                  <div key={inv.id} className="mobile-invoice-card">
-                    <div className="mobile-invoice-header" onClick={() => toggleInvoiceExpand(inv.id)}>
-                      <div className="mobile-invoice-number">{inv.invoice_no}</div>
-                      <div className={`mobile-expand-icon ${expandedInvoice === inv.id ? 'expanded' : ''}`}>▼</div>
-                    </div>
+            <div className="expenses-table-wrapper">
+              <Table
+                columns={[
+                  { 
+                    header: 'No.', 
+                    accessor: 'invoice_no', 
+                    cell: (r) => (
+                      <button className="id-bubble" onClick={() => handleViewDetails(r)}>
+                        {r.invoice_no}
+                      </button>
+                    ) 
+                  },
+                  { header: 'Date', accessor: 'invoice_date', cell: (r) => new Date(r.invoice_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) },
+                  { header: 'Customer', accessor: 'customer_name', cell: (r) => r.customer_name || 'Counter Guest' },
+                  { header: 'Taxable', accessor: 'subtotal_ex_tax', cell: (r) => formatMoney(r.subtotal_ex_tax) },
+                  { header: 'Tax', accessor: 'total_tax', cell: (r) => <span style={{ color: '#dc2626', fontWeight: 600 }}>{formatMoney(r.total_tax)}</span> },
+                  { header: 'Total', accessor: 'total_inc_tax', cell: (r) => <span style={{ fontWeight: 800, color: '#0f172a' }}>{formatMoney(r.total_inc_tax)}</span> },
+                  { header: 'Payment', accessor: 'payment_method', cell: (r) => <span className={`status-pill ${r.payment_method}`}>{prettyMethod(r.payment_method)}</span> },
+                  { header: 'Status', accessor: 'status', cell: (r) => <span className={`status-pill status-${r.status}`}>{r.status === 'open' ? 'Open' : r.status === 'void' ? 'Void' : 'Paid'}</span> },
+                  {
+                    header: 'Actions',
+                    accessor: 'actions',
+                    cell: (r) => (
+                      <div className="expenses-actions" style={{ display: 'flex', gap: '8px' }}>
+                        <button className="action-bubble pdf" onClick={() => handleViewInvoice(r)}>
+                           <FaFilePdf size={12} /> PDF
+                        </button>
+                        <button
+                          className="action-bubble void"
+                          onClick={() => voidInvoice(r)}
+                          disabled={String(r.status || '').toLowerCase() === 'void'}
+                        >
+                          <FaBan size={11} /> Void
+                        </button>
+                      </div>
+                    )
+                  }
+                ]}
+                data={invoices}
+              />
+            </div>
+          </Card>
 
-                    <div className="mobile-invoice-summary">
-                      <div className="mobile-invoice-total">₹{Number(inv.total_inc_tax || 0).toFixed(2)}</div>
-                      <div>
-                        <span className={`payment-badge ${pb.cls}`} title={isMixed(inv) ? pb.label : undefined}>
-                          {isMixed(inv) ? '🔀 Mixed' : pb.label}
+          {/* Invoice Details Modal */}
+          {selectedInvoice && (
+            <div className="modal-overlay" onClick={() => setSelectedInvoice(null)}>
+              <div className="modal-content" onClick={e => e.stopPropagation()}>
+                <div className="modal-header">
+                  <div>
+                    <div className="modal-tag">Invoice Details</div>
+                    <h2 className="modal-title">{selectedInvoice.invoice_no}</h2>
+                  </div>
+                  <button className="close-btn" onClick={() => setSelectedInvoice(null)} title="Close">
+                    <span className="close-icon">&times;</span>
+                  </button>
+                </div>
+
+                <div className="modal-body">
+                  <div className="details-grid">
+                    <div className="detail-item">
+                      <div className="d-label"><FaUser /> Customer</div>
+                      <div className="d-value">{selectedInvoice.customer_name || 'Counter Guest'}</div>
+                    </div>
+                    <div className="detail-item">
+                      <div className="d-label"><FaCalendarDay /> Date</div>
+                      <div className="d-value">{new Date(selectedInvoice.invoice_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}</div>
+                    </div>
+                    <div className="detail-item">
+                      <div className="d-label"><FaWallet /> Payment</div>
+                      <div className="d-value">
+                        <span className={`status-pill ${selectedInvoice.payment_method}`}>
+                          {prettyMethod(selectedInvoice.payment_method)}
                         </span>
                       </div>
                     </div>
-
-                    <div>
-                      <span className={`status-badge ${sb.cls}`}>{sb.label}</span>
-                    </div>
-
-                    <div className={`mobile-invoice-details ${expandedInvoice === inv.id ? 'expanded' : ''}`}>
-                      <div className="mobile-detail-row"><span className="mobile-detail-label">Date</span><span className="mobile-detail-value">{new Date(inv.invoice_date).toLocaleDateString('en-IN')}</span></div>
-                      <div className="mobile-detail-row"><span className="mobile-detail-label">Order</span><span className="mobile-detail-value">{shortOrder(inv.order_id)}</span></div>
-                      <div className="mobile-detail-row"><span className="mobile-detail-label">Customer</span><span className="mobile-detail-value">{inv.customer_name || 'N/A'}</span></div>
-                      <div className="mobile-detail-row"><span className="mobile-detail-label">Taxable</span><span className="mobile-detail-value">₹{Number(inv.subtotal_ex_tax || 0).toFixed(2)}</span></div>
-                      <div className="mobile-detail-row"><span className="mobile-detail-label">Tax</span><span className="mobile-detail-value" style={{ color: '#dc2626' }}>₹{Number(inv.total_tax || 0).toFixed(2)}</span></div>
-
-                      <button className="action-btn mobile-action-btn" onClick={() => handleViewInvoice(inv)}>👁️ View Invoice PDF</button>
-                      <button className="action-btn btn-void mobile-action-btn" onClick={() => voidInvoice(inv)} disabled={String(inv.status || '').toLowerCase() === 'void'}>🚫 Void</button>
+                    <div className="detail-item">
+                      <div className="d-label"><FaCheckCircle /> Status</div>
+                      <div className="d-value">
+                         <span className={`status-pill status-${selectedInvoice.status}`}>
+                           {selectedInvoice.status === 'open' ? 'Open' : selectedInvoice.status === 'void' ? 'Void' : 'Paid'}
+                         </span>
+                      </div>
                     </div>
                   </div>
-                );
-              })}
+
+                  <div className="items-section">
+                    <h3 className="section-label">Order Items</h3>
+                    {detailsLoading ? (
+                      <div className="details-loader">Fetching items…</div>
+                    ) : (
+                      <div className="items-list">
+                        {invoiceItems.map((item, idx) => {
+                          // Very robust fallback for price keys across different versions
+                          const price = Number(
+                            item.unit_price_inc_tax ?? 
+                            item.price ?? 
+                            item.unit_price ?? 
+                            item.price_at_order ?? 
+                            item.unit_price_ex_tax ?? 
+                            0
+                          );
+                          return (
+                            <div key={idx} className="item-row">
+                              <div className="item-main">
+                                <span className="qty">{item.quantity}x</span>
+                                <span className="name">{item.menu_items?.name || item.item_name || 'Item'}</span>
+                              </div>
+                              <div className="item-price">
+                                {formatMoney(price * item.quantity)}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="summary-section">
+                    <div className="sum-row">
+                      <span>Subtotal (Ex. Tax)</span>
+                      <span>{formatMoney(selectedInvoice.subtotal_ex_tax)}</span>
+                    </div>
+                    <div className="sum-row tax">
+                      <span>GST Total</span>
+                      <span>{formatMoney(selectedInvoice.total_tax)}</span>
+                    </div>
+                    <div className="sum-row grand">
+                      <span>Grand Total</span>
+                      <span>{formatMoney(selectedInvoice.total_inc_tax)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="modal-footer">
+                   <Button variant="outline" onClick={() => setSelectedInvoice(null)}>Close</Button>
+                   <Button onClick={() => handleViewInvoice(selectedInvoice)}>Download PDF</Button>
+                </div>
+              </div>
             </div>
-          </>
-        )}
-      </Card>
+          )}
+        </>
+      )}
+
+      <style jsx>{`
+        .expenses-page {
+          width: 100%;
+          background: #f8fafc;
+          min-height: 100vh;
+          padding-bottom: 40px;
+        }
+
+        .expenses-header-row {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          margin-bottom: 32px;
+        }
+
+        .expenses-title {
+          margin: 0;
+          font-size: 28px;
+          color: #0f172a;
+          font-weight: 800;
+          letter-spacing: -0.02em;
+        }
+
+        .expenses-sub {
+          margin: 4px 0 0;
+          font-size: 15px;
+          color: #64748b;
+        }
+
+        .expenses-header-actions {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 12px;
+          margin-top: 6px;
+          align-items: center;
+        }
+
+        @media (min-width: 768px) {
+          .expenses-header-row {
+            flex-direction: row;
+            justify-content: space-between;
+            align-items: center;
+          }
+          .expenses-header-actions {
+            margin-top: 0;
+          }
+        }
+
+        /* Export Strip Styles */
+        .export-reports-strip {
+           background: white;
+           padding: 16px 24px;
+           border-radius: 20px;
+           border: 1px solid #e2e8f0;
+           display: flex;
+           align-items: center;
+           justify-content: space-between;
+           margin-bottom: 32px;
+           box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02);
+           flex-wrap: wrap;
+           gap: 20px;
+        }
+
+        .strip-info {
+           display: flex;
+           align-items: center;
+           gap: 10px;
+           font-size: 16px;
+           font-weight: 800;
+           color: #1e293b;
+        }
+        .info-icon { color: #f97316; font-size: 20px; }
+
+        .export-actions {
+           display: flex;
+           gap: 12px;
+           flex-wrap: wrap;
+        }
+
+        .exp-pill {
+           display: flex;
+           align-items: center;
+           gap: 8px;
+           padding: 10px 18px;
+           background: #ffedd5;
+           border: 1px solid #fed7aa;
+           border-radius: 12px;
+           color: #9a3412;
+           font-size: 13px;
+           font-weight: 700;
+           cursor: pointer;
+           transition: all 0.2s;
+        }
+        
+        .exp-pill:hover:not(:disabled) {
+           background: #fdba74;
+           transform: translateY(-1px);
+           box-shadow: 0 4px 12px rgba(249, 115, 22, 0.15);
+        }
+
+        .exp-pill:disabled {
+           opacity: 0.5;
+           cursor: not-allowed;
+           background: #f1f5f9;
+           border-color: #e2e8f0;
+           color: #94a3b8;
+        }
+
+        .expenses-kpis {
+          display: grid;
+          grid-template-columns: repeat(6, 1fr);
+          gap: 16px;
+          margin-bottom: 32px;
+        }
+
+        @media (max-width: 1400px) {
+           .expenses-kpis { grid-template-columns: repeat(3, 1fr); }
+        }
+
+        @media (max-width: 900px) {
+           .expenses-kpis { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        @media (max-width: 600px) {
+           .expenses-kpis { grid-template-columns: 1fr; }
+        }
+
+        :global(.kpi-pill) {
+          background: white;
+          padding: 12px 24px;
+          border-radius: 99px;
+          border: 1px solid #e2e8f0;
+          border-top: 3px solid var(--pill-color, #f97316);
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          text-align: center;
+          gap: 2px;
+          transition: all 0.2s ease;
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        }
+        
+        :global(.kpi-pill:hover) {
+          transform: translateY(-2px);
+          box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08);
+          border-color: var(--pill-color, #f97316);
+        }
+
+        :global(.kpi-pill .label) {
+          font-size: 9px;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          color: #64748b;
+          font-weight: 700;
+          margin-bottom: 2px;
+        }
+        :global(.kpi-pill .value) {
+          font-size: 18px;
+          font-weight: 800;
+          color: #1e293b;
+          line-height: 1;
+          letter-spacing: -0.01em;
+        }
+
+        .value-row { display: flex; align-items: center; gap: 12px; }
+        .v-item { font-size: 13px; font-weight: 700; color: #475569; }
+        .v-sep { color: #cbd5e1; font-weight: 400; }
+
+        .expenses-card {
+          background: white;
+          border-radius: 16px;
+          border: 1px solid #e2e8f0;
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02);
+          overflow: hidden;
+        }
+
+        .expenses-list-head {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          justify-content: space-between;
+          padding: 20px 24px;
+          border-bottom: 2px solid #f97316;
+        }
+        .section-title {
+          margin: 0;
+          font-size: 18px;
+          color: #0f172a;
+          font-weight: 800;
+        }
+
+        .expenses-filters {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 12px;
+        }
+
+        .expenses-table-wrapper {
+          overflow-x: auto;
+        }
+
+        .link-button {
+           display: none; /* Deprecated */
+        }
+
+        .action-bubble {
+           display: flex;
+           align-items: center;
+           gap: 6px;
+           padding: 6px 12px;
+           border-radius: 99px;
+           font-size: 11px;
+           font-weight: 800;
+           cursor: pointer;
+           border: 1px solid transparent;
+           transition: all 0.2s;
+           text-transform: uppercase;
+           letter-spacing: 0.02em;
+           line-height: 1;
+        }
+
+        .action-bubble.pdf {
+           background: #fff7ed;
+           color: #ea580c;
+           border-color: #fed7aa;
+        }
+        .action-bubble.pdf:hover {
+           background: #ea580c;
+           color: white;
+           box-shadow: 0 4px 12px rgba(234, 88, 12, 0.2);
+        }
+
+        .action-bubble.void {
+           background: #fef2f2;
+           color: #dc2626;
+           border-color: #fecaca;
+        }
+        .action-bubble.void:hover:not(:disabled) {
+           background: #dc2626;
+           color: white;
+           box-shadow: 0 4px 12px rgba(220, 38, 38, 0.2);
+        }
+        .action-bubble:disabled {
+           opacity: 0.4;
+           cursor: not-allowed;
+           filter: grayscale(1);
+        }
+
+        /* Unified status-pill from Overview */
+        .status-pill {
+           display: inline-block; padding: 4px 12px; border-radius: 999px;
+           font-size: 11px; font-weight: 700; text-transform: uppercase;
+           white-space: nowrap;
+        }
+        /* Methods */
+        .status-pill.cash { background: #f0fdf4; color: #16a34a; }
+        .status-pill.upi, .status-pill.card, .status-pill.online { background: #eff6ff; color: #2563eb; }
+        .status-pill.credit { background: #fef9c3; color: #854d0e; }
+        .status-pill.mixed { background: #f5f3ff; color: #7c3aed; }
+
+        /* Invoice Status */
+        .status-pill.status-paid { background: #f0fdf4; color: #16a34a; }
+        .status-pill.status-open { background: #fff7ed; color: #ea580c; }
+        .status-pill.status-void { background: #fef2f2; color: #dc2626; }
+
+        @media (max-width: 1024px) {
+           .expenses-kpis { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        @media (max-width: 640px) {
+          .expenses-page {
+            padding: 16px;
+          }
+          .expenses-title {
+            font-size: 22px;
+          }
+          .expenses-kpis {
+            grid-template-columns: 1fr;
+            gap: 12px;
+          }
+          .kpi-pill { padding: 12px 20px; border-radius: 16px; }
+          .kpi-pill .value { font-size: 20px; }
+        }
+
+        .id-bubble {
+           background: #f1f5f9;
+           color: #0f172a;
+           border: 1px solid #e2e8f0;
+           padding: 4px 12px;
+           border-radius: 99px;
+           font-size: 12px;
+           font-weight: 800;
+           cursor: pointer;
+           transition: all 0.2s;
+        }
+        .id-bubble:hover {
+           background: #e2e8f0;
+           border-color: #cbd5e1;
+           box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        /* Modal Styles */
+        .modal-overlay {
+          position: fixed;
+          top: 0; left: 0; right: 0; bottom: 0;
+          background: rgba(15, 23, 42, 0.75);
+          backdrop-filter: blur(4px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 1000;
+          padding: 20px;
+        }
+        .modal-content {
+          background: white;
+          width: 100%;
+          max-width: 500px;
+          max-height: 90vh;
+          border-radius: 24px;
+          overflow: hidden;
+          box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+          animation: slideIn 0.3s ease-out;
+          display: flex;
+          flex-direction: column;
+        }
+        @keyframes slideIn {
+          from { transform: translateY(20px); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+
+        .modal-header {
+          padding: 24px;
+          background: #f8fafc;
+          border-bottom: 1px solid #e2e8f0;
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+        }
+        .modal-tag {
+          font-size: 10px;
+          text-transform: uppercase;
+          font-weight: 800;
+          color: #f97316;
+          letter-spacing: 0.1em;
+          margin-bottom: 4px;
+        }
+        .modal-title { margin: 0; font-size: 24px; color: #0f172a; font-weight: 800; }
+        .close-btn {
+          background: transparent;
+          border: none;
+          padding: 0;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 32px;
+          height: 32px;
+          margin-top: -4px;
+          margin-right: -4px;
+        }
+        .close-icon {
+          font-size: 32px;
+          line-height: 1;
+          color: #92400e; /* Brown cross */
+          font-weight: 300;
+        }
+        .close-btn:hover .close-icon {
+          color: #78350f;
+          transform: scale(1.1);
+        }
+
+        .modal-body { 
+          padding: 24px; 
+          overflow-y: auto;
+          flex: 1;
+        }
+        .modal-body::-webkit-scrollbar {
+          width: 6px;
+        }
+        .modal-body::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .modal-body::-webkit-scrollbar-thumb {
+          background: #e2e8f0;
+          border-radius: 10px;
+        }
+        .modal-body::-webkit-scrollbar-thumb:hover {
+          background: #cbd5e1;
+        }
+        .details-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 20px;
+          margin-bottom: 32px;
+        }
+        .d-label { font-size: 11px; color: #64748b; font-weight: 700; display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+        .d-value { font-size: 14px; color: #1e293b; font-weight: 700; }
+
+        .section-label { font-size: 12px; font-weight: 800; text-transform: uppercase; color: #94a3b8; margin-bottom: 12px; border-bottom: 1px solid #f1f5f9; padding-bottom: 8px; }
+        
+        .items-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 32px; }
+        .item-row { display: flex; justify-content: space-between; align-items: center; }
+        .qty { color: #f97316; font-weight: 800; font-size: 13px; margin-right: 8px; background: #fff7ed; padding: 2px 6px; border-radius: 6px; }
+        .name { font-weight: 700; color: #334155; font-size: 14px; }
+        .item-price { font-weight: 800; color: #0f172a; font-size: 14px; }
+
+        .summary-section { background: #f8fafc; padding: 20px; border-radius: 16px; display: flex; flex-direction: column; gap: 8px; }
+        .sum-row { display: flex; justify-content: space-between; font-size: 14px; color: #64748b; font-weight: 600; }
+        .sum-row.tax { color: #dc2626; }
+        .sum-row.grand { margin-top: 8px; padding-top: 8px; border-top: 1px solid #e2e8f0; font-size: 18px; color: #0f172a; font-weight: 900; }
+
+        .modal-footer {
+          padding: 16px 24px;
+          border-top: 1px solid #e2e8f0;
+          display: flex; gap: 12px;
+          justify-content: flex-end;
+          background: #f8fafc;
+        }
+      `}</style>
     </div>
   );
 }

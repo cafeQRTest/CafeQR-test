@@ -177,21 +177,16 @@ export function RestaurantProvider({ children }) {
 
     resolve();
 
-    // Listen to auth changes for owner routes
-    if (router.pathname?.startsWith('/owner')) {
-      const {
-        data: { subscription },
-      } = supabase.auth.onAuthStateChange(() => {
-        resolve();
-      });
-      return () => {
-        cancelled = true;
-        subscription?.unsubscribe();
-      };
-    }
+    // Listen to auth changes globally to keep restaurant state in sync
+    const {
+      data: { subscription: authSub },
+    } = supabase.auth.onAuthStateChange(() => {
+      resolve();
+    });
 
     return () => {
       cancelled = true;
+      authSub?.unsubscribe();
     };
   }, [supabase, ridFromUrlOrStorage, router.pathname]);
 
