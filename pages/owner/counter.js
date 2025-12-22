@@ -1659,34 +1659,88 @@ window.dispatchEvent(
           border: '1px solid #f1f5f9',
           marginTop: '20px'
         }}>
-          <div style={{ position: 'relative', marginBottom: '16px' }}>
+          <div style={{ position: 'relative', marginBottom: '20px' }}>
+            <div style={{ 
+              position: 'absolute', 
+              left: '18px', 
+              top: '50%', 
+              transform: 'translateY(-50%)',
+              color: THEME.main,
+              fontSize: '20px',
+              fontWeight: 'bold',
+              pointerEvents: 'none',
+              zIndex: 1
+            }}>
+              🔍
+            </div>
             <input 
               type="text" 
-              placeholder="Search dishes, drinks, or codes..." 
+              placeholder="🔎 Search menu items, drinks, or item codes..." 
               value={searchQuery} 
               onChange={(e) => setSearchQuery(e.target.value)} 
               style={{ 
                 width: '100%',
-                padding: '14px 16px', 
-                background: '#f8fafc', 
-                border: '1px solid #eef2f6', 
-                borderRadius: '12px', 
+                padding: '16px 20px 16px 52px', 
+                background: 'linear-gradient(135deg, #ffffff 0%, #fefefe 100%)', 
+                border: `3px solid ${THEME.main}`, 
+                borderRadius: '16px', 
                 outline: 'none',
-                fontSize: '15px',
-                transition: 'all 0.2s',
+                fontSize: '16px',
+                fontWeight: 600,
+                color: '#1e293b',
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                boxShadow: `0 8px 20px ${THEME.main}30, 0 0 0 0 ${THEME.main}00`,
+                animation: 'pulse-border 2s ease-in-out infinite'
               }} 
               onFocus={(e) => {
                 e.target.style.background = '#ffffff';
-                e.target.style.borderColor = THEME.main;
-                e.target.style.boxShadow = `0 0 0 3px ${THEME.main}15`;
+                e.target.style.borderColor = THEME.dark;
+                e.target.style.boxShadow = `0 0 0 6px ${THEME.main}20, 0 12px 24px ${THEME.main}40`;
+                e.target.style.transform = 'translateY(-2px)';
               }}
               onBlur={(e) => {
-                e.target.style.background = '#f8fafc';
-                e.target.style.borderColor = '#eef2f6';
-                e.target.style.boxShadow = 'none';
+                e.target.style.background = 'linear-gradient(135deg, #ffffff 0%, #fefefe 100%)';
+                e.target.style.borderColor = THEME.main;
+                e.target.style.boxShadow = `0 8px 20px ${THEME.main}30`;
+                e.target.style.transform = 'translateY(0)';
               }}
             />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                style={{
+                  position: 'absolute',
+                  right: '16px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: THEME.main,
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '28px',
+                  height: '28px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                  fontWeight: 'bold',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = THEME.dark;
+                  e.currentTarget.style.transform = 'translateY(-50%) scale(1.1)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = THEME.main;
+                  e.currentTarget.style.transform = 'translateY(-50%) scale(1)';
+                }}
+              >
+                ✕
+              </button>
+            )}
           </div>
+
 
           <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px', scrollbarWidth: 'none' }}>
             {[

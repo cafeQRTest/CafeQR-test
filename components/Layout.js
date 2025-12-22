@@ -73,9 +73,16 @@ export default function Layout({
   hideChrome = false,
   showCustomerHeader = false,
 }) {
+  const router = useRouter();
+
+  // If landing/login/signup page, render raw children (allows full screen control)
+  const fullScreenRoutes = ['/', '/login', '/signup'];
+  if (fullScreenRoutes.includes(router.pathname)) {
+    return <>{children}</>;
+  }
+
   if (hideChrome) return <main style={{ padding: 20 }}>{children}</main>;
 
-  const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const MOBILE_BREAKPOINT = 1024; // use drawer up to 1024px wide (phones + tablets)

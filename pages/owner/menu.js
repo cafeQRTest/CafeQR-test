@@ -377,6 +377,10 @@ export default function MenuPage() {
               option_id,
               price,
               variant_options(name)
+            ),
+            menu_item_upsells!menu_item_upsells_parent_menu_item_id_fkey(
+              upsell_menu_item_id,
+              upsell_item:menu_items!menu_item_upsells_upsell_menu_item_id_fkey(id, name, price)
             )`
           )
           .eq("restaurant_id", restaurantId)
@@ -1096,13 +1100,13 @@ export default function MenuPage() {
                 </div>
                 <div className="detail-item">
                   <span className="detail-label">Type</span>
-                  <span className={`detail-badge ${detailPopupItem.is_packaged_good ? 'badge-pkg' : 'badge-menu'}`}>
+                  <span className="detail-value">
                     {detailPopupItem.is_packaged_good ? "Packaged" : "Menu"}
                   </span>
                 </div>
                 <div className="detail-item">
                   <span className="detail-label">Status</span>
-                  <span className={`detail-badge ${detailPopupItem.status === 'available' ? 'badge-available' : 'badge-out'}`}>
+                  <span className="detail-value">
                     {detailPopupItem.status === 'available' ? "Available" : "Out of Stock"}
                   </span>
                 </div>
@@ -1123,6 +1127,20 @@ export default function MenuPage() {
                       <div key={idx} className="variant-option-card">
                         <span className="variant-option-name">{pricing.variant_options?.name || "Option"}</span>
                         <span className="variant-option-price">₹{Number(pricing.price ?? 0).toFixed(2)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {detailPopupItem.menu_item_upsells && detailPopupItem.menu_item_upsells.length > 0 && (
+                <div className="detail-upsells-section">
+                  <h3>Upsells / Add-ons</h3>
+                  <div className="upsell-items-grid">
+                    {detailPopupItem.menu_item_upsells.map((upsell, idx) => (
+                      <div key={idx} className="upsell-item-card">
+                        <span className="upsell-item-name">{upsell.upsell_item?.name || "Item"}</span>
+                        <span className="upsell-item-price">₹{Number(upsell.upsell_item?.price ?? 0).toFixed(2)}</span>
                       </div>
                     ))}
                   </div>
@@ -1950,22 +1968,26 @@ export default function MenuPage() {
 
         .detail-item {
           display: flex;
-          flex-direction: column;
-          gap: 6px;
+          flex-direction: row;
+          align-items: center;
+          gap: 16px;
+          justify-content: space-between;
         }
 
         .detail-label {
-          font-size: 12px;
+          font-size: 13px;
           font-weight: 600;
           color: #6b7280;
           text-transform: uppercase;
           letter-spacing: 0.5px;
+          min-width: fit-content;
         }
 
         .detail-value {
           font-size: 15px;
           font-weight: 600;
           color: #1f2937;
+          text-align: right;
         }
 
         .detail-price {
@@ -2064,6 +2086,56 @@ export default function MenuPage() {
           font-size: 14px;
           font-weight: 700;
           color: #f97316;
+        }
+
+        .detail-upsells-section {
+          background: #ecfdf5;
+          border: 2px solid #10b981;
+          border-radius: 12px;
+          padding: 16px;
+          margin-top: 20px;
+        }
+
+        .detail-upsells-section h3 {
+          margin: 0 0 12px 0;
+          font-size: 16px;
+          font-weight: 700;
+          color: #1f2937;
+        }
+
+        .upsell-items-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+          gap: 8px;
+        }
+
+        .upsell-item-card {
+          background: white;
+          border: 1.5px solid #a7f3d0;
+          border-radius: 8px;
+          padding: 10px 12px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          transition: all 0.2s ease;
+        }
+
+        .upsell-item-card:hover {
+          border-color: #10b981;
+          box-shadow: 0 2px 4px rgba(16, 185, 129, 0.15);
+          transform: translateY(-1px);
+        }
+
+        .upsell-item-name {
+          font-size: 13px;
+          font-weight: 600;
+          color: #1f2937;
+        }
+
+        .upsell-item-price {
+          font-size: 14px;
+          font-weight: 700;
+          color: #10b981;
         }
 
         @media (max-width: 640px) {
