@@ -677,6 +677,10 @@ export default function SettingsPage() {
     gst_enabled: false, gstin: '', fssai_license: '', default_tax_rate: 5, prices_include_tax: false,
     swiggy_api_key: '', swiggy_api_secret: '', swiggy_webhook_secret: '',
     zomato_api_key: '', zomato_api_secret: '', zomato_webhook_secret: '',
+    delivery_radius_km: 10,
+    owner_lat: '',
+    owner_lng: '',
+
   });
 
   const [originalTables, setOriginalTables] = useState(0);
@@ -715,6 +719,10 @@ export default function SettingsPage() {
             features_inventory_enabled: !!profile.features_inventory_enabled,
             features_counter_send_to_kitchen_enabled: profile.features_counter_send_to_kitchen_enabled !== false,
             swiggy_enabled: !!(profile.swiggy_api_key), zomato_enabled: !!(profile.zomato_api_key),
+            delivery_radius_km: profile.delivery_radius_km ?? 10,
+            owner_lat: profile.location ? profile.location.coordinates?.[1] ?? '' : '',
+            owner_lng: profile.location ? profile.location.coordinates?.[0] ?? '' : '',
+
           }));
           setOriginalTables(profile.tables_count || 0);
           setIsFirstTime(false);
@@ -760,6 +768,11 @@ export default function SettingsPage() {
           description: form.description,
           instagram_handle: form.instagram_handle,
           website_url: form.website_url,
+          delivery_radius_km: Number(form.delivery_radius_km || 10),
+          location: (form.owner_lat && form.owner_lng)
+          ? `SRID=4326;POINT(${Number(form.owner_lng)} ${Number(form.owner_lat)})`
+          : null,
+
           
           features_credit_enabled: form.features_credit_enabled,
           features_menu_images_enabled: form.features_menu_images_enabled,
@@ -871,6 +884,65 @@ export default function SettingsPage() {
                 <Input value={form.shipping_pincode} onChange={onChange('shipping_pincode')} placeholder="Pincode" maxLength={6} />
               </FormField>
             </SectionBody>
+
+  <SectionHeader>
+    <SectionIcon>📍</SectionIcon>
+    <div>
+      <SectionTitle>Delivery Location</SectionTitle>
+      <div style={{ fontSize: 13, color: 'gray', fontWeight: 400 }}>
+        Used to show your restaurant to customers nearby
+      </div>
+    </div>
+  </SectionHeader>
+
+  <SectionBody>
+    <FormField>
+      <Label>Delivery radius (km)</Label>
+      <Input
+        type="number"
+        min="1"
+        max="50"
+        value={form.delivery_radius_km}
+        onChange={onChange('delivery_radius_km')}
+      />
+      <HelperText>Customers will see you within this radius.</HelperText>
+    </FormField>
+
+    <FormField>
+      <Label>Latitude</Label>
+      <Input value={form.owner_lat} onChange={onChange('owner_lat')} placeholder="e.g. 12.9716" />
+    </FormField>
+
+    <FormField>
+      <Label>Longitude</Label>
+      <Input value={form.owner_lng} onChange={onChange('owner_lng')} placeholder="e.g. 77.5946" />
+    </FormField>
+
+    <FormField span={2}>
+      <ActionButton
+        type="button"
+        primary
+        onClick={() => {
+          if (!navigator.geolocation) return alert('Geolocation not supported')
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              setForm(f => ({
+                ...f,
+                owner_lat: String(pos.coords.latitude),
+                owner_lng: String(pos.coords.longitude)
+              }))
+            },
+            (err) => alert(err.message),
+            { enableHighAccuracy: true, timeout: 10000 }
+          )
+        }}
+      >
+        Use current location
+      </ActionButton>
+    </FormField>
+  </SectionBody>
+
+
           </SectionCard>
 
           {/* OPERATIONS CARD */}

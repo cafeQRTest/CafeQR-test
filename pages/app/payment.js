@@ -1,0 +1,603 @@
+//pages/app/payment.js
+
+import { useRouter } from "next/router";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { getSupabase } from "../../services/supabase";
+
+const cartKey = (restaurantId) => `cart_delivery_${restaurantId}`;
+
+export default function DeliveryPayment() {
+  const router = useRouter();
+  const supabase = getSupabase();
+  const { r: restaurantId } = router.query;
+
+  const [restaurant, setRestaurant] = useState(null);
+  const [cart, setCart] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const [payMode, setPayMode] = useState("cod"); // "cod" | "online"
+  const [placing, setPlacing] = useState(false);
+
+  // Delivery details
+  const [custName, setCustName] = useState("");
+  const [custPhone, setCustPhone] = useState("");
+  const [custAddress, setCustAddress] = useState("");
+  const [note, setNote] = useState("");
+
+  useEffect(() => {
+    if (!restaurantId) return;
+
+    const load = async () => {
+      setLoading(true);
+
+      const { data: rest } = await supabase
+        .from("restaurants")
+        .select(
+          `
+          id,
+          name,
+          restaurant_profiles(
+            brand_color,
+            online_payment_enabled,
+            use_own_gateway,
+            gst_enabled,
+            default_tax_rate,
+            prices_include_tax
+          )
+        `
+        )
+        .eq("id", restaurantId)
+        .single();
+
+      setRestaurant(rest || null);
+
+      if (typeof window !== "undefined") {
+        const stored = localStorage.getItem(cartKey(restaurantId));
+        if (stored) {
+          try {
+            const parsed = JSON.parse(stored);
+            setCart(Array.isArray(parsed) ? parsed : []);
+          } catch {
+            setCart([]);
+          }
+        } else {
+          setCart([]);
+        }
+
+        // Optional: prefill from last delivery attempt
+        try {
+          const last = JSON.parse(localStorage.getItem("last_delivery_details") || "{}");
+          if (last?.name) setCustName(String(last.name));
+          if (last?.phone) setCustPhone(String(last.phone));
+          if (last?.address) setCustAddress(String(last.address));
+        } catch {
+          // ignore
+        }
+      }
+
+      setLoading(false);
+    };
+
+    load();
+  }, [restaurantId, supabase]);
+
+  const brandColor = restaurant?.restaurant_profiles?.brand_color || "#f59e0b";
+  const onlineEnabled = !!restaurant?.restaurant_profiles?.online_payment_enabled;
+
+  const totals = useMemo(() => {
+    const profile = restaurant?.restaurant_profiles;
+    const gstEnabled = !!profile?.gst_enabled;
+    const baseRate = Number(profile?.default_tax_rate ?? 0);
+    const pricesIncludeTax =
+      profile?.prices_include_tax === true ||
+      profile?.prices_include_tax === "true" ||
+      profile?.prices_include_tax === 1 ||
+      profile?.prices_include_tax === "1";
+
+    let subtotalEx = 0;
+    let taxAmount = 0;
+    let totalInc = 0;
+
+    cart.forEach((item) => {
+      const q = Number(item.quantity) || 1;
+      const price = Number(item.price) || 0;
+      const isPackaged = !!item.is_packaged_good;
+
+      if (!gstEnabled) {
+        subtotalEx += price * q;
+        totalInc += price * q;
+        return;
+      }
+
+      if (isPackaged) {
+        subtotalEx += price * q;
+        totalInc += price * q;
+        return;
+      }
+
+      if (pricesIncludeTax) {
+        const inc = price * q;
+        const ex = baseRate > 0 ? inc / (1 + baseRate / 100) : inc;
+        subtotalEx += ex;
+        taxAmount += inc - ex;
+        totalInc += inc;
+      } else {
+        const ex = price * q;
+        const tax = (baseRate / 100) * ex;
+        subtotalEx += ex;
+        taxAmount += tax;
+        totalInc += ex + tax;
+      }
+    });
+
+    return { subtotalEx, taxAmount, totalInc };
+  }, [cart, restaurant]);
+
+  const validateDelivery = () => {
+    if (!custName.trim()) return "Please enter your name.";
+    if (!custPhone.trim() || custPhone.trim().length < 8)
+      return "Please enter a valid phone number.";
+    if (!custAddress.trim() || custAddress.trim().length < 8)
+      return "Please enter a delivery address.";
+    if (!restaurantId) return "Missing restaurant.";
+    if (!cart?.length) return "Cart is empty.";
+    if (!Number.isFinite(totals.totalInc) || totals.totalInc <= 0)
+      return "Invalid total amount.";
+    return "";
+  };
+
+  const notifyOwner = async (payload) => {
+    try {
+      await fetch("/api/notify-owner", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      // best-effort
+    }
+  };
+
+  const saveLastDeliveryDetails = () => {
+    try {
+      localStorage.setItem(
+        "last_delivery_details",
+        JSON.stringify({
+          name: custName.trim(),
+          phone: custPhone.trim(),
+          address: custAddress.trim(),
+        })
+      );
+    } catch {
+      // ignore
+    }
+  };
+
+  const buildDeliveryBlock = () => {
+    return [
+      "Delivery Details:",
+      `Name: ${custName.trim()}`,
+      `Phone: ${custPhone.trim()}`,
+      `Address: ${custAddress.trim()}`,
+      note.trim() ? `Note: ${note.trim()}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+  };
+
+  const buildOrderPayload = () => {
+    const deliveryBlock = buildDeliveryBlock();
+
+    return {
+      restaurant_id: restaurantId,
+      restaurant_name: restaurant?.name || null,
+      table_number: "DELIVERY",
+      items: cart.map((i) => ({
+        id: i.id,
+        name: i.name,
+        price: Number(i.price) || 0,
+        quantity: Number(i.quantity) || 1,
+        veg: !!i.veg,
+        variant_id: i.selectedVariant?.variant_id || null,
+        variant_name: i.selectedVariant?.variant_name || null,
+      })),
+      subtotal: totals.subtotalEx,
+      tax: totals.taxAmount,
+      total_amount: totals.totalInc,
+      special_instructions: deliveryBlock,
+    };
+  };
+
+  const placeCOD = async () => {
+    const err = validateDelivery();
+    if (err) return alert(err);
+
+    setPlacing(true);
+    try {
+      saveLastDeliveryDetails();
+
+      const orderData = {
+        ...buildOrderPayload(),
+        payment_method: "none",
+        payment_status: "pending",
+      };
+
+      const res = await fetch("/api/orders/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(orderData),
+      });
+
+      const result = await res.json();
+      if (!res.ok) throw new Error(result?.error || "Failed to create order");
+
+      await notifyOwner({
+        restaurantId,
+        orderId: result.order_id || result.id,
+        orderItems: orderData.items,
+      });
+
+      if (typeof window !== "undefined") {
+        localStorage.removeItem(cartKey(restaurantId));
+      }
+
+      const amt = encodeURIComponent(String(totals.totalInc));
+      router.replace(
+        `/app/success?orderId=${encodeURIComponent(
+          result.order_id || result.id
+        )}&method=cod&amt=${amt}`
+      );
+    } catch (e) {
+      alert(e?.message || "Failed to place order.");
+    } finally {
+      setPlacing(false);
+    }
+  };
+
+  const ensureRazorpayScript = async () => {
+    if (typeof window === "undefined") return;
+    if (window.Razorpay) return;
+
+    await new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.async = true;
+      script.onload = resolve;
+      script.onerror = reject;
+      document.body.appendChild(script);
+    });
+  };
+
+  const payOnlineRazorpay = async () => {
+    const err = validateDelivery();
+    if (err) return alert(err);
+
+    if (!onlineEnabled) return alert("Online payment is disabled for this restaurant.");
+    if (typeof window === "undefined") return;
+
+    const publicKey = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+    if (!publicKey) {
+      return alert("Missing NEXT_PUBLIC_RAZORPAY_KEY_ID in environment.");
+    }
+
+    setPlacing(true);
+    try {
+      saveLastDeliveryDetails();
+      await ensureRazorpayScript();
+
+      // 1) Create Razorpay order on server
+      const resp = await fetch("/api/payments/create-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: totals.totalInc,
+          currency: "INR",
+          customer_name: custName.trim(),
+          customer_email: "guest@restaurant.com",
+          customer_phone: custPhone.trim(),
+          metadata: {
+            restaurant_id: restaurantId,
+            source: "delivery_app",
+          },
+        }),
+      });
+
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data?.error || "Failed to create payment order");
+
+      // 2) Store pending delivery order locally (created after payment success)
+      const pendingDeliveryOrder = {
+        ...buildOrderPayload(),
+        payment_method: "online",
+        payment_status: "completed",
+        payment_details: {
+          provider: "razorpay",
+          razorpay_order_id: data.order_id,
+          amount: data.amount,
+          currency: data.currency,
+        },
+      };
+
+      localStorage.setItem(
+        "pending_delivery_order",
+        JSON.stringify(pendingDeliveryOrder)
+      );
+
+      // 3) Open Razorpay checkout
+      const options = {
+        key: publicKey,
+        order_id: data.order_id,
+        amount: data.amount,
+        currency: data.currency,
+        name: restaurant?.name || "Restaurant",
+        description: "Delivery order payment",
+        prefill: {
+          name: custName.trim(),
+          contact: custPhone.trim(),
+        },
+        theme: { color: brandColor },
+        handler: function (response) {
+          try {
+            localStorage.setItem(
+              "delivery_payment_session",
+              JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                amount: data.amount,
+                currency: data.currency,
+              })
+            );
+          } catch {
+            // ignore
+          }
+          window.location.href = "/app/payment-success";
+        },
+        modal: {
+          ondismiss: function () {
+            setPlacing(false);
+          },
+        },
+      };
+
+      const rz = new window.Razorpay(options);
+      rz.open();
+    } catch (e) {
+      setPlacing(false);
+      alert(e?.message || "Online payment failed to start.");
+    }
+  };
+
+  if (loading) return <div style={{ padding: 40, textAlign: "center" }}>Loading…</div>;
+
+  if (!restaurantId || !restaurant) {
+    return (
+      <div style={{ padding: 40, textAlign: "center" }}>
+        Missing restaurant.
+        <div style={{ marginTop: 10 }}>
+          <Link href="/app">Back</Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (!cart?.length) {
+    return (
+      <div style={{ padding: 40, textAlign: "center" }}>
+        Your cart is empty.
+        <div style={{ marginTop: 10 }}>
+          <Link href={`/app/restaurant/${restaurantId}`}>Browse menu</Link>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#f8f9fa", paddingBottom: 120 }}>
+      <header
+        style={{
+          background: "#fff",
+          borderBottom: "1px solid #e5e7eb",
+          padding: 16,
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+        }}
+      >
+        <button
+          onClick={() => router.back()}
+          style={{
+            border: "1px solid #e5e7eb",
+            background: "#fff",
+            borderRadius: 10,
+            padding: "8px 10px",
+            cursor: "pointer",
+          }}
+        >
+          {"<"}
+        </button>
+        <div style={{ fontWeight: 900, flex: 1 }}>Delivery details</div>
+      </header>
+
+      <div style={{ padding: 16, display: "grid", gap: 12 }}>
+        <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: 14 }}>
+          <div style={{ fontWeight: 900, marginBottom: 10 }}>Customer info</div>
+
+          <label style={{ fontSize: 12, color: "#6b7280" }}>Name</label>
+          <input
+            value={custName}
+            onChange={(e) => setCustName(e.target.value)}
+            placeholder="Your name"
+            style={{
+              width: "100%",
+              padding: 12,
+              borderRadius: 12,
+              border: "1px solid #e5e7eb",
+              marginTop: 6,
+              outline: "none",
+            }}
+          />
+
+          <div style={{ height: 10 }} />
+
+          <label style={{ fontSize: 12, color: "#6b7280" }}>Phone</label>
+          <input
+            value={custPhone}
+            onChange={(e) => setCustPhone(e.target.value)}
+            placeholder="Your phone number"
+            style={{
+              width: "100%",
+              padding: 12,
+              borderRadius: 12,
+              border: "1px solid #e5e7eb",
+              marginTop: 6,
+              outline: "none",
+            }}
+          />
+
+          <div style={{ height: 10 }} />
+
+          <label style={{ fontSize: 12, color: "#6b7280" }}>Delivery address</label>
+          <textarea
+            value={custAddress}
+            onChange={(e) => setCustAddress(e.target.value)}
+            placeholder="House no, street, area, landmark, city"
+            rows={3}
+            style={{
+              width: "100%",
+              padding: 12,
+              borderRadius: 12,
+              border: "1px solid #e5e7eb",
+              marginTop: 6,
+              outline: "none",
+              resize: "vertical",
+            }}
+          />
+
+          <div style={{ height: 10 }} />
+
+          <label style={{ fontSize: 12, color: "#6b7280" }}>Note (optional)</label>
+          <input
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Any special instructions?"
+            style={{
+              width: "100%",
+              padding: 12,
+              borderRadius: 12,
+              border: "1px solid #e5e7eb",
+              marginTop: 6,
+              outline: "none",
+            }}
+          />
+        </div>
+
+        <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: 14 }}>
+          <div style={{ fontWeight: 900, marginBottom: 10 }}>Payment method</div>
+
+          <label
+            style={{
+              display: "flex",
+              gap: 10,
+              alignItems: "center",
+              padding: 12,
+              border: "1px solid #e5e7eb",
+              borderRadius: 12,
+              cursor: "pointer",
+            }}
+          >
+            <input
+              type="radio"
+              name="paymode"
+              checked={payMode === "cod"}
+              onChange={() => setPayMode("cod")}
+            />
+            <div style={{ fontWeight: 800 }}>Cash on delivery</div>
+          </label>
+
+          <div style={{ height: 10 }} />
+
+          <label
+            style={{
+              display: "flex",
+              gap: 10,
+              alignItems: "center",
+              padding: 12,
+              border: "1px solid #e5e7eb",
+              borderRadius: 12,
+              cursor: onlineEnabled ? "pointer" : "not-allowed",
+              opacity: onlineEnabled ? 1 : 0.6,
+            }}
+          >
+            <input
+              type="radio"
+              name="paymode"
+              disabled={!onlineEnabled}
+              checked={payMode === "online"}
+              onChange={() => setPayMode("online")}
+            />
+            <div style={{ fontWeight: 800 }}>Online payment (Razorpay)</div>
+          </label>
+
+          {!onlineEnabled ? (
+            <div style={{ marginTop: 8, fontSize: 12, color: "#6b7280" }}>
+              Online payment is disabled for this restaurant.
+            </div>
+          ) : null}
+        </div>
+
+        <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: 14 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+            <span>Subtotal</span>
+            <span>₹{totals.subtotalEx.toFixed(2)}</span>
+          </div>
+          {totals.taxAmount > 0 ? (
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, color: "#6b7280" }}>
+              <span>Tax</span>
+              <span>₹{totals.taxAmount.toFixed(2)}</span>
+            </div>
+          ) : null}
+          <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 900, fontSize: 18 }}>
+            <span>Total</span>
+            <span>₹{totals.totalInc.toFixed(2)}</span>
+          </div>
+        </div>
+      </div>
+
+      <div
+        style={{
+          position: "fixed",
+          left: 16,
+          right: 16,
+          bottom: 16,
+          background: "#fff",
+          border: "1px solid #e5e7eb",
+          borderRadius: 16,
+          padding: 12,
+        }}
+      >
+        <button
+          disabled={placing}
+          onClick={() => (payMode === "online" ? payOnlineRazorpay() : placeCOD())}
+          style={{
+            width: "100%",
+            background: brandColor,
+            border: "none",
+            color: "#fff",
+            borderRadius: 14,
+            padding: 14,
+            fontWeight: 900,
+            cursor: placing ? "not-allowed" : "pointer",
+          }}
+        >
+          {placing ? "Please wait…" : payMode === "online" ? "Pay & Place order" : "Place order"}
+        </button>
+
+        <div style={{ marginTop: 8, fontSize: 12, color: "#6b7280", textAlign: "center" }}>
+          You will receive confirmation after the order is placed.
+        </div>
+      </div>
+    </div>
+  );
+}
