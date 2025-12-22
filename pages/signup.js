@@ -1,8 +1,9 @@
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
 import { getSupabase } from '../services/supabase'
 import { useRouter } from 'next/router'
-import { FaEye, FaEyeSlash } from 'react-icons/fa'
+import { FaFacebook, FaEye, FaEyeSlash, FaApple } from 'react-icons/fa'
+import { FcGoogle } from 'react-icons/fc'
 
 export default function SignupPage() {
   const supabase = getSupabase()
@@ -10,342 +11,314 @@ export default function SignupPage() {
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const passwordRef = useRef(null)
-
+  
   const handleSignup = async (e) => {
     e.preventDefault()
+    if (password !== confirmPassword) {
+      setMessage('Passwords do not match')
+      return
+    }
     setLoading(true)
     setMessage('')
 
-    const { data, error } = await supabase.auth.signUp({ email, password })
+    const { data, error } = await supabase.auth.signUp({ 
+      email, 
+      password
+    })
     setLoading(false)
 
     if (error) {
-      const msg = error.message.toLowerCase().includes('already')
-        ? (
-          <span>
-            This email is already registered. Please{' '}
-            <Link href="/login" className="link-action">
-              log in
-            </Link>{' '}
-            instead.
-          </span>
-        )
-        : 'Error: ' + error.message
-      setMessage(msg)
-      passwordRef.current?.focus()
+      setMessage(error.message)
       return
     }
 
-    setMessage(
-      'Account created! A confirmation link has been sent to your email. Please verify to continue.'
-    )
+    setMessage('Account created! Please verify your email.')
   }
 
   return (
-    <div className="login-wrapper">
-      <div className="ambient-glow" />
-      <div className="split-card">
+    <div className="page-wrapper">
+      <div className="mobile-card">
         
-        {/* Left Side: Form */}
-        <div className="form-side">
-          <div className="form-content">
-            <h1 className="title">Get Started <span className="wave">🚀</span></h1>
-            <p className="subtitle">
-              Join thousands of restaurants managing their business with us.
-              Create your account today.
-            </p>
+        {/* Header Graphic (Green Base, Orange Decor) */}
+        <div className="header-graphic">
+           <div className="circle-overlay" />
+           <div className="header-content">
+             <button className="back-btn" onClick={() => router.push('/login')}>
+               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+             </button>
+             <h1>Create<br/>Account</h1>
+           </div>
+        </div>
 
-            <form onSubmit={handleSignup}>
-              <div className="form-group">
-                <label>Email Address</label>
-                <input
-                  type="email"
-                  placeholder="owner@restaurant.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label>Password</label>
-                <div className="password-wrapper">
-                  <input
-                    ref={passwordRef}
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="Create a password (min 6 chars)"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    minLength={6}
-                  />
-                  <button 
-                    type="button" 
-                    className="toggle-btn"
-                    onClick={() => setShowPassword(!showPassword)}
-                  >
-                    {showPassword ? <FaEyeSlash /> : <FaEye />}
-                  </button>
-                </div>
-              </div>
-
-              {message && (
-                  <div className={`alert ${typeof message === 'string' && message.startsWith('Error') ? 'error' : 'success'}`}>
-                    {message}
-                  </div>
-              )}
-
-              <button type="submit" disabled={loading} className="signin-btn">
-                {loading ? 'Creating Account...' : 'Sign Up'}
-              </button>
-            </form>
-
-            <div className="divider"><span>Or</span></div>
-
-            <div className="social-login">
-              <button className="social-btn google" disabled>
-                <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" width="20" />
-                Sign up with Google
-              </button>
-              <button className="social-btn facebook" disabled>
-                <img src="https://www.svgrepo.com/show/475647/facebook-color.svg" alt="Facebook" width="20" />
-                Sign up with Facebook
-              </button>
+        {/* Form Body (White) */}
+        <div className="form-body">
+          <form onSubmit={handleSignup}>
+            
+            <div className="input-group">
+              <input
+                type="email"
+                id="email"
+                value={email}
+                className={email ? 'has-content' : ''}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                placeholder=" "
+              />
+              <label htmlFor="email">Email Address</label>
             </div>
 
-            <p className="signup-text">
-              Already have an account? <Link href="/login">Login here</Link>
-            </p>
-            
-            <p className="copyright">© 2026 ALL RIGHTS RESERVED</p>
-          </div>
-        </div>
+            <div className="input-group">
+              <div className="password-row">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  id="password"
+                  value={password}
+                  className={password ? 'has-content' : ''}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  minLength={6}
+                  placeholder=" "
+                />
+                <label htmlFor="password">Password</label>
+                <button type="button" className="eye-btn" onClick={() => setShowPassword(!showPassword)}>
+                   {showPassword ? <FaEyeSlash /> : <FaEye />}
+                </button>
+              </div>
+            </div>
 
-        {/* Right Side: Image */}
-        <div className="image-side">
-           {/* Reusing the login background for consistency */}
+            <div className="input-group">
+              <div className="password-row">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  id="confirm"
+                  value={confirmPassword}
+                  className={confirmPassword ? 'has-content' : ''}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                  minLength={6}
+                  placeholder=" "
+                />
+                <label htmlFor="confirm">Confirm Password</label>
+                {/* Optional: Second eye button, or just rely on the first one toggling both. 
+                    User asked "option for both". I will add the button to both for clarity. */}
+                <button type="button" className="eye-btn" onClick={() => setShowPassword(!showPassword)}>
+                   {showPassword ? <FaEyeSlash /> : <FaEye />}
+                </button>
+              </div>
+            </div>
+
+            {message && <div className="alert">{message}</div>}
+
+            <button type="submit" disabled={loading} className="submit-btn">
+              {loading ? 'WAIT...' : 'SIGN UP'}
+            </button>
+            
+            <div className="social-row">
+               <button type="button" className="social-btn" disabled>
+                 <span style={{ display: 'flex', flexShrink: 0 }}><FcGoogle size={24} /></span>
+                 <span>Sign in with Google</span>
+               </button>
+               <button type="button" className="social-btn" disabled>
+                 <span style={{ display: 'flex', flexShrink: 0 }}><FaFacebook size={24} color="#1877F2" /></span>
+                 <span>Sign in with Facebook</span>
+               </button>
+               <button type="button" className="social-btn full-width" disabled>
+                 <span style={{ display: 'flex', flexShrink: 0 }}><FaApple size={26} color="black" /></span>
+                 <span>Sign in with Apple</span>
+               </button>
+            </div>
+            
+            <div className="login-link">
+               <p>Already have an account? <Link href="/login">Sign In</Link></p>
+            </div>
+
+            <div className="copyright-footer">
+              &copy; 2026 ALL RIGHTS RESERVED
+            </div>
+
+          </form>
         </div>
-        
       </div>
 
       <style jsx global>{`
-        body { background: #0f172a; margin: 0; font-family: 'Inter', sans-serif; }
+        body { background: #e2e8f0; margin: 0; font-family: 'Plus Jakarta Sans', sans-serif; }
       `}</style>
-      
+
       <style jsx>{`
-        .login-wrapper {
+        .page-wrapper {
           min-height: 100vh;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          padding: 20px;
-          background: #0f172a;
-          position: relative;
-          overflow: hidden;
+          display: flex; align-items: center; justify-content: center;
+          background: #cbd5e1; padding: 20px;
         }
 
-        .ambient-glow {
-          position: absolute;
-          width: 800px; height: 800px;
-          background: radial-gradient(circle, rgba(249, 115, 22, 0.08) 0%, transparent 70%);
-          top: 50%; left: 50%;
-          transform: translate(-50%, -50%);
-          pointer-events: none;
-          z-index: 0;
+        .mobile-card {
+           width: 100%; max-width: 950px; height: 650px;
+           background: white; border-radius: 32px;
+           overflow: hidden; box-shadow: 0 40px 80px -20px rgba(0,0,0,0.2);
+           display: flex; flex-direction: row;
         }
 
-        .split-card {
-           position: relative;
-           z-index: 1;
-          display: flex;
-          width: 100%;
-          max-width: 850px;
-          min-height: 520px;
-          background: #ffffff;
-          border-radius: 24px;
-          overflow: hidden;
-          box-shadow: 0 50px 100px -20px rgba(0,0,0,0.5);
+        /* HEADER (Green Theme for Signup) */
+        .header-graphic {
+          width: 45%; height: 100%;
+          background: #115e59; /* Green Base */
+          position: relative; overflow: hidden;
         }
-
-        .form-side {
-          flex: 1;
-          padding: 40px;
-          display: flex;
-          flex-direction: column;
-          justify-content: center;
+        .circle-overlay {
+          position: absolute; top: -100px; right: -100px;
+          width: 320px; height: 320px;
+          background: #f97316; /* Orange Decor */
+          border-radius: 50%; opacity: 1;
         }
-
-        .image-side {
-          flex: 1;
-          background-image: url('/login-bg.png'); /* Shared Asset */
-          background-size: cover;
-          background-position: center;
-          position: relative;
-          min-height: 300px;
+        .header-content {
+          position: relative; z-index: 2; padding: 60px 40px; height: 100%;
+          display: flex; flex-direction: column; justify-content: center;
         }
-
-        .title {
-          font-size: 26px;
-          font-weight: 800;
-          color: #1e293b;
-          margin: 0 0 8px;
-        }
-        .subtitle {
-          font-size: 14px;
-          color: #64748b;
-          line-height: 1.5;
-          margin: 0 0 24px;
-        }
-        .wave { animation: bounce 2s infinite; display: inline-block; }
-        @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
-
-        .form-group { margin-bottom: 16px; }
-        .form-group label {
-          display: block;
-          font-size: 13px;
-          font-weight: 600;
-          color: #334155;
-          margin-bottom: 6px;
-        }
-        .password-wrapper { position: relative; }
-        .form-group input {
-          width: 100%;
-          padding: 12px;
-          padding-right: 40px;
-          border-radius: 10px;
-          background: #f8fafc;
-          border: 1px solid #e2e8f0;
-          font-size: 14px;
-          color: #1e293b;
-          outline: none;
-          transition: all 0.2s;
-          box-sizing: border-box;
-        }
-        .form-group input:focus {
-          border-color: #f97316; 
-          background: #fff;
-          box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
-        }
-
-        .toggle-btn {
-          position: absolute;
-          right: 12px;
-          top: 50%;
-          transform: translateY(-50%);
-          background: transparent;
-          border: none;
-          color: #94a3b8;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          padding: 4px;
-        }
-        .toggle-btn:hover { color: #64748b; }
-
-        .alert {
-          padding: 12px; margin-bottom: 20px;
-          border-radius: 8px; font-size: 14px;
-        }
-        .alert.error { background: #fee2e2; color: #ef4444; }
-        .alert.success { background: #dcfce7; color: #166534; }
+        .header-content h1 { font-size: 48px; margin: 0; color: white; line-height: 1.1; font-weight: 800; }
         
-        .link-action { color: #ea580c; text-decoration: underline; font-weight: 600; }
-
-        .signin-btn {
-          width: 100%;
-          padding: 12px;
-          background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
-          color: white;
-          border: none;
-          border-radius: 10px;
-          font-size: 15px; font-weight: 600;
-          cursor: pointer;
-          transition: transform 0.2s, box-shadow 0.2s;
+        .back-btn {
+          position: absolute; top: 30px; left: 30px;
+          background: transparent; border: none; padding: 0; cursor: pointer;
         }
-        .signin-btn:hover { transform: translateY(-1px); box-shadow: 0 5px 15px -3px rgba(234, 88, 12, 0.4); }
-        .signin-btn:disabled { opacity: 0.7; }
+        .back-btn svg { stroke: white; }
 
+        /* FORM BODY */
+        .form-body {
+          flex: 1; padding: 60px;
+          display: flex; flex-direction: column; justify-content: center;
+          background: white;
+        }
+        form { width: 100%; max-width: 360px; margin: 0 auto; }
 
-        .divider {
-          text-align: center; margin: 24px 0; position: relative;
+        /* INPUTS */
+        .input-group { 
+           margin-bottom: 32px; position: relative; 
         }
-        .divider:before {
-          content: ''; position: absolute; left: 0; top: 50%; width: 100%; height: 1px; background: #e2e8f0;
+        
+        .input-group input { 
+           display: block; width: 100%;
+           padding: 12px 0;
+           font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 500;
+           font-size: 16px; 
+           border: none; border-bottom: 2px solid #cbd5e1;
+           background: transparent !important;
+           border-radius: 0; color: #1e293b;
+           outline: none; transition: all 0.2s;
         }
-        .divider span {
-          background: #fff; position: relative; padding: 0 12px; color: #94a3b8; font-size: 12px;
+        .input-group input:focus { border-bottom-color: #115e59; }
+
+        .input-group input:-webkit-autofill,
+        .input-group input:-webkit-autofill:hover, 
+        .input-group input:-webkit-autofill:focus, 
+        .input-group input:-webkit-autofill:active {
+            -webkit-box-shadow: 0 0 0 30px white inset !important;
         }
 
-        .social-login {
-          display: flex; gap: 12px; margin-bottom: 24px;
+        /* Floating Label */
+        .input-group label { 
+           position: absolute; top: 12px; left: 0;
+           font-size: 16px; color: #94a3b8;
+           pointer-events: none; transition: all 0.2s ease;
+        }
+        
+        .input-group input:focus + label,
+        .input-group input:not(:placeholder-shown) + label,
+        .password-row input:focus + label,
+        .password-row input:not(:placeholder-shown) + label,
+        .input-group input.has-content + label,
+        .password-row input.has-content + label,
+        .input-group input:-webkit-autofill + label,
+        .password-row input:-webkit-autofill + label {
+           top: -8px; font-size: 12px; color: #115e59; font-weight: 600;
+        }
+
+        /* Password Row & Eye */
+        .password-row { position: relative; width: 100%; }
+        .password-row input { padding-right: 35px; }
+
+        .eye-btn {
+           position: absolute; right: 0; top: 4px;
+           background: transparent; border: none; 
+           color: #cbd5e1; cursor: pointer;
+           font-size: 18px; transition: color 0.2s;
+        }
+        .eye-btn:hover { color: #f97316; }
+
+        .submit-btn {
+           width: 100%; padding: 16px;
+           background: #f97316; /* Orange for Signup */
+           color: white;
+           border: none; border-radius: 12px;
+           font-size: 14px; font-weight: 700;
+           letter-spacing: 1px; cursor: pointer; text-transform: uppercase;
+           box-shadow: 0 10px 20px -5px rgba(249, 115, 22, 0.4);
+           transition: transform 0.2s;
+           margin-top: 10px;
+        }
+        .submit-btn:hover { transform: translateY(-2px); }
+
+        /* Social Buttons (Wide) */
+        .social-row { 
+           display: flex; gap: 12px; flex-wrap: wrap; 
+           justify-content: center; margin-top: 24px; 
         }
         .social-btn {
-          flex: 1;
-          display: flex; align-items: center; justify-content: center; gap: 8px;
-          padding: 10px;
-          background: #f8fafc;
-          border: none;
-          border-radius: 10px;
-          color: #334155; font-size: 13px; font-weight: 600;
-          cursor: not-allowed; opacity: 0.6;
+           flex: 1 1 45%;
+           height: 48px;
+           border-radius: 100px;
+           border: 1px solid #e2e8f0;
+           background: white;
+           color: #1e293b;
+           display: flex; align-items: center; justify-content: center; gap: 8px;
+           font-size: 13px; font-weight: 600;
+           font-family: 'Plus Jakarta Sans', sans-serif;
+           cursor: not-allowed;
+           transition: all 0.2s;
+           box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+           opacity: 0.6; /* Disabled state */
+           white-space: nowrap;
+           padding: 0 16px;
         }
+        .social-btn.full-width { flex: 1 1 100%; }
+        .social-btn:hover { background: #f8fafc; }
 
-        .signup-text {
-          text-align: center; color: #64748b; font-size: 13px; margin-bottom: 24px;
-        }
-        .signup-text a { color: #ea580c; font-weight: 600; text-decoration: none; }
+        .login-link { text-align: center; margin-top: 30px; font-size: 14px; color: #64748b; }
+        .login-link a { color: #115e59; text-decoration: none; font-weight: 700; }
         
-        .copyright {
-          text-align: center; color: #cbd5e1; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;
+        .alert { 
+           font-size: 13px; color: #ef4444; border-radius: 8px; 
+           background: #fef2f2; padding: 10px; margin-bottom: 20px;
         }
 
-        /* Responsive Mobile Layout */
+        .copyright-footer {
+          text-align: center;
+          margin-top: 40px;
+          font-size: 12px;
+          color: #94a3b8; /* Neutral Grey to match login */
+          letter-spacing: 1px;
+          font-weight: 500;
+        }
+
+        /* MOBILE */
         @media (max-width: 900px) {
-          .split-card {
-            flex-direction: column-reverse;
-            max-width: 500px;
-            min-height: auto;
-          }
-          .image-side { height: 180px; width: 100%; flex: none; }
-          .form-side { padding: 32px 24px; }
-        }
-
-        /* Pure Mobile Optimization (<480px) - Aggressive Compaction */
-        @media (max-width: 480px) {
-          .login-wrapper { padding: 12px; align-items: start; }
-          .split-card {
-             border-radius: 20px;
-             margin-top: 5vh; 
-             margin-top: 0;
-          }
-          .image-side { height: 80px; }
-          .form-side { padding: 20px 16px; }
-          
-          .title { font-size: 20px; margin-bottom: 4px; }
-          .subtitle { font-size: 12px; margin-bottom: 16px; line-height: 1.3; }
-          .wave { display: none; }
-          
-          .form-group { margin-bottom: 10px; }
-          .form-group label { font-size: 12px; margin-bottom: 2px; }
-          .form-group input { padding: 10px; font-size: 14px; border-radius: 8px; height: 40px; }
-          
-          .alert { padding: 8px; font-size: 12px; margin-bottom: 12px; }
-          
-          .signin-btn { padding: 12px; font-size: 14px; margin-top: 0; height: 44px; }
-          
-          .divider { margin: 16px 0; }
-          .divider span { font-size: 12px; padding: 0 8px; }
-          
-          .social-login { gap: 8px; margin-bottom: 16px; }
-          .social-btn { padding: 8px; font-size: 12px; height: 36px; }
-          .social-btn img { width: 16px; }
-          
-          .signup-text { margin-bottom: 12px; font-size: 12px; }
-          .copyright { display: none; }
+           .page-wrapper { padding: 0; align-items: flex-start; background: #fff; }
+           .mobile-card {
+              flex-direction: column; height: 100%; min-height: 100vh;
+              max-width: none; border-radius: 0; box-shadow: none;
+           }
+           .header-graphic {
+              width: 100%; height: 280px; flex: none;
+              border-bottom-left-radius: 50px; border-bottom-right-radius: 50px;
+           }
+           .circle-overlay { top: -60px; right: -60px; width: 220px; height: 220px; }
+           .header-content { justify-content: flex-start; padding-top: 60px; }
+           .header-content h1 { font-size: 36px; }
+           .form-body { padding: 40px 30px; justify-content: flex-start; }
+           form { max-width: none; margin: 0; }
         }
       `}</style>
     </div>

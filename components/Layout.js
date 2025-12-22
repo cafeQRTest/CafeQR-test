@@ -76,7 +76,7 @@ export default function Layout({
   const router = useRouter();
 
   // If landing/login/signup page, render raw children (allows full screen control)
-  const fullScreenRoutes = ['/', '/login', '/signup'];
+  const fullScreenRoutes = ['/', '/login', '/signup', '/forgot-password'];
   if (fullScreenRoutes.includes(router.pathname)) {
     return <>{children}</>;
   }
