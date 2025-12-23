@@ -615,14 +615,6 @@ export default function MenuPage() {
 
         {/* Actions Row */}
         <div className="toolbar-cta">
-          <Button onClick={() => openEditor({})}>Add New Item</Button>
-          <Button onClick={() => setShowImageImport(true)} style={{ position: 'relative', overflow: 'visible' }}>
-            Import from Image
-            <AIBadge>AI</AIBadge>
-          </Button>
-          <Button onClick={() => setShowLibrary(true)}>Add from Library</Button>
-          <Button variant="outline" onClick={() => setShowCategoryManager(true)}>Categories</Button>
-          <Button variant="outline" onClick={() => setShowVariantManager(true)}>Variants</Button>
           {hasSelection && (
             <>
               <Button variant="success" onClick={() => applyBulk("available")}>
@@ -664,6 +656,14 @@ export default function MenuPage() {
               </Button>
             </>
           )}
+          <Button onClick={() => openEditor({})}>Add New Item</Button>
+          <Button onClick={() => setShowImageImport(true)} style={{ position: 'relative', overflow: 'visible' }}>
+            Import from Image
+            <AIBadge>AI</AIBadge>
+          </Button>
+          <Button onClick={() => setShowLibrary(true)}>Add from Library</Button>
+          <Button variant="outline" onClick={() => setShowCategoryManager(true)}>Categories</Button>
+          <Button variant="outline" onClick={() => setShowVariantManager(true)}>Variants</Button>
         </div>
       </ToolBar>
 

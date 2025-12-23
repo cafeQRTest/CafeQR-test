@@ -439,7 +439,10 @@ export default async function handler(req, res) {
         total_tax: newTotals.total_tax,
         total_inc_tax: newTotals.total_inc_tax,
         total_amount: newTotals.total_amount,
-        ...(table_number !== undefined && { table_number, ...(table_number ? { order_type: 'dine-in' } : {}) }) 
+        // Update table_number if provided (undefined check ensures we don't wipe it if not sent)
+        ...(table_number !== undefined && { table_number }),
+        // Update order_type if provided (e.g. switching to parcel)
+        ...(req.body.order_type && { order_type: req.body.order_type })
       })
       .eq('id', order_id)
       .eq('restaurant_id', restaurant_id);

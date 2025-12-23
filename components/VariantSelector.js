@@ -230,12 +230,15 @@ const bumpQty = (variantId, dir) => {
                   disabled={isDisabled}
                   index={index}
                   onClick={() => {
-                    if (!isDisabled && quantity === 0) {
+                    if (isDisabled) return;
+                    if (quantity === 0) {
                       setQtyNumber(variant.variant_id, 1);
+                    } else {
+                      setQtyNumber(variant.variant_id, 0);
                     }
                   }}
                   style={{ 
-                    cursor: isDisabled ? 'not-allowed' : (quantity === 0 ? 'pointer' : 'default')
+                    cursor: isDisabled ? 'not-allowed' : 'pointer'
                   }}
                 >
                   <VariantLeftSection>

@@ -770,9 +770,18 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
   );
 }
 
-function EditOrderPanel({ order, onClose, onSave }) {
+function EditOrderPanel({ order, onClose, onSave, tablesCount = 0 }) {
   const [originalLines] = useState(() => toDisplayItems(order)); // snapshot of original
   const [lines, setLines] = useState(() => toDisplayItems(order));
+  
+  // Initialize location state
+  const [selectedLocation, setSelectedLocation] = useState(() => {
+     if (order.order_type === 'parcel') return 'parcel';
+     if (order.table_number) return `table:${order.table_number}`;
+     return 'parcel'; // default fallback
+  });
+
+  const tables = Array.from({ length: tablesCount }, (_, i) => i + 1);
   const [showMenuPicker, setShowMenuPicker] = useState(false);
   const [menuSearch, setMenuSearch] = useState('');
   const [menuItems, setMenuItems] = useState([]);
@@ -833,15 +842,38 @@ function EditOrderPanel({ order, onClose, onSave }) {
     }
     return false;
   })();
+  
+  // Detect if location changed
+  const hasLocationChange = (() => {
+     const origLoc = order.order_type === 'parcel' 
+        ? 'parcel' 
+        : (order.table_number ? `table:${order.table_number}` : 'parcel');
+     return selectedLocation !== origLoc;
+  })();
 
   const handleSave = () => {
-    // guard: no lines, no real change, or already saving
-    if (lines.length === 0 || !hasChanges || saving) return;
+    // guard: no lines, no change, or already saving
+    if (lines.length === 0 || (!hasChanges && !hasLocationChange) || saving) return;
+    
+    // Parse location
+    let tableNum = null;
+    let orderType = 'dine-in';
+    
+    if (selectedLocation === 'parcel') {
+       tableNum = null;
+       orderType = 'parcel';
+    } else if (selectedLocation && selectedLocation.startsWith('table:')) {
+       tableNum = selectedLocation.split(':')[1];
+       orderType = 'dine-in';
+    }
+
     setSaving(true);
     onSave({
       ...order,
       lines,
       total,
+      table_number: tableNum,
+      order_type: orderType
     });
     // parent should close/unmount panel after success
   };
@@ -1091,12 +1123,21 @@ function EditOrderPanel({ order, onClose, onSave }) {
             alignItems: 'center',
           }}
         >
-          <div>
+          <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 600, fontSize: 16 }}>
               Edit Order #{order.id.slice(0, 8)}
             </div>
-            <div style={{ fontSize: 12, color: '#6b7280' }}>
-              {getOrderTypeLabel(order)}
+            {/* Table Selection Dropdown */}
+            <div style={{ marginTop: 8, maxWidth: 220 }}>
+               <NiceSelect
+                  value={selectedLocation}
+                  onChange={setSelectedLocation}
+                  placeholder="Select Location"
+                  options={[
+                    { value: 'parcel', label: 'Parcel / Takeaway' },
+                    ...tables.map(n => ({ value: `table:${n}`, label: `Table ${n}` }))
+                  ]}
+               />
             </div>
           </div>
         </div>
@@ -1282,7 +1323,7 @@ function EditOrderPanel({ order, onClose, onSave }) {
               variant="primary"
               style={{ flex: 1 }}
               onClick={handleSave}
-              disabled={lines.length === 0 || !hasChanges || saving}
+              disabled={lines.length === 0 || (!hasChanges && !hasLocationChange) || saving}
             >
               {saving ? 'Saving…' : 'Save & Reprint KOT'}
             </Button>
@@ -1571,42 +1612,52 @@ function PaxEditDialog({ order, onSave, onClose }) {
 }
 
 
-function TableEditDialog({ order, onSave, onClose }) {
-  const [val, setVal] = useState(order.table_number || '');
+function TableEditDialog({ order, onSave, onClose, tablesCount = 0 }) {
+  const [val, setVal] = useState(() => {
+    if (order.order_type === 'parcel') return 'parcel';
+    if (order.table_number) return `table:${order.table_number}`;
+    return '';
+  });
+
+  const tables = Array.from({ length: tablesCount }, (_, i) => i + 1);
+
   return (
     <div style={{
       position: 'fixed', inset: 0,
       backgroundColor: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(5px)',
       display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: 12
-    }}>
+    }} onClick={onClose}>
       <div style={{ 
-        backgroundColor: 'white', padding: 20, borderRadius: 16, width: '100%', maxWidth: 280,
+        backgroundColor: 'white', padding: 20, borderRadius: 16, width: '100%', maxWidth: 320,
         boxShadow: '0 12px 24px -10px rgba(0, 0, 0, 0.15)',
         animation: 'fadeIn 0.2s ease-out'
-      }}>
-        <h3 style={{ fontSize: 16, fontWeight: 800, color: '#0f172a', margin: '0 0 4px 0', letterSpacing: '-0.01em' }}>Update Table</h3>
-        <p style={{ fontSize: 11, color: '#64748b', marginBottom: 12 }}>
-            Assign table for Order <strong>#{order.id.slice(0,6)}</strong>
+      }} onClick={e => e.stopPropagation()}>
+        <h3 style={{ fontSize: 16, fontWeight: 800, color: '#0f172a', margin: '0 0 4px 0', letterSpacing: '-0.01em' }}>Update Table / Type</h3>
+        <p style={{ fontSize: 11, color: '#64748b', marginBottom: 16 }}>
+            Set location for Order <strong>#{order.id.slice(0,6)}</strong>
         </p>
-        
-        <label style={{ fontSize: 9, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Table Number</label>
-        <input 
-            type="text"
-            autoFocus
+
+        <div style={{ marginBottom: 20 }}>
+          <NiceSelect
             value={val}
-            onChange={e => setVal(e.target.value)}
-            placeholder="e.g. 5 or A1"
-            style={{ 
-                width: '100%', padding: '10px', fontSize: 16, fontWeight: 700,
-                border: '1.5px solid #e2e8f0', borderRadius: 10,
-                outline: 'none', background: '#f8fafc', color: '#0f172a',
-                marginBottom: 16, textAlign: 'center'
-            }}
-        />
+            onChange={setVal}
+            placeholder="Select Table or Parcel..."
+            options={[
+              { value: 'parcel', label: 'Parcel / Takeaway' },
+              ...tables.map(n => ({ value: `table:${n}`, label: `Table ${n}` }))
+            ]}
+          />
+        </div>
         
         <div style={{ display: 'flex', gap: 8 }}>
           <Button onClick={onClose} variant="outline" style={{ flex: 1, height: 38, borderRadius: 10, fontSize: 13 }}>Cancel</Button>
-          <Button onClick={() => onSave(val)} style={{ flex: 1.5, height: 38, borderRadius: 10, background: BRAND.orange, color: 'white', fontSize: 13 }}>Update</Button>
+          <Button 
+            onClick={() => onSave(val)} 
+            disabled={!val}
+            style={{ flex: 1.5, height: 38, borderRadius: 10, background: BRAND.orange, color: 'white', fontSize: 13 }}
+          >
+            Update
+          </Button>
         </div>
       </div>
     </div>
@@ -1640,6 +1691,20 @@ export default function OrdersPage() {
   const [ordersByStatus, setOrdersByStatus] = useState({
     new: [], in_progress: [], ready: [], completed: [], mobileFilter: 'new'
   });
+  
+  const [tablesCount, setTablesCount] = useState(0);
+
+  useEffect(() => {
+    if (!restaurantId || !supabase) return;
+    supabase
+      .from('restaurant_profiles')
+      .select('tables_count')
+      .eq('restaurant_id', restaurantId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.tables_count) setTablesCount(data.tables_count);
+      });
+  }, [restaurantId, supabase]);
   
   const [completedPage, setCompletedPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -1927,6 +1992,7 @@ const handleEditSave = async (edited) => {
         restaurant_id: restaurantId,
         lines: edited.lines,
         table_number: edited.table_number, // Pass table number update
+        order_type: edited.order_type,     // Pass order type update
         reason: 'Order edited from dashboard',
       }),
     });
@@ -2137,9 +2203,22 @@ useEffect(() => {
   async function updateTableNumber(id, val) {
     if (!supabase || !restaurantId) return;
     try {
-      const tableNum = val ? String(val).trim() : null;
-      const updateData = { table_number: tableNum };
-      if (tableNum) updateData.order_type = 'dine-in'; 
+      let tableNum = null;
+      let orderType = 'dine-in';
+
+      if (val === 'parcel') {
+        tableNum = null;
+        orderType = 'parcel';
+      } else if (val && val.startsWith('table:')) {
+        tableNum = val.split(':')[1];
+        orderType = 'dine-in';
+      } else {
+         // Fallback for direct number input if any old usage remains
+         tableNum = val ? String(val).trim() : null;
+         if (tableNum) orderType = 'dine-in';
+      }
+
+      const updateData = { table_number: tableNum, order_type: orderType }; 
 
       const { error } = await supabase.from('orders').update(updateData).eq('id', id).eq('restaurant_id', restaurantId);
       if (error) throw error;
@@ -2714,6 +2793,7 @@ colOrders =
     order={editingOrder}
     onClose={() => setEditingOrder(null)}
     onSave={handleEditSave}
+    tablesCount={tablesCount}
   />
 )}
 
@@ -2732,6 +2812,7 @@ colOrders =
     <TableEditDialog 
         order={tableEditOrder}
         onClose={() => setTableEditOrder(null)}
+        tablesCount={tablesCount}
         onSave={(val) => {
             updateTableNumber(tableEditOrder.id, val);
             setTableEditOrder(null);

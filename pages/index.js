@@ -614,15 +614,16 @@ export default function Home() {
           .hero-header { margin-bottom: 32px; justify-content: center; display: flex; }
           .hero-badge { margin: 0 auto 24px; }
           
-          .cta-group { justify-content: center; flex-direction: column; width: 100%; max-width: 400px; margin: 0 auto 40px; }
+          .cta-group { justify-content: flex-start; align-items: flex-start; flex-direction: column; width: 100%; max-width: 400px; margin: 0 0 40px; }
           .cta-btn { justify-content: center; width: 100%; box-sizing: border-box; }
           
           .feature-checklist { 
             grid-template-columns: repeat(2, 1fr); 
             text-align: left; 
-            max-width: 400px; 
-            margin: 30px auto 0; 
-            justify-items: center;
+            width: fit-content;
+            max-width: 100%; 
+            margin: 30px 0 0; 
+            /* justify-items: center; REMOVED to align checkmarks */
           }
           
           /* Scale down phone for tablets/mobile */
