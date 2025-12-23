@@ -2211,6 +2211,18 @@ export default function MenuPage() {
           onClose={() => setShowVariantManager(false)}
         />
       )}
+
+      {showImageImport && (
+        <MenuImageImport
+          onClose={() => setShowImageImport(false)}
+          onImported={(newItems) => {
+             refreshCategories();
+             // Maybe show a success toast here
+          }}
+          restaurantId={restaurantId}
+          existingItems={items}
+        />
+      )}
       
       {viewImage && (
         <div 

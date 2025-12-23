@@ -55,7 +55,7 @@ export default function MenuImageImport({ onClose, onImported, restaurantId, exi
 
     try {
       const base64 = await compressImage(file);
-      setStatusMsg("Analyzing with Gemini 2.5... (may take 30s)");
+      setStatusMsg("Analyzing with Gemini 1.5... (may take 30s)");
 
       // Try calling API; if 503/504, retry once more
       let finalResult = null;
