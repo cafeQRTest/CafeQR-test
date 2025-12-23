@@ -795,8 +795,66 @@ export default function SettingsPage() {
       await supabase.from('restaurant_profiles').upsert(payload, { onConflict: 'restaurant_id' });
       await supabase.from('restaurants').update({ name: form.restaurant_name }).eq('id', restaurant.id);
       
+      // AUTO-SEND QR EMAIL IF TABLES INCREASED
+      const prevCount = originalTables;
+      const newCount = payload.tables_count;
+      
+      if (newCount > prevCount) {
+        try {
+          // Generate new QR codes
+          const origin = window.location.origin;
+          const newQrCodes = [];
+          for (let i = prevCount + 1; i <= newCount; i++) {
+            newQrCodes.push({
+              tableNumber: String(i),
+              qrUrl: `${origin}/menu/${restaurant.id}?table=${i}`
+            });
+          }
+          
+          if (newQrCodes.length > 0) {
+            // Prepare recipient data
+            // Use support email if available, else try restaurant owner email if available in context
+            const recipientEmail = form.support_email || restaurant.owner_email; 
+            
+            const restaurantData = {
+              restaurantName: form.restaurant_name,
+              recipientName: form.legal_name,
+              recipientPhone: form.phone,
+              email: recipientEmail,
+              address: [
+                 form.shipping_address_line1, 
+                 form.shipping_address_line2, 
+                 form.shipping_city, 
+                 form.shipping_state, 
+                 form.shipping_pincode
+              ].filter(Boolean).join(', ')
+            };
+
+            // Call API
+            fetch('/api/send-qr-email', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                qrCodes: newQrCodes,
+                restaurantData,
+                isIncremental: true
+              })
+            })
+            .then(res => res.json())
+            .then(d => {
+              if (d.success) console.log('QR Email sent successfully');
+              else console.warn('QR Email failed', d.error);
+            })
+            .catch(e => console.error('QR Email exception', e));
+          }
+        } catch (qrErr) {
+          console.error('Error triggering QR email', qrErr);
+        }
+      }
+
       setOriginalTables(payload.tables_count);
       setSuccess("Settings Saved");
+      if (newCount > prevCount) setSuccess("Settings Saved & QR Codes Emailed!");
       setShowToast(true);
       setTimeout(refreshSubscription, 500);
     } catch (err) { setError(err.message); setShowToast(true); }
