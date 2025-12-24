@@ -2208,6 +2208,7 @@ export default function MenuPage() {
 
       {showVariantManager && (
         <VariantManager
+          restaurantId={restaurantId}
           onClose={() => setShowVariantManager(false)}
         />
       )}

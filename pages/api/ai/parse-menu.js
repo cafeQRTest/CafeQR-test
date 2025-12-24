@@ -96,86 +96,109 @@ export default async function handler(req, res) {
 
     // 3. Retry Loop
     // We try multiple keys or retries on the same key if it's just "busy"
+    // 3. Retry Loop: Iterate Keys -> Models -> Retries
+    const envModel = process.env.AI_MODEL_NAME ? process.env.AI_MODEL_NAME.trim() : null;
+    const defaultModels = ["gemini-1.5-flash", "gemini-1.5-flash-001", "gemini-1.5-pro"];
+    const MODELS = envModel 
+      ? [envModel, ...defaultModels.filter(m => m !== envModel)]
+      : defaultModels;
+
     mainLoop: for (const key of apiKeys) {
       if (successData) break;
 
-      // Attempt up to 2 times per key
-      for (let attempt = 1; attempt <= 2; attempt++) {
-        // Stop if we are running out of time
-        if (Date.now() > HARD_DEADLINE - 8000) break mainLoop;
+      modelLoop: for (const model of MODELS) {
+        if (successData) break;
+        
+        // Attempt up to 2 times per model/key combo (for 503/429)
+        for (let attempt = 1; attempt <= 2; attempt++) {
+          // Stop if we are running out of time
+          if (Date.now() > HARD_DEADLINE - 8000) break mainLoop;
 
-        // Give Gemini 25s to think (it needs it for complex menus)
-        const requestTimeoutMs = 25_000; 
+          // Give Gemini 25s to think
+          const requestTimeoutMs = 25_000; 
 
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), requestTimeoutMs);
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), requestTimeoutMs);
 
-          // USING gemini-1.5-flash (Correct Model)
-          const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(key)}`;
-          
-          const response = await fetch(url, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [{
-                role: "user",
-                parts: [
-                  { text: "Extract menu items to JSON. Be precise with prices." },
-                  { inline_data: { mime_type: mimeType, data: base64Data } }
-                ]
-              }],
-              generationConfig: {
-                temperature: 0.1,
-                maxOutputTokens: 8192, // High limit prevents cut-off JSON
-                response_mime_type: "application/json",
-                response_schema: MENU_SCHEMA
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(key)}`;
+            
+            const response = await fetch(url, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                contents: [{
+                  role: "user",
+                  parts: [
+                    { text: "Extract menu items to JSON. For variants: 1. Infer meaningful group names (e.g. 'Portion', 'Size'). 2. If multiple groups have the same name but different options, rename them to be unique (e.g. 'Size', 'Size (Large)'). 3. If groups have identical options, keep the same name. 4. Do NOT use the menu item name as the group name." },
+                    { inline_data: { mime_type: mimeType, data: base64Data } }
+                  ]
+                }],
+                generationConfig: {
+                  temperature: 0.1,
+                  maxOutputTokens: 8192,
+                  response_mime_type: "application/json",
+                  response_schema: {
+                    ...MENU_SCHEMA,
+                    properties: {
+                      ...MENU_SCHEMA.properties,
+                      items: {
+                        ...MENU_SCHEMA.properties.items,
+                        items: {
+                          ...MENU_SCHEMA.properties.items.items,
+                          required: ["name"] 
+                        }
+                      }
+                    }
+                  }
+                }
+              }),
+              signal: controller.signal
+            }).finally(() => clearTimeout(timeoutId));
+
+            // Handle Response
+            if (!response.ok) {
+              // 404 = Wrong Model, Try next model immediately
+              if (response.status === 404) {
+                 console.warn(`Model ${model} not found (404). Trying next...`);
+                 continue modelLoop; // Try next model
               }
-            }),
-            signal: controller.signal
-          }).finally(() => clearTimeout(timeoutId));
+              
+              // 429/503 -> RETRY same model
+              if (response.status === 429 || response.status === 503) {
+                lastError = { status: 503, message: "AI is busy, retrying..." };
+                console.log(`Gemini ${model} Busy (${response.status}), retrying...`);
+                await sleep(2000 * attempt); 
+                continue; // Retry loop
+              }
 
-          // Handle "Busy" vs "Broken"
-          if (!response.ok) {
-            // 404 = Wrong Model Name (Don't retry, just fail)
-            if (response.status === 404) {
-               throw new Error("Gemini Model Not Found (Check API version/model name)");
+              const errText = await response.text();
+              throw new Error(`Gemini Error ${response.status}: ${errText}`);
+            }
+
+            const data = await response.json();
+            const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+            if (!text) throw new Error("Empty response from AI");
+
+            successData = JSON.parse(text);
+            break mainLoop; // Success!
+
+          } catch (err) {
+            const isTimeout = err.name === "AbortError";
+            if (isTimeout) {
+              console.log(`Attempt ${attempt} (${model}) timed out`);
+              lastError = { status: 504, message: "AI took too long." };
+            } else {
+              console.error(`Attempt ${attempt} (${model}) error:`, err.message);
+              lastError = { status: 500, message: err.message };
+              // If we already handled 404 via continue modelLoop, we won't get here for 404.
+              // But for other critical errors:
+              if (err.message.includes("400")) break mainLoop; // Bad Request = Fatal
             }
             
-            // 429 (Rate Limit) or 503 (Overloaded) -> RETRY
-            if (response.status === 429 || response.status === 503) {
-              lastError = { status: 503, message: "AI is busy, retrying..." };
-              console.log(`Gemini Busy (${response.status}), retrying...`);
-              await sleep(2000 * attempt); // Wait 2s, then 4s
-              continue; 
-            }
-
-            const errText = await response.text();
-            throw new Error(`Gemini Error ${response.status}: ${errText}`);
+            if (Date.now() < HARD_DEADLINE - 5000) await sleep(1000);
           }
-
-          const data = await response.json();
-          const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-
-          if (!text) throw new Error("Empty response from AI");
-
-          successData = JSON.parse(text);
-          break mainLoop; // Success!
-
-        } catch (err) {
-          const isTimeout = err.name === "AbortError";
-          if (isTimeout) {
-            console.log(`Attempt ${attempt} timed out (frontend will retry if needed)`);
-            lastError = { status: 504, message: "AI took too long." };
-          } else {
-            console.error(`Attempt ${attempt} error:`, err.message);
-            lastError = { status: 500, message: err.message };
-            // If it was a 404 or bad request, break loop immediately
-            if (err.message.includes("404") || err.message.includes("400")) break mainLoop;
-          }
-          
-          // Small pause before next attempt
-          if (Date.now() < HARD_DEADLINE - 5000) await sleep(1000);
         }
       }
     }

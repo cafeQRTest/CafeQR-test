@@ -160,6 +160,7 @@ export default function ItemEditor({
           )
         `)
         .eq('is_active', true)
+        .or(`restaurant_id.is.null,restaurant_id.eq.${restaurantId}`)
         .order('display_order');
       
       if (error) {

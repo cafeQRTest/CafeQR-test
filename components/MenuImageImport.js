@@ -55,7 +55,7 @@ export default function MenuImageImport({ onClose, onImported, restaurantId, exi
 
     try {
       const base64 = await compressImage(file);
-      setStatusMsg("Analyzing with Gemini 1.5... (may take 30s)");
+      setStatusMsg("Analyzing with Gemini... (may take 30s)");
 
       // Try calling API; if 503/504, retry once more
       let finalResult = null;
@@ -266,6 +266,64 @@ export default function MenuImageImport({ onClose, onImported, restaurantId, exi
                           />
                         </div>
                       </div>
+                      
+                      {/* Variants Section */}
+                      {it.variants && it.variants.length > 0 && (
+                        <div className="import-variants-section">
+                           {it.variants.map((v, vIdx) => (
+                             <div key={vIdx} className="import-variant-card">
+                                <div className="import-variant-header-row">
+                                   <label>Variant Group</label>
+                                   <input 
+                                      value={v.template || ''}
+                                      onChange={e => {
+                                         const c = [...items];
+                                         if (!c[idx].variants[vIdx]) return;
+                                         c[idx].variants[vIdx].template = e.target.value;
+                                         setItems(c);
+                                      }}
+                                      placeholder="e.g. Size, Color"
+                                      className="variant-template-input"
+                                   />
+                                </div>
+                                <div className="import-variant-options-list">
+                                   <div className="import-options-header-row">
+                                      <span>Option Name</span>
+                                      <span>Price</span>
+                                   </div>
+                                   {v.options && v.options.map((opt, optIdx) => (
+                                      <div key={optIdx} className="import-variant-option-row">
+                                         <input 
+                                           value={opt.name || ''}
+                                           onChange={e => {
+                                             const c = [...items];
+                                             c[idx].variants[vIdx].options[optIdx].name = e.target.value;
+                                             setItems(c);
+                                           }}
+                                           placeholder="Option (e.g. Small)"
+                                           className="variant-opt-name"
+                                         />
+                                         <div className="import-price-compact">
+                                            <span>₹</span>
+                                            <input 
+                                              type="number"
+                                              value={opt.price}
+                                              onChange={e => {
+                                                const c = [...items];
+                                                c[idx].variants[vIdx].options[optIdx].price = e.target.value;
+                                                setItems(c);
+                                              }}
+                                              placeholder="0"
+                                            />
+                                         </div>
+                                      </div>
+                                   ))}
+                                </div>
+                             </div>
+                           ))}
+                        </div>
+                      )}
+
                     </div>
                   </div>
                 ))}
@@ -734,6 +792,137 @@ export default function MenuImageImport({ onClose, onImported, restaurantId, exi
             padding: 48px 24px;
           }
         }
+
+        .import-variants-section {
+          margin-top: 16px;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+
+        .import-variant-card {
+           background: #f8fafc;
+           border: 1px solid #e2e8f0;
+           border-radius: 10px;
+           padding: 16px;
+        }
+
+        .import-variant-header-row {
+           margin-bottom: 14px;
+        }
+
+        .import-variant-header-row label {
+           display: block;
+           font-size: 10px;
+           font-weight: 700;
+           color: #64748b;
+           margin-bottom: 6px;
+           text-transform: uppercase;
+           letter-spacing: 0.8px;
+        }
+
+        .variant-template-input {
+           width: 100%;
+           padding: 10px 12px;
+           border: 1px solid #cbd5e1;
+           border-radius: 8px;
+           font-size: 14px;
+           font-weight: 600;
+           color: #1e293b;
+           background: white;
+           transition: all 0.2s;
+        }
+
+        .variant-template-input:focus {
+           border-color: #f97316;
+           box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
+           outline: none;
+        }
+
+        .import-variant-options-list {
+           display: flex;
+           flex-direction: column;
+           gap: 8px;
+        }
+
+        .import-options-header-row {
+           display: grid;
+           grid-template-columns: 2fr 1fr;
+           gap: 12px;
+           padding: 0 4px;
+           margin-bottom: 2px;
+        }
+
+        .import-options-header-row span {
+           font-size: 10px;
+           font-weight: 700;
+           color: #94a3b8;
+           text-transform: uppercase;
+           letter-spacing: 0.5px;
+        }
+
+        .import-variant-option-row {
+           display: grid;
+           grid-template-columns: 2fr 1fr;
+           gap: 12px;
+           align-items: center;
+        }
+
+        .variant-opt-name {
+           padding: 10px 12px;
+           border: 1px solid #e2e8f0;
+           border-radius: 8px;
+           font-size: 13px;
+           background: white;
+           width: 100%;
+           outline: none;
+           transition: all 0.2s;
+           font-weight: 500;
+           color: #334155;
+        }
+
+        .variant-opt-name:focus {
+           border-color: #f97316;
+           box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.1);
+        }
+
+        .import-price-compact {
+           display: flex;
+           align-items: center;
+           padding: 10px 12px;
+           border: 1px solid #e2e8f0;
+           border-radius: 8px;
+           background: white;
+           transition: all 0.2s;
+        }
+
+        .import-price-compact:focus-within {
+           border-color: #f97316;
+           box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.1);
+        }
+
+        .import-price-compact span {
+           font-size: 13px;
+           font-weight: 600;
+           color: #64748b;
+           margin-right: 6px;
+        }
+
+        .import-price-compact input {
+           width: 100%;
+           border: none;
+           background: transparent;
+           font-size: 13px;
+           font-weight: 600;
+           outline: none;
+           padding: 0;
+           color: #0f172a;
+        }
+
+
+/* Legacy CSS removed */
+
+
       `}</style>
     </div>
   );

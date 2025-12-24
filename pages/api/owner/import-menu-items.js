@@ -70,17 +70,50 @@ async function findExistingMenuItemId(restaurantId, itemName) {
   return data?.id || null;
 }
 
-async function upsertTemplate(name) {
+async function upsertTemplate(restaurantId, name) {
   const clean = (name || "Options").trim() || "Options";
 
-  const { data, error } = await supabaseAdmin
+  // STRICT RESTAURANT ISOLATION:
+  // Never use global templates for imports, to avoid polluting them with custom options.
+  // Always find or create a template specific to this restaurant.
+
+  // 1. Try to find existing RESTAURANT-SPECIFIC template
+  const { data: existing, error: selErr } = await supabaseAdmin
     .from("variant_templates")
-    .upsert([{ name: clean, is_active: true }], { onConflict: "name" })
+    .select("id,name")
+    .eq("restaurant_id", restaurantId)
+    .eq("name", clean)
+    .maybeSingle();
+
+  if (selErr) throw selErr;
+  if (existing) return existing;
+
+  // 2. Create new RESTAURANT-SPECIFIC template
+  const { data: newTpl, error: insErr } = await supabaseAdmin
+    .from("variant_templates")
+    .insert([{ 
+      name: clean, 
+      restaurant_id: restaurantId,
+      is_active: true 
+    }])
     .select("id,name")
     .single();
 
-  if (error) throw error;
-  return data;
+  if (insErr) {
+    // Handle race condition if created between select and insert
+    if (insErr.code === "23505") { // unique_violation
+      const { data: retry } = await supabaseAdmin
+        .from("variant_templates")
+        .select("id,name")
+        .eq("restaurant_id", restaurantId)
+        .eq("name", clean)
+        .single();
+      if (retry) return retry;
+    }
+    throw insErr;
+  }
+
+  return newTpl;
 }
 
 async function upsertOptions(templateId, optionNames) {
@@ -170,7 +203,7 @@ export default async function handler(req, res) {
       if (!hasVariants) continue;
 
       for (const v of variants) {
-        const tpl = await upsertTemplate(v.template);
+        const tpl = await upsertTemplate(restaurantId, v.template);
 
         const { error: linkErr } = await supabaseAdmin
           .from("menu_item_variants")

@@ -5,7 +5,7 @@ import React, { useState, useEffect } from 'react';
 import { getSupabase } from '../services/supabase';
 import NiceSelect from './NiceSelect';
 
-export default function VariantManager({ onClose, onSaved }) {
+export default function VariantManager({ onClose, onSaved, restaurantId }) {
   const supabase = getSupabase();
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -40,6 +40,7 @@ export default function VariantManager({ onClose, onSaved }) {
         options:variant_options(*)
       `)
       .eq('is_active', true)
+      .or(`restaurant_id.is.null,restaurant_id.eq.${restaurantId || ''}`)
       .order('display_order');
     
     if (!err) {
@@ -93,7 +94,8 @@ export default function VariantManager({ onClose, onSaved }) {
       .insert({
         name: createName.trim(),
         display_order: templates.length, // approximate order
-        is_active: true
+        is_active: true,
+        restaurant_id: restaurantId
       })
       .select('id')
       .single();
