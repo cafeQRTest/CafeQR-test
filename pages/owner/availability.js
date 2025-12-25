@@ -9,6 +9,7 @@ import Card from "../../components/ui/Card";
 import { getSupabase } from "../../services/supabase";
 
 import { FaStore, FaClock, FaToggleOn, FaToggleOff, FaCopy, FaUndo, FaSave, FaCheckCircle, FaChevronRight } from "react-icons/fa";
+import PremiumTimeSelect from "../../components/PremiumTimeSelect";
 
 const BRAND = {
   orange: '#f97316',
@@ -384,17 +385,19 @@ export default function AvailabilityPage() {
              </>
            ) : (
              <div className="custom-set-row" style={{display:'flex', gap:8, alignItems:'center'}}>
-                <PresetTimeInput 
-                  type="time" 
-                  value={customTimes.open} 
-                  onChange={e => setCustomTimes(p => ({...p, open: e.target.value}))}
-                />
+                <div style={{ width: 110 }}>
+                  <PremiumTimeSelect 
+                    value={customTimes.open} 
+                    onChange={e => setCustomTimes(p => ({...p, open: e.target.value}))}
+                  />
+                </div>
                 <span style={{color:'#94a3b8', fontSize:12}}>to</span>
-                <PresetTimeInput 
-                  type="time" 
-                  value={customTimes.close} 
-                  onChange={e => setCustomTimes(p => ({...p, close: e.target.value}))}
-                />
+                <div style={{ width: 110 }}>
+                  <PremiumTimeSelect 
+                    value={customTimes.close} 
+                    onChange={e => setCustomTimes(p => ({...p, close: e.target.value}))}
+                  />
+                </div>
                 <button className="chip" style={{background:BRAND.orange, color:'white', borderColor:BRAND.orange}} onClick={() => {
                    setAll({ open: customTimes.open, close: customTimes.close, enabled: true });
                    addPreset(customTimes.open, customTimes.close);
@@ -800,138 +803,7 @@ const SaveBtn = styled(ActionButton)`
   }
 `;
 
-/* ---------------- Custom Time Select ---------------- */
-// Generates time slots every 15 minutes
-const TIME_SLOTS = [];
-for (let i = 0; i < 24; i++) {
-  for (let j = 0; j < 60; j += 15) {
-    const h = i.toString().padStart(2, '0');
-    const m = j.toString().padStart(2, '0');
-    TIME_SLOTS.push(`${h}:${m}`);
-  }
-}
-// Add 23:59 as end of day option
-TIME_SLOTS.push('23:59');
 
-function PremiumTimeSelect({ value, onChange, disabled }) {
-  const [isOpen, setIsOpen] = useState(false);
-  const wrapperRef = React.useRef(null);
-
-  useEffect(() => {
-    function handleClickOutside(event) {
-      if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
-        setIsOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  const handleSelect = (time) => {
-    onChange({ target: { value: time } }); // Mock event object to match existing handler
-    setIsOpen(false);
-  };
-
-  // Scroll to selected item when opening
-  useEffect(() => {
-    if (isOpen && wrapperRef.current) {
-      const selectedEl = wrapperRef.current.querySelector('.selected');
-      if (selectedEl) {
-        selectedEl.scrollIntoView({ block: 'center' });
-      }
-    }
-  }, [isOpen]);
-
-  // Display logic
-  const displayValue = value || "00:00";
-
-  return (
-    <div className="time-select-wrapper" ref={wrapperRef}>
-      <div 
-        className={`time-select-trigger ${disabled ? 'disabled' : ''}`} 
-        onClick={() => !disabled && setIsOpen(!isOpen)}
-      >
-        <span>{displayValue}</span>
-        {!disabled && <FaChevronRight style={{ transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)', transition: '0.2s', fontSize: 10, opacity: 0.5 }} />}
-      </div>
-
-      {isOpen && !disabled && (
-        <div className="time-select-dropdown">
-          {TIME_SLOTS.map(t => (
-            <div 
-              key={t} 
-              className={`time-option ${t === value ? 'selected' : ''}`}
-              onClick={() => handleSelect(t)}
-            >
-              {t}
-            </div>
-          ))}
-        </div>
-      )}
-
-      <style jsx>{`
-        .time-select-wrapper {
-          position: relative;
-          width: 100%;
-          min-width: 90px;
-        }
-        .time-select-trigger {
-          border: 1px solid #d1d5db;
-          border-radius: 8px;
-          padding: 10px 12px;
-          font-size: 1rem;
-          font-weight: 700;
-          color: #111827;
-          background: #fff;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          cursor: pointer;
-          transition: all 0.2s;
-          user-select: none;
-        }
-        .time-select-trigger:hover {
-          border-color: ${BRAND.orange};
-        }
-        .time-select-trigger.disabled {
-          background: #f9fafb;
-          color: #9ca3af;
-          cursor: not-allowed;
-          opacity: 0.7;
-        }
-        .time-select-dropdown {
-          position: absolute;
-          top: 100%;
-          left: 0;
-          width: 100%;
-          max-height: 200px;
-          overflow-y: auto;
-          background: white;
-          border: 1px solid #e5e7eb;
-          border-radius: 8px;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-          z-index: 50;
-          margin-top: 4px;
-        }
-        .time-option {
-          padding: 10px 12px;
-          font-weight: 600;
-          color: #374151;
-          cursor: pointer;
-          transition: background 0.1s;
-        }
-        .time-option:hover {
-          background: #fff7ed;
-          color: ${BRAND.orange};
-        }
-        .time-option.selected {
-          background: ${BRAND.orange};
-          color: white;
-        }
-      `}</style>
-    </div>
-  );
-}
 
 /* ---------------- Helpers ---------------- */
 function toHHMM(value) {

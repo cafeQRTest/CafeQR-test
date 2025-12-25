@@ -7,9 +7,8 @@ import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import { getSupabase } from '../../services/supabase'; // 1. IMPORT ADDED
 import { istSpanFromDatesUtcISO } from '../../utils/istTime';
-import { FaShoppingBag, FaMoneyBillWave, FaChartLine, FaClipboardList, FaRobot, FaTimes, FaFire, FaFileInvoiceDollar, FaClock, FaMagic, FaTrophy, FaMedal } from 'react-icons/fa';
-
-
+import PremiumTimeSelect from '../../components/PremiumTimeSelect';
+import { FaShoppingBag, FaMoneyBillWave, FaChartLine, FaClipboardList, FaRobot, FaTimes, FaFire, FaFileInvoiceDollar, FaClock, FaMagic, FaTrophy, FaMedal, FaCalendarAlt } from 'react-icons/fa';
 
 export default function AnalyticsPage() {
   // 2. & 3. APPLY SINGLETON PATTERN
@@ -19,6 +18,12 @@ export default function AnalyticsPage() {
   const { restaurant, loading: restLoading } = useRestaurant();
 
   const [timeRange, setTimeRange] = useState('today');
+  /* Custom Range State */
+  const [customStart, setCustomStart] = useState(() => new Date().toISOString().slice(0, 10));
+  const [customStartTime, setCustomStartTime] = useState('00:00');
+  const [customEnd, setCustomEnd] = useState(() => new Date().toISOString().slice(0, 10));
+  const [customEndTime, setCustomEndTime] = useState('23:59');
+
   const [stats, setStats] = useState({
     orders: 0,
     revenue: 0,
@@ -36,8 +41,9 @@ export default function AnalyticsPage() {
     loadAnalytics();
     // The supabase dependency is stable, but loadAnalytics is not, so keep it for now.
     // To optimize further, wrap loadAnalytics in useCallback.
+    // For 'custom', we also need to re-load when the custom dates change
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [checking, restLoading, restaurantId, timeRange, supabase]);
+  }, [checking, restLoading, restaurantId, timeRange, supabase, customStart, customStartTime, customEnd, customEndTime]);
 
   const loadAnalytics = async () => {
     if (!supabase) return; // Guard
@@ -101,6 +107,18 @@ export default function AnalyticsPage() {
       case 'today': start.setHours(0, 0, 0, 0); return { start, end: now };
       case 'week': start.setDate(now.getDate() - 7); return { start, end: now };
       case 'month': start.setDate(now.getDate() - 30); return { start, end: now };
+      case 'custom': {
+         // Construct Date objects from custom state
+         const s = new Date(customStart);
+         const [sh, sm] = customStartTime.split(':');
+         s.setHours(Number(sh), Number(sm), 0, 0);
+         
+         const e = new Date(customEnd);
+         const [eh, em] = customEndTime.split(':');
+         e.setHours(Number(eh), Number(em), 59, 999);
+         
+         return { start: s, end: e };
+      }
       default: start.setHours(0, 0, 0, 0); return { start, end: now };
     }
   };
@@ -212,6 +230,20 @@ const formatAIResponse = (text) => {
             ))}
 
             <Button
+                onClick={() => setTimeRange('custom')}
+                style={{
+                  background: timeRange === 'custom' ? '#f97316' : '#fff7ed',
+                  color: timeRange === 'custom' ? 'white' : '#ea580c',
+                  border: `1px solid ${timeRange === 'custom' ? '#f97316' : '#fed7aa'}`,
+                  textTransform: 'capitalize',
+                  fontWeight: 600,
+                  display: 'flex', alignItems: 'center', gap: 6
+                }}
+              >
+                <FaCalendarAlt size={12} /> Custom
+            </Button>
+
+            <Button
               variant="outline"
               onClick={fetchAiSuggestions}
               disabled={aiLoading}
@@ -222,6 +254,63 @@ const formatAIResponse = (text) => {
             </Button>
           </div>
         </div>
+
+        {/* Custom Date Range Picker Panel */}
+        {timeRange === 'custom' && (
+          <Card padding="20px" style={{ marginBottom: 24, border: '1px solid #fed7aa', background: '#fffcf5' }}>
+             <div className="custom-picker-grid">
+               {/* Start Group */}
+               <div className="picker-group">
+                 <label>Start From</label>
+                 <div className="picker-row">
+                    <input 
+                      type="date" 
+                      value={customStart}
+                      onChange={(e) => setCustomStart(e.target.value)}
+                      max={new Date().toISOString().slice(0, 10)}
+                      className="date-input"
+                    />
+                    <div style={{ width: 120 }}>
+                      <PremiumTimeSelect 
+                        value={customStartTime} 
+                        onChange={(e) => setCustomStartTime(e.target.value)}
+                        themeColor="#f97316"
+                      />
+                    </div>
+                 </div>
+               </div>
+               
+               <div className="picker-arrow">→</div>
+
+               {/* End Group */}
+               <div className="picker-group">
+                 <label>End At</label>
+                 <div className="picker-row">
+                    <input 
+                      type="date" 
+                      value={customEnd}
+                      onChange={(e) => setCustomEnd(e.target.value)}
+                      max={new Date().toISOString().slice(0, 10)}
+                      className="date-input"
+                    />
+                    <div style={{ width: 120 }}>
+                      <PremiumTimeSelect 
+                        value={customEndTime} 
+                        onChange={(e) => setCustomEndTime(e.target.value)}
+                        themeColor="#f97316"
+                      />
+                    </div>
+                 </div>
+               </div>
+               
+               <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                 <Button onClick={loadAnalytics} style={{ height: 42, background: '#f97316', color: 'white' }}>
+                    Apply Range
+                 </Button>
+               </div>
+             </div>
+          </Card>
+        )}
 
         {error && (
           <Card padding="12px" style={{ marginBottom: 16, borderColor: '#fecaca', background: '#fff1f2' }}>
@@ -647,6 +736,54 @@ const formatAIResponse = (text) => {
           }
           .roadmap-item:hover { transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgba(249, 115, 22, 0.1); }
           .roadmap-item svg { color: #f97316; font-size: 1rem; }
+
+          /* Custom Picker Styles */
+          .custom-picker-grid {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+            flex-wrap: wrap;
+          }
+          .picker-group label {
+            display: block;
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: #ea580c;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+          }
+          .picker-row {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+          }
+          .date-input {
+            padding: 10px 12px;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            font-weight: 600;
+            color: #1f2937;
+            font-family: inherit;
+            outline: none;
+            transition: all 0.2s;
+            background: white;
+          }
+          .date-input:focus {
+            border-color: #f97316;
+            box-shadow: 0 0 0 2px #fff7ed;
+          }
+          .picker-arrow {
+            font-size: 1.5rem;
+            color: #fed7aa;
+            padding-top: 24px;
+            font-weight: 300;
+          }
+          @media (max-width: 768px) {
+             .custom-picker-grid { flex-direction: column; align-items: stretch; gap: 16px; }
+             .picker-arrow { transform: rotate(90deg); align-self: center; padding: 0; }
+             .picker-row { display: grid; grid-template-columns: 1.5fr 1fr; } 
+          }
         `}</style>
     </>
   );

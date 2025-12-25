@@ -11,6 +11,7 @@ import VariantSelector from '../../components/VariantSelector';
 import NiceSelect from '../../components/NiceSelect';
 import { useAlert } from '../../context/AlertContext';
 import HorizontalScrollRow from '../../components/HorizontalScrollRow';
+import PremiumTimeSelect from '../../components/PremiumTimeSelect';
 import { round2, normalizeQty, formatQty2 } from '../../lib/qty';
 
 // -------------------------------
@@ -608,6 +609,12 @@ const getDraftOrQtyNumber = (cartId, fallbackQty) => {
     const d = new Date();
     d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
     return d.toISOString().slice(0, 10);
+  });
+  const [orderTime, setOrderTime] = useState(() => {
+    const d = new Date();
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    return `${hh}:${mm}`;
   });
   const [paymentMethod, setPaymentMethod] = useState('cash');
 
@@ -1304,9 +1311,9 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
       Number(orderDate.split('-')[0]),
       Number(orderDate.split('-')[1]) - 1,
       Number(orderDate.split('-')[2]),
-      new Date().getHours(),
-      new Date().getMinutes(),
-      new Date().getSeconds()
+      Number(orderTime.split(':')[0]),
+      Number(orderTime.split(':')[1]),
+      0
     ).toISOString(),
   };
 
@@ -1400,9 +1407,9 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
         Number(orderDate.split('-')[0]),
         Number(orderDate.split('-')[1]) - 1,
         Number(orderDate.split('-')[2]),
-        new Date().getHours(),
-        new Date().getMinutes(),
-        new Date().getSeconds()
+        Number(orderTime.split(':')[0]),
+        Number(orderTime.split(':')[1]),
+        0
       ).toISOString()
     };
 
@@ -1593,18 +1600,18 @@ window.dispatchEvent(
             
              {/* Backdate Configuration (New) */}
              <div>
-                <SectionLabel>Date Ordered</SectionLabel>
-                <div style={{ maxWidth: '150px' }}>
+                <SectionLabel>Date & Time</SectionLabel>
+                <div style={{ maxWidth: '300px', display: 'flex', gap: '8px' }}>
                    <input
                      type="date"
                      max={new Date().toLocaleDateString('en-CA')}
                      value={orderDate}
                      onChange={(e) => setOrderDate(e.target.value)}
                      style={{
-                       width: '100%',
-                       padding: '12px 16px',
-                       borderRadius: '12px',
-                       border: `2px solid ${orderMode === 'kitchen' ? '#f97316' : '#22c55e'}`, // orange for kitchen, green for settle
+                       flex: 2,
+                       padding: '9.5px 12px',
+                       borderRadius: '8px',
+                       border: `1.5px solid ${orderMode === 'kitchen' ? '#f97316' : '#22c55e'}`,
                        fontSize: '14px',
                        fontWeight: 600,
                        color: '#1e293b',
@@ -1615,6 +1622,13 @@ window.dispatchEvent(
                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
                      }}
                    />
+                   <div style={{ flex: 1.2 }}>
+                     <PremiumTimeSelect
+                       value={orderTime}
+                       onChange={(e) => setOrderTime(e.target.value)}
+                       themeColor={orderMode === 'kitchen' ? '#f97316' : '#22c55e'}
+                     />
+                   </div>
                 </div>
             </div>
             
