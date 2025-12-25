@@ -32,7 +32,10 @@ export default function SignupPage() {
     setLoading(false)
 
     if (error) {
-      setMessage(error.message)
+      console.error('Signup Error:', error);
+      // Try to show more details if available
+      const detailedMsg = error.details || error.hint || error.message;
+      setMessage(detailedMsg);
       return
     }
 

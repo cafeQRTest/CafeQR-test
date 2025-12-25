@@ -15,11 +15,25 @@ export default async function handler(req, res) {
   try {
     const supabase = getServerSupabase();
 
-    const { data: existingRestaurant, error: restError } = await supabase
+    let { data: existingRestaurant, error: restError } = await supabase
       .from('restaurants')
       .select('id')
       .eq('id', restaurant_id)
       .maybeSingle();
+
+    // 1b) Fallback: if not found by ID, but we have an email, try finding by email
+    // This handles cases where client might have generated a generic ID but user already has a restaurant
+    if (!existingRestaurant && owner_email) {
+      const { data: byEmail, error: emailError } = await supabase
+        .from('restaurants')
+        .select('id')
+        .eq('owner_email', owner_email)
+        .maybeSingle();
+      
+      if (!emailError && byEmail) {
+         existingRestaurant = byEmail;
+      }
+    }
 
     if (restError) {
       console.error('[start-trial] Error fetching restaurant:', restError);
