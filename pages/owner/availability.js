@@ -426,12 +426,12 @@ export default function AvailabilityPage() {
                   <div className="input-pair">
                     <div className="input-group">
                       <label>Opening</label>
-                      <input type="time" value={h.open} onChange={(e) => setRow(h.dow, { open: e.target.value })} disabled={!h.enabled} />
+                      <PremiumTimeSelect value={h.open} onChange={(e) => setRow(h.dow, { open: e.target.value })} disabled={!h.enabled} />
                     </div>
                     <div className="arrow-sep"><FaChevronRight /></div>
                     <div className="input-group">
                       <label>Closing</label>
-                      <input type="time" value={h.close} onChange={(e) => setRow(h.dow, { close: e.target.value })} disabled={!h.enabled} />
+                       <PremiumTimeSelect value={h.close} onChange={(e) => setRow(h.dow, { close: e.target.value })} disabled={!h.enabled} />
                     </div>
                   </div>
                   
@@ -474,10 +474,10 @@ export default function AvailabilityPage() {
                       </label>
                     </td>
                     <td>
-                      <input className="table-time-input" type="time" value={h.open} onChange={(e) => setRow(h.dow, { open: e.target.value })} disabled={!h.enabled} />
+                      <PremiumTimeSelect value={h.open} onChange={(e) => setRow(h.dow, { open: e.target.value })} disabled={!h.enabled} />
                     </td>
                     <td>
-                      <input className="table-time-input" type="time" value={h.close} onChange={(e) => setRow(h.dow, { close: e.target.value })} disabled={!h.enabled} />
+                      <PremiumTimeSelect value={h.close} onChange={(e) => setRow(h.dow, { close: e.target.value })} disabled={!h.enabled} />
                     </td>
                     <td>
                       <div className="table-actions">
@@ -594,7 +594,7 @@ export default function AvailabilityPage() {
 
         /* Table */
         /* Table */
-        .premium-table-wrap { background: white; border-radius: 12px; border: 1px solid #e5e7eb; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .premium-table-wrap { background: white; border-radius: 12px; border: 1px solid #e5e7eb; /* overflow hidden removed for picker scroll */ box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
         .premium-table { width: 100%; border-collapse: collapse; }
         .premium-table th { 
           background: linear-gradient(to bottom, #ffffff 0%, #fafafa 100%);
@@ -610,6 +610,7 @@ export default function AvailabilityPage() {
         .table-time-input { 
           border: 1px solid #d1d5db; border-radius: 8px; padding: 10px 12px; font-size: 1rem; 
           font-weight: 700; color: #111827; outline: none; transition: all 0.2s;
+          -webkit-appearance: none; appearance: none; /* Fix for time picker scroll */
         }
         .table-time-input:focus { border-color: ${BRAND.orange}; ring: 2px solid ${BRAND.orange}33; }
         .table-time-input:disabled { background: #f9fafb; opacity: 0.5; color: #9ca3af; }
@@ -669,7 +670,7 @@ export default function AvailabilityPage() {
           .desktop-only-table { display: none; }
           .mobile-only-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
           .avail-card { 
-            background: white; border-radius: 16px; border: 1px solid #e5e7eb; overflow: hidden; 
+            background: white; border-radius: 16px; border: 1px solid #e5e7eb; /* overflow removed */ 
             box-shadow: 0 2px 4px rgba(0,0,0,0.05); transition: 0.2s;
           }
           .card-top { padding: 16px; border-bottom: 1px solid #f3f4f6; display: flex; justify-content: space-between; align-items: center; background: #fafafa; }
@@ -685,6 +686,7 @@ export default function AvailabilityPage() {
           .input-group input { 
             width: 100%; border: 1px solid #d1d5db; border-radius: 8px; padding: 10px; 
             font-size: 1rem; font-weight: 800; outline: none; background: #fff;
+            -webkit-appearance: none; appearance: none; /* Fix for iOS scroll */
           }
           .arrow-sep { color: #d1d5db; margin-top: 18px; }
           .card-footer-actions { border-top: 1px dashed #e5e7eb; padding-top: 12px; }
@@ -798,6 +800,139 @@ const SaveBtn = styled(ActionButton)`
   }
 `;
 
+/* ---------------- Custom Time Select ---------------- */
+// Generates time slots every 15 minutes
+const TIME_SLOTS = [];
+for (let i = 0; i < 24; i++) {
+  for (let j = 0; j < 60; j += 15) {
+    const h = i.toString().padStart(2, '0');
+    const m = j.toString().padStart(2, '0');
+    TIME_SLOTS.push(`${h}:${m}`);
+  }
+}
+// Add 23:59 as end of day option
+TIME_SLOTS.push('23:59');
+
+function PremiumTimeSelect({ value, onChange, disabled }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const wrapperRef = React.useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleSelect = (time) => {
+    onChange({ target: { value: time } }); // Mock event object to match existing handler
+    setIsOpen(false);
+  };
+
+  // Scroll to selected item when opening
+  useEffect(() => {
+    if (isOpen && wrapperRef.current) {
+      const selectedEl = wrapperRef.current.querySelector('.selected');
+      if (selectedEl) {
+        selectedEl.scrollIntoView({ block: 'center' });
+      }
+    }
+  }, [isOpen]);
+
+  // Display logic
+  const displayValue = value || "00:00";
+
+  return (
+    <div className="time-select-wrapper" ref={wrapperRef}>
+      <div 
+        className={`time-select-trigger ${disabled ? 'disabled' : ''}`} 
+        onClick={() => !disabled && setIsOpen(!isOpen)}
+      >
+        <span>{displayValue}</span>
+        {!disabled && <FaChevronRight style={{ transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)', transition: '0.2s', fontSize: 10, opacity: 0.5 }} />}
+      </div>
+
+      {isOpen && !disabled && (
+        <div className="time-select-dropdown">
+          {TIME_SLOTS.map(t => (
+            <div 
+              key={t} 
+              className={`time-option ${t === value ? 'selected' : ''}`}
+              onClick={() => handleSelect(t)}
+            >
+              {t}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <style jsx>{`
+        .time-select-wrapper {
+          position: relative;
+          width: 100%;
+          min-width: 90px;
+        }
+        .time-select-trigger {
+          border: 1px solid #d1d5db;
+          border-radius: 8px;
+          padding: 10px 12px;
+          font-size: 1rem;
+          font-weight: 700;
+          color: #111827;
+          background: #fff;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          cursor: pointer;
+          transition: all 0.2s;
+          user-select: none;
+        }
+        .time-select-trigger:hover {
+          border-color: ${BRAND.orange};
+        }
+        .time-select-trigger.disabled {
+          background: #f9fafb;
+          color: #9ca3af;
+          cursor: not-allowed;
+          opacity: 0.7;
+        }
+        .time-select-dropdown {
+          position: absolute;
+          top: 100%;
+          left: 0;
+          width: 100%;
+          max-height: 200px;
+          overflow-y: auto;
+          background: white;
+          border: 1px solid #e5e7eb;
+          border-radius: 8px;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+          z-index: 50;
+          margin-top: 4px;
+        }
+        .time-option {
+          padding: 10px 12px;
+          font-weight: 600;
+          color: #374151;
+          cursor: pointer;
+          transition: background 0.1s;
+        }
+        .time-option:hover {
+          background: #fff7ed;
+          color: ${BRAND.orange};
+        }
+        .time-option.selected {
+          background: ${BRAND.orange};
+          color: white;
+        }
+      `}</style>
+    </div>
+  );
+}
+
 /* ---------------- Helpers ---------------- */
 function toHHMM(value) {
   if (!value) return "00:00";
@@ -808,12 +943,7 @@ function toHHMM(value) {
 
 const formatTimeDisp = (val) => {
    if(!val) return "";
-   let [h, m] = val.split(":");
-   const ih = parseInt(h);
-   const ampm = ih >= 12 ? "PM" : "AM";
-   const dh = ih % 12 || 12;
-   if(m === "00") return `${dh} ${ampm}`;
-   return `${dh}:${m} ${ampm}`;
+   return val; // Return 24-hour format as is (e.g. 14:00)
 };
 
 const DAYS = [
