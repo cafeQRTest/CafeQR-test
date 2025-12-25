@@ -404,13 +404,14 @@ function Header({ showSidebar, onHamburger, isCustomer }) {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '0 24px',
+        padding: '0 16px',
         height: 72,
         position: 'sticky',
         top: 0,
         zIndex: 40,
         transition: 'all 0.3s ease',
-        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.01), 0 2px 4px -1px rgba(0, 0, 0, 0.01)'
+        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.01), 0 2px 4px -1px rgba(0, 0, 0, 0.01)',
+        gap: 20
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
@@ -448,7 +449,7 @@ function Header({ showSidebar, onHamburger, isCustomer }) {
         )}
         
         <div 
-            style={{ display: 'flex', alignItems: 'center', gap: 14, cursor: 'pointer', userSelect: 'none' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 14, cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap', flexShrink: 0 }}
             onClick={() => router.push(isCustomer ? '/' : '/owner')}
         >
           <img 
@@ -470,19 +471,19 @@ function Header({ showSidebar, onHamburger, isCustomer }) {
         </div>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         {!isCustomer && (
           <nav style={{ display: 'flex', alignItems: 'center' }}>
             <Link 
                 href="/faq" 
                 className="header-link"
                 style={{ 
-                    padding: '8px 16px',
+                    padding: '6px 12px',
                     borderRadius: 99,
                     color: '#334155', // Slate 700 - reduced grey-ness
                     textDecoration: 'none', 
                     fontWeight: 600, 
-                    fontSize: 14,
+                    fontSize: 13,
                     background: '#f8fafc',
                     border: '1px solid #e2e8f0', // lighter border
                     transition: 'all 0.2s ease'

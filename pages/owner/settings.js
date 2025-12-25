@@ -658,7 +658,7 @@ function PrintLogoField({ restaurantId, supabase }) {
 
 export default function SettingsPage() {
   const supabase = getSupabase();
-  const { restaurant, loading: loadingRestaurant } = useRestaurant();
+  const { restaurant, loading: loadingRestaurant, refresh } = useRestaurant();
   const { refresh: refreshSubscription } = useSubscription();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -794,6 +794,9 @@ export default function SettingsPage() {
 
       await supabase.from('restaurant_profiles').upsert(payload, { onConflict: 'restaurant_id' });
       await supabase.from('restaurants').update({ name: form.restaurant_name }).eq('id', restaurant.id);
+      
+      // Refresh the context to update sidebar features immediately
+      refresh();
       
       // AUTO-SEND QR EMAIL IF TABLES INCREASED
       const prevCount = originalTables;

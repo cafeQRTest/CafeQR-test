@@ -1660,27 +1660,14 @@ window.dispatchEvent(
           marginTop: '20px'
         }}>
           <div style={{ position: 'relative', marginBottom: '20px' }}>
-            <div style={{ 
-              position: 'absolute', 
-              left: '18px', 
-              top: '50%', 
-              transform: 'translateY(-50%)',
-              color: THEME.main,
-              fontSize: '20px',
-              fontWeight: 'bold',
-              pointerEvents: 'none',
-              zIndex: 1
-            }}>
-              🔍
-            </div>
             <input 
               type="text" 
-              placeholder="🔎 Search menu items, drinks, or item codes..." 
+              placeholder="Search menu items, drinks, or item codes..." 
               value={searchQuery} 
               onChange={(e) => setSearchQuery(e.target.value)} 
               style={{ 
                 width: '100%',
-                padding: '16px 20px 16px 52px', 
+                padding: '16px 20px', 
                 background: 'linear-gradient(135deg, #ffffff 0%, #fefefe 100%)', 
                 border: `3px solid ${THEME.main}`, 
                 borderRadius: '16px', 
@@ -1890,11 +1877,14 @@ const isVariantItem = !!item.hasvariants && (item.variants?.length || 0) > 0;
                           display: 'flex', flexDirection: 'column',
                           justifyContent: 'space-between',
                           padding: '12px',
-                          minHeight: '110px',
+                          minHeight: '120px',
                           position: 'relative',
                           opacity: !avail ? 0.7 : 1,
-                          overflow: 'hidden',
-                          transition: 'all 0.2s ease'
+                          overflow: 'visible',
+                          transition: 'all 0.2s ease',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          justifyContent: 'space-between'
                       }}>
                          {!avail && (
                             <div style={{position:'absolute', inset:0, background:'rgba(255,255,255,0.5)', zIndex:10}} />
@@ -1909,26 +1899,27 @@ const isVariantItem = !!item.hasvariants && (item.variants?.length || 0) > 0;
                            </div>
                         </div>
 
-                        <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-end', marginTop:12}}>
+                        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:12, flexWrap: 'wrap', gap: 8}}>
                            <div style={{fontSize:15, fontWeight:700, color: THEME.main}}>₹{item.price.toFixed(2)}</div>
                            
                            <div style={{position:'relative', zIndex:20}}> {/* zIndex ensures clickability over disabled overlay if needed */}
                            {qty > 0 ? (
                              <div style={{
-                               display:'flex', alignItems:'center', 
+                               display:'inline-flex', alignItems:'center', 
                                background: THEME.soft, 
                                borderRadius: 8, 
                                border: `1px solid ${THEME.main}`,
-                               overflow: 'hidden',
-                               boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                               boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                               minWidth: 'fit-content'
                              }}>
                                <button
                                  onClick={() => updateCartItem(item.id, qty - 1)}
                                  style={{
-                                    width: 32, height: 28, 
+                                    width: 32, height: 32, 
                                     border: 'none', background: 'transparent', 
                                     color: THEME.main, fontSize: 18, fontWeight: 700,
-                                    cursor: 'pointer', display:'flex', alignItems:'center', justifyContent:'center'
+                                    cursor: 'pointer', display:'flex', alignItems:'center', justifyContent:'center',
+                                    flexShrink: 0
                                  }}
                                >-</button>
                                
@@ -1943,10 +1934,11 @@ const isVariantItem = !!item.hasvariants && (item.variants?.length || 0) > 0;
                                     if (e.key === 'Escape') clearDraft(item.id);
                                   }}
                                   style={{
-                                    width: 40, height: 28,
+                                    width: 40, height: 32,
                                     border: 'none', background: 'transparent',
                                     textAlign: 'center', fontSize: 14, fontWeight: 700,
-                                    color: THEME.dark, outline: 'none'
+                                    color: THEME.dark, outline: 'none',
+                                    flexShrink: 0
                                   }}
                                 />
 
@@ -1954,10 +1946,11 @@ const isVariantItem = !!item.hasvariants && (item.variants?.length || 0) > 0;
                                  onClick={() => addToCart(item)}
                                  disabled={!avail}
                                  style={{
-                                    width: 32, height: 28, 
+                                    width: 32, height: 32, 
                                     border: 'none', background: 'transparent', 
                                     color: THEME.main, fontSize: 18, fontWeight: 700,
-                                    cursor: 'pointer', display:'flex', alignItems:'center', justifyContent:'center'
+                                    cursor: 'pointer', display:'flex', alignItems:'center', justifyContent:'center',
+                                    flexShrink: 0
                                  }}
                                >+</button>
                              </div>

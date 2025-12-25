@@ -27,6 +27,8 @@ export function RestaurantProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  const [refreshKey, setRefreshKey] = useState(0);
+
   // Resolve active restaurant ID from URL or storage (for order/kitchen)
   const ridFromUrlOrStorage = useMemo(() => {
     if (typeof window === 'undefined') return null;
@@ -188,7 +190,7 @@ export function RestaurantProvider({ children }) {
       cancelled = true;
       authSub?.unsubscribe();
     };
-  }, [supabase, ridFromUrlOrStorage, router.pathname]);
+  }, [supabase, ridFromUrlOrStorage, router.pathname, refreshKey]);
 
   const value = useMemo(() => {
     const role = restaurant?.role || 'guest';
@@ -201,12 +203,7 @@ export function RestaurantProvider({ children }) {
       isManager: role === 'manager',
       isStaff: role === 'staff',
       refresh: async () => {
-        const q = router.query;
-        await router.replace(
-          { pathname: router.pathname, query: { ...q, _r: Date.now() } },
-          undefined,
-          { shallow: true }
-        );
+        setRefreshKey(prev => prev + 1);
       },
     };
   }, [restaurant, loading, error, router]);

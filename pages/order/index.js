@@ -959,7 +959,7 @@ export default function OrderPage() {
                         </div>
                       </div>
 
-                      <div style={{ display: 'flex', alignItems: 'center', minWidth: 100, justifyContent: 'flex-end' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', minWidth: 'fit-content', flexShrink: 0, justifyContent: 'flex-end', marginLeft: 8 }}>
                         {isOutOfStock ? (
                           <div style={{
                             padding: '8px 12px',
@@ -1031,7 +1031,9 @@ export default function OrderPage() {
                             padding: '4px',
                             borderRadius: '14px',
                             border: '1px solid #e2e8f0',
-                            gap: 4
+                            gap: 4,
+                            minWidth: 'fit-content',
+                            flexShrink: 0
                           }}>
                             <button
                               onClick={(e) => { e.stopPropagation(); updateCartItem(item.id, totalQty - 1); }}
