@@ -10,7 +10,13 @@ export default function DateRangePicker({ start, end, onChange }) {
     if (!isNaN(d.getTime())) onChange({ start, end: d });
   }
 
-  const fmt = d => d.toISOString().slice(0, 10)
+  const fmt = d => {
+    if (!d || isNaN(d.getTime())) return '';
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
   return (
     <div className="date-range-picker">
       <div className="picker-group">

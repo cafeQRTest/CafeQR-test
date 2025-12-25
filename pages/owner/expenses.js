@@ -233,8 +233,8 @@ const [paymentProfit, setPaymentProfit] = useState([]);
   `)
 
         .eq('restaurant_id', restaurantId)
-        .gte('created_at', startUtc)
-        .lt('created_at', endUtc)
+        .gte('date_ordered', startUtc)
+        .lt('date_ordered', endUtc)
         .neq('status', 'cancelled');
 
       if (ordersErr) throw ordersErr;

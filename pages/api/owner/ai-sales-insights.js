@@ -35,7 +35,7 @@ export default async function handler(req) {
     // Fetching data
     const [restRes, ordersRes, expensesRes, hoursRes] = await Promise.all([
       supabase.from("restaurants").select("name").eq("id", restaurantId).single(),
-      supabase.from("orders").select("total_inc_tax, total_amount, items, created_at").eq("restaurant_id", restaurantId).gte("created_at", startUtc).lt("created_at", endUtc).neq("status", "cancelled"),
+      supabase.from("orders").select("total_inc_tax, total_amount, items, created_at, date_ordered").eq("restaurant_id", restaurantId).gte("date_ordered", startUtc).lt("date_ordered", endUtc).neq("status", "cancelled"),
       supabase.from("expenses").select("amount").eq("restaurant_id", restaurantId).gte("expense_date", startUtc).lte("expense_date", endUtc),
       supabase.from("restaurant_hours").select("*").eq("restaurant_id", restaurantId)
     ]);
@@ -50,7 +50,7 @@ export default async function handler(req) {
     
     const hourlyMap = {};
     orders.forEach(o => {
-        const h = new Date(o.created_at).getUTCHours(); 
+        const h = new Date(o.date_ordered || o.created_at).getUTCHours(); 
         hourlyMap[h] = (hourlyMap[h] || 0) + (o.total_inc_tax || 0);
     });
     const hourlyData = Object.entries(hourlyMap).map(([h, rev]) => ({ hour: h, revenue: rev }));

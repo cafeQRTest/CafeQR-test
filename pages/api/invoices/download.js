@@ -68,7 +68,7 @@ export default async function handler(req, res) {
     const pdfPayload = {
       invoice: {
         invoice_no: invoice?.invoice_no,
-        invoice_date: order.created_at || new Date().toISOString(),
+        invoice_date: order.date_ordered || order.created_at || new Date().toISOString(),
         customer_name: order.customer_name || null,
         customer_gstin: order.customer_gstin || null,
         payment_method:

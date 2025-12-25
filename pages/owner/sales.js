@@ -191,20 +191,20 @@ export default function SalesPage() {
           customer_name,
           items,
           payment_method,
-          actual_payment_method,
           mixed_payment_details,
           order_type,
-          table_number
+          table_number,
+          date_ordered
         `)
         .eq('restaurant_id', restaurantId)
-        .gte('created_at', startUtc)
-        .lt('created_at', endUtc)
+        .gte('date_ordered', startUtc)
+        .lte('date_ordered', endUtc)
         .neq('status', 'cancelled')
 
       if (ordersError) throw ordersError
       const orderData = Array.isArray(orders) ? orders : []
-      // Sort orders by date desc initially if not already
-      orderData.sort((a,b) => new Date(b.created_at) - new Date(a.created_at))
+      // Sort orders by date_ordered desc initially if not already
+      orderData.sort((a,b) => new Date(b.date_ordered || b.created_at) - new Date(a.date_ordered || a.created_at))
       setOrdersList(orderData)
       setCurrentPage(1) // Reset to page 1 on new data
 
@@ -306,7 +306,7 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
      })
      const hourlyMap = {}
      orderData.forEach(o => {
-       const key = fmtHour.format(new Date(o.created_at)) // "06", "17", etc.
+       const key = fmtHour.format(new Date(o.date_ordered || o.created_at)) // "06", "17", etc.
        const amount = Number(o.total_inc_tax ?? o.total_amount ?? 0)
        if (!hourlyMap[key]) hourlyMap[key] = { count: 0, amount: 0 }
        hourlyMap[key].count += 1
@@ -652,8 +652,8 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
                     },
                     { 
                       header: 'Ordered Date', 
-                      accessor: 'created_at', 
-                      cell: (r) => new Date(r.created_at).toLocaleString('en-IN', {
+                      accessor: 'date_ordered', 
+                      cell: (r) => new Date(r.date_ordered || r.created_at).toLocaleString('en-IN', {
                         day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true
                       })
                     },

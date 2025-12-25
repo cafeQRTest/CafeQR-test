@@ -2383,16 +2383,16 @@ if (ordersByStatus.mobileFilter === 'inprogress') {
   mobileOrders = [
     ...ordersByStatus.in_progress,
     ...ordersByStatus.ready,
-  ].sort((a, b) => new Date(a.updated_at) - new Date(b.updated_at));
+  ].sort((a, b) => new Date(a.date_ordered || a.created_at) - new Date(b.date_ordered || b.created_at));
 } else if (ordersByStatus.mobileFilter === 'completed') {
   // Done: newest → oldest
   mobileOrders = [...(ordersByStatus.completed || [])].sort(
-    (a, b) => new Date(b.updated_at) - new Date(a.updated_at)
+    (a, b) => new Date(b.date_ordered || b.created_at) - new Date(a.date_ordered || a.created_at)
   );
 } else {
   // New column: oldest → newest
   mobileOrders = [...(ordersByStatus[ordersByStatus.mobileFilter] || [])].sort(
-    (a, b) => new Date(a.updated_at) - new Date(b.updated_at)
+    (a, b) => new Date(a.date_ordered || a.created_at) - new Date(b.date_ordered || b.created_at)
   );
 }
 
@@ -2858,7 +2858,7 @@ colOrders =
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                           <span style={{fontWeight:700, textTransform: 'uppercase', letterSpacing: '0.04em', fontSize: 7.5, color: '#cbd5e1'}}>Placed</span>
                           <span style={{fontWeight:600, color: '#475569'}}>
-                            {new Date(itemsModalOrder.created_at).toLocaleString('en-IN', {
+                            {new Date(itemsModalOrder.date_ordered || itemsModalOrder.created_at).toLocaleString('en-IN', {
                               month:'short', day:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit', hour12: true
                             })}
                           </span>

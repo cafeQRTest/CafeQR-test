@@ -141,11 +141,11 @@ const customerTiles = useMemo(() => {
     const { startUtc, endUtc } = istSpanUtcISO(startDate, endDate);
     const { data: orders, error: ordersErr } = await supabase
       .from('v_credit_orders_effective')
-      .select('id, credit_customer_id, customer_name, customer_phone, total_amount, total_tax, total_inc_tax, created_at, status')
+      .select('id, credit_customer_id, customer_name, customer_phone, total_amount, total_tax, total_inc_tax, created_at, date_ordered, status')
       .eq('restaurant_id', restaurantId)
-      .gte('created_at', startUtc)
-      .lt('created_at', endUtc)
-      .order('created_at', { ascending: false });
+      .gte('date_ordered', startUtc)
+      .lt('date_ordered', endUtc)
+      .order('date_ordered', { ascending: false });
     if (ordersErr) throw ordersErr;
 
     // 2) All ledger movements in range (source of truth for totals)
@@ -300,7 +300,7 @@ const customerTiles = useMemo(() => {
           <div className="cr-tile-head">
             <div>
               <div className="cr-tile-title">#{o.id.substring(0, 8)}</div>
-              <div className="cr-tile-sub">{formatDisplayDate(o.created_at)}</div>
+              <div className="cr-tile-sub">{formatDisplayDate(o.date_ordered || o.created_at)}</div>
             </div>
             <span className={`cr-badge ${o.status === 'completed' ? 'cr-badge-success' : 'cr-badge-warn'}`}>
               {o.status}
@@ -412,7 +412,7 @@ const customerTiles = useMemo(() => {
                     <td className="cr-right">₹{Number(order.total_amount || 0).toFixed(2)}</td>
                     <td className="cr-right">₹{Number(order.total_tax || 0).toFixed(2)}</td>
                     <td className="cr-right cr-strong">₹{Number(order.total_inc_tax || 0).toFixed(2)}</td>
-                    <td>{formatDisplayDate(order.created_at)}</td>
+                    <td>{formatDisplayDate(order.date_ordered || order.created_at)}</td>
                     <td className="cr-center">
                       <span className={`cr-badge ${order.status === 'completed' ? 'cr-badge-success' : 'cr-badge-warn'}`}>
                         {order.status}
@@ -512,7 +512,7 @@ const customerTiles = useMemo(() => {
               <div style={{ marginBottom: 20, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                  <div>
                     <div className="detail-label">Time Ordered</div>
-                    <div className="detail-val">{new Date(selectedOrder.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</div>
+                    <div className="detail-val">{new Date(selectedOrder.date_ordered || selectedOrder.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</div>
                  </div>
                  <div style={{ textAlign: 'right' }}>
                     <div className="detail-label">Order Status</div>

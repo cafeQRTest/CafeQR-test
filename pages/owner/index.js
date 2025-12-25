@@ -128,9 +128,9 @@ export default function OwnerOverview() {
 
         const { data: todayRows, error: todayErr } = await supabase
           .from('orders')
-          .select('total_inc_tax, status, created_at') // Simplified select
+          .select('total_inc_tax, status, created_at, date_ordered') // Simplified select
           .eq('restaurant_id', restaurantId)
-          .gte('created_at', startISO);
+          .gte('date_ordered', startISO);
         if (todayErr) throw todayErr;
 
         const rows = Array.isArray(todayRows) ? todayRows : [];
@@ -161,9 +161,9 @@ export default function OwnerOverview() {
       try {
         const { data, error } = await supabase
           .from('orders')
-          .select('id, created_at, status, total_inc_tax, gst_enabled, total_tax, subtotal_ex_tax') // Simplified select
+          .select('id, created_at, date_ordered, status, total_inc_tax, gst_enabled, total_tax, subtotal_ex_tax') // Simplified select
           .eq('restaurant_id', restaurantId)
-          .order('created_at', { ascending: false })
+          .order('date_ordered', { ascending: false })
           .limit(10);
         if (error) throw error;
         if (!cancel) setOrders(Array.isArray(data) ? data : []);
@@ -234,7 +234,7 @@ export default function OwnerOverview() {
                 <div style={{ marginBottom: 20, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                    <div>
                       <div className="detail-label">Time Ordered</div>
-                      <div className="detail-val">{new Date(selectedOrder.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</div>
+                      <div className="detail-val">{new Date(selectedOrder.date_ordered || selectedOrder.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</div>
                    </div>
                    <div style={{ textAlign: 'right' }}>
                       <div className="detail-label">Order Status</div>
@@ -670,7 +670,7 @@ function RecentOrders({ orders, loading, onViewOrder }) {
                 <tr key={o.id} onClick={() => onViewOrder && onViewOrder(o)} style={{ cursor: 'pointer' }}>
                   <td><strong>#{String(o.id).slice(0, 8)}</strong></td>
                   <td>
-                    {o.created_at ? new Date(o.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '--'}
+                    {o.date_ordered || o.created_at ? new Date(o.date_ordered || o.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '--'}
                   </td>
                   <td>
                      <span className={`status-pill ${String(o.status || 'new')}`}>

@@ -130,7 +130,7 @@ export class InvoiceService {
             order_id: order.id,
             invoice_no: invoiceNo,
             bill_no: nextBillNo,
-            invoice_date: new Date().toISOString(),
+            invoice_date: order.created_at || new Date().toISOString(),
             customer_name: order.customer_name || null,
             customer_gstin: order.customer_gstin || null,
             billing_address: order.billing_address || null,
@@ -149,7 +149,8 @@ export class InvoiceService {
             mixed_payment_details: order.mixed_payment_details || null,
             generation_method: regenerationReason ? 'regenerated' : 'auto',
             regenerated_from_invoice_id: null,
-            regeneration_reason: regenerationReason || null
+            regeneration_reason: regenerationReason || null,
+            date_ordered: order.date_ordered || order.created_at || new Date().toISOString()
           })
           .select()
           .single()

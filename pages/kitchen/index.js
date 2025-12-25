@@ -49,7 +49,7 @@ function KitchenOrderCard({ order, onStart }) {
         </span>
       </div>
       <div style={{ marginBottom: 8, fontSize: 11, color: '#888' }}>
-        {new Date(order.created_at).toLocaleTimeString()}
+        {new Date(order.date_ordered || order.created_at).toLocaleTimeString()}
       </div>
       <div style={{ marginBottom: 10, flex: 1, fontSize: '13px' }}>
         {items.length === 0 ? (
@@ -165,7 +165,7 @@ export default function KitchenPage() {
           .select('*, order_items(*, menu_items(name))')
           .eq('restaurant_id', restaurantId)
           .eq('status', 'new')
-          .order('created_at', { ascending: true });
+          .order('date_ordered', { ascending: true });
 
         if (error) throw error;
         setNewOrders(data || []);
@@ -209,21 +209,24 @@ export default function KitchenPage() {
                 .eq('id', orderData.id)
                 .single();
               if (error || !completeOrder) return;
+              
               setNewOrders((prev) => {
                 const filtered = prev.filter((o) => o.id !== completeOrder.id);
+                let nextList = filtered;
+
                 if (payload.eventType === 'INSERT' && completeOrder.status === 'new') {
                   if (audioRef.current) {
                     audioRef.current.play().catch(() => {});
                   }
-                  return [completeOrder, ...filtered];
+                  nextList = [completeOrder, ...filtered];
+                } else if (payload.eventType === 'UPDATE') {
+                  nextList = completeOrder.status === 'new' ? [completeOrder, ...filtered] : filtered;
+                } else if (payload.eventType === 'DELETE') {
+                  nextList = filtered;
                 }
-                if (payload.eventType === 'UPDATE') {
-                  return completeOrder.status === 'new' ? [completeOrder, ...filtered] : filtered;
-                }
-                if (payload.eventType === 'DELETE') {
-                  return filtered;
-                }
-                return prev;
+                
+                // Re-sort to respect date_ordered ascending (FIFO)
+                return nextList.sort((a, b) => new Date(a.date_ordered || a.created_at) - new Date(b.date_ordered || b.created_at));
               });
             } catch (error) {
               console.error('❌ Error processing realtime event:', error);

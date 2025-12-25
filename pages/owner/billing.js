@@ -42,7 +42,7 @@ export default function BillingPage() {
   const { restaurant, loading: restLoading } = useRestaurant();
   
   const [range, setRange] = useState({
-    start: new Date(new Date().setDate(new Date().getDate() - 30)),
+    start: new Date(new Date().setHours(0, 0, 0, 0)),
     end: new Date()
   });
 
@@ -108,9 +108,9 @@ export default function BillingPage() {
         .from('invoices')
         .select('*')
         .eq('restaurant_id', restaurant.id)
-        .gte('invoice_date', startUtc)
-        .lte('invoice_date', endUtc)
-        .order('invoice_date', { ascending: false });
+        .gte('date_ordered', startUtc)
+        .lte('date_ordered', endUtc)
+        .order('date_ordered', { ascending: false });
 
       if (error) throw error;
 
@@ -440,7 +440,7 @@ const exportHsnSummary = async () => {
                       </button>
                     ) 
                   },
-                  { header: 'Date', accessor: 'invoice_date', cell: (r) => new Date(r.invoice_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) },
+                  { header: 'Date', accessor: 'date_ordered', cell: (r) => new Date(r.date_ordered || r.invoice_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) },
                   { header: 'Customer', accessor: 'customer_name', cell: (r) => r.customer_name || 'Counter Guest' },
                   { header: 'Taxable', accessor: 'subtotal_ex_tax', cell: (r) => formatMoney(r.subtotal_ex_tax) },
                   { header: 'Tax', accessor: 'total_tax', cell: (r) => <span style={{ color: '#dc2626', fontWeight: 600 }}>{formatMoney(r.total_tax)}</span> },
@@ -517,7 +517,7 @@ const exportHsnSummary = async () => {
                     </div>
                     <div className="detail-item">
                       <div className="d-label"><FaCalendarDay /> Date</div>
-                      <div className="d-value">{new Date(selectedInvoice.invoice_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}</div>
+                      <div className="d-value">{new Date(selectedInvoice.date_ordered || selectedInvoice.invoice_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}</div>
                     </div>
                     <div className="detail-item">
                       <div className="d-label"><FaWallet /> Payment</div>

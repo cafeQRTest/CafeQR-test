@@ -38,6 +38,7 @@ export default async function handler(req, res) {
       original_payment_method = null,
       status: incomingStatus = null,
       number_of_customers = null, // optional
+      custom_created_at = null,
     } = req.body;
 
     if (!restaurant_id || !Array.isArray(items) || items.length === 0) {
@@ -209,6 +210,8 @@ export default async function handler(req, res) {
           credit_customer_id: credit_customer_id ?? null,
           original_payment_method: original_payment_method || null,
           number_of_customers: number_of_customers || null,
+          created_at: custom_created_at || undefined,
+          date_ordered: custom_created_at || new Date().toISOString(),
         },
       ])
       .select('id, created_at');

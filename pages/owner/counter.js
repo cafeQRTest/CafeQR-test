@@ -20,6 +20,8 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false, mode 
   const BRAND = mode === 'kitchen'
     ? { orange: '#f97316', orangeDark: '#ea580c', bgSoft: '#fff7ed', border: '#e5e7eb', text: '#111827' }
     : { orange: '#16a34a', orangeDark: '#15803d', bgSoft: '#ecfdf3', border: '#e5e7eb', text: '#111827' };
+
+  
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [showMixedForm, setShowMixedForm] = useState(false);
   const [cashAmount, setCashAmount] = useState('');
@@ -602,6 +604,11 @@ const getDraftOrQtyNumber = (cartId, fallbackQty) => {
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [numberOfCustomers, setNumberOfCustomers] = useState('');
+  const [orderDate, setOrderDate] = useState(() => {
+    const d = new Date();
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 10);
+  });
   const [paymentMethod, setPaymentMethod] = useState('cash');
 
   // Credit mode
@@ -1293,6 +1300,14 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
     ...(finalPaymentMethod === 'mixed' && mixedDetails
       ? { mixed_payment_details: mixedDetails }
       : {}),
+    custom_created_at: new Date(
+      Number(orderDate.split('-')[0]),
+      Number(orderDate.split('-')[1]) - 1,
+      Number(orderDate.split('-')[2]),
+      new Date().getHours(),
+      new Date().getMinutes(),
+      new Date().getSeconds()
+    ).toISOString(),
   };
 
   const res = await fetch('/api/orders/create', {
@@ -1379,7 +1394,16 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
       items,
       is_credit: isCredit,
       credit_customer_id: isCredit ? selectedCreditCustomerId : null,
-      original_payment_method: null
+      credit_customer_id: isCredit ? selectedCreditCustomerId : null,
+      original_payment_method: null,
+      custom_created_at: new Date(
+        Number(orderDate.split('-')[0]),
+        Number(orderDate.split('-')[1]) - 1,
+        Number(orderDate.split('-')[2]),
+        new Date().getHours(),
+        new Date().getMinutes(),
+        new Date().getSeconds()
+      ).toISOString()
     };
 
     const res = await fetch('/api/orders/create', {
@@ -1566,6 +1590,35 @@ window.dispatchEvent(
                 />
               </div>
             </div>
+            
+             {/* Backdate Configuration (New) */}
+             <div>
+                <SectionLabel>Date Ordered</SectionLabel>
+                <div style={{ maxWidth: '150px' }}>
+                   <input
+                     type="date"
+                     max={new Date().toLocaleDateString('en-CA')}
+                     value={orderDate}
+                     onChange={(e) => setOrderDate(e.target.value)}
+                     style={{
+                       width: '100%',
+                       padding: '12px 16px',
+                       borderRadius: '12px',
+                       border: `2px solid ${orderMode === 'kitchen' ? '#f97316' : '#22c55e'}`, // orange for kitchen, green for settle
+                       fontSize: '14px',
+                       fontWeight: 600,
+                       color: '#1e293b',
+                       outline: 'none',
+                       background: '#ffffff',
+                       fontFamily: 'inherit',
+                       transition: 'all 0.2s',
+                       boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                     }}
+                   />
+                </div>
+            </div>
+            
+
           </div>
 
           {/* Customer Details */}
@@ -2102,6 +2155,7 @@ const isVariantItem = !!item.hasvariants && (item.variants?.length || 0) > 0;
                 </div>
               )}
             </div>
+
             
             {/* Cart Body */}
             <div className="counter-drawer-body" style={{ 

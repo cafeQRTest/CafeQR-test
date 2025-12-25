@@ -105,7 +105,7 @@ const loadCustomerOrders = async (customerId) => {
       .select('*')
       .eq('restaurant_id', restaurantId)
       .eq('credit_customer_id', customerId)
-      .order('created_at', { ascending: false })
+      .order('date_ordered', { ascending: false })
       .limit(20);
     if (error) throw error;
     setCustomerOrders(prev => ({ ...prev, [customerId]: orders || [] }));
@@ -382,7 +382,7 @@ const handleViewOrder = async (order) => {
                         >
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                             <span style={{ fontWeight: 800, fontSize: 14 }}>#{o.id.substring(0, 8)}</span>
-                            <span style={{ fontSize: 12, color: '#6b7280' }}>{formatDisplayDate(o.created_at)}</span>
+                            <span style={{ fontSize: 12, color: '#6b7280' }}>{formatDisplayDate(o.date_ordered || o.created_at)}</span>
                           </div>
                           <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: 4 }}>
                             <span style={{ fontWeight: 800, color: BRAND.orange }}>{fmt.format(Number(o.total_inc_tax || o.total_amount || 0))}</span>
@@ -493,7 +493,7 @@ const handleViewOrder = async (order) => {
                                             return (
                                               <tr key={o.id} onClick={() => handleViewOrder(o)} style={{ cursor: 'pointer' }} className="clickable-order-row">
                                                 <td><strong style={{ color: '#111827' }}>#{o.id.substring(0, 8)}</strong></td>
-                                                <td>{formatDisplayDate(o.created_at)}</td>
+                                                <td>{formatDisplayDate(o.date_ordered || o.created_at)}</td>
                                                 <td style={{ textAlign: 'right' }}>{fmt.format(baseAmt)}</td>
                                                 <td style={{ textAlign: 'right' }}>{fmt.format(taxAmt)}</td>
                                                 <td style={{ textAlign: 'right', fontWeight: 800, color: '#f97316' }}>{fmt.format(totalIncl)}</td>
@@ -672,7 +672,7 @@ const handleViewOrder = async (order) => {
                 <div style={{ marginBottom: 20, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                    <div>
                       <div style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', marginBottom: 4 }}>Time Ordered</div>
-                      <div style={{ fontSize: 14, color: '#111827', fontWeight: 600 }}>{new Date(selectedOrder.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</div>
+                      <div style={{ fontSize: 14, color: '#111827', fontWeight: 600 }}>{new Date(selectedOrder.date_ordered || selectedOrder.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</div>
                    </div>
                    <div style={{ textAlign: 'right' }}>
                       <div style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', marginBottom: 4 }}>Order Status</div>

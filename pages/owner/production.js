@@ -111,8 +111,8 @@ export default function ProductionPage() {
         .from('orders')
         .select('items')
         .eq('restaurant_id', restaurantId)
-        .gte('created_at', `${selectedReportDate}T00:00:00`)
-        .lte('created_at', `${selectedReportDate}T23:59:59`)
+        .gte('date_ordered', `${selectedReportDate}T00:00:00`)
+        .lte('date_ordered', `${selectedReportDate}T23:59:59`)
         .neq('status', 'cancelled')
 
       if (ordErr) throw ordErr

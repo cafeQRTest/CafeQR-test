@@ -49,10 +49,10 @@ export default function AnalyticsPage() {
 
       const { data: orders, error: ordersError } = await supabase
         .from('orders')
-        .select('id, total_amount, total_inc_tax, created_at, status, items')
+        .select('id, total_amount, total_inc_tax, created_at, date_ordered, status, items')
         .eq('restaurant_id', restaurantId)
-        .gte('created_at', startUtc)
-        .lt('created_at', endUtc)
+        .gte('date_ordered', startUtc)
+        .lt('date_ordered', endUtc)
         .neq('status', 'cancelled');
 
       if (ordersError) throw ordersError;
@@ -79,7 +79,7 @@ export default function AnalyticsPage() {
       const hourFmt = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', hour12:         false });
       const hMap = {};
       orderData.forEach(o => {
-      const h = hourFmt.format(new Date(o.created_at));
+      const h = hourFmt.format(new Date(o.date_ordered || o.created_at));
       const amt = Number(o.total_inc_tax ?? o.total_amount ?? 0);
       if (!hMap[h]) hMap[h] = { count: 0, amount: 0 };
       hMap[h].count += 1; hMap[h].amount += amt;

@@ -47,9 +47,9 @@ export default async function handler(req, res) {
         )
       `)
       .eq('restaurant_id', restaurant_id)
-      .gte('invoice_date', `${from}T00:00:00Z`)
-      .lte('invoice_date', `${to}T23:59:59Z`)
-      .order('invoice_date', { ascending: true })
+      .gte('date_ordered', `${from}T00:00:00Z`)
+      .lte('date_ordered', `${to}T23:59:59Z`)
+      .order('date_ordered', { ascending: true })
       .order('line_no', { referencedTable: 'invoice_items', ascending: true });
 
     if (error) throw error;
@@ -101,7 +101,7 @@ export default async function handler(req, res) {
 
       const common = {
         'Invoice No': inv.invoice_no,
-        'Date': new Date(inv.invoice_date).toLocaleDateString('en-IN'),
+        'Date': new Date(inv.date_ordered || inv.invoice_date).toLocaleDateString('en-IN'),
         'Customer Name': inv.customer_name || 'Walk-in',
         'Customer GSTIN': inv.customer_gstin || '',
         'Place of Supply': inv.place_of_supply || '',
