@@ -32,7 +32,8 @@ export default function MenuItemCard({
   decimalPlaces = 2,
   isActive = false,
   highlightColor,
-  compact = false
+  compact = false,
+  onItemClick
 }) {
   const hasImage = !!item.image_url;
   const isOutOfStock =
@@ -112,7 +113,8 @@ export default function MenuItemCard({
     }
   };
 
-  const handleIncrease = () => {
+  const handleIncrease = (e) => {
+    e?.stopPropagation();
     if (isOutOfStock) return;
 
     if (onQuantityChange) {
@@ -124,7 +126,8 @@ export default function MenuItemCard({
     }
   };
 
-  const handleDecrease = () => {
+  const handleDecrease = (e) => {
+    e?.stopPropagation();
     if (isOutOfStock) return;
 
     if (onQuantityChange) {
@@ -136,7 +139,8 @@ export default function MenuItemCard({
     }
   };
 
-  const handleInitialAdd = () => {
+  const handleInitialAdd = (e) => {
+    e?.stopPropagation();
     if (isOutOfStock) return;
 
     if (onQuantityChange) {
@@ -178,6 +182,7 @@ export default function MenuItemCard({
   return (
     <div 
       style={cardStyle}
+      onClick={onItemClick}
       onMouseEnter={(e) => {
         e.currentTarget.style.transform = 'translateY(-4px)';
         e.currentTarget.style.boxShadow = '0 12px 30px rgba(0,0,0,0.08)';

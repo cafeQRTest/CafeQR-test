@@ -831,9 +831,10 @@ export default function OrderPage() {
                         onEdit={item.has_variants ? () => setEditingVariantItem(item) : undefined}
                         showImage={true}
                         highlightColor={brandColor}
+                        onItemClick={() => handleAddItem(item)}
                       />
                     </div>
-                  )
+                  );
                 }}
               />
             </section>
@@ -873,6 +874,7 @@ export default function OrderPage() {
                   return (
                     <div 
                       key={item.id}
+                      onClick={() => handleAddItem(item)}
                       style={{
                         display: 'flex',
                         gap: 16,
