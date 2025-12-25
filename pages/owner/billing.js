@@ -557,7 +557,10 @@ const exportHsnSummary = async () => {
                             <div key={idx} className="item-row">
                               <div className="item-main">
                                 <span className="qty">{item.quantity}x</span>
-                                <span className="name">{item.menu_items?.name || item.item_name || 'Item'}</span>
+                                <span className="name">
+                                  {item.menu_items?.name || item.item_name || 'Item'}
+                                  {item.variant_name ? ` (${item.variant_name})` : ''}
+                                </span>
                               </div>
                               <div className="item-price">
                                 {formatMoney(price * item.quantity)}
@@ -994,9 +997,10 @@ const exportHsnSummary = async () => {
         .section-label { font-size: 12px; font-weight: 800; text-transform: uppercase; color: #94a3b8; margin-bottom: 12px; border-bottom: 1px solid #f1f5f9; padding-bottom: 8px; }
         
         .items-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 32px; }
-        .item-row { display: flex; justify-content: space-between; align-items: center; }
-        .qty { color: #f97316; font-weight: 800; font-size: 13px; margin-right: 8px; background: #fff7ed; padding: 2px 6px; border-radius: 6px; }
-        .name { font-weight: 700; color: #334155; font-size: 14px; }
+        .item-row { display: flex; justify-content: space-between; align-items: flex-start; }
+        .item-main { display: flex; flex: 1; flex-direction: row; gap: 8px; align-items: baseline; }
+        .qty { display: inline-block; color: #f97316; font-weight: 800; font-size: 13px; margin-right: 6px; background: #fff7ed; padding: 2px 6px; border-radius: 6px; align-self: flex-start; margin-bottom: 2px; width: fit-content; }
+        .name { font-weight: 700; color: #334155; font-size: 14px; line-height: 1.4; }
         .item-price { font-weight: 800; color: #0f172a; font-size: 14px; }
 
         .summary-section { background: #f8fafc; padding: 20px; border-radius: 16px; display: flex; flex-direction: column; gap: 8px; }

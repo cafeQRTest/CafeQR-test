@@ -42,7 +42,7 @@ export default function OrderDetailsModal({ order, onClose, onStatusChange }) {
           {items.map((it, i) => (
             <div key={i} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
               <div>
-                {it.quantity || 1}× {it.name}
+                {it.quantity || 1}× {it.name} {it.variant_name ? `(${it.variant_name})` : ''}
                 {it.notes && <div className="muted" style={{ fontSize: 13 }}>{it.notes}</div>}
               </div>
               <div>₹{((it.quantity||1)*(it.price||0)).toFixed(2)}</div>
