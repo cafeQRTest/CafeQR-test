@@ -157,6 +157,7 @@ export default function MenuItemCard({
   // Dynamic styles based on usage
   const cardStyle = {
     ...styles.card,
+    cursor: onItemClick ? 'pointer' : 'default',
     ...(compact ? {
       minHeight: 'auto',
       maxHeight: 'none', // Allow it to shrink
@@ -273,7 +274,7 @@ export default function MenuItemCard({
                 ...styles.addButton,
                 ...(compact ? { padding: '8px', fontSize: '12px' } : {})
               }}
-              onClick={() => !isOutOfStock && onAdd?.(item)}
+              onClick={(e) => { e.stopPropagation(); !isOutOfStock && onAdd?.(item); }}
               disabled={isOutOfStock}
             >
               {isOutOfStock ? 'OUT OF STOCK' : (

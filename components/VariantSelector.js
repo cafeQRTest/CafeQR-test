@@ -378,7 +378,7 @@ const Overlay = styled.div`
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: ${props => props.zIndex || 1000};
+  z-index: ${props => props.zIndex || 9999};
   padding: 20px;
   animation: fadeIn 0.2s ease;
 

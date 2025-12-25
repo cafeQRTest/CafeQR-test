@@ -680,7 +680,14 @@ export default function MenuPage() {
                {visible.map(item => {
                  const available = item.status === "available";
                  return (
-                   <div key={item.id} style={{ padding: 16, borderBottom: '1px solid #f3f4f6', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                   <div 
+                     key={item.id} 
+                     style={{ padding: 16, borderBottom: '1px solid #f3f4f6', display: 'flex', flexDirection: 'column', gap: 10, cursor: 'pointer' }}
+                     onClick={(e) => {
+                       if (e.target.closest('button') || e.target.closest('input')) return;
+                       setDetailPopupItem(item);
+                     }}
+                   >
                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
                          <input
@@ -970,7 +977,10 @@ export default function MenuPage() {
                         <td className="hide-sm" style={{ width: '75px' }}>
                           {item.image_url ? (
                             <div 
-                              onClick={() => setViewImage(item.image_url)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setViewImage(item.image_url);
+                              }}
                               style={{ 
                                 width: 40, height: 40, 
                                 overflow: 'hidden', borderRadius: 6, 

@@ -605,8 +605,11 @@ if (code.trim()) {
         className="ie-modal" 
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="ie-header-area">
+        <div className="ie-header-area" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h3 className="ie-title">{isEdit ? "Edit Item" : "Add Item"}</h3>
+          <button type="button" onClick={handleClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 4 }}>
+             <span style={{ fontSize: 24, color: '#92400e', lineHeight: 1 }}>✕</span>
+          </button>
         </div>
         <div className="ie-scroll-content">
           {err && <div className="ie-error">{err}</div>}
