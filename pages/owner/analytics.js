@@ -105,18 +105,7 @@ export default function AnalyticsPage() {
     }
   };
 
-  const generateHourlyData = (orders, isToday) => {
-    if (!isToday) return [];
-    const hourlyRevenue = new Array(24).fill(0);
-    orders.forEach(o => {
-      const hour = new Date(o.created_at).getHours();
-      hourlyRevenue[hour] += Number(o.total_inc_tax ?? o.total_amount ?? 0);
-    });
-    return hourlyRevenue.map((revenue, hour) => ({
-      hour: `${hour.toString().padStart(2, '0')}:00`,
-      revenue: Math.round(revenue),
-    }));
-  };
+
 
   const formatCurrency = (n) => `₹${Number(n).toFixed(2)}`;
 
