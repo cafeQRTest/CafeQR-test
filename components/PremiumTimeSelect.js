@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { FaChevronDown, FaClock } from 'react-icons/fa';
 
-export default function PremiumTimeSelect({ value, onChange, disabled, themeColor = '#f97316' }) {
+export default function PremiumTimeSelect({ value, onChange, disabled, themeColor = '#f97316', overrideStyle = {} }) {
   const [isOpen, setIsOpen] = useState(false);
   const wrapperRef = useRef(null);
   
@@ -17,6 +17,8 @@ export default function PremiumTimeSelect({ value, onChange, disabled, themeColo
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  // ... (keeping existing scroll logic) ...
 
   // Scroll to selected item when opened
   useEffect(() => {
@@ -43,6 +45,7 @@ export default function PremiumTimeSelect({ value, onChange, disabled, themeColo
       <div 
         className={`trigger ${disabled ? 'disabled' : ''} ${isOpen ? 'open' : ''}`}
         onClick={() => !disabled && setIsOpen(!isOpen)}
+        style={overrideStyle}
       >
         <div className="trigger-content">
            <div className="icon-badge">

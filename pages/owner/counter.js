@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/router';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import styled from 'styled-components';
 import { useRequireAuth } from '../../lib/useRequireAuth';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { getSupabase } from '../../services/supabase';
@@ -1496,7 +1497,7 @@ window.dispatchEvent(
         </div>
 
         <ControlsCard theme={THEME}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '24px' }}>
             {/* Mode & Type Selection */}
             <div>
               <SectionLabel>Order Configuration</SectionLabel>
@@ -1601,14 +1602,15 @@ window.dispatchEvent(
              {/* Backdate Configuration (New) */}
              <div>
                 <SectionLabel>Date & Time</SectionLabel>
-                <div style={{ maxWidth: '300px', display: 'flex', gap: '8px' }}>
+                <DateTimeContainer>
+                   <DateInputWrapper>
                    <input
                      type="date"
                      max={new Date().toLocaleDateString('en-CA')}
                      value={orderDate}
                      onChange={(e) => setOrderDate(e.target.value)}
                      style={{
-                       flex: 2,
+                       width: '100%', // Ensure input takes full width of wrapper
                        padding: '9.5px 12px',
                        borderRadius: '8px',
                        border: `1.5px solid ${orderMode === 'kitchen' ? '#f97316' : '#22c55e'}`,
@@ -1619,17 +1621,32 @@ window.dispatchEvent(
                        background: '#ffffff',
                        fontFamily: 'inherit',
                        transition: 'all 0.2s',
-                       boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                       boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                       boxSizing: 'border-box', // Prevent padding overflow
+                       maxWidth: '100%',
+                       margin: 0
                      }}
                    />
-                   <div style={{ flex: 1.2 }}>
+                   </DateInputWrapper>
+                   <TimeInputWrapper>
                      <PremiumTimeSelect
                        value={orderTime}
                        onChange={(e) => setOrderTime(e.target.value)}
                        themeColor={orderMode === 'kitchen' ? '#f97316' : '#22c55e'}
+                       overrideStyle={{
+                         border: `1.5px solid ${orderMode === 'kitchen' ? '#f97316' : '#22c55e'}`,
+                         borderRadius: '8px',
+                         boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                         padding: '9.5px 12px',
+                         height: '42.5px', 
+                         width: '100%',
+                         boxSizing: 'border-box', // Prevent padding overflow
+                         maxWidth: '100%',
+                         margin: 0
+                       }}
                      />
-                   </div>
-                </div>
+                   </TimeInputWrapper>
+                </DateTimeContainer>
             </div>
             
 
@@ -2743,3 +2760,33 @@ onClick={() => {
         </div>
   );
 }
+
+const DateTimeContainer = styled.div`
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  @media (min-width: 640px) {
+    flex-direction: row;
+    gap: 12px;
+  }
+`;
+
+const DateInputWrapper = styled.div`
+  width: 100%;
+  min-width: 0; /* Fix flex overflow */
+  @media (min-width: 640px) {
+    flex: 2;
+    width: auto;
+  }
+`;
+
+const TimeInputWrapper = styled.div`
+  width: 100%;
+  min-width: 0; /* Fix flex overflow */
+  @media (min-width: 640px) {
+    flex: 1.2;
+    width: auto;
+  }
+`;
