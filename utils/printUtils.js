@@ -146,22 +146,34 @@ function renderLogoFromBitmap(restaurantProfile, width) {
 // Helper: Build item row with word-wrapped name
 function buildItemRow(item, width) {
   // Format: NAME (wrapped to 14 chars) | QTY | RATE | TOTAL
-  // For now, first line only - we'll handle multi-line items separately
   
   const name = (item.name || '').substring(0, 14).padEnd(14);
-  const qty = `${item.quantity}`.padStart(2);
   
+  // Format quantity with UOM
+  const qtyNum = Number(item.quantity || 0);
+  let qtyStr = qtyNum % 1 === 0 ? String(qtyNum) : String(Number(qtyNum.toFixed(3))); // Remove trailing zeros for decimals
+  
+  // Append UOM if present. 
+  // We check uom_short_code (from order_items snapshot) or fallback to uom name
+  const uom = item.uom_short_code || item.uom || '';
+  if (uom && uom.toLowerCase() !== 'pc') {
+     qtyStr += ' ' + uom;
+  }
+  
+  // Pad to 6 chars to fit "1.25kg"
+  const qty = qtyStr.padStart(6).substring(0, 6); 
+
   const rateNum = Number(item.price || 0);
   const rate = rateNum % 1 === 0 
     ? rateNum.toFixed(0).padStart(4)
     : rateNum.toFixed(2).padStart(4);
   
-  const totalNum = rateNum * Number(item.quantity || 1);
+  const totalNum = rateNum * qtyNum;
   const total = totalNum % 1 === 0
     ? totalNum.toFixed(0).padStart(5)
     : totalNum.toFixed(2).padStart(5);
   
-  return `${name}${qty}  ${rate}  ${total}`;
+  return `${name}${qty} ${rate} ${total}`;
 }
 
 function getReceiptWidth(restaurantProfile) {
@@ -251,12 +263,20 @@ export function buildKotText(order, restaurantProfile) {
       if (items.length) {
     lines.push('ITEM                     QTY');  // simple KOT header
     items.forEach(item => {
-      const nameLines = wrapText(item.name || 'Item', W - 5);
+      const nameLines = wrapText(item.name || 'Item', W - 7); // Reserve 6 chars for qty + 1 space
       if (!nameLines.length) return;
-      const qty = String(item.quantity ?? 1).padStart(3);
+      
+      const qtyNum = Number(item.quantity || 1);
+      let qtyStr = qtyNum % 1 === 0 ? String(qtyNum) : String(Number(qtyNum.toFixed(3)));
+      
+      const uom = item.uom_short_code || item.uom || '';
+      if (uom && uom.toLowerCase() !== 'pc') {
+          qtyStr += ' ' + uom;
+      }
+      const qty = qtyStr.padStart(6).substring(0,6);
 
       // first line: name + qty at end
-      lines.push(nameLines[0].padEnd(W - 4) + ' ' + qty);
+      lines.push(nameLines[0].padEnd(W - 7) + ' ' + qty);
 
       // extra lines: just the continued name
       for (let i = 1; i < nameLines.length; i++) {
@@ -270,16 +290,23 @@ export function buildKotText(order, restaurantProfile) {
       lines.push('ITEM                     QTY');
 
       removedItems.forEach(ri => {
-        const nameLines = wrapText(ri.name || 'Item', W - 5);
+        const nameLines = wrapText(ri.name || 'Item', W - 7);
         if (!nameLines.length) return;
-        const qty = String(ri.quantity ?? 1).padStart(3);
+        
+        const qtyNum = Number(ri.quantity || 1);
+        let qtyStr = qtyNum % 1 === 0 ? String(qtyNum) : String(Number(qtyNum.toFixed(3)));
+        const uom = ri.uom_short_code || ri.uom || '';
+        if (uom && uom.toLowerCase() !== 'pc') {
+          qtyStr += ' ' + uom;
+        }
+        const qty = qtyStr.padStart(6).substring(0,6);
 
-        // prefix with "-" so kitchen immediately sees it as cancellation
-        const firstName = ('- ' + nameLines[0]).substring(0, W - 5);
-        lines.push(firstName.padEnd(W - 4) + ' ' + qty);
+        // prefix with "-" 
+        const firstName = ('- ' + nameLines[0]).substring(0, W - 7);
+        lines.push(firstName.padEnd(W - 7) + ' ' + qty);
 
         for (let i = 1; i < nameLines.length; i++) {
-          const cont = ('  ' + nameLines[i]).substring(0, W);
+          const cont = ('  ' + nameLines[i]).substring(0, W); // Indent continuation lines
           lines.push(cont);
         }
       });
@@ -416,7 +443,8 @@ export async function downloadTextAndShare(order, bill, restaurantProfile) {
       
       // First line with quantities/rates/totals
       const rateNum = Number(item.price || 0);
-      const totalNum = rateNum * Number(item.quantity || 1);
+      const qtyNum = Number(item.quantity || 1);
+      const totalNum = rateNum * qtyNum;
       
       const rate = rateNum % 1 === 0 
         ? rateNum.toFixed(0).padStart(4)
@@ -426,8 +454,18 @@ export async function downloadTextAndShare(order, bill, restaurantProfile) {
         ? totalNum.toFixed(0).padStart(5)
         : totalNum.toFixed(2).padStart(5);
       
-      const qty = `${item.quantity}`.padStart(2);
-      const firstLine = nameLines[0].padEnd(14) + qty + '  ' + rate + '  ' + total;
+      // Helper to format quantity
+      let qtyStr = qtyNum % 1 === 0 ? String(qtyNum) : String(Number(qtyNum.toFixed(3)));
+      const uom = item.uom_short_code || item.uom || '';
+      if (uom && uom.toLowerCase() !== 'pc') {
+          qtyStr += ' ' + uom;
+      }
+      const qty = qtyStr.padStart(6).substring(0, 6);
+
+      // Adjusted spacing to match new QTY width (6 chars) + spaces
+      // Name (14) + Qty(6) + Rate(4) + Total(5) + spaces = 14 + 0 + 6 + 1 + 4 + 1 + 5 = 31? No, let's keep it tight.
+      // Name(14) + Qty(6) + Rate(4) + Total(5) + 3 spaces = 32
+      const firstLine = nameLines[0].padEnd(14) + qty + ' ' + rate + ' ' + total;
       lines.push(firstLine);
       
       // Additional name lines (if wrapped to multiple lines)

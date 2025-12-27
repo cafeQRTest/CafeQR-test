@@ -8,9 +8,10 @@ import { getSupabase } from '../../services/supabase';
 import NiceSelect from '../../components/NiceSelect';
 
 // Standard units commonly used in restaurants for ingredients
-const RESTAURANT_UNITS = ['kg', 'g', 'L', 'ml', 'pcs', 'dozen'];
+// We now fetch these from the DB, but keep a fallback just in case
+const FALLBACK_UNITS = ['kg', 'g', 'L', 'ml', 'pc', 'dozen'];
 
-function UnitSelect({ value, onChange, disabled, placeholder = 'Select unit...' }) {
+function UnitSelect({ value, onChange, disabled, placeholder = 'Select unit...', options = [] }) {
   const [open, setOpen] = React.useState(false);
   const wrapperRef = React.useRef(null);
 
@@ -45,7 +46,7 @@ function UnitSelect({ value, onChange, disabled, placeholder = 'Select unit...' 
       </UnitSelectButton>
       {open && !disabled && (
         <UnitSelectList role="listbox">
-          {RESTAURANT_UNITS.map((unit) => (
+          {(options && options.length > 0 ? options : FALLBACK_UNITS).map((unit) => (
             <UnitOption
               key={unit}
               type="button"
@@ -72,6 +73,7 @@ export default function InventoryPage() {
   const [recipes, setRecipes] = useState([])
   const [menuItems, setMenuItems] = useState([])
   const [loading, setLoading] = useState(true)
+  const [uoms, setUoms] = useState([]) // From valid unit_of_measures table
   const [error, setError] = useState('')
   const [editingIngredient, setEditingIngredient] = useState(null)
   const [ingredientForm, setIngredientForm] = useState({ name: '', unit: '', current_stock: 0, reorder_threshold: 0 })
@@ -92,14 +94,22 @@ export default function InventoryPage() {
     Promise.all([
       supabase.from('ingredients').select('*').eq('restaurant_id', restaurantId),
       supabase.from('recipes').select('id,menu_item_id,variant_option_id,recipe_items(*,ingredients(name,unit))').eq('restaurant_id', restaurantId),
-      supabase.from('menu_items').select('id,name,is_packaged_good').eq('restaurant_id', restaurantId)
-    ]).then(async ([ingRes, recRes, menuRes]) => {
+      supabase.from('menu_items').select('id,name,is_packaged_good').eq('restaurant_id', restaurantId),
+      supabase.from('unit_of_measures').select('short_code').or(`restaurant_id.is.null,restaurant_id.eq.${restaurantId}`).order('short_code')
+    ]).then(async ([ingRes, recRes, menuRes, uomRes]) => {
       if (ingRes.error || recRes.error || menuRes.error) {
         setError(ingRes.error?.message || recRes.error?.message || menuRes.error?.message)
       } else {
         setIngredients(ingRes.data || [])
         setRecipes(recRes.data || [])
         
+        // Populate UOM options
+        if (uomRes.data) {
+           const codes = uomRes.data.map(u => u.short_code);
+           // Dedup
+           setUoms([...new Set(codes)]);
+        }
+
         let items = menuRes.data || []
         // Fetch variants for these items
         if (items.length > 0) {
@@ -121,6 +131,39 @@ export default function InventoryPage() {
       setLoading(false)
     })
   }, [checking, restLoading, restaurantId, supabase])
+
+  // Realtime subscription for ingredients
+  useEffect(() => {
+    if (!restaurantId || !supabase) return;
+
+    const channel = supabase
+      .channel(`inventory-${restaurantId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'ingredients',
+          filter: `restaurant_id=eq.${restaurantId}`,
+        },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            setIngredients((prev) => [...prev, payload.new]);
+          } else if (payload.eventType === 'UPDATE') {
+            setIngredients((prev) =>
+              prev.map((i) => (i.id === payload.new.id ? payload.new : i))
+            );
+          } else if (payload.eventType === 'DELETE') {
+            setIngredients((prev) => prev.filter((i) => i.id !== payload.old.id));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [restaurantId, supabase]);
 
   const startEdit = (ing) => {
     setEditingIngredient(ing.id)
@@ -669,7 +712,7 @@ export default function InventoryPage() {
                   onChange={(unit) => setIngredientForm({ ...ingredientForm, unit })}
                   disabled={!!editingIngredient}
                   placeholder="Select unit..."
-                  options={RESTAURANT_UNITS.map((u) => ({ value: u, label: u }))}
+                  options={(uoms.length > 0 ? uoms : FALLBACK_UNITS).map((u) => ({ value: u, label: u }))}
                 />
               </FormGroup>
               <FormGroup>

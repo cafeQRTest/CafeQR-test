@@ -6,6 +6,7 @@ import { useRequireAuth } from '../../lib/useRequireAuth';
 import { useRestaurant } from '../../context/RestaurantContext';
 import { useSubscription } from '../../context/SubscriptionContext';
 import { getSupabase } from '../../services/supabase';
+import UomManager from "../../components/UomManager";
 import PrinterSetupCard from '../../components/PrinterSetupCard';
 import NiceSelect from '../../components/NiceSelect';
 import { fileToBitmapGrid } from '../../utils/logoBitmap';
@@ -662,6 +663,8 @@ export default function SettingsPage() {
   const { refresh: refreshSubscription } = useSubscription();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [showUomManager, setShowUomManager] = useState(false);
+  const [defaultUomName, setDefaultUomName] = useState(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [showToast, setShowToast] = useState(false);
@@ -693,6 +696,70 @@ export default function SettingsPage() {
     }
   }, [showToast]);
 
+  
+
+  useEffect(() => {
+    fetchRestaurant();
+  }, [supabase]);
+
+  const fetchRestaurant = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        window.location.href = '/login';
+        return;
+      }
+      
+      const { data, error } = await supabase
+        .from('restaurants')
+        .select('*, default_uom:unit_of_measures!default_uom_id(name)')
+        .eq('owner_email', user.email)
+        .single();
+        
+      if (error) throw error;
+      if (data) {
+        // setRestaurant(data); // This line is commented out as useRestaurant hook already provides it
+        if (data.default_uom) {
+             // Handle both object (single relation) and array (if misconfigured)
+             const uomName = Array.isArray(data.default_uom) ? data.default_uom[0]?.name : data.default_uom.name;
+             setDefaultUomName(uomName);
+        } else {
+             setDefaultUomName(null);
+        }
+        
+        // Pre-fill form - this part is handled by the existing useEffect below
+        // setForm({
+        //   id: data.id,
+        //   name: data.name || '',
+        //   phone: data.phone || '',
+        //   address: data.address || '',
+        //   upi_id: data.upi_id || '',
+        //   logo_url: data.logo_url || '',
+        //   tables_count: data.tables_count || 10,
+        //   table_prefix: data.table_prefix || '',
+        //   owner_lat: data.owner_lat || '',
+        //   owner_lng: data.owner_lng || '',
+        //   theme_color: data.theme_color || '#f97316',
+        //   gst_enabled: data.gst_enabled || false,
+        //   gstin: data.gstin || '',
+        //   default_tax_rate: data.default_tax_rate || 0,
+        //   fssai_cert_number: data.fssai_cert_number || '', // Added
+        //   business_legal_name: data.business_legal_name || '', // Added
+        //   printer_name: data.printer_name || 'POS-80', // Added printer defaults
+        //   printer_ip: data.printer_ip || '192.168.1.100',
+        //   printer_width: data.printer_width || 80,
+        //   features_menu_images_enabled: !!data.features_menu_images_enabled, // ensure boolean
+        // });
+        // setOriginalTables(data.tables_count);
+        
+        // Set images
+        // if (data.logo_url) setLogoPreview(data.logo_url);
+      }
+    } catch (err) {
+      console.error(err);
+      // alert('Error loading settings');
+    }
+  };
   useEffect(() => {
    if (!restaurant?.id || !supabase) return;
     async function load() {
@@ -884,6 +951,13 @@ export default function SettingsPage() {
           </Toast>
       )}
 
+      {showUomManager && restaurant?.id && (
+        <UomManager
+            restaurantId={restaurant.id}
+            onClose={() => setShowUomManager(false)}
+        />
+      )}
+
       <form onSubmit={save}>
         <ContentGrid>
           
@@ -1006,6 +1080,68 @@ export default function SettingsPage() {
 
           </SectionCard>
 
+          {/* UNITS CARD */}
+          <SectionCard>
+            <SectionHeader>
+              <SectionIcon>📏</SectionIcon>
+              <div>
+                 <SectionTitle>UOM Management</SectionTitle>
+                 <div style={{fontSize: 13, color:'gray', fontWeight:400}}>Manage measurement units and product quantity defaults</div>
+              </div>
+            </SectionHeader>
+            <SectionBody>
+               <FormField span={2}>
+                  <div style={{
+                     display:'flex', alignItems:'center', justifyContent:'space-between',
+                     padding: '24px 28px', 
+                     background: '#ffffff', 
+                     border: '1px solid #e2e8f0', 
+                     borderRadius: '16px',
+                     boxShadow: '0 2px 4px rgba(15, 23, 42, 0.03)'
+                  }}>
+                     <div style={{flex:1, display:'flex', alignItems:'center', gap:16}}>
+                        <div style={{fontWeight:600, color:'#0f172a', fontSize:16}}>
+                          Units & Defaults
+                        </div>
+                        
+                        <div style={{height: 24, width: 1, background: '#e2e8f0'}}></div>
+
+                        {defaultUomName ? (
+                            <div style={{
+                                display:'flex', alignItems:'center', gap:6,
+                                background: '#f8fafc',
+                                padding: '6px 14px',
+                                borderRadius: '8px',
+                                border: '1px solid #e2e8f0'
+                            }}>
+                                <span style={{fontSize:13, fontWeight:500, color:'#64748b'}}>Default:</span>
+                                <span style={{fontSize:14, fontWeight:600, color:'#0f172a'}}>
+                                  {defaultUomName}
+                                </span>
+                            </div>
+                        ) : (
+                            <div style={{
+                                background:'#fff7ed', color:'#c2410c', 
+                                padding:'6px 14px', borderRadius:'8px', 
+                                border:'1px solid #ffedd5', fontSize:13, fontWeight:600
+                            }}>
+                                Setup Required
+                            </div>
+                        )}
+                     </div>
+                     <ActionButton type="button" onClick={() => setShowUomManager(true)} style={{
+                        padding:'8px 20px', fontSize:14, fontWeight:600, height:'40px', 
+                        background:'white', color:'#0f172a', border:'1px solid #cbd5e1', 
+                        boxShadow:'0 1px 2px rgba(0,0,0,0.05)',
+                        borderRadius: '8px'
+                     }}>
+                        Manage
+                     </ActionButton>
+                  </div>
+               </FormField>
+            </SectionBody>
+          </SectionCard>
+
           {/* OPERATIONS CARD */}
           <SectionCard>
             <SectionHeader>
@@ -1025,6 +1161,7 @@ export default function SettingsPage() {
                   <Label>Table Prefix</Label>
                   <Input value={form.table_prefix} onChange={onChange('table_prefix')} placeholder="e.g. T" maxLength={3} />
                </FormField>
+               {/* OPERATIONS CARD */}
                <FormField span={2}>
                   <Label>UPI ID (VPA) <Required>*</Required></Label>
                   <Input value={form.upi_id} onChange={onChange('upi_id')} placeholder="merchant@upi" />
@@ -1259,20 +1396,30 @@ export default function SettingsPage() {
         </ContentGrid>
 
         <SaveBar>
-  <SaveBtn
-    primary
-    disabled={saving}
-    onClick={save}
-    style={{
-      padding: '16px 32px',
-      fontSize: 16,
-      borderRadius: 100,
-      boxShadow: '0 10px 20px -5px rgba(249, 115, 22, 0.4)',
-    }}
-  >
-    {saving ? 'Saving...' : '✨ Save Changes'}
-  </SaveBtn>
-</SaveBar>
+          <SaveBtn
+            primary
+            disabled={saving}
+            onClick={save}
+            style={{
+              padding: '16px 32px',
+              fontSize: 16,
+              borderRadius: 100,
+              boxShadow: '0 10px 20px -5px rgba(249, 115, 22, 0.4)',
+            }}
+          >
+            {saving ? 'Saving...' : '✨ Save Changes'}
+          </SaveBtn>
+        </SaveBar>
+
+        {showUomManager && (
+            <UomManager 
+              restaurantId={restaurant?.id}
+              onClose={() => setShowUomManager(false)}
+              onSaved={() => {
+                  fetchRestaurant(); // Refresh to update default name pill
+              }}
+            />
+        )}
 
       </form>
     </PageContainer>

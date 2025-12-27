@@ -154,6 +154,7 @@ export default async function handler(req, res) {
         tax_rate: effectiveRate,
         hsn: it.hsn || null,
         is_packaged_good: isPackaged,
+        uom_short_code: it.uom_short_code || null,
       };
     });
 

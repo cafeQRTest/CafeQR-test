@@ -24,11 +24,16 @@ DROP FUNCTION IF EXISTS public.handle_new_user();
 -- 4. TRIGGER FUNCTION: The robust logic to create a restaurant on signup
 CREATE OR REPLACE FUNCTION public.handle_new_user() 
 RETURNS TRIGGER AS $$
+DECLARE
+  default_ea_id UUID;
 BEGIN
+  -- Get ID for 'Each' unit
+  SELECT id INTO default_ea_id FROM unit_of_measures WHERE short_code = 'ea' LIMIT 1;
+
   -- Insert a new restaurant for the user.
   -- Uses ON CONFLICT matching user's UNIQUE constraints (owner_email) to avoid crashing.
-  INSERT INTO public.restaurants (name, owner_email, owner_id)
-  VALUES ('My Restaurant', NEW.email, NEW.id)
+  INSERT INTO public.restaurants (name, owner_email, owner_id, default_uom_id)
+  VALUES ('My Restaurant', NEW.email, NEW.id, default_ea_id)
   ON CONFLICT (owner_email) DO NOTHING;
   
   RETURN NEW;

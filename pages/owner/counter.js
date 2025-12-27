@@ -747,7 +747,8 @@ const [orderMode, setOrderMode] = useState('settle');
         const { data: menu, error: menuErr } = await supabase
           .from('menu_items')
           .select(`
-            id,name,price,category,veg,status,hsn,tax_rate,is_packaged_good,code_number,image_url,has_variants,
+            id,name,price,category,veg,status,hsn,tax_rate,is_packaged_good,code_number,image_url,has_variants,uom_id,
+            uom:unit_of_measures(short_code, precision),
             menu_item_variants(
               variant_templates(
                 id,
@@ -840,7 +841,9 @@ const [orderMode, setOrderMode] = useState('settle');
             variants: variants.sort((a, b) => a.display_order - b.display_order),
             variant_template_name: item.has_variants ? templateName : null,
             addon_groups: addonGroups,
-            has_addons: hasAddons
+            has_addons: hasAddons,
+            uom_short_code: item.uom?.short_code || null,
+            uom_precision: item.uom?.precision || 0
           };
         });
         
@@ -1282,6 +1285,7 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
     code_number: i.code_number,
     variant_id: i.variant_id || null,
     variant_name: i.variant_name || null,
+    uom_short_code: i.uom_short_code || null
   }));
 
   const isCredit = isCreditSale;
@@ -1380,7 +1384,8 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
     const items = cart.map((i) => ({
       id: i.id, name: i.displayName || i.name, price: i.price, quantity: round2(i.quantity),
       hsn: i.hsn, tax_rate: i.tax_rate, is_packaged_good: i.is_packaged_good, code_number: i.code_number,
-      variant_id: i.variant_id || null, variant_name: i.variant_name || null
+      variant_id: i.variant_id || null, variant_name: i.variant_name || null,
+      uom_short_code: i.uom_short_code || null
     }));
 
     const isCredit = isCreditSale;

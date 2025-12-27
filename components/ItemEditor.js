@@ -1,6 +1,7 @@
 // components/ItemEditor.js
 
 import { useState, useEffect, useMemo, useRef } from "react";
+import UomManager from "./UomManager";
 import NiceSelect from "./NiceSelect";
 
 const STORAGE_KEY = 'itemEditorDraft';
@@ -20,6 +21,8 @@ export default function ItemEditor({
 
   const [cats, setCats] = useState([]);
   const [loadingCats, setLoadingCats] = useState(false);
+  const [uoms, setUoms] = useState([]);
+  const [uomId, setUomId] = useState(item?.uom_id || null);
 
   const [code, setCode] = useState(item?.code_number || "");
   const [name, setName] = useState(item?.name || "");
@@ -97,6 +100,19 @@ export default function ItemEditor({
   const [upsellSearch, setUpsellSearch] = useState("");
   const [tempSelectedUpsells, setTempSelectedUpsells] = useState(new Set());
 
+  const [showUomManager, setShowUomManager] = useState(false);
+
+  // Fetch UOMs
+  const fetchUoms = () => {
+    if(!supabase || !restaurantId) return;
+    supabase
+      .from("unit_of_measures")
+      .select("id, name, short_code, restaurant_id")
+      .or(`restaurant_id.is.null,restaurant_id.eq.${restaurantId}`)
+      .order("name")
+      .then(({ data }) => setUoms(data || []));
+  };
+
   useEffect(() => {
 // ... existing code ...
 
@@ -111,12 +127,45 @@ export default function ItemEditor({
         setLoadingCats(false);
         if (!error) setCats(data || []);
       });
+
+    fetchUoms();
   }, [open, restaurantId, supabase]);
+
+  const [defaultUomId, setDefaultUomId] = useState(null);
+
+  // Fetch default UOM
+  useEffect(() => {
+    if(!supabase || !restaurantId) return;
+    const fetchDefault = async () => {
+      const { data } = await supabase.from('restaurants').select('default_uom_id').eq('id', restaurantId).single();
+      if(data) setDefaultUomId(data.default_uom_id);
+    };
+    fetchDefault();
+  }, [supabase, restaurantId]);
+
+  // Handle UOMs formatting
+  const uomOptions = useMemo(() => {
+     const defUom = uoms.find(u => u.id === defaultUomId);
+     // Normalize 'Pieces' to 'Each' for display if somehow stale data persists
+     let defName = defUom ? defUom.name : 'Each';
+     if (defName === 'Pieces') defName = 'Each';
+
+     const defaultLabel = `Default (${defName})`;
+     
+     return [
+        { value: null, label: defaultLabel },
+        ...uoms.map(u => ({ 
+            value: u.id, 
+            label: `${u.name === 'Pieces' ? 'Each' : u.name} (${u.short_code})` 
+        }))
+     ];
+  }, [uoms, defaultUomId]);
 
   // Load existing variants if editing
   useEffect(() => {
     if (!supabase || !open || !item?.id) return;
     
+    // ... rest of variants fetch logic check
     const fetchVariants = async () => {
       // Get linked template
       const { data: link, error: linkError } = await supabase
@@ -243,6 +292,7 @@ export default function ItemEditor({
             setCessRate(data.cessRate ?? 0);
             setImageUrl(data.imageUrl || "");
             setHasVariants(!!data.hasVariants);
+            setUomId(data.uomId || null);
             
             // Restore variant state
             setSelectedTemplate(data.selectedTemplate || null);
@@ -282,6 +332,7 @@ export default function ItemEditor({
         setVariantPrices([]);
         setSelectedUpsells(new Set());
         setImageFile(null);
+        setUomId(item?.uom_id || null);
       }
       setErr("");
       hasInitialized.current = true;
@@ -302,12 +353,12 @@ export default function ItemEditor({
         hsn, taxRate, isPackaged, cessRate, imageUrl, hasVariants,
         id: item?.id || null,
         code, name, price, category, status, veg, isPopular,
-        hsn, taxRate, isPackaged, cessRate, imageUrl, hasVariants,
+        hsn, taxRate, isPackaged, cessRate, imageUrl, hasVariants, uomId,
         selectedTemplate, variantPrices, selectedUpsells: Array.from(selectedUpsells)
       };
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(formData));
     }
-  }, [open, item, code, name, price, category, status, veg, isPopular, hsn, taxRate, isPackaged, cessRate, imageUrl, hasVariants, selectedTemplate, variantPrices, selectedUpsells]);
+  }, [open, item, code, name, price, category, status, veg, isPopular, hsn, taxRate, isPackaged, cessRate, imageUrl, hasVariants, uomId, selectedTemplate, variantPrices, selectedUpsells]);
 
   const clearDraft = () => {
     sessionStorage.removeItem(STORAGE_KEY);
@@ -537,6 +588,7 @@ if (code.trim()) {
         compensation_cess_rate: Number(cessRate),
         image_url: imageUrl || null,
         has_variants: hasVariants,
+        uom_id: uomId,
       };
 
       let savedItemId;
@@ -717,8 +769,8 @@ if (code.trim()) {
           </div>
         )}
 
-        <div className="ie-row-2">
-          <label>
+        <div className="ie-row-2" style={{alignItems: 'center'}}>
+          <label style={{flex: 1}}>
             <div className="ie-label">
               Price <span style={{ color: "red" }}>*</span>
             </div>
@@ -728,14 +780,47 @@ if (code.trim()) {
               value={price}
               onChange={(e) => setPrice(e.target.value)}
               required
-             // min="0.01"
               className="ie-input"
               placeholder="Enter price"
             />
           </label>
-          <label>
-            <div className="ie-label">Category</div>
-            <div style={{ display: "flex", gap: 4 }}>
+        
+          <label style={{flex: 0.6}}>
+              <div className="ie-label">
+                 Unit
+              </div>
+              <NiceSelect
+                  value={uomId}
+                  onChange={setUomId}
+                  placeholder="Unit"
+                  options={uomOptions}
+                />
+            </label>
+        </div>
+
+        <div className="ie-row-2">
+           <label>
+            <div className="ie-label">
+              Category
+              <button
+                type="button"
+                onClick={() => {
+                  setNewCatName("");
+                  setNewCatErr("");
+                  setShowCatModal(true);
+                }}
+                style={{
+                  background:'none', border:'none',
+                  fontSize: 11, color:'#f97316', 
+                  cursor:'pointer', marginLeft: 6, fontWeight:600,
+                  textDecoration:'none'
+                }}
+                title="Create new category"
+              >
+                + Add New
+              </button>
+            </div>
+            
               <NiceSelect
                 value={category}
                 onChange={setCategory}
@@ -750,18 +835,6 @@ if (code.trim()) {
                     .map((c) => ({ value: c.name, label: c.name })),
                 ]}
               />
-              <button
-                type="button"
-                onClick={() => {
-                  setNewCatName("");
-                  setNewCatErr("");
-                  setShowCatModal(true);
-                }}
-                className="ie-btn-small"
-              >
-                +
-              </button>
-            </div>
           </label>
         </div>
 
@@ -1047,7 +1120,7 @@ if (code.trim()) {
                marginTop: 8
              }}
            >
-             <span style={{ fontSize: 18 }}>+</span> Add Add-ons from Menu
+             <span style={{ fontSize: 18 }}>+</span> Add Add-ons
            </button>
         </div>
 
@@ -1694,6 +1767,16 @@ if (code.trim()) {
         .ie-addon-checkbox { width: 16px; height: 16px; accent-color: #059669; }
         .ie-addon-name { font-size: 14px; font-weight: 500; color: #374151; }
       `}</style>
+{showUomManager && (
+         <UomManager
+            restaurantId={restaurantId}
+            onClose={() => setShowUomManager(false)}
+            onSaved={() => {
+               fetchUoms();
+               // setShowUomManager(false); // Can keep open or close
+            }}
+         />
+       )}
     </div>
   );
 }
