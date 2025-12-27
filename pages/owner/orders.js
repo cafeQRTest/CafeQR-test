@@ -710,7 +710,16 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
                 <div>
                    <label style={{ fontSize: 8, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', display: 'block', marginBottom: 2 }}>Cash</label>
                    <input 
-                     type="number" value={cashAmount} onChange={e => setCashAmount(e.target.value)}
+                     type="number" value={cashAmount} 
+                     onChange={e => {
+                        const val = e.target.value;
+                        setCashAmount(val);
+                        const c = Number(val);
+                        if (!isNaN(c)) {
+                           const rem = Math.max(0, effectiveTotal - c);
+                           setOnlineAmount(rem.toFixed(2));
+                        }
+                     }}
                      placeholder="0.00" style={{ 
                         width: '100%', padding: '6px 10px', borderRadius: 6, border: '1px solid #e2e8f0',
                         fontSize: 12, fontWeight: 600, outline: 'none'
@@ -735,8 +744,7 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
                   onChange={setOnlineMethod}
                   options={[
                     { value: 'upi', label: 'UPI' },
-                    { value: 'card', label: 'Card' },
-                    { value: 'wallet', label: 'Wallet' }
+                    { value: 'card', label: 'Card' }
                   ]}
                 />
              </div>

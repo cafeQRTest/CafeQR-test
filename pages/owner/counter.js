@@ -217,14 +217,14 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false, mode 
                   min="0"
                   step="0.01"
                   value={cashAmount}
-                  onChange={(e) => setCashAmount(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '8px 10px',
-                    border: '2px solid #e2e8f0',
-                    borderRadius: 6,
-                    fontSize: '14px',
-                    fontWeight: 600
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setCashAmount(val);
+                    const c = Number(val);
+                    if (!isNaN(c)) {
+                      const rem = Math.max(0, total - c);
+                      setOnlineAmount(rem.toFixed(2));
+                    }
                   }}
                   disabled={disabled}
                 />
@@ -259,9 +259,7 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false, mode 
                   onChange={setOnlineMethod}
                   options={[
                     { value: 'upi', label: 'UPI' },
-                    { value: 'card', label: 'Card' },
-                    { value: 'netbanking', label: 'Net Banking' },
-                    { value: 'wallet', label: 'Wallet' }
+                    { value: 'card', label: 'Card' }
                   ]}
                 />
               </div>
@@ -900,16 +898,13 @@ setSendToKitchenEnabled(profile?.features_counter_send_to_kitchen_enabled !== fa
 setEnableMenuImages(!!profile?.features_menu_images_enabled);
 
 // after loading profile
-// after loading profile
-const savedMode = localStorage.getItem('counter_orderMode');
-let modeToSet = profile?.features_counter_send_to_kitchen_enabled === false
-  ? 'settle'
-  : 'kitchen';
+      // after loading profile
+      // Enforce default: Kitchen if enabled, otherwise Settle. Always partial to strict default.
+      let modeToSet = profile?.features_counter_send_to_kitchen_enabled === false
+        ? 'settle'
+        : 'kitchen';
 
-if (profile?.features_counter_send_to_kitchen_enabled !== false && (savedMode === 'kitchen' || savedMode === 'settle')) {
-  modeToSet = savedMode;
-}
-setOrderMode(modeToSet);
+      setOrderMode(modeToSet);
 
 
 // Only load credit customers if feature is enabled

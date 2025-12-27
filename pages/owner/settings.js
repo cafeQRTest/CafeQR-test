@@ -1117,7 +1117,7 @@ export default function SettingsPage() {
                  <div style={{fontSize: 13, color:'gray', fontWeight:400}}>Enable specific features for your workflow</div>
               </div>
             </SectionHeader>
-            <div style={{ padding: 36, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px' }}>
+            <SectionBody>
               
               <FeatureCard 
                  checked={form.features_menu_images_enabled} 
@@ -1191,7 +1191,7 @@ export default function SettingsPage() {
                  <Switch checked={form.features_counter_send_to_kitchen_enabled} />
               </FeatureCard>
 
-            </div>
+            </SectionBody>
           </SectionCard>
 
           {/* BRANDING CARD */}
