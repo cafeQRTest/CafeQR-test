@@ -108,3 +108,5 @@ export async function forceSupabaseSessionRestore() {
   }
   return null
 }
+
+export default getSupabase;

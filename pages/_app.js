@@ -11,6 +11,7 @@ import { useRouter } from 'next/router'
 import { useEffect, useState } from 'react'
 import { Capacitor } from '@capacitor/core'
 import { getFCMToken } from '../lib/firebase/messaging'
+import { CustomerAuthProvider, useCustomerAuth } from "../context/CustomerAuthContext";
 import {
   getSupabase,
   forceSupabaseSessionRestore,
@@ -172,6 +173,52 @@ function AppPrintOrchestrator() {
   );
 }
 
+// Routes that REQUIRE customer login
+const DELIVERY_PREFIX = "/app";
+const DELIVERY_AUTH_ROUTES = [
+  "/app/auth",
+  "/app/auth/callback",
+];
+
+// Adjust these to match your actual “must be logged in” pages
+const DELIVERY_PROTECTED_PREFIXES = [
+  "/app/addresses",
+  "/app/profile",
+  "/app/payment",
+];
+
+function DeliveryAuthGate({ children }) {
+  const router = useRouter();
+  const { loading, isLoggedIn } = useCustomerAuth();
+
+  const path = router.pathname || "";
+  const isDelivery = path.startsWith(DELIVERY_PREFIX);
+  const isAuthPage = DELIVERY_AUTH_ROUTES.includes(path);
+
+  const isProtected =
+    isDelivery &&
+    !isAuthPage &&
+    DELIVERY_PROTECTED_PREFIXES.some((p) => path.startsWith(p));
+
+  useEffect(() => {
+    if (!router.isReady) return;
+    if (!isProtected) return;
+    if (loading) return;
+
+    if (!isLoggedIn) {
+      router.replace(`/app/auth?next=${encodeURIComponent(router.asPath)}`);
+    }
+  }, [router, loading, isLoggedIn, isProtected]);
+
+  // Optional loader (prevents flashing protected page before redirect)
+  if (isProtected && (loading || !isLoggedIn)) {
+    return <div style={{ padding: 16 }}>Please sign in…</div>;
+  }
+
+  return <>{children}</>;
+}
+
+
 // ── MyApp ────────────────────────────────────────────────────────────────────
 function MyApp({ Component, pageProps }) {
   const router = useRouter()
@@ -285,34 +332,35 @@ function MyApp({ Component, pageProps }) {
   const isOwner = path.startsWith(OWNER_PREFIX)
   const isCustomer = path.startsWith(CUSTOMER_PREFIX)
 
-  return (
-    <>
-      <Head>
-        <meta
-          name="viewport"
-          content="width=device-width, initial-scale=1, viewport-fit=cover"
-        />
-      </Head>
-    <RestaurantProvider>
-      <AlertProvider>
-        <SubscriptionProvider>
-          <GlobalSubscriptionGate>
-            <Layout
-              title={pageProps.title}
-              showSidebar={isOwner}
-              hideChrome={isCustomer}
-              showCustomerHeader={isCustomer}
-            >
-              <Component {...pageProps} />
-            </Layout>
-            <AppPrintOrchestrator />
-          </GlobalSubscriptionGate>
-        </SubscriptionProvider>
-      </AlertProvider>
-    </RestaurantProvider>
-    </>
+return (
+  <>
+    <Head>
+      <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    </Head>
 
-  )
+    <CustomerAuthProvider>
+      <DeliveryAuthGate>
+        <RestaurantProvider>
+          <AlertProvider>
+            <SubscriptionProvider>
+              <GlobalSubscriptionGate>
+                <Layout
+                  title={pageProps.title}
+                  showSidebar={isOwner}
+                  hideChrome={isCustomer}
+                  showCustomerHeader={isCustomer}
+                >
+                  <Component {...pageProps} />
+                </Layout>
+                <AppPrintOrchestrator />
+              </GlobalSubscriptionGate>
+            </SubscriptionProvider>
+          </AlertProvider>
+        </RestaurantProvider>
+      </DeliveryAuthGate>
+    </CustomerAuthProvider>
+  </>
+);
 }
 
 export default MyApp

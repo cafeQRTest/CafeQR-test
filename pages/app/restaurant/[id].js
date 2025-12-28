@@ -1,4 +1,4 @@
-//pages/app/restaurant/[id].js
+// pages/app/restaurant/[id].js
 
 import { useRouter } from "next/router";
 import { useEffect, useMemo, useState } from "react";
@@ -12,496 +12,496 @@ export default function DeliveryRestaurantMenu() {
   const supabase = getSupabase();
   const { id: restaurantId } = router.query;
 
-  const [restaurant, setRestaurant] = useState(null);
-  const [menuItems, setMenuItems] = useState([]);
-  const [cart, setCart] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [restaurant, setRestaurant] = useState(null);
 
-  // Variant modal
-  const [variantModalOpen, setVariantModalOpen] = useState(false);
-  const [variantTargetItem, setVariantTargetItem] = useState(null);
-  const [selectedVariantId, setSelectedVariantId] = useState(null);
+  const [itemsLoading, setItemsLoading] = useState(true);
+  const [items, setItems] = useState([]);
 
-  const brandColor = restaurant?.restaurant_profiles?.brand_color || "#f59e0b";
-  const showImages = !!restaurant?.restaurant_profiles?.features_menu_images_enabled;
+  const [cat, setCat] = useState("All");
+  const [q, setQ] = useState("");
+
+  const [cart, setCart] = useState([]);
+  const [cartOpen, setCartOpen] = useState(true);
 
   useEffect(() => {
     if (!restaurantId) return;
-    if (typeof window === "undefined") return;
+
+    const loadRestaurant = async () => {
+      setLoading(true);
+      const { data } = await supabase
+        .from("restaurants")
+        .select("id, name, restaurant_profiles(brand_color, gst_enabled, default_tax_rate, prices_include_tax)")
+        .eq("id", restaurantId)
+        .single();
+
+      setRestaurant(data || null);
+      setLoading(false);
+    };
+
+    loadRestaurant();
+  }, [restaurantId, supabase]);
+
+  useEffect(() => {
+    if (!restaurantId) return;
+
+    const loadItems = async () => {
+      setItemsLoading(true);
+
+      // Assumptions (adjust columns if your schema differs):
+      // menu_items: id, restaurant_id, name, price, veg, image_url, category, is_active, is_packaged_good, tax_rate
+      const { data } = await supabase
+        .from("menu_items")
+        .select("id, name, price, veg, image_url, category, is_packaged_good, tax_rate")
+        .eq("restaurant_id", restaurantId)
+        .order("name", { ascending: true });
+
+      setItems(data || []);
+      setItemsLoading(false);
+    };
+
+    loadItems();
+  }, [restaurantId, supabase]);
+
+  useEffect(() => {
+    if (!restaurantId || typeof window === "undefined") return;
     const stored = localStorage.getItem(cartKey(restaurantId));
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        setCart(Array.isArray(parsed) ? parsed : []);
-      } catch {
-        setCart([]);
-      }
-    } else {
+    if (!stored) return setCart([]);
+    try {
+      const parsed = JSON.parse(stored);
+      setCart(Array.isArray(parsed) ? parsed : []);
+    } catch {
       setCart([]);
     }
   }, [restaurantId]);
 
-  useEffect(() => {
-    if (!restaurantId) return;
-    if (typeof window === "undefined") return;
-    localStorage.setItem(cartKey(restaurantId), JSON.stringify(cart));
-  }, [cart, restaurantId]);
+  const brandColor = restaurant?.restaurant_profiles?.brand_color || "#f59e0b";
 
-  useEffect(() => {
-    if (!restaurantId) return;
+  const persist = (next) => {
+    setCart(next);
+    if (typeof window !== "undefined" && restaurantId) {
+      localStorage.setItem(cartKey(restaurantId), JSON.stringify(next));
+    }
+  };
 
-    const load = async () => {
-      setLoading(true);
+  const addItem = (it) => {
+    const match = (c) => c.id === it.id && !c.selectedVariant;
 
-      // Restaurant + profile
-      const { data: rest, error: restErr } = await supabase
-        .from("restaurants")
-        .select(
-          `
-          id,
-          name,
-          online_paused,
-          restaurant_profiles(
-            brand_color,
-            features_menu_images_enabled,
-            online_payment_enabled,
-            use_own_gateway,
-            gst_enabled,
-            default_tax_rate,
-            prices_include_tax
-          )
-        `
-        )
-        .eq("id", restaurantId)
-        .single();
+    const found = cart.find(match);
+    if (found) {
+      persist(cart.map((c) => (match(c) ? { ...c, quantity: (c.quantity || 1) + 1 } : c)));
+      return;
+    }
 
-      if (restErr || !rest) {
-        setRestaurant(null);
-        setMenuItems([]);
-        setLoading(false);
-        return;
-      }
+    persist([
+      ...cart,
+      {
+        id: it.id,
+        name: it.name,
+        displayName: it.name,
+        price: Number(it.price) || 0,
+        quantity: 1,
+        veg: !!it.veg,
+        image_url: it.image_url || null,
+        is_packaged_good: !!it.is_packaged_good,
+        tax_rate: it.tax_rate ?? null,
+        selectedVariant: null,
+      },
+    ]);
+    setCartOpen(true);
+  };
 
-      // Menu items
-      const { data: rawItems, error: menuErr } = await supabase
-        .from("menu_items")
-        .select(
-          `
-          id,
-          name,
-          price,
-          description,
-          category,
-          veg,
-          status,
-          is_packaged_good,
-          image_url,
-          has_variants
-        `
-        )
-        .eq("restaurant_id", restaurantId)
-        .order("category", { ascending: true })
-        .order("name", { ascending: true });
+  const updateQty = (target, qty) => {
+    const match = (c) =>
+      c.id === target.id &&
+      (target.selectedVariant
+        ? c.selectedVariant?.variant_id === target.selectedVariant?.variant_id
+        : !c.selectedVariant);
 
-      if (menuErr) {
-        setRestaurant(rest);
-        setMenuItems([]);
-        setLoading(false);
-        return;
-      }
-
-      const items = (rawItems || []).map((i) => ({ ...i, variantOptions: [] }));
-
-      // Variant pricing for items with variants
-      const variantItemIds = items.filter((i) => i.has_variants).map((i) => i.id);
-
-      if (variantItemIds.length > 0) {
-        const { data: vpData } = await supabase
-          .from("variant_pricing")
-          .select(
-            `
-            menu_item_id,
-            price,
-            is_available,
-            variant_options (id, name, display_order, template_id)
-          `
-          )
-          .in("menu_item_id", variantItemIds);
-
-        const map = new Map();
-        (vpData || []).forEach((vp) => {
-          if (!vp?.menu_item_id || !vp?.variant_options) return;
-          if (!map.has(vp.menu_item_id)) map.set(vp.menu_item_id, []);
-          map.get(vp.menu_item_id).push({
-            variant_id: vp.variant_options.id,
-            variant_name: vp.variant_options.name,
-            price: Number(vp.price) || 0,
-            is_available: vp.is_available !== false,
-            display_order: vp.variant_options.display_order ?? 0,
-          });
-        });
-
-        items.forEach((i) => {
-          if (map.has(i.id)) {
-            i.variantOptions = map
-              .get(i.id)
-              .sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
-          }
-        });
-      }
-
-      setRestaurant(rest);
-      setMenuItems(items);
-      setLoading(false);
-    };
-
-    load();
-  }, [restaurantId, supabase]);
+    if (qty <= 0) persist(cart.filter((c) => !match(c)));
+    else persist(cart.map((c) => (match(c) ? { ...c, quantity: qty } : c)));
+  };
 
   const categories = useMemo(() => {
-    const s = new Set();
-    (menuItems || []).forEach((i) => s.add(i.category || "Others"));
-    return ["All", ...Array.from(s)];
-  }, [menuItems]);
+    const set = new Set(["All"]);
+    (items || []).forEach((it) => {
+      const c = (it.category || "").trim();
+      if (c) set.add(c);
+    });
+    return Array.from(set);
+  }, [items]);
 
-  const [cat, setCat] = useState("All");
-  useEffect(() => setCat("All"), [restaurantId]);
+  const filteredItems = useMemo(() => {
+    const term = q.trim().toLowerCase();
+    return (items || [])
+      .filter((it) => (cat === "All" ? true : String(it.category || "") === cat))
+      .filter((it) => (it.name || "").toLowerCase().includes(term));
+  }, [items, cat, q]);
 
-  const visibleItems = useMemo(() => {
-    if (cat === "All") return menuItems;
-    return menuItems.filter((i) => (i.category || "Others") === cat);
-  }, [menuItems, cat]);
+  const totals = useMemo(() => {
+    const profile = restaurant?.restaurant_profiles;
+    const gstEnabled = !!profile?.gst_enabled;
+    const baseRate = Number(profile?.default_tax_rate ?? 0);
+    const pricesIncludeTax =
+      profile?.prices_include_tax === true ||
+      profile?.prices_include_tax === "true" ||
+      profile?.prices_include_tax === 1 ||
+      profile?.prices_include_tax === "1";
 
-  const cartCount = useMemo(
-    () => cart.reduce((s, i) => s + (Number(i.quantity) || 0), 0),
-    [cart]
-  );
+    let subtotalEx = 0;
+    let taxAmount = 0;
+    let totalInc = 0;
 
-  const cartTotal = useMemo(
-    () =>
-      cart.reduce(
-        (s, i) => s + (Number(i.price) || 0) * (Number(i.quantity) || 0),
-        0
-      ),
-    [cart]
-  );
+    cart.forEach((item) => {
+      const qty = Number(item.quantity) || 1;
+      const price = Number(item.price) || 0;
+      const isPackaged = !!item.is_packaged_good;
 
-  const addDirect = (item) => {
-    setCart((prev) => {
-      const idx = prev.findIndex(
-        (c) =>
-          c.id === item.id &&
-          (!c.selectedVariant && !item.selectedVariant
-            ? true
-            : c.selectedVariant?.variant_id === item.selectedVariant?.variant_id)
-      );
-
-      if (idx >= 0) {
-        const next = [...prev];
-        next[idx] = { ...next[idx], quantity: (next[idx].quantity || 0) + 1 };
-        return next;
+      if (!gstEnabled || isPackaged) {
+        subtotalEx += price * qty;
+        totalInc += price * qty;
+        return;
       }
 
-      return [
-        ...prev,
-        {
-          id: item.id,
-          name: item.name,
-          displayName: item.displayName || item.name,
-          price: Number(item.price) || 0,
-          quantity: 1,
-          veg: !!item.veg,
-          image_url: item.image_url,
-          is_packaged_good: !!item.is_packaged_good,
-          selectedVariant: item.selectedVariant || null,
-        },
-      ];
-    });
-  };
-
-  const openVariantModal = (item) => {
-    setVariantTargetItem(item);
-    const first = (item.variantOptions || []).find((v) => v.is_available !== false);
-    setSelectedVariantId(first?.variant_id || null);
-    setVariantModalOpen(true);
-  };
-
-  const confirmVariant = () => {
-    const item = variantTargetItem;
-    if (!item) return;
-
-    const v = (item.variantOptions || []).find((x) => x.variant_id === selectedVariantId);
-    if (!v) return;
-
-    addDirect({
-      ...item,
-      price: v.price,
-      displayName: `${item.name} (${v.variant_name})`,
-      selectedVariant: { variant_id: v.variant_id, variant_name: v.variant_name },
+      if (pricesIncludeTax) {
+        const inc = price * qty;
+        const ex = baseRate > 0 ? inc / (1 + baseRate / 100) : inc;
+        subtotalEx += ex;
+        taxAmount += inc - ex;
+        totalInc += inc;
+      } else {
+        const ex = price * qty;
+        const tax = (baseRate / 100) * ex;
+        subtotalEx += ex;
+        taxAmount += tax;
+        totalInc += ex + tax;
+      }
     });
 
-    setVariantModalOpen(false);
-    setVariantTargetItem(null);
-    setSelectedVariantId(null);
-  };
+    return { subtotalEx, taxAmount, totalInc };
+  }, [cart, restaurant]);
 
-  if (loading) {
-    return <div style={{ padding: 40, textAlign: "center" }}>Loading menu…</div>;
-  }
-
-  if (!restaurant) {
-    return (
-      <div style={{ padding: 40, textAlign: "center" }}>
-        Restaurant not found.
-        <div style={{ marginTop: 12 }}>
-          <Link href="/app">Back</Link>
-        </div>
-      </div>
-    );
-  }
-
-  if (restaurant.online_paused) {
-    return (
-      <div style={{ padding: 40, textAlign: "center" }}>
-        {restaurant.name} is currently closed.
-        <div style={{ marginTop: 12 }}>
-          <Link href="/app">Back</Link>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <div style={{ padding: 40, textAlign: "center" }}>Loading…</div>;
+  if (!restaurantId) return <div style={{ padding: 40, textAlign: "center" }}>Missing restaurant.</div>;
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f8f9fa", paddingBottom: 90 }}>
+    <div style={{ minHeight: "100vh", background: "#f8f9fa", paddingBottom: cart.length ? 170 : 84 }}>
       <header
         style={{
           background: "#fff",
           borderBottom: "1px solid #e5e7eb",
-          padding: 16,
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
+          padding: 14,
+          position: "sticky",
+          top: 0,
+          zIndex: 10,
         }}
       >
-        <button
-          onClick={() => router.push("/app")}
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <button
+            onClick={() => router.back()}
+            style={{
+              border: "1px solid #e5e7eb",
+              background: "#fff",
+              borderRadius: 12,
+              width: 40,
+              height: 40,
+              cursor: "pointer",
+              fontWeight: 900,
+            }}
+          >
+            {"<"}
+          </button>
+
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 900, color: "#111827" }}>{restaurant?.name || "Restaurant"}</div>
+            <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
+              Add items • Checkout below
+            </div>
+          </div>
+
+          <Link
+            href="/app/profile"
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 999,
+              border: "1px solid #e5e7eb",
+              background: "#fff",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              textDecoration: "none",
+              color: "#111827",
+              fontWeight: 900,
+            }}
+            aria-label="Profile"
+          >
+            ☺
+          </Link>
+        </div>
+
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search dishes…"
           style={{
+            marginTop: 12,
+            width: "100%",
+            padding: "12px 12px",
+            borderRadius: 12,
             border: "1px solid #e5e7eb",
-            background: "#fff",
-            borderRadius: 10,
-            padding: "8px 10px",
-            cursor: "pointer",
+            outline: "none",
+            background: "#f8f9fa",
           }}
-        >
-          {"<"}
-        </button>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 800, fontSize: 16 }}>{restaurant.name}</div>
-          <div style={{ color: "#6b7280", fontSize: 12 }}>Delivery menu</div>
+        />
+
+        <div style={{ marginTop: 12, display: "flex", gap: 8, overflowX: "auto" }}>
+          {categories.map((c) => (
+            <button
+              key={c}
+              onClick={() => setCat(c)}
+              style={{
+                whiteSpace: "nowrap",
+                border: "1px solid #e5e7eb",
+                background: cat === c ? brandColor : "#fff",
+                color: cat === c ? "#fff" : "#111827",
+                padding: "8px 12px",
+                borderRadius: 999,
+                fontWeight: 900,
+                cursor: "pointer",
+              }}
+            >
+              {c}
+            </button>
+          ))}
         </div>
       </header>
 
-      <div style={{ padding: 12, display: "flex", gap: 8, overflowX: "auto" }}>
-        {categories.map((c) => (
-          <button
-            key={c}
-            onClick={() => setCat(c)}
-            style={{
-              border: "1px solid #e5e7eb",
-              background: c === cat ? brandColor : "#fff",
-              color: c === cat ? "#fff" : "#111827",
-              borderRadius: 999,
-              padding: "10px 14px",
-              fontWeight: 700,
-              cursor: "pointer",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {c}
-          </button>
-        ))}
-      </div>
-
-      <div style={{ padding: 12, display: "grid", gap: 12 }}>
-        {visibleItems.map((item) => {
-          const isAvailable = item.status !== "out_of_stock" && item.status !== "inactive";
-          return (
-            <div
-              key={item.id}
-              style={{
-                background: "#fff",
-                border: "1px solid #e5e7eb",
-                borderRadius: 14,
-                padding: 14,
-                opacity: isAvailable ? 1 : 0.6,
-              }}
-            >
-              <div style={{ display: "flex", gap: 12 }}>
-                {showImages && item.image_url ? (
+      <div style={{ padding: 12 }}>
+        {itemsLoading ? (
+          <div style={{ padding: 20, textAlign: "center" }}>Loading menu…</div>
+        ) : filteredItems.length === 0 ? (
+          <div style={{ padding: 20, textAlign: "center", color: "#6b7280" }}>No items found.</div>
+        ) : (
+          <div style={{ display: "grid", gap: 10 }}>
+            {filteredItems.map((it) => (
+              <div
+                key={it.id}
+                style={{
+                  background: "#fff",
+                  border: "1px solid #e5e7eb",
+                  borderRadius: 14,
+                  padding: 14,
+                  display: "flex",
+                  gap: 12,
+                  alignItems: "center",
+                }}
+              >
+                {it.image_url ? (
                   <img
-                    src={item.image_url}
-                    alt={item.name}
+                    src={it.image_url}
+                    alt={it.name}
+                    style={{ width: 56, height: 56, borderRadius: 12, objectFit: "cover" }}
+                  />
+                ) : (
+                  <div
                     style={{
-                      width: 70,
-                      height: 70,
+                      width: 56,
+                      height: 56,
                       borderRadius: 12,
-                      objectFit: "cover",
-                      flexShrink: 0,
+                      background: "#f3f4f6",
                     }}
                   />
-                ) : null}
+                )}
 
                 <div style={{ flex: 1 }}>
-                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <span style={{ fontSize: 12 }}>{item.veg ? "🟢" : "🔺"}</span>
-                    <div style={{ fontWeight: 800 }}>{item.name}</div>
+                  <div style={{ fontWeight: 900, color: "#111827" }}>
+                    {it.name} <span style={{ fontSize: 12 }}>{it.veg ? "🟢" : "🔺"}</span>
                   </div>
-                  {item.description ? (
-                    <div style={{ marginTop: 6, color: "#6b7280", fontSize: 13 }}>
-                      {item.description}
-                    </div>
-                  ) : null}
-
-                  <div style={{ marginTop: 10, fontWeight: 800 }}>
-                    ₹{Number(item.price || 0).toFixed(2)}
-                    {item.has_variants ? (
-                      <span style={{ marginLeft: 8, fontSize: 12, color: "#6b7280" }}>
-                        (Variants)
-                      </span>
-                    ) : null}
+                  <div style={{ marginTop: 6, color: "#6b7280", fontSize: 13 }}>
+                    ₹{Number(it.price || 0).toFixed(2)}
                   </div>
-
-                  <button
-                    disabled={!isAvailable}
-                    onClick={() => {
-                      if (item.has_variants && (item.variantOptions || []).length > 0) {
-                        openVariantModal(item);
-                      } else {
-                        addDirect(item);
-                      }
-                    }}
-                    style={{
-                      marginTop: 10,
-                      width: "100%",
-                      background: brandColor,
-                      border: "none",
-                      color: "#fff",
-                      borderRadius: 12,
-                      padding: "10px 12px",
-                      fontWeight: 800,
-                      cursor: isAvailable ? "pointer" : "not-allowed",
-                    }}
-                  >
-                    Add
-                  </button>
                 </div>
+
+                <button
+                  onClick={() => addItem(it)}
+                  style={{
+                    background: "#fff",
+                    border: `2px solid ${brandColor}`,
+                    color: brandColor,
+                    borderRadius: 12,
+                    padding: "10px 12px",
+                    fontWeight: 900,
+                    cursor: "pointer",
+                    minWidth: 76,
+                  }}
+                >
+                  Add
+                </button>
               </div>
-            </div>
-          );
-        })}
+            ))}
+          </div>
+        )}
       </div>
 
-      {cartCount > 0 && (
-        <Link
-          href={`/app/cart?r=${restaurantId}`}
-          style={{
-            position: "fixed",
-            left: 16,
-            right: 16,
-            bottom: 16,
-            background: "#111827",
-            color: "#fff",
-            textDecoration: "none",
-            borderRadius: 14,
-            padding: 14,
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            fontWeight: 800,
-          }}
-        >
-          <span>{cartCount} item(s)</span>
-          <span>View cart • ₹{cartTotal.toFixed(2)}</span>
-        </Link>
-      )}
-
-      {variantModalOpen && (
+      {cart.length ? (
         <div
           style={{
             position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.45)",
-            display: "flex",
-            alignItems: "flex-end",
-            justifyContent: "center",
+            left: 12,
+            right: 12,
+            bottom: 76,
+            background: "#fff",
+            border: "1px solid #e5e7eb",
+            borderRadius: 16,
             padding: 12,
           }}
-          onClick={() => setVariantModalOpen(false)}
         >
-          <div
-            style={{
-              width: "100%",
-              maxWidth: 520,
-              background: "#fff",
-              borderRadius: 16,
-              padding: 16,
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ fontWeight: 900, fontSize: 16 }}>
-              Choose variant • {variantTargetItem?.name}
-            </div>
-
-            <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
-              {(variantTargetItem?.variantOptions || []).map((v) => (
-                <label
-                  key={v.variant_id}
-                  style={{
-                    border: "1px solid #e5e7eb",
-                    borderRadius: 12,
-                    padding: 12,
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    opacity: v.is_available ? 1 : 0.5,
-                    cursor: v.is_available ? "pointer" : "not-allowed",
-                  }}
-                >
-                  <span>
-                    <input
-                      type="radio"
-                      disabled={!v.is_available}
-                      checked={selectedVariantId === v.variant_id}
-                      onChange={() => setSelectedVariantId(v.variant_id)}
-                      style={{ marginRight: 10 }}
-                    />
-                    {v.variant_name}
-                  </span>
-                  <span style={{ fontWeight: 800 }}>₹{Number(v.price).toFixed(2)}</span>
-                </label>
-              ))}
-            </div>
-
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <button
-              onClick={confirmVariant}
-              disabled={!selectedVariantId}
+              onClick={() => setCartOpen((v) => !v)}
               style={{
-                marginTop: 12,
-                width: "100%",
-                background: brandColor,
-                border: "none",
-                color: "#fff",
+                border: "1px solid #e5e7eb",
+                background: "#fff",
                 borderRadius: 12,
-                padding: 12,
+                padding: "8px 10px",
+                cursor: "pointer",
                 fontWeight: 900,
-                cursor: selectedVariantId ? "pointer" : "not-allowed",
               }}
             >
-              Add to cart
+              {cartOpen ? "Hide" : "Show"}
             </button>
+
+            <div style={{ flex: 1, fontWeight: 900 }}>
+              {cart.reduce((n, it) => n + Number(it.quantity || 0), 0)} items • ₹{totals.totalInc.toFixed(2)}
+            </div>
+
+            <Link
+              href={`/app/payment?r=${restaurantId}`}
+              style={{
+                background: brandColor,
+                color: "#fff",
+                textDecoration: "none",
+                borderRadius: 14,
+                padding: "10px 14px",
+                fontWeight: 900,
+              }}
+            >
+              Checkout
+            </Link>
           </div>
+
+          {cartOpen ? (
+            <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+              {cart.map((it) => (
+                <div
+                  key={`${it.id}-${it.selectedVariant?.variant_id || "base"}`}
+                  style={{
+                    border: "1px solid #e5e7eb",
+                    borderRadius: 14,
+                    padding: 10,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                  }}
+                >
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 900, fontSize: 13, color: "#111827" }}>
+                      {it.displayName || it.name}
+                    </div>
+                    <div style={{ color: "#6b7280", fontSize: 12 }}>
+                      ₹{Number(it.price || 0).toFixed(2)}
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", border: "1px solid #e5e7eb", borderRadius: 12 }}>
+                    <button
+                      onClick={() => updateQty(it, (it.quantity || 1) - 1)}
+                      style={{
+                        width: 36,
+                        height: 36,
+                        border: "none",
+                        background: "#fff",
+                        cursor: "pointer",
+                        fontWeight: 900,
+                        color: brandColor,
+                      }}
+                    >
+                      -
+                    </button>
+                    <div
+                      style={{
+                        width: 36,
+                        height: 36,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        background: "#f8f9fa",
+                        fontWeight: 900,
+                      }}
+                    >
+                      {it.quantity}
+                    </div>
+                    <button
+                      onClick={() => updateQty(it, (it.quantity || 1) + 1)}
+                      style={{
+                        width: 36,
+                        height: 36,
+                        border: "none",
+                        background: "#fff",
+                        cursor: "pointer",
+                        fontWeight: 900,
+                        color: brandColor,
+                      }}
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
-      )}
+      ) : null}
+
+      <BottomNav active="home" />
+    </div>
+  );
+}
+
+function BottomNav({ active }) {
+  const itemStyle = (key) => ({
+    flex: 1,
+    textAlign: "center",
+    textDecoration: "none",
+    color: active === key ? "#f59e0b" : "#6b7280",
+    fontWeight: 900,
+    fontSize: 12,
+    padding: "10px 0",
+  });
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: "#fff",
+        borderTop: "1px solid #e5e7eb",
+        display: "flex",
+        height: 64,
+      }}
+    >
+      <Link href="/app" style={itemStyle("home")}>
+        Home
+      </Link>
+      <Link href="/app/addresses" style={itemStyle("addresses")}>
+        Addresses
+      </Link>
+      <Link href="/app/profile" style={itemStyle("profile")}>
+        Profile
+      </Link>
     </div>
   );
 }
