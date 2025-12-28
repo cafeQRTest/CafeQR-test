@@ -110,6 +110,8 @@ export default async function handler(req, res) {
           tax_amount: row.tax_amount || 0, // Tax Amt column
           line_total_ex_tax: lineEx,
           line_total_inc_tax: lineInc,     // Total column (incl tax / MRP)
+          uom_precision: row.uom_precision ?? 0,
+          uom_short_code: row.uom_short_code || null,
           // Pass these so PDF generator uses them directly instead of recalculating
           use_precalculated: true,
         };

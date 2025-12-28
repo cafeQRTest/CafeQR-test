@@ -7,6 +7,9 @@ function toDisplayItems(order) {
       name: oi.menu_items?.name || oi.item_name || 'Item',
       quantity: oi.quantity,
       price: oi.price,
+      uom: oi.uom_short_code || '',
+      uom_short_code: oi.uom_short_code || '',
+      uom_precision: oi.uom_precision ?? 0
     }));
   }
   return [];
@@ -151,7 +154,12 @@ function buildItemRow(item, width) {
   
   // Format quantity with UOM
   const qtyNum = Number(item.quantity || 0);
-  let qtyStr = qtyNum % 1 === 0 ? String(qtyNum) : String(Number(qtyNum.toFixed(3))); // Remove trailing zeros for decimals
+  const p = Number.isInteger(item.uom_precision) ? item.uom_precision : (qtyNum % 1 === 0 ? 0 : 2);
+  let qtyStr = qtyNum.toFixed(p);
+  if (p > 0 && qtyStr.includes('.')) {
+    // Optional: remove trailing zeros if you want 1.5 instead of 1.500 even if precision is 3
+    // But usually precision implies consistency. Let's keep it consistent with the UI.
+  }
   
   // Append UOM if present. 
   // We check uom_short_code (from order_items snapshot) or fallback to uom name
@@ -267,7 +275,8 @@ export function buildKotText(order, restaurantProfile) {
       if (!nameLines.length) return;
       
       const qtyNum = Number(item.quantity || 1);
-      let qtyStr = qtyNum % 1 === 0 ? String(qtyNum) : String(Number(qtyNum.toFixed(3)));
+      const p = Number.isInteger(item.uom_precision) ? item.uom_precision : (qtyNum % 1 === 0 ? 0 : 2);
+      let qtyStr = qtyNum.toFixed(p);
       
       const uom = item.uom_short_code || item.uom || '';
       if (uom && uom.toLowerCase() !== 'pc') {
@@ -294,7 +303,8 @@ export function buildKotText(order, restaurantProfile) {
         if (!nameLines.length) return;
         
         const qtyNum = Number(ri.quantity || 1);
-        let qtyStr = qtyNum % 1 === 0 ? String(qtyNum) : String(Number(qtyNum.toFixed(3)));
+        const p = Number.isInteger(ri.uom_precision) ? ri.uom_precision : (qtyNum % 1 === 0 ? 0 : 2);
+        let qtyStr = qtyNum.toFixed(p);
         const uom = ri.uom_short_code || ri.uom || '';
         if (uom && uom.toLowerCase() !== 'pc') {
           qtyStr += ' ' + uom;
@@ -455,7 +465,8 @@ export async function downloadTextAndShare(order, bill, restaurantProfile) {
         : totalNum.toFixed(2).padStart(5);
       
       // Helper to format quantity
-      let qtyStr = qtyNum % 1 === 0 ? String(qtyNum) : String(Number(qtyNum.toFixed(3)));
+      const p = Number.isInteger(item.uom_precision) ? item.uom_precision : (qtyNum % 1 === 0 ? 0 : 2);
+      let qtyStr = qtyNum.toFixed(p);
       const uom = item.uom_short_code || item.uom || '';
       if (uom && uom.toLowerCase() !== 'pc') {
           qtyStr += ' ' + uom;
@@ -647,10 +658,16 @@ export function buildReceiptText(order, bill, restaurantProfile) {
           ? totalNum.toFixed(0).padStart(5)
           : totalNum.toFixed(2).padStart(5);
 
-      const qty = `${qtyNum}`.padStart(2);
+      const p = Number.isInteger(item.uom_precision) ? item.uom_precision : (qtyNum % 1 === 0 ? 0 : 2);
+      let qtyStr = qtyNum.toFixed(p);
+      const uom = item.uom_short_code || item.uom || '';
+      if (uom && uom.toLowerCase() !== 'pc') {
+          qtyStr += ' ' + uom;
+      }
+      const qty = qtyStr.padStart(6).substring(0, 6);
 
       const firstLine =
-        nameLines[0].padEnd(14) + qty + '  ' + rate + '  ' + total;
+        nameLines[0].padEnd(14) + qty + ' ' + rate + ' ' + total;
       lines.push(firstLine);
 
       for (let i = 1; i < nameLines.length; i++) {

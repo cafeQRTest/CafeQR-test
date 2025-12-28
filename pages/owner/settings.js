@@ -665,6 +665,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [showUomManager, setShowUomManager] = useState(false);
   const [defaultUomName, setDefaultUomName] = useState(null);
+  const [localRestaurantId, setLocalRestaurantId] = useState(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [showToast, setShowToast] = useState(false);
@@ -718,7 +719,7 @@ export default function SettingsPage() {
         
       if (error) throw error;
       if (data) {
-        // setRestaurant(data); // This line is commented out as useRestaurant hook already provides it
+        setLocalRestaurantId(data.id);
         if (data.default_uom) {
              // Handle both object (single relation) and array (if misconfigured)
              const uomName = Array.isArray(data.default_uom) ? data.default_uom[0]?.name : data.default_uom.name;
@@ -933,12 +934,14 @@ export default function SettingsPage() {
 
   if (loading) return <div style={{padding:80, textAlign:'center'}}>Loading settings...</div>;
 
+
   return (
-    <PageContainer>
-      <Header>
-        <Title>Settings & Preferences</Title>
-        <Subtitle>Customize how your restaurant operates, manages orders, and connects with customers.</Subtitle>
-      </Header>
+    <>
+      <PageContainer>
+        <Header>
+          <Title>Settings & Preferences</Title>
+          <Subtitle>Customize how your restaurant operates, manages orders, and connects with customers.</Subtitle>
+        </Header>
 
       {/* Toast */}
       {showToast && (
@@ -951,12 +954,6 @@ export default function SettingsPage() {
           </Toast>
       )}
 
-      {showUomManager && restaurant?.id && (
-        <UomManager
-            restaurantId={restaurant.id}
-            onClose={() => setShowUomManager(false)}
-        />
-      )}
 
       <form onSubmit={save}>
         <ContentGrid>
@@ -1129,14 +1126,28 @@ export default function SettingsPage() {
                             </div>
                         )}
                      </div>
-                     <ActionButton type="button" onClick={() => setShowUomManager(true)} style={{
-                        padding:'8px 20px', fontSize:14, fontWeight:600, height:'40px', 
-                        background:'white', color:'#0f172a', border:'1px solid #cbd5e1', 
-                        boxShadow:'0 1px 2px rgba(0,0,0,0.05)',
-                        borderRadius: '8px'
-                     }}>
+                     <button 
+                        type="button" 
+                        onClick={(e) => { 
+                          e.preventDefault(); 
+                          e.stopPropagation();
+                          setShowUomManager(true); 
+                        }} 
+                        style={{
+                           padding:'8px 20px', 
+                           fontSize:14, 
+                           fontWeight:600, 
+                           height:'40px', 
+                           background:'white', 
+                           color:'#0f172a', 
+                           border:'1px solid #cbd5e1', 
+                           boxShadow:'0 1px 2px rgba(0,0,0,0.05)',
+                           borderRadius: '8px',
+                           cursor: 'pointer'
+                        }}
+                     >
                         Manage
-                     </ActionButton>
+                     </button>
                   </div>
                </FormField>
             </SectionBody>
@@ -1411,17 +1422,21 @@ export default function SettingsPage() {
           </SaveBtn>
         </SaveBar>
 
-        {showUomManager && (
-            <UomManager 
-              restaurantId={restaurant?.id}
-              onClose={() => setShowUomManager(false)}
-              onSaved={() => {
-                  fetchRestaurant(); // Refresh to update default name pill
-              }}
-            />
-        )}
 
       </form>
     </PageContainer>
+
+    {showUomManager && (
+      <UomManager 
+        restaurantId={localRestaurantId || restaurant?.id}
+        onClose={() => {
+            setShowUomManager(false);
+        }}
+        onSaved={() => {
+            fetchRestaurant(); 
+        }}
+      />
+    )}
+    </>
   );
 }

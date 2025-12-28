@@ -696,7 +696,7 @@ function openEditExpense(expense) {
     }}
     aria-label="Close"
   >
-    ×
+    ✕
   </button>
 </div>
 
@@ -809,7 +809,7 @@ function openEditExpense(expense) {
           <div className="expenses-modal" style={{ maxWidth: '360px' }} onClick={(e) => e.stopPropagation()}>
             <div className="expenses-modal-header" style={{ marginBottom: '16px', borderBottom: 'none', paddingBottom: 0 }}>
               <h3 style={{ margin: 0, fontSize: '1.25rem' }}>Confirm Delete</h3>
-              <button className="x" onClick={() => setDeleteConfirmId(null)}>×</button>
+              <button className="x" onClick={() => setDeleteConfirmId(null)}>✕</button>
             </div>
             <p style={{ color: '#4b5563', marginBottom: '24px', lineHeight: '1.5', fontSize: '0.95rem' }}>
               Are you sure you want to delete this expense? This action cannot be undone.
@@ -850,7 +850,7 @@ function openEditExpense(expense) {
           <div className="expenses-modal" style={{ maxWidth: '400px', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }} onClick={(e) => e.stopPropagation()}>
             <div className="expenses-modal-header">
               <h3>Manage Categories</h3>
-              <button className="x" onClick={() => setShowCategoryManager(false)}>×</button>
+              <button className="x" onClick={() => setShowCategoryManager(false)}>✕</button>
             </div>
             
             <div style={{ padding: '24px' }}>
@@ -940,7 +940,7 @@ function openEditExpense(expense) {
           <div className="expenses-modal" style={{ maxWidth: '360px' }} onClick={(e) => e.stopPropagation()}>
             <div className="expenses-modal-header">
               <h3>Add Category</h3>
-              <button className="x" onClick={() => setShowQuickAdd(false)}>×</button>
+              <button className="x" onClick={() => setShowQuickAdd(false)}>✕</button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
               <input
@@ -1265,21 +1265,18 @@ function openEditExpense(expense) {
         }
         .expenses-modal-header .x {
           border: none;
-          background: #f3f4f6;
-          color: #6b7280;
-          width: 32px;
-          height: 32px;
-          border-radius: 50%;
-          font-size: 18px;
+          background: transparent;
+          color: #92400e;
+          font-size: 24px;
           cursor: pointer;
           display: flex;
           align-items: center;
           justify-content: center;
-          transition: all 0.2s;
+          transition: opacity 0.2s;
+          padding: 4px;
         }
         .expenses-modal-header .x:hover {
-          background: #e5e7eb;
-          color: #111827;
+          opacity: 0.7;
         }
 
         .expenses-form {

@@ -266,9 +266,7 @@ const text =
         <div className="pwa-print-card" role="dialog" aria-modal="true">
           <div className="pwa-print-head">
             <h3>Print Bill / KOT</h3>
-            <button className="x" onClick={onClose} aria-label="Close">
-              ×
-            </button>
+            <button className="x" onClick={onClose} aria-label="Close">✕</button>
           </div>
           <div className="pwa-preview">
             <pre>{`Order: #${(order?.id || '').slice(0, 8).toUpperCase()}
@@ -324,9 +322,7 @@ Amount: ₹${amount.toFixed(2)}`}</pre>
       <div className="kot-modal">
         <div className="kot-header">
           <h2>Print Bill / KOT</h2>
-          <button className="close-btn" onClick={onClose}>
-            ×
-          </button>
+          <button className="close-btn" onClick={onClose}>✕</button>
         </div>
         {status && (
           <div className={`status ${status.includes('✗') ? 'error' : 'success'}`}>{status}</div>

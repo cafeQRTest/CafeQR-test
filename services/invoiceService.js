@@ -198,7 +198,9 @@ export class InvoiceService {
           tax_rate: taxRate,
           tax_amount: Number(tax.toFixed(2)),
           line_total_ex_tax: Number(ex.toFixed(2)),
-          line_total_inc_tax: Number(inc.toFixed(2))
+          line_total_inc_tax: Number(inc.toFixed(2)),
+          uom_precision: it.uom_precision ?? 0,
+          uom_short_code: it.uom_short_code || null
         })
       }
       return { invoiceId: inv.id, invoiceNo }

@@ -49,7 +49,7 @@ export default async function handler(req, res) {
     const itemIds = items.map((it) => it.id).filter(Boolean);
     const { data: menuItems, error: menuError } = await supabase
       .from('menu_items')
-      .select('id, is_packaged_good, tax_rate')
+      .select('id, is_packaged_good, tax_rate, uom:unit_of_measures(precision, short_code)')
       .in('id', itemIds);
 
     if (menuError) {
@@ -154,7 +154,8 @@ export default async function handler(req, res) {
         tax_rate: effectiveRate,
         hsn: it.hsn || null,
         is_packaged_good: isPackaged,
-        uom_short_code: it.uom_short_code || null,
+        uom_short_code: it.uom_short_code || menuItem?.uom?.short_code || null,
+        uom_precision: it.uom_precision ?? menuItem?.uom?.precision ?? 0,
       };
     });
 

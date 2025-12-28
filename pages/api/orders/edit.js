@@ -99,6 +99,8 @@ export default async function handler(req, res) {
         is_packaged_good: !!l.is_packaged_good,
         variant_option_id: l.variant_id || l.variant_option_id || null,
         variant_name: l.variant_name || null,
+        uom_short_code: l.uom_short_code || null,
+        uom_precision: l.uom_precision ?? 0,
       }));
 
     if (filteredLines.length === 0) {
@@ -126,7 +128,7 @@ export default async function handler(req, res) {
     // 4) Load current order_items
     const { data: currentItems, error: itemsErr } = await supabase
       .from('order_items')
-      .select('id, menu_item_id, quantity, price, item_name, hsn, is_packaged_good, variant_option_id')
+      .select('id, menu_item_id, quantity, price, item_name, hsn, is_packaged_good, variant_option_id, uom_short_code, uom_precision')
       .eq('order_id', order_id);
 
     if (itemsErr) {
@@ -222,6 +224,8 @@ export default async function handler(req, res) {
           action: 'REMOVED_FULL',
           old_qty: ri.quantity,
           new_qty: 0,
+          uom_short_code: ri.uom_short_code,
+          uom_precision: ri.uom_precision,
         });
       }
     }
@@ -285,6 +289,8 @@ export default async function handler(req, res) {
             is_packaged_good: !!newLine.is_packaged_good,
             variant_option_id: newLine.variant_option_id,
             variant_name: newLine.variant_name,
+            uom_short_code: newLine.uom_short_code,
+            uom_precision: newLine.uom_precision,
             ...breakdown,
           });
 
@@ -299,6 +305,8 @@ export default async function handler(req, res) {
             old_qty: 0,
             new_qty: newLine.quantity,
             variant_name: newLine.variant_name,
+            uom_short_code: newLine.uom_short_code,
+            uom_precision: newLine.uom_precision,
           });
 
           // For internal tracking (stock/invoice)
@@ -311,6 +319,8 @@ export default async function handler(req, res) {
             action: 'ADDED',
             is_packaged_good: !!newLine.is_packaged_good,
             variant_name: newLine.variant_name,
+            uom_short_code: newLine.uom_short_code,
+            uom_precision: newLine.uom_precision,
           });
 
           await deductStockForItem(supabase, restaurant_id, newLine);
@@ -332,6 +342,8 @@ export default async function handler(req, res) {
             is_packaged_good: !!newLine.is_packaged_good,
             variant_option_id: newLine.variant_option_id,
             variant_name: newLine.variant_name,
+            uom_short_code: newLine.uom_short_code,
+            uom_precision: newLine.uom_precision,
             ...breakdown,
           });
 
@@ -348,6 +360,8 @@ export default async function handler(req, res) {
               old_qty: current.quantity,
               new_qty: newLine.quantity,
               is_packaged_good: !!newLine.is_packaged_good,
+              uom_short_code: newLine.uom_short_code,
+              uom_precision: newLine.uom_precision,
             });
           }
 
@@ -361,6 +375,8 @@ export default async function handler(req, res) {
               action: 'INCREASED',
               old_qty: current.quantity,
               new_qty: newLine.quantity,
+              uom_short_code: newLine.uom_short_code,
+              uom_precision: newLine.uom_precision,
             });
 
             await deductStockForItem(supabase, restaurant_id, {
@@ -383,6 +399,8 @@ export default async function handler(req, res) {
               action: 'REMOVED_PARTIAL',
               old_qty: current.quantity,
               new_qty: newLine.quantity,
+              uom_short_code: newLine.uom_short_code,
+              uom_precision: newLine.uom_precision,
             });
           }
         }
@@ -507,7 +525,7 @@ export default async function handler(req, res) {
       // 10.3 load full current order_items
       const { data: fullOrderItems, error: fullItemsErr } = await supabase
         .from('order_items')
-        .select('item_name, hsn, quantity, price, menu_item_id')
+        .select('item_name, hsn, quantity, price, menu_item_id, uom_short_code, uom_precision')
         .eq('order_id', order_id);
 
       if (!fullItemsErr && fullOrderItems?.length) {
@@ -544,6 +562,8 @@ export default async function handler(req, res) {
             line_total_inc_tax: Number(inc.toFixed(2)),
             cess_rate: 0,
             cess_amount: 0,
+            uom_short_code: oi.uom_short_code || null,
+            uom_precision: oi.uom_precision ?? 0,
           });
         }
 
@@ -560,7 +580,7 @@ export default async function handler(req, res) {
     // 11) Build order_for_print
     const { data: finalOrderItems } = await supabase
       .from('order_items')
-      .select('menu_item_id, item_name, quantity, price, hsn')
+      .select('menu_item_id, item_name, quantity, price, hsn, uom_short_code, uom_precision')
       .eq('order_id', order_id);
 
     const preparedItems = (finalOrderItems || []).map((oi) => ({

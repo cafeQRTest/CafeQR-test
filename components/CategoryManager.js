@@ -154,7 +154,7 @@ export default function CategoryManager({ restaurantId, onClose, onSaved }) {
       <div className="cm-modal" onClick={(e) => e.stopPropagation()}>
         <div className="cm-header">
           <h2 className="cm-title">Manage Categories</h2>
-          <button className="cm-close-btn" onClick={onClose}>&times;</button>
+          <button className="cm-close-btn" onClick={onClose}>✕</button>
         </div>
 
         <div className="cm-content">
@@ -304,8 +304,10 @@ export default function CategoryManager({ restaurantId, onClose, onSaved }) {
         .cm-title { margin: 0; font-size: 18px; font-weight: 700; color: #111827; }
         .cm-close-btn {
           background: transparent; border: none; font-size: 24px;
-          color: #9ca3af; cursor: pointer; padding: 0; line-height: 1;
+          color: #92400e; cursor: pointer; padding: 4px; line-height: 1;
+          transition: opacity 0.2s;
         }
+        .cm-close-btn:hover { opacity: 0.7; }
         .cm-content { padding: 24px; overflow-y: auto; flex: 1; padding-bottom: 250px; }
         .cm-section { display: flex; flex-direction: column; gap: 12px; }
         .cm-label { font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 4px; }
@@ -316,16 +318,23 @@ export default function CategoryManager({ restaurantId, onClose, onSaved }) {
         }
         .cm-input {
           flex: 1; padding: 10px 12px; border: 1px solid #d1d5db;
-          border-radius: 8px; font-size: 14px; outline: none; background: #f9fafb;
+          border-radius: 10px; font-size: 14px; outline: none; background: #f9fafb;
+          transition: border-color 0.2s;
         }
+        .cm-input:focus { border-color: #f97316; }
         .cm-primary-btn {
-          padding: 0 16px; background: #f97316; color: white; border: none;
-          border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 14px; height: 40px;
+          padding: 10px 24px; background: #f97316; color: white; border: none;
+          border-radius: 10px; font-weight: 600; cursor: pointer; font-size: 14px;
+          box-shadow: 0 4px 6px -1px rgba(249, 115, 22, 0.2);
+          transition: all 0.2s;
         }
+        .cm-primary-btn:hover { background: #ea580c; transform: translateY(-1px); }
         .cm-secondary-btn {
-          padding: 0 16px; background: white; color: #374151; border: 1px solid #d1d5db;
-          border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 14px; height: 40px;
+          padding: 10px 24px; background: white; color: #4b5563; border: 1px solid #d1d5db;
+          border-radius: 10px; font-weight: 600; cursor: pointer; font-size: 14px;
+          transition: all 0.2s;
         }
+        .cm-secondary-btn:hover { background: #f9fafb; border-color: #9ca3af; }
         .cm-divider { border-top: 1px solid #e5e7eb; margin: 20px 0; }
         .cm-edit-panel {
           padding: 20px; background-color: #ffffff; border-radius: 12px;

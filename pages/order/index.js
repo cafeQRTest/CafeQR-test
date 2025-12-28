@@ -7,6 +7,7 @@ import MenuItemCard from '../../components/MenuItemCard'
 import HorizontalScrollRow from '../../components/HorizontalScrollRow'
 import VariantSelector from '../../components/VariantSelector'
 import VariantEditModal from '../../components/VariantEditModal'
+import { formatQtyP } from '../../lib/qty'
 
 import Head from 'next/head'
 
@@ -209,7 +210,8 @@ export default function OrderPage() {
         const { data: rawItems, error: menuErr } = await supabase
           .from('menu_items')
           .select(`
-            id, name, price, description, category, veg, status, is_packaged_good, ispopular, image_url, has_variants,
+            id, name, price, description, category, veg, status, is_packaged_good, ispopular, image_url, has_variants, uom_id,
+            uom:unit_of_measures(short_code, precision),
             menu_item_variants(
               variant_templates(id, name)
             )
@@ -220,8 +222,17 @@ export default function OrderPage() {
 
         if (menuErr) throw menuErr
 
-        // 4. Fetch Variant Pricing
-        const finalItems = (rawItems || []).map(i => ({ ...i })); 
+        // 4. Normalize and Fetch Variant Pricing
+        // Handle case where uom might be returned as an array
+        const finalItems = (rawItems || []).map(i => {
+           const uomObj = Array.isArray(i.uom) ? i.uom[0] : i.uom;
+           return { 
+            ...i,
+            uom: uomObj,
+            uom_precision: uomObj?.precision ?? 2
+           };
+        });
+
         // Filter only valid items with explicit IDs
         const variantItemIds = finalItems.filter(i => i && i.has_variants && i.id).map(i => i.id);
 
@@ -455,9 +466,17 @@ export default function OrderPage() {
       }
     }
   }
-  const updateCartItem = (itemId, quantity) => {
-    if (quantity === 0) setCart(prev => prev.filter(c => c.id !== itemId))
-    else setCart(prev => prev.map(c => c.id === itemId ? { ...c, quantity } : c))
+  const updateCartItem = (itemId, quantity, itemObj) => {
+    setCart(prev => {
+       const exists = prev.find(c => c.id === itemId && !c.selectedVariant);
+       if (quantity <= 0) {
+          return prev.filter(c => !(c.id === itemId && !c.selectedVariant));
+       }
+       if (!exists && itemObj) {
+          return [...prev, { ...itemObj, quantity }];
+       }
+       return prev.map(c => (c.id === itemId && !c.selectedVariant) ? { ...c, quantity } : c);
+    })
   }
 
   const getItemQuantity = (itemId) => {
@@ -500,7 +519,15 @@ export default function OrderPage() {
   }, [filteredItems])
 
   const cartTotal = useMemo(() => cart.reduce((s, i) => s + i.price * i.quantity, 0), [cart])
-  const cartItemsCount = useMemo(() => cart.reduce((s, i) => s + i.quantity, 0), [cart])
+  const cartItemsCount = useMemo(() => cart.reduce((s, i) => {
+    // If precision > 0, treat it as 1 "item" (line item) regardless of weight
+    // If precision == 0 (Units), add the actual quantity
+    return s + ((i.uom?.precision || 0) > 0 ? 1 : i.quantity)
+  }, 0), [cart])
+  const cartItemsCountDisplay = useMemo(
+    () => cartItemsCount,
+    [cartItemsCount]
+  );
 
   const brandColor = restaurant?.restaurant_profiles?.brand_color || '#f59e0b'
 
@@ -828,10 +855,13 @@ export default function OrderPage() {
                         badge={badge}
                         onAdd={() => handleAddItem(item)}
                         onRemove={() => updateCartItem(item.id, passQty - 1)}
+                        onQuantityChange={(it, qty) => updateCartItem(it.id, qty, it)}
                         onEdit={item.has_variants ? () => setEditingVariantItem(item) : undefined}
                         showImage={true}
                         highlightColor={brandColor}
                         onItemClick={() => handleAddItem(item)}
+                        decimalPlaces={item.uom_precision}
+                        quantityStep={item.uom_precision > 0 ? (1 / Math.pow(10, item.uom_precision)) : 1}
                       />
                     </div>
                   );
@@ -1021,7 +1051,7 @@ export default function OrderPage() {
                                   borderRadius: '50%',
                                   border: '2px solid #fff'
                                 }}>
-                                  {totalQty}
+                                  {formatQtyP(totalQty, item.uom?.precision ?? 0)}
                                 </span>
                             )}
                           </button>
@@ -1074,7 +1104,7 @@ export default function OrderPage() {
                               textAlign: 'center',
                               fontVariantNumeric: 'tabular-nums'
                             }}>
-                              {totalQty}
+                              {formatQtyP(totalQty, item.uom?.precision ?? 0)}
                             </span>
                             <button
                               onClick={(e) => { e.stopPropagation(); addToCart(item); }}
@@ -1160,7 +1190,7 @@ export default function OrderPage() {
             </div>
             <div>
               <div style={{ fontSize: 13, fontWeight: 500, opacity: 0.9 }}>
-                {cartItemsCount} Item{cartItemsCount !== 1 ? 's' : ''}
+                {cartItemsCountDisplay} Item{cartItemsCount !== 1 ? 's' : ''}
               </div>
               <div style={{ fontWeight: 800, fontSize: 18 }}>₹{cartTotal.toFixed(2)}</div>
             </div>

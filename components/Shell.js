@@ -94,7 +94,7 @@ export default function Shell({ children, showSidebar = false }) {
                   )}
                   {isMobile && (
                     <button className="close-btn" onClick={() => setSidebarOpen(false)} aria-label="Close">
-                      ×
+                      ✕
                     </button>
                   )}
                 </div>

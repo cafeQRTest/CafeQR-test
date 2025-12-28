@@ -156,7 +156,7 @@ export default function ItemEditor({
         { value: null, label: defaultLabel },
         ...uoms.map(u => ({ 
             value: u.id, 
-            label: `${u.name === 'Pieces' ? 'Each' : u.name} (${u.short_code})` 
+            label: `${u.name === 'Pieces' ? 'Each' : u.name} (${u.short_code === 'ea' ? 'Ea' : u.short_code})` 
         }))
      ];
   }, [uoms, defaultUomId]);

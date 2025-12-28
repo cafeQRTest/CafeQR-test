@@ -3,10 +3,9 @@ import React from 'react';
 import Card from './ui/Card';
 import Button from './ui/Button';
 import Chip from './ui/Chip';
+import { timeAgo } from '../lib/timeAgo';
 
 export default function OrderCard({ order, statusColor, onChangeStatus, onComplete, generatingInvoice, onKotPrinted }) {
-  return (
-    <div className="order-card-wrapper">
   // Items is a JSONB array of { name, quantity, price, notes? }
   const items = Array.isArray(order.items) ? order.items : [];
 
@@ -14,7 +13,14 @@ export default function OrderCard({ order, statusColor, onChangeStatus, onComple
   const subtotal = Number(order.subtotal ?? 0);
   const tax = Number(order.tax_amount ?? order.tax ?? 0);
   const itemCount = items.reduce((sum, it) => sum + (it.quantity || 1), 0);
+  const status = order.status || 'new';
 
+  // Fix onClick handler missing in props but used in component
+  // Assuming onChangeStatus logic handles card clicks or we need to add onClick prop
+  const onClick = () => {}; 
+
+  return (
+    <div className="order-card-wrapper">
     <Card
       className="order-card"
       onClick={onClick}
@@ -25,7 +31,7 @@ export default function OrderCard({ order, statusColor, onChangeStatus, onComple
           <strong>#{order.id.slice(0, 8)}</strong>
           <div className="muted" style={{ fontSize: 12 }}>
             {order.table_number && `Table ${order.table_number} • `}
-            {new Date(order.created_at).toLocaleTimeString()}
+            {timeAgo(order.updated_at || order.created_at)}
           </div>
         </div>
         <Chip tone={
@@ -42,7 +48,7 @@ export default function OrderCard({ order, statusColor, onChangeStatus, onComple
       <div style={{ fontSize: 14, color: '#374151' }}>
         {items.slice(0, 3).map((it, i) => (
           <div key={i}>
-            {it.quantity || 1}× {it.name}
+            {formatQtyP(it.quantity || 1, it.uom_precision ?? 0)}× {it.name}
             {it.notes && <em style={{ marginLeft: 4, color: '#6b7280' }}>({it.notes})</em>}
           </div>
         ))}

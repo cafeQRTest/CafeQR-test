@@ -51,8 +51,8 @@ export default function MenuItemCard({
 
   // Sync input if parent quantity changes (cart updates, etc.)
   useEffect(() => {
-    setQtyInput(quantity > 0 ? String(quantity) : '');
-  }, [quantity]);
+    setQtyInput(quantity > 0 ? quantity.toFixed(decimalPlaces) : '');
+  }, [quantity, decimalPlaces]);
 
   // Helper to enforce min/max and rounding
   const clampQuantity = (rawValue) => {
@@ -63,8 +63,24 @@ export default function MenuItemCard({
     // Enforce min/max
     value = Math.max(minQuantity, Math.min(maxQuantity, value));
 
-    // Round to required decimal places only
-    return Number(value.toFixed(decimalPlaces));
+    // Round based on decimalPlaces to ensure alignment with display
+    if (decimalPlaces > 0) {
+       const factor = Math.pow(10, decimalPlaces);
+       // Check if step suggests a coarser grain (e.g. 0.5 where precision might be 1 or 2)
+       // If step is standard 10^-N, just use standard rounding
+       // Otherwise, respect step
+       
+       if (quantityStep > 0 && quantityStep < 1 && (1/quantityStep) < factor) {
+          // Step is coarser (e.g. 0.5 vs precision 2 which allows 0.01)
+          // We likely want to snap to step
+           const stepFactor = 1 / quantityStep;
+           return Math.round(value * stepFactor) / stepFactor;
+       }
+       
+       return Math.round(value * factor) / factor;
+    }
+
+    return Math.round(value);
   };
 
   const handleQtyInputChange = (e) => {
@@ -104,7 +120,7 @@ export default function MenuItemCard({
     }
 
     const finalQty = clampQuantity(parsed);
-    setQtyInput(String(finalQty));
+    setQtyInput(finalQty > 0 ? finalQty.toFixed(decimalPlaces) : '');
 
     if (onQuantityChange) {
       onQuantityChange(item, finalQty);

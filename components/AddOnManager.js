@@ -204,7 +204,7 @@ export default function AddOnManager({ onClose, onSaved }) {
       <div className="vm-modal" onClick={(e) => e.stopPropagation()}>
         <div className="vm-header">
           <h2 className="vm-title">Manage Add-ons</h2>
-          <button className="vm-close-btn" onClick={onClose}>&times;</button>
+          <button className="vm-close-btn" onClick={onClose}>✕</button>
         </div>
 
         <div className="vm-content">
@@ -443,8 +443,10 @@ export default function AddOnManager({ onClose, onSaved }) {
         .vm-title { margin: 0; fontSize: 18px; fontWeight: 700; color: #111827; }
         .vm-close-btn {
           background: transparent; border: none; fontSize: 24px;
-          color: #9ca3af; cursor: pointer; padding: 0; line-height: 1;
+          color: #92400e; cursor: pointer; padding: 0; line-height: 1;
+          transition: opacity 0.2s;
         }
+        .vm-close-btn:hover { opacity: 0.7; }
         .vm-content { padding: 24px; overflow-y: auto; flex: 1; padding-bottom: 450px; }
         .vm-section { display: flex; flex-direction: column; gap: 12px; }
         .vm-label { fontSize: 13px; fontWeight: 600; color: #374151; margin-bottom: 4px; }
@@ -458,13 +460,18 @@ export default function AddOnManager({ onClose, onSaved }) {
           border-radius: 6px; fontSize: 13px; outline: none; background: #ffffff;
         }
         .vm-primary-btn {
-          padding: 0 16px; background: #f97316; color: white; border: none;
-          border-radius: 8px; fontWeight: 600; cursor: pointer; fontSize: 14px; height: 40px;
+          padding: 10px 24px; background: #f97316; color: white; border: none;
+          border-radius: 10px; fontWeight: 600; cursor: pointer; fontSize: 14px;
+          box-shadow: 0 4px 6px -1px rgba(249, 115, 22, 0.2);
+          transition: all 0.2s;
         }
+        .vm-primary-btn:hover { background: #ea580c; transform: translateY(-1px); }
         .vm-secondary-btn-small {
-          padding: 0 12px; background: white; color: #374151; border: 1px solid #d1d5db;
-          border-radius: 6px; fontWeight: 500; cursor: pointer; fontSize: 13px; height: 35px;
+          padding: 8px 16px; background: white; color: #4b5563; border: 1px solid #d1d5db;
+          border-radius: 8px; fontWeight: 600; cursor: pointer; fontSize: 13px;
+          transition: all 0.2s;
         }
+        .vm-secondary-btn-small:hover { background: #f9fafb; border-color: #9ca3af; }
         .vm-template-card {
           padding: 20px; background-color: #ffffff; border-radius: 12px;
           border: 1px solid #e5e7eb; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);

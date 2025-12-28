@@ -13,7 +13,7 @@ import NiceSelect from '../../components/NiceSelect';
 import { useAlert } from '../../context/AlertContext';
 import HorizontalScrollRow from '../../components/HorizontalScrollRow';
 import PremiumTimeSelect from '../../components/PremiumTimeSelect';
-import { round2, normalizeQty, formatQty2 } from '../../lib/qty';
+import { round2, roundP, normalizeQty, formatQty2, formatQtyP } from '../../lib/qty';
 
 // -------------------------------
 // Inline Payment Confirm Dialog
@@ -562,8 +562,11 @@ const clearDraft = (cartId) =>
     return next;
   });
 
-const updateCartItem = (cartId, qty) => {
-  const q = round2(qty);
+const updateCartItem = (cartId, qty, precision) => {
+  // Use passed precision or default to 2
+  const p = Number.isInteger(precision) ? precision : 2;
+  const q = roundP(qty, p);
+  
   if (!Number.isFinite(q) || q <= 0) {
     setCart((p) => p.filter((c) => c.cartId !== cartId));
     clearDraft(cartId);
@@ -573,18 +576,19 @@ const updateCartItem = (cartId, qty) => {
   clearDraft(cartId);
 };
 
-const commitQtyDraft = (cartId, raw) => {
-  const q = normalizeQty(raw, { allowZero: true }); // allow 0 => remove line
-  if (q === 0) return updateCartItem(cartId, 0);
+const commitQtyDraft = (cartId, raw, precision) => {
+  const p = Number.isInteger(precision) ? precision : 2;
+  const q = normalizeQty(raw, { allowZero: true, precision: p });
   if (q === null) {
-    clearDraft(cartId); // revert UI
-    return;
+      clearDraft(cartId);
+      return;
   }
-  return updateCartItem(cartId, q);
+  return updateCartItem(cartId, q, p);
 };
 
-const getDraftOrQtyNumber = (cartId, fallbackQty) => {
-  const parsed = normalizeQty(qtyDrafts[cartId], { allowZero: true });
+const getDraftOrQtyNumber = (cartId, fallbackQty, precision = 2) => {
+  const p = Number.isInteger(precision) ? precision : 2;
+  const parsed = normalizeQty(qtyDrafts[cartId], { allowZero: true, precision: p });
   if (parsed === null) return Number(fallbackQty || 0);
   return parsed;
 };
@@ -810,6 +814,14 @@ const [orderMode, setOrderMode] = useState('settle');
         
         // Transform menu data with variants and upsells
         const transformedMenu = (menu || []).map(item => {
+          // Flatten UOM if returned as array
+          let uomObj = item.uom;
+          if (Array.isArray(item.uom)) {
+             uomObj = item.uom[0] || null;
+          }
+          item.uom = uomObj;
+          item.uom_precision = uomObj?.precision ?? 2;
+
           const variants = variantDataMap.get(item.id) || [];
           const templateName = item.menu_item_variants?.[0]?.variant_templates?.name || 'Options';
 
@@ -1210,9 +1222,14 @@ const loadCreditCustomers = async () => {
   );
 
   const cartItemsCount = useMemo(
-    () => cart.reduce((s, i) => s + i.quantity, 0),
+    () => cart.reduce((s, i) => {
+        // If precision > 0, count as 1 item. If precision == 0, count quantity.
+        return s + ((i.uom?.precision || 0) > 0 ? 1 : i.quantity);
+    }, 0),
     [cart]
   );
+
+  const cartItemsCountDisplay = cartItemsCount;
 
   const addToCart = (item) => {
     if (item.status && item.status !== 'available') {
@@ -1278,14 +1295,15 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
     id: i.id,
     name: i.displayName || i.name, // consistent with kitchen order
     price: i.price,
-    quantity: round2(i.quantity),
+    quantity: roundP(i.quantity, i.uom?.precision ?? 2),
     hsn: i.hsn,
     tax_rate: i.tax_rate,
     is_packaged_good: i.is_packaged_good,
     code_number: i.code_number,
     variant_id: i.variant_id || null,
     variant_name: i.variant_name || null,
-    uom_short_code: i.uom_short_code || null
+    uom_short_code: i.uom_short_code || null,
+    uom_precision: i.uom?.precision ?? 0
   }));
 
   const isCredit = isCreditSale;
@@ -1382,10 +1400,12 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
     else if (orderSelect && orderSelect.startsWith('table:')) table_number = orderSelect.split(':')[1] || null;
 
     const items = cart.map((i) => ({
-      id: i.id, name: i.displayName || i.name, price: i.price, quantity: round2(i.quantity),
+      id: i.id, name: i.displayName || i.name, price: i.price, 
+      quantity: roundP(i.quantity, i.uom?.precision ?? 2),
       hsn: i.hsn, tax_rate: i.tax_rate, is_packaged_good: i.is_packaged_good, code_number: i.code_number,
       variant_id: i.variant_id || null, variant_name: i.variant_name || null,
-      uom_short_code: i.uom_short_code || null
+      uom_short_code: i.uom_short_code || null,
+      uom_precision: i.uom?.precision ?? 0
     }));
 
     const isCredit = isCreditSale;
@@ -1910,14 +1930,15 @@ renderItem={(item) => {
   const handleQuantityChange = (it, q) => {
     // Only safe for non-variant items because cartId differs for variants
     const cartId = it.id;
-    if (q <= 0) return updateCartItem(cartId, 0);
+    const precision = it.uom_precision ?? 2;
+    if (q <= 0) return updateCartItem(cartId, 0, precision);
 
     const exists = cart.some((c) => c.cartId === cartId);
-    if (exists) updateCartItem(cartId, q);
-    else addItemToCart({ ...it, quantity: q });
+    if (exists) updateCartItem(cartId, q, precision);
+    else addItemToCart({ ...it, quantity: q }); // addItemToCart handles initial add, precision stored in item
   };
 
-const isVariantItem = !!item.hasvariants && (item.variants?.length || 0) > 0;
+const isVariantItem = !!item.has_variants && (item.variants?.length || 0) > 0;
 
 
   return (
@@ -1929,11 +1950,13 @@ const isVariantItem = !!item.hasvariants && (item.variants?.length || 0) > 0;
   onAdd={() => addToCart(item)}
   onRemove={() => {
           const current = cart.find((c) => c.id === item.id)?.quantity || 0;
-          updateCartItem(item.id, current - 1);
+          updateCartItem(item.id, current - 1, item.uom_precision ?? 2);
         }}
   onQuantityChange={isVariantItem ? undefined : handleQuantityChange}
   showImage={enableMenuImages}
   highlightColor={enableMenuImages ? undefined : THEME.main}
+  decimalPlaces={item.uom_precision ?? 2}
+  quantityStep={item.uom_precision > 0 ? (1 / Math.pow(10, item.uom_precision)) : 1}
 />
     </div>
   );
@@ -1997,7 +2020,7 @@ const isVariantItem = !!item.hasvariants && (item.variants?.length || 0) > 0;
                                minWidth: 'fit-content'
                              }}>
                                <button
-                                 onClick={() => updateCartItem(item.id, qty - 1)}
+                                 onClick={() => updateCartItem(item.id, qty - 1, item.uom?.precision)}
                                  style={{
                                     width: 32, height: 32, 
                                     border: 'none', background: 'transparent', 
@@ -2008,11 +2031,11 @@ const isVariantItem = !!item.hasvariants && (item.variants?.length || 0) > 0;
                                >-</button>
                                
                                <input
-                                  value={qtyDrafts[item.id] ?? formatQty2(qty)}
+                                  value={qtyDrafts[item.id] ?? (Number.isFinite(qty) ? qty.toFixed(item.uom?.precision ?? 2) : '0.00')}
                                   inputMode="decimal"
                                   type="text"
                                   onChange={(e) => setDraft(item.id, e.target.value)}
-                                  onBlur={(e) => commitQtyDraft(item.id, e.target.value)}
+                                  onBlur={(e) => commitQtyDraft(item.id, e.target.value, item.uom?.precision)}
                                   onKeyDown={(e) => {
                                     if (e.key === 'Enter') e.currentTarget.blur();
                                     if (e.key === 'Escape') clearDraft(item.id);
@@ -2080,7 +2103,7 @@ const isVariantItem = !!item.hasvariants && (item.variants?.length || 0) > 0;
   >
     <span>View Cart</span>
     <span style={{ opacity: 0.6 }}>|</span>
-    <span>{cartItemsCount} Items</span>
+    <span>{cartItemsCountDisplay} {cartItemsCount === 1 ? 'Item' : 'Items'}</span>
     <span style={{ opacity: 0.6 }}>|</span>
     <span>₹{cartTotals.totalInc.toFixed(2)}</span>
   </button>
@@ -2268,11 +2291,13 @@ const isVariantItem = !!item.hasvariants && (item.variants?.length || 0) > 0;
                           flexShrink: 0,
                         }}>
                           <button
-onClick={() => {
-  const id = i.cartId || i.id;
-  const base = getDraftOrQtyNumber(id, i.quantity);
-  updateCartItem(id, base - 1);
-}}
+                            onClick={() => {
+                              const id = i.cartId || i.id;
+                              const prec = i.uom_precision ?? 2;
+                              const step = prec > 0 ? (1 / Math.pow(10, prec)) : 1;
+                              const base = getDraftOrQtyNumber(id, i.quantity, prec);
+                              updateCartItem(id, base - step, prec);
+                            }}
                             style={{
                               background: 'white',
                               color: THEME.main,
@@ -2307,14 +2332,16 @@ onClick={() => {
                             alignItems: 'center',
                             justifyContent: 'center',
                           }}>
-                            {i.quantity}
+                            {formatQtyP(i.quantity, i.uom_precision ?? 2)}
                           </span>
                           <button
-onClick={() => {
-  const id = i.cartId || i.id;
-  const base = getDraftOrQtyNumber(id, i.quantity);
-  updateCartItem(id, base + 1);
-}}
+                            onClick={() => {
+                              const id = i.cartId || i.id;
+                              const prec = i.uom_precision ?? 2;
+                              const step = prec > 0 ? (1 / Math.pow(10, prec)) : 1;
+                              const base = getDraftOrQtyNumber(id, i.quantity, prec);
+                              updateCartItem(id, base + step, prec);
+                            }}
                             style={{
                               background: 'white',
                               color: THEME.main,
@@ -2341,7 +2368,7 @@ onClick={() => {
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           <span style={{ fontSize: 13, color: '#6b7280' }}>
-                            ₹{i.price} × {i.quantity}
+                            ₹{i.price} × {formatQtyP(i.quantity, i.uom?.precision ?? 2)}
                           </span>
                           {profileTax.gst_enabled && !profileTax.prices_include_tax && !i.is_packaged_good && (
                             <span style={{

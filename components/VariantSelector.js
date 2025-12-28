@@ -10,16 +10,21 @@ export default function VariantSelector({ item, onSelect, onClose, gstEnabled = 
   // Track quantity for each add-on (key: addon_id, value: quantity)
   const [addonQuantities, setAddonQuantities] = useState({});
 
-  const quantityStep = 1;      // change if you want button step like 0.25, etc.
-const decimalPlaces = 2;
+const quantityStep = (item.uom?.precision || 0) > 0 ? (1 / Math.pow(10, item.uom.precision)) : 1;
 const minQuantity = 0;
 const maxQuantity = 99;
+const decimalPlaces = item.uom?.precision ?? 0;
 
 const [variantQtyDrafts, setVariantQtyDrafts] = useState({}); // variantId -> string
 
 const clampQty = (n) => {
   if (!Number.isFinite(n)) return minQuantity;
   let v = Math.max(minQuantity, Math.min(maxQuantity, n));
+  // Round to nearest step if precision > 0
+  if (quantityStep > 0 && quantityStep < 1) {
+       const factor = 1 / quantityStep;
+       return Math.round(v * factor) / factor;
+  }
   return Number(v.toFixed(decimalPlaces));
 };
 
@@ -210,8 +215,24 @@ const bumpQty = (variantId, dir) => {
                    <div style={{ fontWeight: 600, color: '#374151' }}>Quantity</div>
                    <QuantityControls>
                       <QuantityButton onClick={() => setMainQty(q => Math.max(1, q - 1))} disabled={mainQty <= 1}>−</QuantityButton>
-                      <QuantityDisplay>{mainQty}</QuantityDisplay>
-                      <QuantityButton onClick={() => setMainQty(q => q + 1)}>+</QuantityButton>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={mainQty}
+                        onChange={(e) => {
+                           const raw = e.target.value.replace(',', '.');
+                           if (raw === '' || /^\d*\.?\d*$/.test(raw)) {
+                             setMainQty(raw); // Store as string temporarily
+                           }
+                        }}
+                        onBlur={(e) => {
+                           const val = parseFloat(e.target.value);
+                           if (!Number.isNaN(val)) setMainQty(clampQty(val));
+                           else setMainQty(1);
+                        }}
+                        style={{ width: 60, textAlign: 'center', fontWeight: 'bold', border: 'none', outline: 'none' }}
+                      />
+                      <QuantityButton onClick={() => setMainQty(q => (typeof q === 'string' ? parseFloat(q) : q) + 1)}>+</QuantityButton>
                    </QuantityControls>
                 </div>
              </div>
@@ -334,7 +355,7 @@ const bumpQty = (variantId, dir) => {
                       const variant = variants.find(v => v.variant_id === variantId);
                       return (
                         <SelectedItem key={variantId}>
-                          {qty}× {variant?.variant_name}
+                           {qty.toFixed(decimalPlaces)}× {variant?.variant_name}
                         </SelectedItem>
                       );
                     })}

@@ -1058,15 +1058,17 @@ const AddButton = styled.button`
   background: #10b981;
   color: #fff;
   border: none;
-  padding: 0.7rem 1.25rem;
-  border-radius: 8px;
+  padding: 10px 24px;
+  border-radius: 10px;
   font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.2s;
+  box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.2);
+  transition: all 0.2s;
 
   &:hover {
     background: #059669;
+    transform: translateY(-1px);
   }
 `
 
@@ -1396,16 +1398,17 @@ const ModalTitle = styled.h3`
 `
 
 const CloseButton = styled.button`
-  background: none;
+  background: transparent;
   border: none;
-  font-size: 1.4rem;
+  font-size: 24px;
   cursor: pointer;
-  color: #6b7280;
-  padding: 0;
-  transition: color 0.2s;
+  color: #92400e;
+  padding: 4px;
+  line-height: 1;
+  transition: opacity 0.2s;
 
   &:hover {
-    color: #111827;
+    opacity: 0.7;
   }
 `
 
@@ -1549,34 +1552,37 @@ const InlineError = styled.div`
 `
 
 const CancelButton = styled.button`
-  padding: 0.7rem 1.3rem;
-  background: #e5e7eb;
-  color: #374151;
-  border: none;
-  border-radius: 8px;
+  padding: 10px 24px;
+  background: transparent;
+  color: #4b5563;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
   font-weight: 600;
   font-size: 0.95rem;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: all 0.2s;
 
   &:hover {
-    background: #d1d5db;
+    background: #f9fafb;
+    border-color: #9ca3af;
   }
 `
 
 const SaveButton = styled.button`
-  padding: 0.7rem 1.3rem;
+  padding: 10px 24px;
   background: #10b981;
   color: #fff;
   border: none;
-  border-radius: 8px;
+  border-radius: 10px;
   font-weight: 600;
   font-size: 0.95rem;
   cursor: pointer;
-  transition: background 0.2s;
+  box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.2);
+  transition: all 0.2s;
 
   &:hover {
     background: #059669;
+    transform: translateY(-1px);
   }
 `
 

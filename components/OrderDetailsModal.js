@@ -11,7 +11,13 @@ export default function OrderDetailsModal({ order, onClose, onStatusChange }) {
       <div className="modal__card" style={{ maxWidth: 600 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <h2 style={{ margin: 0 }}>Order #{order.id.slice(0,8)}</h2>
-          <Button variant="outline" onClick={onClose}>×</Button>
+           <button type="button" onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 4, transition: 'opacity 0.2s' }}>
+             <span 
+               style={{ fontSize: 24, color: '#92400e', lineHeight: 1 }}
+               onMouseEnter={e => e.currentTarget.parentElement.style.opacity = '0.7'}
+               onMouseLeave={e => e.currentTarget.parentElement.style.opacity = '1'}
+             >✕</span>
+           </button>
         </div>
 
         {/* Customer & Table Info */}

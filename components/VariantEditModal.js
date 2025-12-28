@@ -37,19 +37,21 @@ export default function VariantEditModal({ item, cartItems, onUpdate, onClose, t
              onClick={onClose} 
              style={{
                border:'none', 
-               background:'#f3f4f6', 
-               width: 32, 
-               height: 32, 
-               borderRadius: '50%', 
-               fontSize:18, 
+               background:'transparent', 
+               padding: 4,
+               fontSize: 24, 
                display: 'flex', 
                alignItems: 'center', 
                justifyContent: 'center',
-               color: '#4b5563',
-               cursor: 'pointer'
+               color: '#92400e',
+               cursor: 'pointer',
+               lineHeight: 1,
+               transition: 'opacity 0.2s'
              }}
+             onMouseEnter={e => e.currentTarget.style.opacity = '0.7'}
+             onMouseLeave={e => e.currentTarget.style.opacity = '1'}
            >
-             &times;
+             ✕
            </button>
         </div>
         

@@ -132,7 +132,7 @@ export default function MenuImageImport({ onClose, onImported, restaurantId, exi
             <div className="import-icon">📋</div>
             <h2 className="import-title">Menu Import</h2>
           </div>
-          <button onClick={onClose} className="import-close" aria-label="Close">×</button>
+          <button onClick={onClose} className="import-close" aria-label="Close">✕</button>
         </div>
 
         {/* Content */}
@@ -398,8 +398,8 @@ export default function MenuImageImport({ onClose, onImported, restaurantId, exi
           display: flex;
           justify-content: space-between;
           align-items: center;
-          background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
-          color: white;
+          background: #ffffff;
+          color: #111827;
         }
 
         .import-header-left {
@@ -423,19 +423,18 @@ export default function MenuImageImport({ onClose, onImported, restaurantId, exi
           width: 32px;
           height: 32px;
           border: none;
-          background: rgba(255, 255, 255, 0.15);
-          border-radius: 6px;
-          font-size: 20px;
-          color: white;
+          background: transparent;
+          font-size: 24px;
+          color: #92400e;
           cursor: pointer;
-          transition: all 0.15s ease;
+          transition: opacity 0.2s ease;
           display: flex;
           align-items: center;
           justify-content: center;
+          line-height: 1;
         }
-
         .import-close:hover {
-          background: rgba(255, 255, 255, 0.25);
+          opacity: 0.7;
         }
 
         .import-content {

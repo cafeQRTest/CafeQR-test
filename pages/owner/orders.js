@@ -13,7 +13,7 @@ import { subscribeOwnerDevice } from '../../helpers/subscribePush';
 import { downloadInvoicePdf } from '../../lib/downloadInvoicePdf'
 import VariantSelector from '../../components/VariantSelector'
 import NiceSelect from '../../components/NiceSelect'
-import { round2 } from '../../lib/qty'
+import { round2, roundP, formatQtyP } from '../../lib/qty'
 
 const BRAND = {
   orange: '#f97316',
@@ -458,13 +458,12 @@ async function restoreStockForOrder(supabase, restaurantId, orderItems) {
     }
 
     for (const ri of recipe.recipe_items) {
-      const addBack = round2(Number(ri.quantity) * Number(oi.quantity));
-      console.log('[STOCK RESTORE] Restoring ingredient:', { ingredient_id: ri.ingredient_id, addBack });
+      console.log('[STOCK RESTORE] Processing ingredient:', ri.ingredient_id);
       
       // Get current stock
       const { data: ing, error: ingErr } = await supabase
         .from('ingredients')
-        .select('id, current_stock, name')
+        .select('id, current_stock, name, uom:unit_of_measures(precision)')
         .eq('id', ri.ingredient_id)
         .eq('restaurant_id', restaurantId)
         .single();
@@ -474,8 +473,11 @@ async function restoreStockForOrder(supabase, restaurantId, orderItems) {
         continue;
       }
 
+      const precision = ing.uom?.precision ?? 2;
+      const addBack = roundP(Number(ri.quantity) * Number(oi.quantity), precision);
+
       const oldStock = Number(ing.current_stock || 0);
-      const newStock = round2(oldStock + addBack);
+      const newStock = roundP(oldStock + addBack, precision);
       console.log('[STOCK RESTORE] Updating stock for', ing.name, ':', oldStock, '→', newStock);
       
       const { error: updateErr } = await supabase
@@ -523,13 +525,8 @@ function computeOrderTotalDisplay(order) {
 }
 
 function toDisplayItems(order) {
-  if (Array.isArray(order.items) && order.items.length > 0) {
-    return order.items.map((item) => ({
-      ...item,
-      menu_item_id: item.menu_item_id || item.id,
-    }));
-  }
-  if (Array.isArray(order.order_items)) {
+  // Prioritize relational order_items as it contains joined menu info and precision
+  if (Array.isArray(order.order_items) && order.order_items.length > 0) {
     return order.order_items.map((oi) => ({
       menu_item_id: oi.menu_item_id,
       name: oi.item_name || oi.menu_items?.name || 'Item',
@@ -537,7 +534,17 @@ function toDisplayItems(order) {
       price: oi.price,
       is_packaged_good: oi.is_packaged_good,
       variant_id: oi.variant_option_id || null,
-      variant_name: oi.variant_name || null,
+      uom_short_code: oi.uom_short_code || null,
+      uom_precision: oi.uom_precision ?? oi.menu_items?.uom?.precision ?? 0,
+      notes: oi.notes,
+    }));
+  }
+  // Fallback to JSONB items (legacy or if order_items missing)
+  if (Array.isArray(order.items) && order.items.length > 0) {
+    return order.items.map((item) => ({
+      ...item,
+      menu_item_id: item.menu_item_id || item.id,
+      uom_precision: item.uom_precision ?? 0, // Ensure precision check for JSONB too
     }));
   }
   return [];
@@ -804,10 +811,14 @@ function EditOrderPanel({ order, onClose, onSave, tablesCount = 0 }) {
 
   const updateQty = (index, qty) => {
     setLines((prev) => {
-      if (qty <= 0) {
+      const line = prev[index];
+      const precision = line?.uom_precision ?? 0;
+      const roundedQty = roundP(Number(qty) || 0, precision);
+      
+      if (roundedQty <= 0) {
         return prev.filter((_, i) => i !== index); // 0 = delete
       }
-      return prev.map((l, i) => (i === index ? { ...l, quantity: qty } : l));
+      return prev.map((l, i) => (i === index ? { ...l, quantity: roundedQty } : l));
     });
   };
 
@@ -895,6 +906,7 @@ function EditOrderPanel({ order, onClose, onSave, tablesCount = 0 }) {
         .from('menu_items')
         .select(`
           id, name, price, is_packaged_good, has_variants,
+          uom:unit_of_measures(short_code, precision),
           menu_item_variants (
             variant_templates (
               id,
@@ -1016,11 +1028,13 @@ function EditOrderPanel({ order, onClose, onSave, tablesCount = 0 }) {
           i === existingIndex
             ? { 
                 ...l, 
-                quantity: (Number(l.quantity) || 0) + qtyToAdd,
+                quantity: roundP((Number(l.quantity) || 0) + qtyToAdd, item.uom?.precision ?? l.uom_precision ?? 0),
                 price: finalPrice, 
                 variant_id: variantId || l.variant_id,
                 menu_item_id: item.id, // Update ID to current
-                name: finalName // Update name formatting if needed
+                name: finalName, // Update name formatting if needed
+                uom_precision: item.uom?.precision ?? l.uom_precision ?? 0,
+                uom_short_code: item.uom?.short_code ?? l.uom_short_code ?? null
               }
             : l
         );
@@ -1030,11 +1044,13 @@ function EditOrderPanel({ order, onClose, onSave, tablesCount = 0 }) {
         ...prev,
         {
           name: finalName,
-          quantity: qtyToAdd,
+          quantity: roundP(qtyToAdd, item.uom?.precision ?? 0),
           price: finalPrice,
           menu_item_id: item.id,
           is_packaged_good: !!item.is_packaged_good,
           variant_id: variantId,
+          uom_precision: item.uom?.precision ?? 0,
+          uom_short_code: item.uom?.short_code ?? null,
         },
       ];
     });
@@ -1095,6 +1111,25 @@ function EditOrderPanel({ order, onClose, onSave, tablesCount = 0 }) {
     m.name.toLowerCase().includes(menuSearch.toLowerCase())
   );
 
+  // Draft state for quantity inputs to allow smooth decimal typing
+  const [qtyDrafts, setQtyDrafts] = useState({});
+
+  const commitDraft = (idx, val, precision) => {
+    const p = precision ?? 2;
+    let num = parseFloat(val);
+    if (isNaN(num)) num = 0;
+    
+    // Clear draft so it syncs with source of truth
+    setQtyDrafts(prev => {
+        const next = { ...prev };
+        delete next[idx];
+        return next;
+    });
+
+    // Update actual state
+    updateQty(idx, num);
+  };
+
   return (
     <div
       style={{
@@ -1135,18 +1170,7 @@ function EditOrderPanel({ order, onClose, onSave, tablesCount = 0 }) {
             <div style={{ fontWeight: 600, fontSize: 16 }}>
               Edit Order #{order.id.slice(0, 8)}
             </div>
-            {/* Table Selection Dropdown */}
-            <div style={{ marginTop: 8, maxWidth: 220 }}>
-               <NiceSelect
-                  value={selectedLocation}
-                  onChange={setSelectedLocation}
-                  placeholder="Select Location"
-                  options={[
-                    { value: 'parcel', label: 'Parcel / Takeaway' },
-                    ...tables.map(n => ({ value: `table:${n}`, label: `Table ${n}` }))
-                  ]}
-               />
-            </div>
+            {/* Table Selection Removed per user request */}
           </div>
         </div>
 
@@ -1179,77 +1203,94 @@ function EditOrderPanel({ order, onClose, onSave, tablesCount = 0 }) {
                 </div>
               </div>
 
-              {/* Qty pill with icons */}
+              {/* Qty Control (Cart Style) */}
               <div
                 style={{
-                  display: 'flex',
+                  display: 'inline-flex',
                   alignItems: 'center',
-                  gap: 6,
-                  borderRadius: 999,
-                  border: '1px solid #e5e7eb',
-                  padding: '2px 8px',
-                  background: '#f9fafb',
+                  background: `${BRAND.orange}20`, // Soft orange background
+                  borderRadius: 8,
+                  border: `1px solid ${BRAND.orange}`,
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                  overflow: 'hidden',
+                  height: 32,
                 }}
               >
-                <span
-                  onClick={() =>
-                    updateQty(idx, (Number(line.quantity) || 0) - 1)
-                  }
+                <button
+                  onClick={() => {
+                    const step = line.uom_precision > 0 ? (1 / Math.pow(10, line.uom_precision)) : 1;
+                    updateQty(idx, (Number(line.quantity) || 0) - step);
+                  }}
                   style={{
-                    width: 20,
-                    height: 20,
-                    borderRadius: '999px',
-                    backgroundColor: '#fee2e2',
-                    color: '#b91c1c',
+                    width: 32,
+                    height: 32,
+                    border: 'none',
+                    background: 'transparent',
+                    color: BRAND.orange,
+                    fontSize: 18,
+                    fontWeight: 700,
+                    cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    fontSize: 14,
-                    cursor: 'pointer',
+                    flexShrink: 0
                   }}
                   title="Decrease"
                 >
                   −
-                </span>
+                </button>
+
                 <input
-                  type="number"
-                  min="1"
-                  value={line.quantity}
-                  onChange={(e) => updateQty(idx, e.target.value)}
+                  type="text"
+                  inputMode="decimal"
+                  value={qtyDrafts[idx] ?? Number(line.quantity || 0).toFixed(line.uom_precision ?? 2)}
+                  onChange={(e) => {
+                     const val = e.target.value;
+                     setQtyDrafts(prev => ({ ...prev, [idx]: val }));
+                  }}
+                  onBlur={(e) => commitDraft(idx, e.target.value, line.uom_precision)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') e.currentTarget.blur();
+                  }}
                   style={{
-                    width: 40,
-                    textAlign: 'center',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    color: '#111827',
+                    width: 50, // Slightly wider for decimals
+                    height: 32,
                     border: 'none',
                     background: 'transparent',
+                    textAlign: 'center',
+                    fontSize: 14,
+                    fontWeight: 700,
+                    color: '#1e293b',
                     outline: 'none',
                     padding: 0,
                     appearance: 'textfield',
-                    margin: '0 4px'
+                    flexShrink: 0
                   }}
                 />
-                <span
-                  onClick={() =>
-                    updateQty(idx, (Number(line.quantity) || 0) + 1)
-                  }
+
+                <button
+                  onClick={() => {
+                     const step = line.uom_precision > 0 ? (1 / Math.pow(10, line.uom_precision)) : 1;
+                     updateQty(idx, (Number(line.quantity) || 0) + step);
+                  }}
                   style={{
-                    width: 20,
-                    height: 20,
-                    borderRadius: '999px',
-                    backgroundColor: '#dcfce7',
-                    color: '#16a34a',
+                    width: 32,
+                    height: 32,
+                    border: 'none',
+                    background: 'transparent',
+                    color: BRAND.orange,
+                    fontSize: 18,
+                    fontWeight: 700,
+                    cursor: 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    fontSize: 14,
-                    cursor: 'pointer',
+                    flexShrink: 0
                   }}
                   title="Increase"
                 >
                   +
-                </span>
+                </button>
               </div>
 
               {/* Delete icon */}
@@ -1675,7 +1716,7 @@ function TableEditDialog({ order, onSave, onClose, tablesCount = 0 }) {
 async function fetchFullOrder(supabase, orderId) {
   const { data, error } = await supabase
     .from('orders')
-    .select('*, order_items(*, menu_items(name))')
+    .select('*, order_items(*, menu_items(name, uom:unit_of_measures(precision)))')
     .eq('id', orderId)
     .single();
   if (!error && data) return data;
@@ -2035,33 +2076,12 @@ const handleEditSave = async (edited) => {
 
 
 
-  // Fetch orders helper
-  async function fetchBucket(status, page = 1) {
-    if (!supabase || !restaurantId) return [];
-    let q = supabase
-      .from('orders')
-      .select('*, order_items(*, menu_items(name))')
-      .eq('restaurant_id', restaurantId)
-      .eq('status', status);
-
-    if (status === 'completed') {
-      const to = page * PAGE_SIZE - 1;
-      const { data, error } = await q.order('updated_at', { ascending: false }).range(0, to);
-      if (error) throw error;
-      return data;
-    }
-
-    const { data, error } = await q.order('updated_at', { ascending: true });
-    if (error) throw error;
-    return data;
-  }
-  
 // Fetch orders helper
-async function fetchBucket(status, page = 1) {
+async function fetchBucket(status, page = 1, supabase, restaurantId) {
   if (!supabase || !restaurantId) return [];
   let q = supabase
     .from('orders')
-    .select('*, order_items(*, menu_items(name))')
+    .select('*, order_items(*, menu_items(name, uom:unit_of_measures(precision)))')
     .eq('restaurant_id', restaurantId)
     .eq('status', status);
 
@@ -2087,10 +2107,10 @@ const loadOrders = useCallback(
     setError('');
     try {
       const [n, i, r, c] = await Promise.all([
-        fetchBucket('new'),
-        fetchBucket('in_progress'),
-        fetchBucket('ready'),
-        fetchBucket('completed', page),
+        fetchBucket('new', 1, supabase, restaurantId),
+        fetchBucket('in_progress', 1, supabase, restaurantId),
+        fetchBucket('ready', 1, supabase, restaurantId),
+        fetchBucket('completed', page, supabase, restaurantId),
       ]);
 
       setOrdersByStatus({
@@ -2128,25 +2148,35 @@ useEffect(() => {
       'postgres_changes',
       { event: '*', schema: 'public', table: 'orders', filter: `restaurant_id=eq.${restaurantId}` },
       (payload) => {
-        const order = payload.new;
-        if (!order) return;
+        const payloadOrder = payload.new;
+        if (!payloadOrder) return;
 
-        // Update order in kanban/mobile list
-        setOrdersByStatus((prev) => {
-          const updated = { ...prev };
-          for (const status of STATUSES) {
-            updated[status] = prev[status].filter((o) => o.id !== order.id);
-          }
-          if (order.status && updated[order.status]) {
-            updated[order.status] = [order, ...updated[order.status]];
-          }
-          return updated;
-        });
+        // Fetch full order with items and precision to ensure UI is correct
+        supabase
+          .from('orders')
+          .select('*, order_items(*, menu_items(name, uom:unit_of_measures(precision)))')
+          .eq('id', payloadOrder.id)
+          .single()
+          .then(({ data: fullOrder }) => {
+             if (!fullOrder) return;
+             
+             // Update order in kanban/mobile list
+             setOrdersByStatus((prev) => {
+               const updated = { ...prev };
+               for (const status of STATUSES) {
+                 updated[status] = prev[status].filter((o) => o.id !== fullOrder.id);
+               }
+               if (fullOrder.status && updated[fullOrder.status]) {
+                 updated[fullOrder.status] = [fullOrder, ...updated[fullOrder.status]];
+               }
+               return updated;
+             });
 
-        // Only play sound for new orders (print is now handled by global service)
-        if (payload.eventType === 'INSERT' && order.status === 'new') {
-          playNotificationSound();
-        }
+             // Only play sound for new orders
+             if (payload.eventType === 'INSERT' && fullOrder.status === 'new') {
+               playNotificationSound();
+             }
+          });
       }
     )
     .subscribe();
@@ -2158,7 +2188,7 @@ useEffect(() => {
           if (!supabase) return;
           const { data } = await supabase
             .from('orders')
-            .select('*, order_items(*, menu_items(name))')
+            .select('*, order_items(*, menu_items(name, uom:unit_of_measures(precision)))')
             .eq('restaurant_id', restaurantId)
             .eq('status', 'new')
             .gte('updated_at', new Date(Date.now() - 120000).toISOString())
@@ -2605,7 +2635,10 @@ if (ordersByStatus.mobileFilter === 'inprogress') {
 }}
 
         onCancelOrderOpen={onCancelOrderOpen}
-        onEditOrder={(order) => setEditingOrder(order)}
+        onEditOrder={async (o) => {
+          const full = await fetchFullOrder(supabase, o.id);
+          setEditingOrder(full || o);
+        }}
         onEditPax={(order) => setPaxEditOrder(order)}
         onEditTable={(order) => setTableEditOrder(order)}
       />
@@ -2737,7 +2770,10 @@ colOrders =
 }}
 
                 onCancelOrderOpen={onCancelOrderOpen}
-                onEditOrder={(order) => setEditingOrder(order)}
+                onEditOrder={async (o) => {
+          const full = await fetchFullOrder(supabase, o.id);
+          setEditingOrder(full || o);
+        }}
                 onEditPax={(order) => setPaxEditOrder(order)}
                 onEditTable={(order) => setTableEditOrder(order)}
                 onShowItems={(o) => setItemsModalOrder(o)}
@@ -2909,10 +2945,11 @@ colOrders =
                 className="dynamic-close-btn"
                 onClick={() => setItemsModalOrder(null)} 
                 style={{
-                    cursor:'pointer', width:28, height:28, 
-                    background:'transparent', color: BRAND.orange, display:'flex', 
-                    alignItems:'center', justifyContent:'center', fontSize:22, fontWeight:300,
-                    flexShrink:0, marginTop: -4, marginRight: -8
+                    cursor:'pointer', width:32, height:32, 
+                    background:'transparent', color: '#92400e', display:'flex', 
+                    alignItems:'center', justifyContent:'center', fontSize:24,
+                    flexShrink:0, marginTop: -4, marginRight: -8,
+                    transition: 'opacity 0.2s'
                 }}
               >✕</div>
             </div>
@@ -2944,7 +2981,7 @@ colOrders =
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 12, fontWeight: 500, color: '#334155' }}>
-                        <span style={{ color: BRAND.orange, fontWeight: 700, marginRight: 5 }}>{it.quantity}×</span>
+                        <span style={{ color: BRAND.orange, fontWeight: 700, marginRight: 5 }}>{formatQtyP(it.quantity, it.uom_precision ?? 0)}×</span>
                         {it.name}
                       </div>
                       {it.variant_name && <div style={{ fontSize: 9, color: '#94a3b8', marginTop: 1, marginLeft: 20 }}>{it.variant_name}</div>}
@@ -2979,7 +3016,7 @@ colOrders =
       <style jsx>{`
 .orders-wrap { padding:12px 0 32px; }
 .dynamic-close-btn { transition: opacity 0.2s ease; }
-.dynamic-close-btn:hover { opacity: 0.6; }
+.dynamic-close-btn:hover { opacity: 0.7; }
 .dynamic-close-btn:active { opacity: 0.9; }
 .orders-header { display:flex; justify-content:space-between; align-items:center; padding:0 12px 12px; gap:10px; }
 .orders-header h1 { margin:0; font-size:clamp(20px,2.6vw,28px); }
@@ -3116,7 +3153,7 @@ function OrderCard({
         {items.slice(0, 3).map((it,i)=>(
           <div key={i} style={{ display: 'flex', justifyContent: 'space-between' }}>
              <div>
-               <span style={{fontWeight:600}}>{it.quantity}×</span> {it.name}
+               <span style={{fontWeight:600}}>{formatQtyP(it.quantity, it.uom_precision ?? 0)}×</span> {it.name}
                {it.variant_name && <span style={{fontSize:12, color:'#6b7280', marginLeft:6}}>({it.variant_name})</span>}
              </div>
           </div>
