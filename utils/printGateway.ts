@@ -160,7 +160,7 @@ export async function printUniversal(opts: Options) {
           if (addr) {
             try {
               await DevicePrinter.pairDevice({ address: addr });
-            } catch {}
+            } catch { }
             localStorage.setItem(addrKey, addr);
             if (pick?.name) localStorage.setItem(nameHintKey, pick.name);
           }
@@ -320,8 +320,22 @@ export async function printUniversal(opts: Options) {
       );
       w.document.close();
       w.focus();
-      w.print();
-      w.close();
+
+      // Chromium sometimes throws "The provided callback is no longer runnable"
+      // if print() is called immediately after document.close().
+      // Using a small timeout and awaiting it ensures window stability.
+      await new Promise<void>((resolve) => {
+        setTimeout(() => {
+          try {
+            w.print();
+            w.close();
+          } catch (e) {
+            console.error('Browser print failed:', e);
+          }
+          resolve();
+        }, 250);
+      });
+
       return { via: 'system' as const };
     }
 

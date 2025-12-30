@@ -215,7 +215,7 @@ export class InvoiceService {
         await supabase.from('invoice_items').insert({
           invoice_id: inv.id,
           line_no: lineNo++,
-          item_name: it.item_name || it.name || 'Item',
+          item_name: it.variant_name ? `${it.item_name || it.name} (${it.variant_name})` : (it.item_name || it.name || 'Item'),
           hsn: it.hsn || null,
           qty,
           unit_rate_ex_tax: unitRateForDB,

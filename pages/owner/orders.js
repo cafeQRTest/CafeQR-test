@@ -538,6 +538,7 @@ function toDisplayItems(order) {
       price: oi.price,
       is_packaged_good: oi.is_packaged_good,
       variant_id: oi.variant_option_id || null,
+      variant_name: oi.variant_name || null,
       uom_short_code: oi.uom_short_code || null,
       uom_precision: oi.uom_precision ?? oi.menu_items?.uom?.precision ?? 0,
       notes: oi.notes,
@@ -1158,6 +1159,7 @@ function EditOrderPanel({ order, onClose, onSave, tablesCount = 0 }) {
                 quantity: roundP((Number(l.quantity) || 0) + qtyToAdd, item.uom?.precision ?? l.uom_precision ?? 0),
                 price: finalPrice, 
                 variant_id: variantId || l.variant_id,
+                variant_name: item.selectedVariant?.variant_name || item.variant_name || l.variant_name || null,
                 menu_item_id: item.id, // Update ID to current
                 name: finalName, // Update name formatting if needed
                 uom_precision: item.uom?.precision ?? l.uom_precision ?? 0,
@@ -1176,6 +1178,7 @@ function EditOrderPanel({ order, onClose, onSave, tablesCount = 0 }) {
           menu_item_id: item.id,
           is_packaged_good: !!item.is_packaged_good,
           variant_id: variantId,
+          variant_name: item.selectedVariant?.variant_name || item.variant_name || null,
           uom_precision: item.uom?.precision ?? 0,
           uom_short_code: item.uom?.short_code ?? null,
         },

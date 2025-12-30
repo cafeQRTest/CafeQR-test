@@ -128,7 +128,7 @@ export default async function handler(req, res) {
     // 4) Load current order_items
     const { data: currentItems, error: itemsErr } = await supabase
       .from('order_items')
-      .select('id, menu_item_id, quantity, price, item_name, hsn, is_packaged_good, variant_option_id, uom_short_code, uom_precision')
+      .select('id, menu_item_id, quantity, price, item_name, hsn, is_packaged_good, variant_option_id, variant_name, uom_short_code, uom_precision')
       .eq('order_id', order_id);
 
     if (itemsErr) {
@@ -525,8 +525,8 @@ export default async function handler(req, res) {
       // 10.3 load full current order_items
       const { data: fullOrderItems, error: fullItemsErr } = await supabase
         .from('order_items')
-        .select('item_name, hsn, quantity, price, menu_item_id, uom_short_code, uom_precision')
-        .eq('order_id', order_id);
+      .select('item_name, variant_name, hsn, quantity, price, menu_item_id, uom_short_code, uom_precision')
+      .eq('order_id', order_id);
 
       if (!fullItemsErr && fullOrderItems?.length) {
         const invoiceRows = [];
@@ -552,7 +552,7 @@ export default async function handler(req, res) {
           invoiceRows.push({
             invoice_id: invoice.id,
             line_no: lineNo++,
-            item_name: oi.item_name,
+            item_name: oi.variant_name ? `${oi.item_name} (${oi.variant_name})` : oi.item_name,
             hsn: oi.hsn || null,
             qty,
             unit_rate_ex_tax: Number(unitEx.toFixed(2)),
