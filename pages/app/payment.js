@@ -192,6 +192,8 @@ export default function DeliveryPayment() {
     return {
       restaurant_id: restaurantId,
       restaurant_name: restaurant?.name || null,
+      customer_name: custName.trim(),
+      customer_phone: custPhone.trim(),
       table_number: "DELIVERY",
       items: cart.map((i) => ({
         id: i.id,

@@ -3194,6 +3194,17 @@ colOrders =
                       </div>
                   </div>
               </div>
+{itemsModalOrder?.special_instructions ? (
+  <div style={{ marginBottom: 14 }}>
+    <div style={{ fontSize: 8, fontWeight: 800, color: "#94a3b8", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 6 }}>
+      Delivery / Instructions
+    </div>
+    <pre style={{ margin: 0, whiteSpace: "pre-wrap", background: "#f8fafc", border: "1px solid #f1f5f9", borderRadius: 12, padding: 12, fontSize: 12, color: "#0f172a" }}>
+      {itemsModalOrder.special_instructions}
+    </pre>
+  </div>
+) : null}
+
               <div 
                 className="dynamic-close-btn"
                 onClick={() => setItemsModalOrder(null)} 
