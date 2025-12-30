@@ -658,6 +658,7 @@ function PrintLogoField({ restaurantId, supabase }) {
 
 
 export default function SettingsPage() {
+  const { checking } = useRequireAuth();
   const supabase = getSupabase();
   const { restaurant, loading: loadingRestaurant, refresh } = useRestaurant();
   const { refresh: refreshSubscription } = useSubscription();
@@ -700,16 +701,13 @@ export default function SettingsPage() {
   
 
   useEffect(() => {
-    fetchRestaurant();
-  }, [supabase]);
+    if (!checking) fetchRestaurant();
+  }, [supabase, checking]);
 
   const fetchRestaurant = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        window.location.href = '/login';
-        return;
-      }
+      if (!user) return;
       
       const { data, error } = await supabase
         .from('restaurants')
@@ -727,44 +725,18 @@ export default function SettingsPage() {
         } else {
              setDefaultUomName(null);
         }
-        
-        // Pre-fill form - this part is handled by the existing useEffect below
-        // setForm({
-        //   id: data.id,
-        //   name: data.name || '',
-        //   phone: data.phone || '',
-        //   address: data.address || '',
-        //   upi_id: data.upi_id || '',
-        //   logo_url: data.logo_url || '',
-        //   tables_count: data.tables_count || 10,
-        //   table_prefix: data.table_prefix || '',
-        //   owner_lat: data.owner_lat || '',
-        //   owner_lng: data.owner_lng || '',
-        //   theme_color: data.theme_color || '#f97316',
-        //   gst_enabled: data.gst_enabled || false,
-        //   gstin: data.gstin || '',
-        //   default_tax_rate: data.default_tax_rate || 0,
-        //   fssai_cert_number: data.fssai_cert_number || '', // Added
-        //   business_legal_name: data.business_legal_name || '', // Added
-        //   printer_name: data.printer_name || 'POS-80', // Added printer defaults
-        //   printer_ip: data.printer_ip || '192.168.1.100',
-        //   printer_width: data.printer_width || 80,
-        //   features_menu_images_enabled: !!data.features_menu_images_enabled, // ensure boolean
-        // });
-        // setOriginalTables(data.tables_count);
-        
-        // Set images
-        // if (data.logo_url) setLogoPreview(data.logo_url);
       }
     } catch (err) {
       console.error(err);
-      // alert('Error loading settings');
     }
   };
   useEffect(() => {
-   if (!restaurant?.id || !supabase) return;
+    if (!restaurant?.id || !supabase) return;
     async function load() {
-      setLoading(true);
+      // Only show full page loader if it's the absolute first load
+      const isInitial = !form.legal_name && !form.restaurant_name;
+      if (isInitial) setLoading(true);
+      
       try {
         const { data: profile } = await supabase.from('restaurant_profiles').select('*').eq('restaurant_id', restaurant.id).maybeSingle();
         if (profile) {
@@ -798,11 +770,15 @@ export default function SettingsPage() {
 
         const { data: restData } = await supabase.from('restaurants').select('name').eq('id', restaurant.id).single();
         if (restData?.name) setForm(prev => ({ ...prev, restaurant_name: restData.name }));
-      } catch (e) { setError(e.message); } 
-      finally { setLoading(false); }
+      } catch (e) { 
+        console.error("Error loading settings:", e);
+        setError(e.message); 
+      } finally { 
+        setLoading(false); 
+      }
     }
     load();
-  }, [restaurant]);
+  }, [restaurant?.id, supabase]);
 
   const onChange = (field) => (e) => setForm({ ...form, [field]: e.target.type === 'checkbox' ? e.target.checked : e.target.value });
 
@@ -932,7 +908,7 @@ export default function SettingsPage() {
     finally { setSaving(false); }
   }
 
-  if (loading) return <div style={{padding:80, textAlign:'center'}}>Loading settings...</div>;
+  if (loading || checking || loadingRestaurant) return <div style={{padding:80, textAlign:'center'}}>Loading settings...</div>;
 
 
   return (

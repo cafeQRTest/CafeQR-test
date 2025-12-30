@@ -150,15 +150,11 @@ export default function ItemEditor({
   // Handle UOMs formatting
   const uomOptions = useMemo(() => {
      // No "Default" option - only show actual UOMs
-     const options = uoms.map(u => ({ 
+     return uoms.map(u => ({ 
          value: u.id, 
          label: `${u.name === 'Pieces' ? 'Each' : u.name} (${u.short_code === 'ea' ? 'Ea' : u.short_code})` 
      }));
-     console.log('UOM Options:', options);
-     console.log('Current uomId:', uomId);
-     console.log('Match found:', options.find(o => o.value === uomId));
-     return options;
-  }, [uoms, uomId]);
+  }, [uoms]);
 
   // Load existing variants if editing
   useEffect(() => {
@@ -332,10 +328,6 @@ export default function ItemEditor({
         setSelectedUpsells(new Set());
         setImageFile(null);
         // If item has no UOM, use restaurant's default UOM
-        console.log('=== UOM Initialization ===');
-        console.log('Item uom_id from DB:', item?.uom_id);
-        console.log('Default UOM ID:', defaultUomId);
-        console.log('Setting uomId to:', item?.uom_id || defaultUomId);
         setUomId(item?.uom_id || defaultUomId);
       }
       setErr("");
@@ -349,13 +341,8 @@ export default function ItemEditor({
   // If not (e.g., item was copied from another restaurant), use default
   useEffect(() => {
     if (open && uomId && uoms.length > 0 && defaultUomId) {
-      console.log('=== UOM Validation ===');
-      console.log('Checking uomId:', uomId);
-      console.log('Available UOMs:', uoms.map(u => ({ id: u.id, name: u.name })));
       const uomExists = uoms.some(u => u.id === uomId);
-      console.log('UOM exists?', uomExists);
       if (!uomExists) {
-        console.warn(`UOM ${uomId} not found in restaurant's UOMs, using default ${defaultUomId}`);
         setUomId(defaultUomId);
       }
     }
