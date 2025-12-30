@@ -3,7 +3,7 @@ import React from 'react';
 import Card from './ui/Card';
 import Button from './ui/Button';
 import Chip from './ui/Chip';
-import { timeAgo } from '../lib/timeAgo';
+import LiveTimeAgo from './LiveTimeAgo';
 
 export default function OrderCard({ order, statusColor, onChangeStatus, onComplete, generatingInvoice, onKotPrinted }) {
   // Items is a JSONB array of { name, quantity, price, notes? }
@@ -31,7 +31,7 @@ export default function OrderCard({ order, statusColor, onChangeStatus, onComple
           <strong>#{order.id.slice(0, 8)}</strong>
           <div className="muted" style={{ fontSize: 12 }}>
             {order.table_number && `Table ${order.table_number} • `}
-            {timeAgo(order.updated_at || order.created_at)}
+            <LiveTimeAgo date={order.updated_at || order.created_at} />
           </div>
         </div>
         <Chip tone={

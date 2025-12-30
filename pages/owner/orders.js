@@ -14,6 +14,7 @@ import { downloadInvoicePdf } from '../../lib/downloadInvoicePdf'
 import VariantSelector from '../../components/VariantSelector'
 import NiceSelect from '../../components/NiceSelect'
 import { round2, roundP, formatQtyP } from '../../lib/qty'
+import DiscountModal from '../../components/DiscountModal'
 
 const BRAND = {
   orange: '#f97316',
@@ -515,12 +516,15 @@ const prefix = (s) => (s ? s.slice(0,24) : '');
 
 function computeOrderTotalDisplay(order) {
   const toNum = (v) => (v == null ? null : Number(v));
-  const a = toNum(order?.total_inc_tax);
-  if (Number.isFinite(a) && a>0) return a;
-  const b = toNum(order?.total_amount);
-  if (Number.isFinite(b) && b>0) return b;
+  // Prioritize total_amount (Final Net Payable) over total_inc_tax (Gross)
+  const net = toNum(order?.total_amount);
+  if (Number.isFinite(net)) return net;
+
+  const gross = toNum(order?.total_inc_tax);
+  if (Number.isFinite(gross) && gross > 0) return gross;
+
   const c = toNum(order?.total);
-  if (Number.isFinite(c) && c>0) return c;
+  if (Number.isFinite(c) && c > 0) return c;
   return 0;
 }
 
@@ -562,10 +566,7 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
   const mode = order.mode || null;
   const originalTotal = computeOrderTotalDisplay(order);
 
-  const effectiveTotal =
-    mode === 'collect'
-      ? Number(order.remainingAmount ?? originalTotal)
-      : (mode === 'refund' ? Number(order.refundAmount ?? 0) : originalTotal);
+
 
   const handleMethodSelect = (method) => {
     setPaymentMethod(method);
@@ -578,6 +579,79 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
     }
   };
 
+
+
+  // --- DISCOUNT INTEGRATION ---
+  // Theme for Modal
+  const THEME = { main: BRAND.orange, soft: '#fff7ed', light: '#fed7aa' };
+
+  // Initialize local items for discount editing
+  // We need to map order_items to a structure compatible with DiscountModal (like 'cart')
+  const [localItems, setLocalItems] = useState(() => {
+     const items = order.order_items || order.items || []; // order_items uses relation, items is jsonb logic
+     // normalize
+     return items.map(i => ({
+        ...i,
+        cartId: i.id, // Database ID serves as cartId
+        // Ensure discount object structure
+        discount: i.discount_amount ? { type: 'amount', value: i.discount_amount } : (i.discount || { type: 'amount', value: 0 }),
+        // Price should be base price
+        price: i.price,
+        quantity: i.quantity,
+        name: i.menu_items?.name || i.name
+     }));
+  });
+
+  const [discount, setDiscount] = useState(() => {
+      // Initialize global discount
+      const dVal = order.discount_amount || 0;
+      return dVal > 0 ? { type: 'amount', value: dVal } : { type: 'amount', value: 0 };
+  });
+
+  const [isDiscountModalOpen, setIsDiscountModalOpen] = useState(false);
+
+  // Recalculate totals based on localItems + global discount
+  const { subtotalAfterItemDisc, finalTotal } = useMemo(() => {
+      // Calculate item-level discounts total
+      let itemDiscTotal = 0;
+      localItems.forEach(i => {
+          const d = i.discount || { type: 'amount', value: 0 };
+          const lineBase = i.price * i.quantity;
+          const lineDisc = d.type === 'amount' ? d.value : (lineBase * d.value / 100);
+          itemDiscTotal += lineDisc;
+      });
+
+      // Calculate subtotal after item discounts
+      // Start with original total and subtract item discounts
+      const baseTotal = order.totalAmount ?? originalTotal;
+      const afterItemDisc = baseTotal - itemDiscTotal;
+      
+      // Calculate global discount
+      const globalD = discount.type === 'amount' 
+        ? discount.value 
+        : (afterItemDisc * discount.value / 100);
+      
+      // Final total after both discount types
+      const final = Math.max(0, afterItemDisc - globalD);
+      
+      return { 
+          subtotalAfterItemDisc: afterItemDisc, 
+          finalTotal: final,
+          globalDiscountAmount: globalD,
+          itemDiscountTotal: itemDiscTotal
+      };
+  }, [localItems, discount, order.totalAmount, originalTotal]);
+
+  const effectiveTotal = mode === 'collect'
+      ? Math.max(0, finalTotal - (order.alreadyPaidAmount || 0))
+      : (mode === 'refund' ? Number(order.refundAmount ?? 0) : finalTotal);
+
+  // Update item in local state
+  const handleUpdateLocalItem = (id, validItem) => {
+     setLocalItems(prev => prev.map(p => p.cartId === id ? validItem : p));
+  };
+
+
   const validateMixedPayment = () => {
     const cash = Number(cashAmount || 0);
     const online = Number(onlineAmount || 0);
@@ -587,7 +661,7 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
       return false;
     }
     if (Math.abs(sum - effectiveTotal) > 0.01) {
-      alert(`Total should be ₹${effectiveTotal.toFixed(2)}`);
+      alert(`Payment total should be ₹${effectiveTotal.toFixed(2)}`);
       return false;
     }
     return true;
@@ -602,9 +676,15 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
         online_method: onlineMethod,
         is_mixed: true,
         mode,
+        discount_amount: discount.type === 'amount' ? discount.value : (subtotalAfterItemDisc * discount.value / 100),
+        updated_items: localItems // Pass updated items to handler
       });
     } else {
-      onConfirm(paymentMethod, null);
+      onConfirm(paymentMethod, {
+        mode,
+        discount_amount: discount.type === 'amount' ? discount.value : (subtotalAfterItemDisc * discount.value / 100),
+        updated_items: localItems
+      });
     }
   };
 
@@ -654,9 +734,44 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
            {order.alreadyPaidAmount > 0.01 && (
              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: 12, color: '#94a3b8' }}>
                 <span>Already Paid</span>
-                <span style={{ fontWeight: 600, color: '#64748b' }}>₹{Number(order.alreadyPaidAmount).toFixed(2)}</span>
-             </div>
+                 <span style={{ fontWeight: 600, color: '#64748b' }}>₹{Number(order.alreadyPaidAmount).toFixed(2)}</span>
+              </div>
            )}
+
+           {/* Discount Trigger */}
+            {mode === 'collect' && (
+                <div style={{ marginTop: 8, marginBottom: 8 }}>
+                    {/* Show summary of discount if applied */}
+                    {(discount.value > 0 || localItems.some(i => i.discount?.value > 0)) ? (
+                        <div 
+                           onClick={() => setIsDiscountModalOpen(true)}
+                           style={{ 
+                             background: '#fff7ed', padding: '8px 12px', borderRadius: 8, 
+                             border: `1px dashed ${BRAND.orange}60`, cursor: 'pointer',
+                             display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                           }}
+                        >
+                             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <span style={{ fontSize: 13 }}>🏷️ </span>
+                                <div>
+                                    <div style={{ fontSize: 12, fontWeight: 700, color: BRAND.orange }}>Discount Applied</div>
+                                    <div style={{ fontSize: 10, color: '#9a3412' }}>Click to edit</div>
+                                </div>
+                             </div>
+                             <div style={{ fontWeight: 700, color: '#ea580c', fontSize: 13 }}>
+                                Edit
+                             </div>
+                        </div>
+                    ) : (
+                        <div 
+                            onClick={() => setIsDiscountModalOpen(true)}
+                            style={{ fontSize: 12, color: BRAND.orange, cursor: 'pointer', fontWeight: 600, textDecoration:'underline', padding: '4px 0' }}
+                        >
+                            + Add Discount
+                        </div>
+                    )}
+                </div>
+            )}
            
            {(mode === 'collect' || mode === 'refund') && (
              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
@@ -664,11 +779,23 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
                    {mode === 'collect' ? 'Collect' : 'Refund'}
                 </span>
                 <span style={{ fontSize: 18, fontWeight: 900, color: mode === 'collect' ? '#0f172a' : '#ef4444' }}>
-                   ₹{(mode === 'collect' ? (order.remainingAmount ?? 0) : (order.refundAmount ?? 0)).toFixed(2)}
+                   ₹{effectiveTotal.toFixed(2)}
                 </span>
              </div>
            )}
+
         </div>
+
+        <DiscountModal 
+           visible={isDiscountModalOpen}
+           onClose={() => setIsDiscountModalOpen(false)}
+           onSaveTotal={setDiscount}
+           cart={localItems}
+           onUpdateCartItem={handleUpdateLocalItem}
+           currentTotalDiscount={discount}
+           theme={THEME}
+           totalAmount={subtotalAfterItemDisc}
+        />
 
         {/* Method Selection Cards - Slim */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
@@ -2326,16 +2453,16 @@ useEffect(() => {
   });
 };
 
-// Updated handler - receives payment method AND mixed details
-const handlePaymentConfirmed = (actualPaymentMethod, mixedDetails = null) => {
+// Updated handler - receives payment method AND details (discount, mixed info, etc.)
+const handlePaymentConfirmed = (actualPaymentMethod, details = null) => {
   if (!paymentConfirmDialog) return;
-  complete(paymentConfirmDialog.id, actualPaymentMethod, mixedDetails);
+  complete(paymentConfirmDialog.id, actualPaymentMethod, details);
   setPaymentConfirmDialog(null);
 };
 
 // Updated complete function - no auto-open PDF + save payment method
-// Updated complete function - extract payment_method from order first
-const complete = async (orderId, actualPaymentMethod = null, mixedDetails = null) => {
+// Updated complete function - handles details object
+const complete = async (orderId, actualPaymentMethod = null, details = null) => {
   if (!supabase) return;
   setGeneratingInvoice(orderId);
   try {
@@ -2361,30 +2488,157 @@ const complete = async (orderId, actualPaymentMethod = null, mixedDetails = null
       finalPaymentMethod = 'credit';
     }
 
+    // Extract discount & mixed details
+    const discountAmount = details?.discount_amount;
+    const updatedItems = details?.updated_items; // Array of items with potential new discounts
+    const isMixed = details?.is_mixed;
+    let mixedPaymentData = null;
+
+    if (isMixed) {
+        // Remove non-payment metadata
+        const { mode, discount_amount, is_mixed, updated_items, ...rest } = details || {};
+        mixedPaymentData = rest;
+    } else if (details && !details.mode && !details.discount_amount) {
+        // Fallback for legacy calls if any (direct mixed details passed)
+        mixedPaymentData = details;
+    }
+
+    // UPDATE ORDER ITEMS DISCOUNTS IF PROVIDED
+    if (updatedItems && Array.isArray(updatedItems)) {
+        // Get the invoice_id for this order
+        const { data: invoiceData } = await supabase
+          .from('invoices')
+          .select('id')
+          .eq('order_id', orderId)
+          .single();
+        
+        const invoiceId = invoiceData?.id;
+        
+        await Promise.all(updatedItems.map(async (item) => {
+             // Calculate discount_amount value from type/value
+             let dVal = 0;
+             if (item.discount) {
+                dVal = item.discount.type === 'amount' 
+                   ? item.discount.value 
+                   : ((item.price * item.quantity) * item.discount.value / 100);
+             }
+
+             // Update order_items
+             if (item.id) {
+               await supabase
+                 .from('order_items')
+                 .update({ discount_amount: dVal })
+                 .eq('id', item.id);
+
+               // Update invoice_items (linked via invoice_id and item_name)
+               if (invoiceId) {
+                 const itemName = item.item_name || item.name;
+                 await supabase
+                   .from('invoice_items')
+                   .update({ discount_amount: dVal })
+                   .eq('invoice_id', invoiceId)
+                   .eq('item_name', itemName);
+               }
+             }
+        }));
+        
+    }
+
     // Update order status to completed
-    const updateData = { 
+    const updatePayload = { 
       status: 'completed',
       ...(finalPaymentMethod && { 
         payment_method: finalPaymentMethod, 
         actual_payment_method: finalPaymentMethod 
       }),
-      ...(mixedDetails && { mixed_payment_details: mixedDetails })
+      ...(mixedPaymentData && { mixed_payment_details: mixedPaymentData }),
+      ...(discountAmount !== undefined && { discount_amount: discountAmount })
     };
+    
+    // IMPORTANT: Recalculate totals when discount changes
+    if (discountAmount !== undefined || (updatedItems && updatedItems.length > 0)) {
+      if (updatedItems && updatedItems.length > 0) {
+        // Use the in-memory updatedItems (which have the latest discounts)
+        let recalculatedTotalInc = 0;
+        
+        updatedItems.forEach(item => {
+          const qty = Number(item.quantity || 1);
+          const unitInc = Number(item.unit_price_inc_tax || item.price || 0);
+          
+          // Calculate item discount from the discount object
+          let itemDiscount = 0;
+          if (item.discount) {
+            const lineBase = unitInc * qty;
+            itemDiscount = item.discount.type === 'amount' 
+              ? item.discount.value 
+              : (lineBase * item.discount.value / 100);
+          }
+          
+          // Line total: (unit price × qty) - item discount
+          const lineTotal = (unitInc * qty) - itemDiscount;
+          recalculatedTotalInc += lineTotal;
+        });
+        
+        // Update total_inc_tax with recalculated value (includes line discounts)
+        updatePayload.total_inc_tax = Number(recalculatedTotalInc.toFixed(2));
+        
+        // Now calculate total_amount: total_inc_tax - order_discount
+        const finalDiscount = Number(discountAmount || 0);
+        updatePayload.total_amount = Number((recalculatedTotalInc - finalDiscount).toFixed(2));
+      } else {
+        // Fallback: fetch from database if no updatedItems
+        const { data: orderItems } = await supabase
+          .from('order_items')
+          .select('*')
+          .eq('order_id', orderId);
+        
+        if (orderItems && orderItems.length > 0) {
+          let recalculatedTotalInc = 0;
+          
+          orderItems.forEach(item => {
+            const qty = Number(item.quantity || 1);
+            const unitInc = Number(item.unit_price_inc_tax || item.price || 0);
+            const itemDiscount = Number(item.discount_amount || 0);
+            
+            const lineTotal = (unitInc * qty) - itemDiscount;
+            recalculatedTotalInc += lineTotal;
+          });
+          
+          updatePayload.total_inc_tax = Number(recalculatedTotalInc.toFixed(2));
+          const finalDiscount = Number(discountAmount || 0);
+          updatePayload.total_amount = Number((recalculatedTotalInc - finalDiscount).toFixed(2));
+        } else {
+          // Last fallback: use existing total_inc_tax
+          const { data: currentOrder } = await supabase
+            .from('orders')
+            .select('total_inc_tax')
+            .eq('id', orderId)
+            .single();
+          
+          if (currentOrder) {
+            const finalDiscount = Number(discountAmount || 0);
+            updatePayload.total_amount = Number((currentOrder.total_inc_tax - finalDiscount).toFixed(2));
+          }
+        }
+      }
+    }
     
     await supabase
       .from('orders')
-      .update(updateData)
+      .update(updatePayload)
       .eq('id', orderId)
       .eq('restaurant_id', restaurantId);
     
     // ✅ FIX: Pass the CORRECT payment_method from order to API
     // ✅ REPLACE the fetch() block with this:
-const { data: updatedInvoice, error: invoiceErr } = await supabase
+const { data: updatedInvoice, error: invoiceErr} = await supabase
   .from('invoices')
   .update({
     payment_method: finalPaymentMethod,
-    mixed_payment_details: mixedDetails,
-    status: 'paid'
+    mixed_payment_details: mixedPaymentData,
+    status: 'paid',
+    ...(discountAmount !== undefined && { discount_amount: discountAmount }),
+    ...(updatePayload.total_amount !== undefined && { paid_amount: updatePayload.total_amount })
   })
   .eq('order_id', orderId)
   .eq('restaurant_id', restaurantId)
@@ -2398,7 +2652,6 @@ if (invoiceErr) {
   }
 }
 
-console.log('Invoice updated:', updatedInvoice?.[0]);
 
     loadOrders();
   } catch (e) {

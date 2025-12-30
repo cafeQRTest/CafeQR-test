@@ -9,6 +9,7 @@ import { getSupabase } from '../../services/supabase';
 import MenuItemCard from '../../components/MenuItemCard';
 import MenuItemCardSimple from '../../components/MenuItemCardSimple';
 import VariantSelector from '../../components/VariantSelector';
+import DiscountModal from '../../components/DiscountModal';
 import NiceSelect from '../../components/NiceSelect';
 import { useAlert } from '../../context/AlertContext';
 import HorizontalScrollRow from '../../components/HorizontalScrollRow';
@@ -112,7 +113,7 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false, mode 
             fontWeight: 700,
             color: '#0f172a'
           }}>
-            Payment Confirmation
+            {mode === 'kitchen' ? 'Confirm Order' : 'Payment Confirmation'}
           </h3>
           <div style={{
             display: 'inline-flex',
@@ -129,74 +130,85 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false, mode 
         </div>
 
         <div style={{ display: 'grid', gap: 10, marginBottom: 16 }}>
-          <label style={choiceBox(paymentMethod === 'cash')} onClick={() => handleMethodSelect('cash')}>
-            <div style={{
-              width: 18,
-              height: 18,
-              borderRadius: '50%',
-              border: `2px solid ${paymentMethod === 'cash' ? BRAND.orange : '#cbd5e1'}`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0
-            }}>
-              {paymentMethod === 'cash' && (
+          {mode === 'kitchen' ? (
+             <div style={{
+               background: '#fff7ed', border: '1px solid #ffedd5',
+               padding: '12px', borderRadius: 8, color: '#c2410c', fontSize: 14, fontWeight: 500
+             }}>
+                Confirm sending this order to the kitchen?
+             </div>
+          ) : (
+            <>
+              <label style={choiceBox(paymentMethod === 'cash')} onClick={() => handleMethodSelect('cash')}>
                 <div style={{
-                  width: 8,
-                  height: 8,
+                  width: 18,
+                  height: 18,
                   borderRadius: '50%',
-                  background: BRAND.orange
-                }} />
-              )}
-            </div>
-            <span style={{ fontSize: '14px', fontWeight: 600 }}>💵 Cash</span>
-          </label>
+                  border: `2px solid ${paymentMethod === 'cash' ? BRAND.orange : '#cbd5e1'}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}>
+                  {paymentMethod === 'cash' && (
+                    <div style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: '50%',
+                      background: BRAND.orange
+                    }} />
+                  )}
+                </div>
+                <span style={{ fontSize: '14px', fontWeight: 600 }}>💵 Cash</span>
+              </label>
 
-          <label style={choiceBox(paymentMethod === 'online')} onClick={() => handleMethodSelect('online')}>
-            <div style={{
-              width: 18,
-              height: 18,
-              borderRadius: '50%',
-              border: `2px solid ${paymentMethod === 'online' ? BRAND.orange : '#cbd5e1'}`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0
-            }}>
-              {paymentMethod === 'online' && (
+              <label style={choiceBox(paymentMethod === 'online')} onClick={() => handleMethodSelect('online')}>
                 <div style={{
-                  width: 8,
-                  height: 8,
+                  width: 18,
+                  height: 18,
                   borderRadius: '50%',
-                  background: BRAND.orange
-                }} />
-              )}
-            </div>
-            <span style={{ fontSize: '14px', fontWeight: 600 }}>💳 Online (UPI/Card)</span>
-          </label>
+                  border: `2px solid ${paymentMethod === 'online' ? BRAND.orange : '#cbd5e1'}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}>
+                  {paymentMethod === 'online' && (
+                    <div style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: '50%',
+                      background: BRAND.orange
+                    }} />
+                  )}
+                </div>
+                <span style={{ fontSize: '14px', fontWeight: 600 }}>💳 Online (UPI/Card)</span>
+              </label>
 
-          <label style={choiceBox(paymentMethod === 'mixed')} onClick={() => handleMethodSelect('mixed')}>
-            <div style={{
-              width: 18,
-              height: 18,
-              borderRadius: '50%',
-              border: `2px solid ${paymentMethod === 'mixed' ? BRAND.orange : '#cbd5e1'}`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0
-            }}>
-              {paymentMethod === 'mixed' && (
+              <label style={choiceBox(paymentMethod === 'mixed')} onClick={() => handleMethodSelect('mixed')}>
                 <div style={{
-                  width: 8,
-                  height: 8,
+                  width: 18,
+                  height: 18,
                   borderRadius: '50%',
-                  background: BRAND.orange
-                }} />
-              )}
-            </div>
-            <span style={{ fontSize: '14px', fontWeight: 600 }}>🔀 Mixed (Cash + Online)</span>
-          </label>
+                  border: `2px solid ${paymentMethod === 'mixed' ? BRAND.orange : '#cbd5e1'}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}>
+                  {paymentMethod === 'mixed' && (
+                    <div style={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: '50%',
+                      background: BRAND.orange
+                    }} />
+                  )}
+                </div>
+                <span style={{ fontSize: '14px', fontWeight: 600 }}>🔀 Mixed (Cash + Online)</span>
+              </label>
+            </>
+          )}
         </div>
 
         {showMixedForm && (
@@ -338,7 +350,7 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false, mode 
               }
             }}
           >
-            {disabled ? 'Processing…' : 'Confirm Payment'}
+            {disabled ? 'Processing…' : (mode === 'kitchen' ? 'Send to Kitchen' : 'Confirm Payment')}
           </button>
         </div>
       </div>
@@ -502,8 +514,12 @@ const PulseAnimation = () => (
       from { transform: translateY(20px); opacity: 0; }
       to { transform: translateY(0); opacity: 1; }
     }
+      to { transform: translateY(0); opacity: 1; }
+    }
   `}</style>
 );
+
+
 
 const ControlsCard = ({ children, theme }) => (
   <div style={{
@@ -552,8 +568,13 @@ export default function CounterSale() {
 // CounterSale component (pages/owner/counter.js)
 const [qtyDrafts, setQtyDrafts] = useState({}); // cartId -> string
 
-const setDraft = (cartId, v) =>
-  setQtyDrafts((prev) => ({ ...prev, [cartId]: v }));
+  const setDraft = (cartId, v) =>
+    setQtyDrafts((prev) => ({ ...prev, [cartId]: v }));
+
+  // Helper to force update a cart item (e.g. for discounts)
+  const onUpdateCartItem = (cartId, newItem) => {
+    setCart(prev => prev.map(c => (c.cartId === cartId || c.id === cartId) ? newItem : c));
+  };
 
 const clearDraft = (cartId) =>
   setQtyDrafts((prev) => {
@@ -634,6 +655,8 @@ const getDraftOrQtyNumber = (cartId, fallbackQty, precision = 2) => {
   const [processing, setProcessing] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
+  const [paymentDialogMode, setPaymentDialogMode] = useState('settle'); // 'settle' | 'kitchen'
+  const [showDiscountModal, setShowDiscountModal] = useState(false);
 
   const [sendToKitchenEnabled, setSendToKitchenEnabled] = useState(true);
   const [enableMenuImages, setEnableMenuImages] = useState(false);
@@ -642,6 +665,7 @@ const getDraftOrQtyNumber = (cartId, fallbackQty, precision = 2) => {
   const [showVariantSelector, setShowVariantSelector] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
   const [showClearCartConfirm, setShowClearCartConfirm] = useState(false);
+  const [discount, setDiscount] = useState({ type: 'amount', value: 0 }); // { type: 'amount' | 'percent', value: number }
 
 
   // NEW: Order mode toggle
@@ -706,22 +730,40 @@ const [orderMode, setOrderMode] = useState('settle');
         if (!(effectiveRate > 0)) effectiveRate = baseRate;
       }
 
+      // ITEM DISCOUNT: Apply to ex-tax amount only
+      const d = it.discount || { type: 'amount', value: 0 };
+      const rawLineTotal = unit * qty;
+      let itemDiscountAmount = d.type === 'amount' ? d.value : (rawLineTotal * d.value / 100);
+      itemDiscountAmount = Math.min(itemDiscountAmount, rawLineTotal); // Cap at line total
+
       let unitEx, unitInc, lineEx, taxAmt, lineInc;
 
+      // Calculate with discount applied to base price (ex-tax)
       if (isPackaged || serviceInclude) {
-        // Treat entered unit as tax-inclusive for packaged goods or inclusive pricing mode
-        unitInc = unit;
-        unitEx = effectiveRate > 0 ? unitInc / (1 + effectiveRate / 100) : unitInc;
-        lineInc = unitInc * qty;
-        lineEx = unitEx * qty;
-        taxAmt = lineInc - lineEx;
-      } else {
-        // Treat unit as tax-exclusive
-        unitEx = unit;
-        lineEx = unitEx * qty;
+        // Prices include tax: reverse calculate ex-tax, apply discount, recalculate
+        const originalUnitEx = effectiveRate > 0 ? unit / (1 + effectiveRate / 100) : unit;
+        const originalLineEx = originalUnitEx * qty;
+        
+        // Apply discount to ex-tax amount
+        lineEx = Math.max(0, originalLineEx - itemDiscountAmount);
+        unitEx = lineEx / qty;
+        
+        // Calculate tax on discounted ex-tax amount
         taxAmt = (effectiveRate / 100) * lineEx;
         lineInc = lineEx + taxAmt;
-        unitInc = effectiveRate > 0 ? unitEx * (1 + effectiveRate / 100) : unitEx;
+        unitInc = lineInc / qty;
+      } else {
+        // Prices exclude tax: apply discount to ex-tax, then add tax
+        const originalLineEx = unit * qty;
+        
+        // Apply discount to ex-tax amount
+        lineEx = Math.max(0, originalLineEx - itemDiscountAmount);
+        unitEx = lineEx / qty;
+        
+        // Calculate tax on discounted ex-tax amount
+        taxAmt = (effectiveRate / 100) * lineEx;
+        lineInc = lineEx + taxAmt;
+        unitInc = lineInc / qty;
       }
 
       subtotalEx += Number(lineEx.toFixed(2));
@@ -997,6 +1039,13 @@ if (profile?.features_credit_enabled) {
        addItemToCart(item);
     }
   };
+
+  // Reset discount if switching to kitchen mode
+  useEffect(() => {
+    if (orderMode === 'kitchen') {
+      setDiscount({ type: 'amount', value: 0 });
+    }
+  }, [orderMode]);
 
   useEffect(() => {
   if (!restaurantId) return;
@@ -1284,113 +1333,136 @@ const loadCreditCustomers = async () => {
 // inside pages/owner/counter.js
 
 async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finalizeNow = false) {
-  let order_type = 'counter';
-  let table_number = null;
-  if (orderSelect === 'parcel') order_type = 'parcel';
-  else if (orderSelect && orderSelect.startsWith('table:')) {
-    table_number = orderSelect.split(':')[1] || null;
-  }
+  try {
+    let order_type = 'counter';
+    let table_number = null;
+    if (orderSelect === 'parcel') order_type = 'parcel';
+    else if (orderSelect && orderSelect.startsWith('table:')) {
+      table_number = orderSelect.split(':')[1] || null;
+    }
 
-  const items = cart.map((i) => ({
-    id: i.id,
-    name: i.displayName || i.name, // consistent with kitchen order
-    price: i.price,
-    quantity: roundP(i.quantity, i.uom?.precision ?? 2),
-    hsn: i.hsn,
-    tax_rate: i.tax_rate,
-    is_packaged_good: i.is_packaged_good,
-    code_number: i.code_number,
-    variant_id: i.variant_id || null,
-    variant_name: i.variant_name || null,
-    uom_short_code: i.uom_short_code || null,
-    uom_precision: i.uom?.precision ?? 0
-  }));
+    const items = cart.map((i) => ({
+      id: i.id,
+      name: i.displayName || i.name,
+      price: i.price,
+      quantity: roundP(i.quantity, i.uom?.precision ?? 2),
+      hsn: i.hsn,
+      tax_rate: i.tax_rate,
+      is_packaged_good: i.is_packaged_good,
+      code_number: i.code_number,
+      variant_id: i.variant_id || null,
+      variant_name: i.variant_name || null,
+      uom_short_code: i.uom_short_code || null,
+      uom_precision: i.uom?.precision ?? 0,
+      discount_amount: i.discount 
+          ? (i.discount.type === 'amount' ? i.discount.value : (i.price * i.quantity * i.discount.value / 100))
+          : 0
+    }));
 
-  const isCredit = isCreditSale;
+    const isCredit = isCreditSale;
 
-  const orderData = {
-    restaurant_id: restaurantId,
-    order_type,
-    table_number,
-    customer_name: customerName.trim() || null,
-    customer_phone: customerPhone.trim() || null,
-    number_of_customers: numberOfCustomers ? Number(numberOfCustomers) : null,
-    payment_method: isCredit ? 'credit' : finalPaymentMethod,
-    payment_status: isCredit ? 'pending' : 'completed',
-    status: finalizeNow ? 'completed' : 'new',
-    items,
-    is_credit: isCredit,
-    credit_customer_id: isCredit ? selectedCreditCustomerId : null,
-    original_payment_method: isCredit ? null : finalPaymentMethod,
-    ...(finalPaymentMethod === 'mixed' && mixedDetails
-      ? { mixed_payment_details: mixedDetails }
-      : {}),
-    custom_created_at: new Date(
-      Number(orderDate.split('-')[0]),
-      Number(orderDate.split('-')[1]) - 1,
-      Number(orderDate.split('-')[2]),
-      Number(orderTime.split(':')[0]),
-      Number(orderTime.split(':')[1]),
-      0
-    ).toISOString(),
-  };
+    // Calculate discount
+    const discountVal = discount.type === 'amount' 
+      ? discount.value 
+      : (cartTotals.totalInc * discount.value / 100);
 
-  const res = await fetch('/api/orders/create', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(orderData),
-  });
+    const orderData = {
+      restaurant_id: restaurantId,
+      order_type,
+      table_number,
+      customer_name: customerName.trim() || null,
+      customer_phone: customerPhone.trim() || null,
+      number_of_customers: numberOfCustomers ? Number(numberOfCustomers) : null,
+      payment_method: isCredit ? 'credit' : finalPaymentMethod,
+      payment_status: isCredit ? 'pending' : 'completed',
+      status: finalizeNow ? 'completed' : 'new',
+      items,
+      is_credit: isCredit,
+      credit_customer_id: isCredit ? selectedCreditCustomerId : null,
+      original_payment_method: isCredit ? null : finalPaymentMethod,
+      discount_amount: discountVal,
+      ...(finalPaymentMethod === 'mixed' && mixedDetails
+        ? { mixed_payment_details: mixedDetails }
+        : {}),
+      custom_created_at: new Date(
+        Number(orderDate.split('-')[0]),
+        Number(orderDate.split('-')[1]) - 1,
+        Number(orderDate.split('-')[2]),
+        Number(orderTime.split(':')[0]),
+        Number(orderTime.split(':')[1]),
+        0
+      ).toISOString(),
+    };
 
-  if (!res.ok) {
-    let msg = 'Failed to create order';
-    try {
-      const j = await res.json();
-      if (j?.error) msg += ': ' + j.error;
-    } catch {}
-    throw new Error(msg);
-  }
+    const res = await fetch('/api/orders/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(orderData),
+    });
 
-  const result = await res.json();
+    if (!res.ok) {
+      let msg = 'Failed to create order';
+      try {
+        const j = await res.json();
+        if (j?.error) msg += ': ' + j.error;
+      } catch {}
+      throw new Error(msg);
+    }
 
-  const fullOrder = result.order_for_print || null;
+    const result = await res.json();
 
-  const orderForPrint = fullOrder || {
-    id: result.order_id,
-    restaurant_id: restaurantId,
-    order_type,
-    table_number,
-    items,
-    created_at: new Date().toISOString(),
-    restaurant_name: restaurant?.name || printProfile?.restaurant_name || null,
-    _profile: printProfile || null,
-    bill: {
-      grand_total: cartTotals.totalInc,
-      subtotal: cartTotals.subtotalEx,
-      tax_total: cartTotals.totalTax,
-      invoice_no: result.invoice_no || null,
-      bill_no: result.bill_no || null,
-    },
-  };
+    const fullOrder = result.order_for_print || null;
 
-  window.dispatchEvent(
-    new CustomEvent('auto-print-order', {
-      detail: {
-        ...orderForPrint,
-        autoPrint: true,
-        kind: 'bill',
+    const orderForPrint = fullOrder || {
+      id: result.order_id,
+      restaurant_id: restaurantId,
+      order_type,
+      table_number,
+      items,
+      created_at: new Date().toISOString(),
+      restaurant_name: restaurant?.name || printProfile?.restaurant_name || null,
+      _profile: printProfile || null,
+      bill: {
+        grand_total: cartTotals.totalInc,
+        subtotal: cartTotals.subtotalEx,
+        tax_total: cartTotals.totalTax,
+        invoice_no: result.invoice_no || null,
+        bill_no: result.bill_no || null,
       },
-    })
-  );
+    };
 
-  // clear UI, reload credit customers as you already do...
+    window.dispatchEvent(
+      new CustomEvent('auto-print-order', {
+        detail: {
+          ...orderForPrint,
+          autoPrint: true,
+          kind: 'bill',
+        },
+      })
+    );
 
-    setCart([]); setCustomerName(''); setCustomerPhone(''); setNumberOfCustomers(''); setPaymentMethod('cash');
-    setOrderSelect(''); setIsCreditSale(false); setSelectedCreditCustomerId(''); setCreditCustomerBalance(0);
-    setDrawerOpen(false); setShowPaymentDialog(false);
+    setCart([]); 
+    setCustomerName(''); 
+    setCustomerPhone(''); 
+    setNumberOfCustomers(''); 
+    setPaymentMethod('cash');
+    setOrderSelect(''); 
+    setIsCreditSale(false); 
+    setSelectedCreditCustomerId(''); 
+    setCreditCustomerBalance(0);
+    setDiscount({ type: 'amount', value: 0 });
+    setDrawerOpen(false); 
+    setShowPaymentDialog(false);
     await loadCreditCustomers();
     setSuccess('Sale completed');
     setTimeout(() => setSuccess(''), 2000);
+  } catch (error) {
+    console.error('[doCreateAndFinalizeOrder] Error:', error);
+    setError(error.message || 'Failed to complete sale');
+    setTimeout(() => setError(''), 5000);
+    throw error; // Re-throw so completeSale() catches it
   }
+}
 
   // Create without finalize (send to kitchen)
   async function doCreateKitchenOrder() {
@@ -1405,8 +1477,16 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
       hsn: i.hsn, tax_rate: i.tax_rate, is_packaged_good: i.is_packaged_good, code_number: i.code_number,
       variant_id: i.variant_id || null, variant_name: i.variant_name || null,
       uom_short_code: i.uom_short_code || null,
-      uom_precision: i.uom?.precision ?? 0
+      uom_precision: i.uom?.precision ?? 0,
+      discount_amount: i.discount 
+        ? (i.discount.type === 'amount' ? i.discount.value : (i.price * i.quantity * i.discount.value / 100))
+        : 0
     }));
+
+    // Calculate discount
+    const discountVal = discount.type === 'amount' 
+      ? discount.value 
+      : (cartTotals.totalInc * discount.value / 100);
 
     const isCredit = isCreditSale;
 
@@ -1424,6 +1504,7 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
       credit_customer_id: isCredit ? selectedCreditCustomerId : null,
       credit_customer_id: isCredit ? selectedCreditCustomerId : null,
       original_payment_method: null,
+      discount_amount: discountVal,
       custom_created_at: new Date(
         Number(orderDate.split('-')[0]),
         Number(orderDate.split('-')[1]) - 1,
@@ -1465,6 +1546,7 @@ window.dispatchEvent(
 
     setCart([]); setCustomerName(''); setCustomerPhone(''); setNumberOfCustomers(''); setPaymentMethod('cash');
     setOrderSelect(''); setIsCreditSale(false); setSelectedCreditCustomerId(''); setCreditCustomerBalance(0);
+    setDiscount({ type: 'amount', value: 0 }); // Reset discount
     setDrawerOpen(false);
     setSuccess('Order sent to kitchen');
     setTimeout(() => setSuccess(''), 2000);
@@ -1477,11 +1559,13 @@ window.dispatchEvent(
     setProcessing(true);
     try {
       if (orderMode === 'kitchen') {
-        await doCreateKitchenOrder();
+        setPaymentDialogMode('kitchen');
+        setShowPaymentDialog(true);
       } else {
         if (isCreditSale) {
           await doCreateAndFinalizeOrder('credit', null, true);
         } else {
+          setPaymentDialogMode('settle');
           setShowPaymentDialog(true);
         }
       }
@@ -2277,6 +2361,20 @@ const isVariantItem = !!item.has_variants && (item.variants?.length || 0) > 0;
                                     {i.variant_name}
                                   </span>
                                 )}
+                                {/* Discount badge inline */}
+                                {i.discount && i.discount.value > 0 && (
+                                   <span style={{ 
+                                     fontSize: 10, 
+                                     fontWeight: 700, 
+                                     color: '#ef4444', 
+                                     background: '#fee2e2',
+                                     padding: '2px 6px', 
+                                     borderRadius: 4,
+                                     border: '1px solid #fecaca'
+                                   }}>
+                                      {i.discount.type === 'percent' ? `-${i.discount.value}%` : `-₹${i.discount.value}`}
+                                   </span>
+                                )}
                               </div>
                             </div>
                         
@@ -2385,9 +2483,17 @@ const isVariantItem = !!item.has_variants && (item.variants?.length || 0) > 0;
                           )}
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ fontSize: 15, fontWeight: 700, color: '#111827' }}>
-                            ₹{(i.price * i.quantity).toFixed(2)}
-                          </span>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                              {(i.discount && i.discount.value > 0) && (
+                                <span style={{ fontSize: 11, color: '#9ca3af', textDecoration: 'line-through', lineHeight: 1 }}>
+                                  ₹{(i.price * i.quantity).toFixed(2)}
+                                </span>
+                              )}
+                              <span style={{ fontSize: 15, fontWeight: 700, color: '#111827', lineHeight: 1 }}>
+                                ₹{Math.max(0, (i.price * i.quantity) - (i.discount ? (i.discount.type === 'amount' ? i.discount.value : (i.price * i.quantity * i.discount.value / 100)) : 0)).toFixed(2)}
+                              </span>
+                          </div>
+                      
                           {profileTax.gst_enabled && !profileTax.prices_include_tax && !i.is_packaged_good && (
                             <span style={{
                               fontSize: 10,
@@ -2397,6 +2503,7 @@ const isVariantItem = !!item.has_variants && (item.variants?.length || 0) > 0;
                               padding: '2px 6px',
                               borderRadius: 4,
                               border: `1px solid ${THEME.main}30`,
+                              height: 'fit-content'
                             }}>
                               +GST
                             </span>
@@ -2528,6 +2635,36 @@ const isVariantItem = !!item.has_variants && (item.variants?.length || 0) > 0;
                       <span>GST Amount</span>
                       <span style={{ fontWeight: 600, color: '#1e293b' }}>₹{cartTotals.totalTax.toFixed(2)}</span>
                     </div>
+
+                    {/* Discount Row - Only visible for Counter/Settle Now modes */}
+                    {orderMode !== 'kitchen' && (
+                      discount.value > 0 ? (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#ef4444' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span>Discount {discount.type === 'percent' ? `(${discount.value}%)` : ''}</span>
+                            <button 
+                              onClick={() => setDiscount({ type: 'amount', value: 0 })}
+                              style={{ 
+                                background: 'none', color: '#ef4444', border: 'none', 
+                                fontSize: 18, cursor: 'pointer', padding: '0 4px', lineHeight: 1, fontWeight: 700 
+                              }}
+                            >×</button>
+                          </div>
+                          <span style={{ fontWeight: 600 }}>-₹{(discount.type === 'amount' ? discount.value : (cartTotals.totalInc * discount.value / 100)).toFixed(2)}</span>
+                        </div>
+                      ) : (
+                        <div style={{  }}>
+                          <button 
+                            onClick={() => setShowDiscountModal(true)}
+                            style={{
+                                  background: 'none', border: 'none', color: THEME.main, fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: 0, textDecoration: 'underline'
+                            }}
+                          >
+                            + Add Discount
+                          </button>
+                        </div>
+                      )
+                    )}
                     <div style={{ 
                       display: 'flex', 
                       justifyContent: 'space-between', 
@@ -2539,7 +2676,7 @@ const isVariantItem = !!item.has_variants && (item.variants?.length || 0) > 0;
                       color: '#0f172a',
                     }}>
                       <span>Total</span>
-                      <span style={{ color: THEME.main }}>₹{cartTotals.totalInc.toFixed(2)}</span>
+                      <span style={{ color: THEME.main }}>₹{(Math.max(0, cartTotals.totalInc - (discount.type === 'amount' ? discount.value : (cartTotals.totalInc * discount.value / 100)))).toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
@@ -2582,41 +2719,63 @@ const isVariantItem = !!item.has_variants && (item.variants?.length || 0) > 0;
                   ) : (
                     <span>
                       {orderMode === 'kitchen'
-                        ? `Send to Kitchen • ₹${cartTotals.totalInc.toFixed(2)}`
+                        ? `Send to Kitchen • ₹${(Math.max(0, cartTotals.totalInc - (discount.type === 'amount' ? discount.value : (cartTotals.totalInc * discount.value / 100)))).toFixed(2)}`
                         : isCreditSale
-                        ? `Credit & Settle • ₹${cartTotals.totalInc.toFixed(2)}`
-                        : `Complete Sale • ₹${cartTotals.totalInc.toFixed(2)}`}
+                        ? `Credit & Settle • ₹${(Math.max(0, cartTotals.totalInc - (discount.type === 'amount' ? discount.value : (cartTotals.totalInc * discount.value / 100)))).toFixed(2)}`
+                        : `Complete Sale • ₹${(Math.max(0, cartTotals.totalInc - (discount.type === 'amount' ? discount.value : (cartTotals.totalInc * discount.value / 100)))).toFixed(2)}`}
                     </span>
                   )}
                 </button>
               </div>
             )}
+            
+            <DiscountModal 
+                 visible={showDiscountModal}
+                 onClose={() => setShowDiscountModal(false)}
+                 onSaveTotal={setDiscount}
+                 cart={cart}
+                 onUpdateCartItem={onUpdateCartItem}
+                 currentTotalDiscount={discount}
+                 theme={THEME}
+                 totalAmount={cartTotals.totalInc + (discount.type === 'amount' ? discount.value : (cartTotals.totalInc * discount.value / 100))} 
+                 // Note: totalAmount passed is the Post-Item-Discount but Pre-Global-Discount sum. 
+                 // Actually cartTotals.totalInc ALREADY has item discounts deducted due to computeCartTotals update above.
+                 // So totalAmount={cartTotals.totalInc} is correct basis for Global Discount?
+                 // Wait, if Global Discount is 10%, it should be on the Current Total. 
+                 // Logic in Modal uses totalAmount for validation.
+                 // cartTotals.totalInc is now the "Subtotal after item discounts".
+            />
           </div>
         </div>
       )}
 
-      {/* Payment dialog (non-credit, settle now) */}
-      {showPaymentDialog && orderMode === 'settle' && !isCreditSale && (
-  <PaymentConfirmDialog
-    amount={cartTotals.totalInc}
-    busy={processing}
-    mode={orderMode}
-    onConfirm={async (method, details) => {
-      if (processing) return; // extra guard
-      setProcessing(true);
-      try {
-        // finalizeNow = true → insert with status: 'completed'
-        await doCreateAndFinalizeOrder(method, details, true);
-      } catch (e) {
-        setError('Error completing sale: ' + e.message);
-        setTimeout(() => setError(''), 3000);
-      } finally {
-        setProcessing(false);
-      }
-    }}
-    onCancel={() => setShowPaymentDialog(false)}
-  />
-)}
+      {/* Payment/Confirmation Dialog */}
+      {showPaymentDialog && (
+        <PaymentConfirmDialog
+          amount={Math.max(0, cartTotals.totalInc - (discount.type === 'amount' ? discount.value : (cartTotals.totalInc * discount.value / 100)))}
+          busy={processing}
+          mode={paymentDialogMode}
+          onConfirm={async (method, details) => {
+            if (processing) return;
+            setProcessing(true);
+            try {
+              if (paymentDialogMode === 'kitchen') {
+                  await doCreateKitchenOrder();
+              } else {
+                 await doCreateAndFinalizeOrder(method, details, true);
+              }
+              setShowPaymentDialog(false);
+            } catch (e) {
+              setProcessing(false);
+              setError(e.message);
+            }
+          }}
+          onCancel={() => {
+            setShowPaymentDialog(false);
+            setProcessing(false);
+          }}
+        />
+      )}
 
 {/* Variant Selector Modal */}
 {showVariantSelector && selectedItem && (

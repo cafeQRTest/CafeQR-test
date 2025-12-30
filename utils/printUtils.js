@@ -7,6 +7,7 @@ function toDisplayItems(order) {
       name: oi.menu_items?.name || oi.item_name || 'Item',
       quantity: oi.quantity,
       price: oi.price,
+      discount_amount: oi.discount_amount || 0, // Include item discount
       uom: oi.uom_short_code || '',
       uom_short_code: oi.uom_short_code || '',
       uom_precision: oi.uom_precision ?? 0
@@ -373,20 +374,32 @@ export async function downloadTextAndShare(order, bill, restaurantProfile) {
     });
 
     // Amounts
+    // IMPORTANT: total_amount already has discount_amount subtracted (calculated by API)
+    // total_inc_tax is the amount BEFORE discount
+    // We should prioritize total_amount as it's the final payable amount
     const grandTotal = Number(
+      order?.total_amount ||          // ← Primary: Final amount after discount (5.26)
       bill?.grand_total || 
-      bill?.total_inc_tax || 
-      order?.total_inc_tax || 
-      order?.total_amount || 
-      order?.total || 
+      bill?.total_amount ||
+      order?.total ||                 // Legacy fallback
       0
     );
+    
+    // If grandTotal is 0 or missing, fall back to calculated amount
+    const calculatedTotal = Number(
+      bill?.total_inc_tax || 
+      order?.total_inc_tax || 
+      0
+    );
+    
+    // Use calculated total only if grandTotal is not available
+    const effectiveGrandTotal = grandTotal > 0 ? grandTotal : calculatedTotal;
+    
     const netAmount = Number(
       bill?.subtotal || 
       bill?.subtotal_ex_tax ||
       order?.subtotal || 
-      order?.total_amount || 
-      order?.total || 
+      order?.subtotal_ex_tax ||
       0
     );
     const taxAmount = Number(
@@ -397,7 +410,9 @@ export async function downloadTextAndShare(order, bill, restaurantProfile) {
       0
     );
 
-    // ======= WIDTH = 32 CHARS =======
+    // Discount
+    const orderDiscount = Number(order?.discount_amount || bill?.discount_amount || 0);
+
     const W = getReceiptWidth(restaurantProfile);
     const dashes = () => '-'.repeat(W);
 
@@ -441,20 +456,29 @@ export async function downloadTextAndShare(order, bill, restaurantProfile) {
     lines.push(dashes());
     lines.push('');
     
+    // Check if any item has a discount
+    const hasItemDiscounts = items.some(it => Number(it.discount_amount || 0) > 0);
+    
     // === ITEMS HEADER ===
-    lines.push('ITEM         QTY  RATE  TOTAL');
+    if (hasItemDiscounts) {
+      lines.push('ITEM       QTY RATE DISC TOTAL');
+    } else {
+      lines.push('ITEM         QTY  RATE  TOTAL');
+    }
     
     // === ITEMS (with word-wrapping for names) ===
     items.forEach(item => {
       const itemName = item.name || 'Item';
-      const nameLines = wrapText(itemName, 14);
+      const nameWidth = hasItemDiscounts ? 10 : 14;
+      const nameLines = wrapText(itemName, nameWidth);
       
       if (nameLines.length === 0) return;
       
       // First line with quantities/rates/totals
       const rateNum = Number(item.price || 0);
       const qtyNum = Number(item.quantity || 1);
-      const totalNum = rateNum * qtyNum;
+      const itemDisc = Number(item.discount_amount || 0);
+      const totalNum = (rateNum * qtyNum) - itemDisc;
       
       const rate = rateNum % 1 === 0 
         ? rateNum.toFixed(0).padStart(4)
@@ -471,17 +495,28 @@ export async function downloadTextAndShare(order, bill, restaurantProfile) {
       if (uom && uom.toLowerCase() !== 'pc') {
           qtyStr += ' ' + uom;
       }
-      const qty = qtyStr.padStart(6).substring(0, 6);
-
-      // Adjusted spacing to match new QTY width (6 chars) + spaces
-      // Name (14) + Qty(6) + Rate(4) + Total(5) + spaces = 14 + 0 + 6 + 1 + 4 + 1 + 5 = 31? No, let's keep it tight.
-      // Name(14) + Qty(6) + Rate(4) + Total(5) + 3 spaces = 32
-      const firstLine = nameLines[0].padEnd(14) + qty + ' ' + rate + ' ' + total;
-      lines.push(firstLine);
       
-      // Additional name lines (if wrapped to multiple lines)
-      for (let i = 1; i < nameLines.length; i++) {
-        lines.push(nameLines[i].padEnd(14));
+      if (hasItemDiscounts) {
+        // Compact layout with DISC column: ITEM(10) QTY(4) RATE(4) DISC(4) TOTAL(5)
+        const qty = qtyStr.padStart(4).substring(0, 4);
+        const disc = itemDisc > 0 
+          ? ('-' + itemDisc.toFixed(0)).padStart(4).substring(0, 4)
+          : '   -'.padStart(4);
+        const firstLine = nameLines[0].padEnd(10) + ' ' + qty + ' ' + rate + ' ' + disc + ' ' + total;
+        lines.push(firstLine);
+        
+        for (let i = 1; i < nameLines.length; i++) {
+          lines.push(nameLines[i].padEnd(10));
+        }
+      } else {
+        // Original layout without DISC column
+        const qty = qtyStr.padStart(6).substring(0, 6);
+        const firstLine = nameLines[0].padEnd(14) + qty + ' ' + rate + ' ' + total;
+        lines.push(firstLine);
+        
+        for (let i = 1; i < nameLines.length; i++) {
+          lines.push(nameLines[i].padEnd(14));
+        }
       }
     });
     
@@ -490,15 +525,40 @@ export async function downloadTextAndShare(order, bill, restaurantProfile) {
     lines.push('');
     
     // === TOTALS (LEFT ALIGNED) ===
-        if (taxAmount > 0) {
-      // Net Amt = Grand Total - Tax
-      const netAmt = grandTotal - taxAmount;
+    // Calculate the final grand total (after all discounts)
+    // Priority 1: Use total_amount (which already has discount subtracted)
+    // Priority 2: Calculate from total_inc_tax - discount_amount
+    let finalGrandTotal;
+    
+    if (order?.total_amount && order.total_amount > 0) {
+      // Use the pre-calculated final amount (already has discount applied)
+      finalGrandTotal = Number(order.total_amount);
+    } else if (bill?.total_amount && bill.total_amount > 0) {
+      finalGrandTotal = Number(bill.total_amount);
+    } else {
+      // Fallback: Calculate manually
+      const baseTotal = effectiveGrandTotal || grandTotal;
+      finalGrandTotal = baseTotal - orderDiscount;
+    }
+    
+    if (taxAmount > 0) {
+      // Work backward to show breakdown
+      const grossTotal = finalGrandTotal + orderDiscount; // Add back discount to get gross
+      const netAmt = grossTotal - taxAmount;
+      
       lines.push(`Net Amt: ${netAmt.toFixed(2)}`);
       lines.push(`Tax: ${taxAmount.toFixed(2)}`);
-      lines.push(`Grand Total: ${grandTotal.toFixed(2)}`);
+      if (orderDiscount > 0) {
+         lines.push(`Discount: -${orderDiscount.toFixed(2)}`);
+      }
+      lines.push(`Grand Total: ${finalGrandTotal.toFixed(2)}`);
     } else {
-      // If no tax, only show Grand Total
-      lines.push(`Total: ${grandTotal.toFixed(2)}`);
+      if (orderDiscount > 0) {
+         const beforeDiscount = finalGrandTotal + orderDiscount;
+         lines.push(`Subtotal: ${beforeDiscount.toFixed(2)}`);
+         lines.push(`Discount: -${orderDiscount.toFixed(2)}`);
+      }
+      lines.push(`Total: ${finalGrandTotal.toFixed(2)}`);
     }
     
     lines.push(dashes());
@@ -585,13 +645,21 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     });
 
     const grandTotal = Number(
+      order?.total_amount ||  // Primary: has discount already subtracted
       bill?.grand_total ||
-      bill?.total_inc_tax ||
-      order?.total_inc_tax ||
-      order?.total_amount ||
+      bill?.total_amount ||
       order?.total ||
       0
     );
+    
+    const calculatedTotal = Number(
+      bill?.total_inc_tax ||
+      order?.total_inc_tax ||
+      0
+    );
+    
+    const effectiveGrandTotal = grandTotal > 0 ? grandTotal : calculatedTotal;
+    
     const taxAmount = Number(
       bill?.tax_total ||
       bill?.total_tax ||
@@ -599,6 +667,9 @@ export function buildReceiptText(order, bill, restaurantProfile) {
       order?.total_tax ||
       0
     );
+    
+    // Discount
+    const orderDiscount = Number(order?.discount_amount || bill?.discount_amount || 0);
 
     const W = getReceiptWidth(restaurantProfile);
     const dashes = () => '-'.repeat(W);
@@ -635,18 +706,27 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     }
     lines.push(dashes());
 
+    // Check for item discounts
+    const hasItemDiscounts = items.some(it => Number(it.discount_amount || 0) > 0);
+    
     // ITEMS
-    lines.push('ITEM         QTY  RATE  TOTAL');
+    if (hasItemDiscounts) {
+      lines.push('ITEM       QTY RATE DISC TOTAL');
+    } else {
+      lines.push('ITEM         QTY  RATE  TOTAL');
+    }
     lines.push(dashes());
 
     items.forEach((item) => {
       const itemName = item.name || 'Item';
-      const nameLines = wrapText(itemName, 14);
+      const nameWidth = hasItemDiscounts ? 10 : 14;
+      const nameLines = wrapText(itemName, nameWidth);
       if (!nameLines.length) return;
 
       const rateNum = Number(item.price || 0);
       const qtyNum = Number(item.quantity || 1);
-      const totalNum = rateNum * qtyNum;
+      const itemDisc = Number(item.discount_amount || 0);
+      const totalNum = (rateNum * qtyNum) - itemDisc;
 
       const rate =
         rateNum % 1 === 0
@@ -664,27 +744,61 @@ export function buildReceiptText(order, bill, restaurantProfile) {
       if (uom && uom.toLowerCase() !== 'pc') {
           qtyStr += ' ' + uom;
       }
-      const qty = qtyStr.padStart(6).substring(0, 6);
+      
+      if (hasItemDiscounts) {
+        // Compact layout with DISC column
+        const qty = qtyStr.padStart(4).substring(0, 4);
+        const disc = itemDisc > 0 
+          ? ('-' + itemDisc.toFixed(0)).padStart(4).substring(0, 4)
+          : '   -'.padStart(4);
+        const firstLine = nameLines[0].padEnd(10) + ' ' + qty + ' ' + rate + ' ' + disc + ' ' + total;
+        lines.push(firstLine);
 
-      const firstLine =
-        nameLines[0].padEnd(14) + qty + ' ' + rate + ' ' + total;
-      lines.push(firstLine);
+        for (let i = 1; i < nameLines.length; i++) {
+          lines.push(nameLines[i].padEnd(10));
+        }
+      } else {
+        // Original layout
+        const qty = qtyStr.padStart(6).substring(0, 6);
+        const firstLine = nameLines[0].padEnd(14) + qty + ' ' + rate + ' ' + total;
+        lines.push(firstLine);
 
-      for (let i = 1; i < nameLines.length; i++) {
-        lines.push(nameLines[i].padEnd(14));
+        for (let i = 1; i < nameLines.length; i++) {
+          lines.push(nameLines[i].padEnd(14));
+        }
       }
     });
 
     lines.push(dashes());
 
     // TOTALS
+    let finalGrandTotal;
+    
+    if (order?.total_amount && order.total_amount > 0) {
+      finalGrandTotal = Number(order.total_amount);
+    } else if (bill?.total_amount && bill.total_amount > 0) {
+      finalGrandTotal = Number(bill.total_amount);
+    } else {
+      const baseTotal = effectiveGrandTotal || grandTotal;
+      finalGrandTotal = baseTotal - orderDiscount;
+    }
+    
     if (taxAmount > 0) {
-      const netAmt = grandTotal - taxAmount;
+      const grossTotal = finalGrandTotal + orderDiscount;
+      const netAmt = grossTotal - taxAmount;
       lines.push(`Net Amt: ${netAmt.toFixed(2)}`);
       lines.push(`Tax: ${taxAmount.toFixed(2)}`);
-      lines.push(`Grand Total: ${grandTotal.toFixed(2)}`);
+      if (orderDiscount > 0) {
+         lines.push(`Discount: -${orderDiscount.toFixed(2)}`);
+      }
+      lines.push(`Grand Total: ${finalGrandTotal.toFixed(2)}`);
     } else {
-      lines.push(`Total: ${grandTotal.toFixed(2)}`);
+      if (orderDiscount > 0) {
+         const beforeDiscount = finalGrandTotal + orderDiscount;
+         lines.push(`Subtotal: ${beforeDiscount.toFixed(2)}`);
+         lines.push(`Discount: -${orderDiscount.toFixed(2)}`);
+      }
+      lines.push(`Total: ${finalGrandTotal.toFixed(2)}`);
     }
 
     lines.push(dashes());

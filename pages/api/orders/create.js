@@ -39,6 +39,7 @@ export default async function handler(req, res) {
       status: incomingStatus = null,
       number_of_customers = null, // optional
       custom_created_at = null,
+      discount_amount = 0,
     } = req.body;
 
     if (!restaurant_id || !Array.isArray(items) || items.length === 0) {
@@ -115,19 +116,45 @@ export default async function handler(req, res) {
         effectiveRate = baseRate;
       }
 
+      // Calculate Tax and Totals
       let unitEx, unitInc, lineEx, tax, lineInc;
+      
+      // ITEM DISCOUNT: Apply to ex-tax amount only
+      const d = it.discount || {};
+      let itemDiscount = Number(it.discount_amount || 0);
+      if (!itemDiscount && d.type) {
+         const rawLineTotal = unit * qty;
+         itemDiscount = d.type === 'amount' 
+           ? Number(d.value) 
+           : (rawLineTotal * Number(d.value) / 100);
+      }
+      
+      // Calculate base ex-tax amounts
       if (isPackaged || serviceInclude) {
-        unitInc = unit;
-        unitEx = effectiveRate > 0 ? unitInc / (1 + effectiveRate / 100) : unitInc;
-        lineInc = unitInc * qty;
-        lineEx = unitEx * qty;
-        tax = lineInc - lineEx;
-      } else {
-        unitEx = unit;
-        lineEx = unitEx * qty;
+        // Prices include tax: extract ex-tax first
+        const originalUnitEx = effectiveRate > 0 ? unit / (1 + effectiveRate / 100) : unit;
+        const originalLineEx = originalUnitEx * qty;
+        
+        // Apply discount to ex-tax amount
+        lineEx = Math.max(0, originalLineEx - itemDiscount);
+        unitEx = lineEx / qty;
+        
+        // Calculate tax on discounted ex-tax amount
         tax = (effectiveRate / 100) * lineEx;
         lineInc = lineEx + tax;
-        unitInc = effectiveRate > 0 ? unitEx * (1 + effectiveRate / 100) : unitEx;
+        unitInc = lineInc / qty;
+      } else {
+        // Prices exclude tax: discount ex-tax directly
+        const originalLineEx = unit * qty;
+        
+        // Apply discount to ex-tax amount
+        lineEx = Math.max(0, originalLineEx - itemDiscount);
+        unitEx = lineEx / qty;
+        
+        // Calculate tax on discounted ex-tax amount
+        tax = (effectiveRate / 100) * lineEx;
+        lineInc = lineEx + tax;
+        unitInc = lineInc / qty;
       }
 
       const unitExR = Number(unitEx.toFixed(2));
@@ -156,6 +183,7 @@ export default async function handler(req, res) {
         is_packaged_good: isPackaged,
         uom_short_code: it.uom_short_code || menuItem?.uom?.short_code || null,
         uom_precision: it.uom_precision ?? menuItem?.uom?.precision ?? 0,
+        discount_amount: Number(itemDiscount.toFixed(2)),
       };
     });
 
@@ -204,7 +232,8 @@ export default async function handler(req, res) {
           subtotal_ex_tax: Number(subtotalEx.toFixed(2)),
           total_tax: Number(totalTax.toFixed(2)),
           total_inc_tax: Number(totalInc.toFixed(2)),
-          total_amount: Number(totalInc.toFixed(2)),
+          discount_amount: Number(discount_amount ?? 0),
+          total_amount: Number((totalInc - (discount_amount || 0)).toFixed(2)),
           prices_include_tax: serviceInclude,
           gst_enabled: gstEnabled,
           mixed_payment_details: processedMixedDetails,
@@ -280,6 +309,7 @@ export default async function handler(req, res) {
         subtotal_ex_tax: Number(subtotalEx.toFixed(2)),
         total_tax: Number(totalTax.toFixed(2)),
         total_inc_tax: Number(totalInc.toFixed(2)),
+        discount_amount: Number(discount_amount ?? 0),
         items: preparedItems.map((pi) => ({
           ...pi,
           name: pi.item_name,

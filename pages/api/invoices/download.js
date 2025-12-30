@@ -81,13 +81,15 @@ export default async function handler(req, res) {
         total_tax:
           invoice?.total_tax ?? order.total_tax ?? order.tax_amount ?? 0,
         total_inc_tax:
+          invoice?.grand_total ?? 
+          order.total_amount ?? 
           invoice?.total_inc_tax ??
           order.total_inc_tax ??
-          order.total_amount ??
           0,
         gst_enabled: profile?.gst_enabled ?? order.gst_enabled ?? false,
         prices_include_tax: profile?.prices_include_tax ?? true,
         mixed_payment_details: order.mixed_payment_details || null,
+        discount_amount: invoice?.discount_amount ?? order.discount_amount ?? 0,
       },
 
       items: (invoiceItems || []).map((row) => {
@@ -114,6 +116,7 @@ export default async function handler(req, res) {
           uom_short_code: row.uom_short_code || null,
           // Pass these so PDF generator uses them directly instead of recalculating
           use_precalculated: true,
+          discount_amount: Number(row.discount_amount || 0),
         };
       }),
 

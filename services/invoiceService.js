@@ -140,12 +140,14 @@ export class InvoiceService {
             subtotal_ex_tax: order.subtotal_ex_tax ?? order.subtotal ?? 0,
             total_tax: order.total_tax ?? order.tax_amount ?? 0,
             total_inc_tax: order.total_inc_tax ?? order.total_amount ?? 0,
+            discount_amount: order.discount_amount || 0,
             cgst: (order.gst_enabled ?? profile?.gst_enabled) ? ((order.total_tax ?? order.tax_amount ?? 0) / 2) : 0,
             sgst: (order.gst_enabled ?? profile?.gst_enabled) ? ((order.total_tax ?? order.tax_amount ?? 0) / 2) : 0,
             igst: 0,
             payment_method: payMethod,
             status: payMethod === 'none' ? 'unpaid' : 'paid',
-            paid_amount: payMethod === 'none' ? 0 : (order.total_inc_tax ?? order.total_amount ?? 0),
+            // FIXED: Use total_amount (AFTER discount) not total_inc_tax (BEFORE discount)
+            paid_amount: payMethod === 'none' ? 0 : (order.total_amount ?? order.total_inc_tax ?? 0),
             mixed_payment_details: order.mixed_payment_details || null,
             generation_method: regenerationReason ? 'regenerated' : 'auto',
             regenerated_from_invoice_id: null,
@@ -183,24 +185,47 @@ export class InvoiceService {
       let lineNo = 1
       for (const it of items) {
         const qty = Number(it.quantity ?? 1)
-        const price = Number(it.is_packaged_good && !inv.prices_include_tax ? it.unit_price_ex_tax : (it.price ?? 0))
         const taxRate = Number(it.tax_rate ?? profile?.default_tax_rate ?? 0)
-        const ex = price * qty
-        const tax = (taxRate / 100) * ex
-        const inc = ex + tax
+
+        let unitRateForDB, taxAmt, lineEx, lineInc
+
+        // Use pre-calculated discounted values from order_items if available
+        // This ensures the Invoice matches the Order exactly (including item discounts)
+        if (it.unit_price_ex_tax !== undefined && it.unit_price_inc_tax !== undefined) {
+             const unitEx = Number(it.unit_price_ex_tax);
+             const unitInc = Number(it.unit_price_inc_tax);
+             
+             lineEx = Number((unitEx * qty).toFixed(2))
+             lineInc = Number((unitInc * qty).toFixed(2))
+             taxAmt = Number((lineInc - lineEx).toFixed(2))
+             unitRateForDB = unitEx
+        } else {
+           // Fallback calculation for legacy items or non-standard payload
+           const price = Number(it.is_packaged_good && !inv.prices_include_tax ? it.unit_price_ex_tax : (it.price ?? 0))
+           const ex = price * qty
+           const tax = (taxRate / 100) * ex
+           const inc = ex + tax
+           
+           lineEx = Number(ex.toFixed(2))
+           lineInc = Number(inc.toFixed(2))
+           taxAmt = Number(tax.toFixed(2))
+           unitRateForDB = price
+        }
+
         await supabase.from('invoice_items').insert({
           invoice_id: inv.id,
           line_no: lineNo++,
           item_name: it.item_name || it.name || 'Item',
           hsn: it.hsn || null,
           qty,
-          unit_rate_ex_tax: price,
+          unit_rate_ex_tax: unitRateForDB,
           tax_rate: taxRate,
-          tax_amount: Number(tax.toFixed(2)),
-          line_total_ex_tax: Number(ex.toFixed(2)),
-          line_total_inc_tax: Number(inc.toFixed(2)),
+          tax_amount: taxAmt,
+          line_total_ex_tax: lineEx,
+          line_total_inc_tax: lineInc,
           uom_precision: it.uom_precision ?? 0,
-          uom_short_code: it.uom_short_code || null
+          uom_short_code: it.uom_short_code || null,
+          discount_amount: Number(it.discount_amount || 0)
         })
       }
       return { invoiceId: inv.id, invoiceNo }
