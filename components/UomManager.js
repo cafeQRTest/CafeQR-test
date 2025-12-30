@@ -267,15 +267,65 @@ export default function UomManager({ restaurantId, onClose, onSaved }) {
   };
   
   const handleSetDefault = async (newId) => {
-    const { error: err } = await supabase
-       .from('restaurants')
-       .update({ default_uom_id: newId })
-       .eq('id', restaurantId);
-    
-    if (err) setError(err.message);
-    else {
-        setDefaultUomId(newId);
-        onSaved?.();
+    try {
+      // Step 1: Get current default UOM ID to find items using it
+      const { data: currentRestaurant, error: fetchErr } = await supabase
+        .from('restaurants')
+        .select('default_uom_id')
+        .eq('id', restaurantId)
+        .single();
+      
+      if (fetchErr) {
+        setError(`Failed to fetch current default: ${fetchErr.message}`);
+        return;
+      }
+      
+      const oldDefaultId = currentRestaurant?.default_uom_id;
+      
+      // Step 2: Update restaurant's default_uom_id
+      const { error: updateRestErr } = await supabase
+        .from('restaurants')
+        .update({ default_uom_id: newId })
+        .eq('id', restaurantId);
+      
+      if (updateRestErr) {
+        setError(updateRestErr.message);
+        return;
+      }
+      
+      // Step 3: Update menu items that were using the old default
+      // Update both items with uom_id = null AND items with uom_id = oldDefaultId
+      if (oldDefaultId) {
+        // Update items that explicitly have the old default UOM
+        const { error: updateOldErr } = await supabase
+          .from('menu_items')
+          .update({ uom_id: newId })
+          .eq('restaurant_id', restaurantId)
+          .eq('uom_id', oldDefaultId);
+        
+        if (updateOldErr) {
+          console.error('Failed to update items with old default:', updateOldErr);
+        }
+      }
+      
+      // Also update items with null UOM
+      const { error: updateNullErr } = await supabase
+        .from('menu_items')
+        .update({ uom_id: newId })
+        .eq('restaurant_id', restaurantId)
+        .is('uom_id', null);
+      
+      if (updateNullErr) {
+        console.error('Failed to update items with null UOM:', updateNullErr);
+      }
+      
+      // Even if item updates had issues, the restaurant default is updated
+      setDefaultUomId(newId);
+      setError(''); // Clear any previous errors
+      onSaved?.();
+      
+    } catch (ex) {
+      setError(`Error updating default UOM: ${ex.message}`);
     }
   };
 
@@ -289,14 +339,80 @@ export default function UomManager({ restaurantId, onClose, onSaved }) {
       .or(filter)
       .order('name');
     
-    if (fetchError) setError(fetchError.message);
-    else setUoms(data || []);
+    if (fetchError) {
+      setError(fetchError.message);
+      setLoading(false);
+      return;
+    }
+    
+    // Deduplicate UOMs: if same name exists multiple times, prefer restaurant-specific over global
+    const uomMap = new Map();
+    (data || []).forEach(uom => {
+      const key = uom.name.toLowerCase();
+      const existing = uomMap.get(key);
+      
+      if (!existing) {
+        // First occurrence, add it
+        uomMap.set(key, uom);
+      } else {
+        // Duplicate found - prefer restaurant-specific entry
+        if (uom.restaurant_id && !existing.restaurant_id) {
+          uomMap.set(key, uom);
+        }
+      }
+    });
+    
+    const deduplicatedUoms = Array.from(uomMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+    setUoms(deduplicatedUoms);
     setLoading(false);
   };
 
   const createUom = async () => {
-    if (!newName.trim() || !newShortCode.trim()) { setError("Name and code are required."); return; }
+    if (!newName.trim() || !newShortCode.trim()) { 
+      setError("Name and code are required."); 
+      return; 
+    }
     
+    // Check for duplicate name (case-insensitive) across all UOMs
+    const { data: existingUoms, error: checkError } = await supabase
+      .from('unit_of_measures')
+      .select('id, name, restaurant_id')
+      .or(`restaurant_id.is.null,restaurant_id.eq.${restaurantId}`)
+      .ilike('name', newName.trim());
+    
+    if (checkError) {
+      setError(checkError.message);
+      return;
+    }
+    
+    if (existingUoms && existingUoms.length > 0) {
+      const existing = existingUoms[0];
+      const isSystem = !existing.restaurant_id;
+      const errorMsg = isSystem 
+        ? `Unit "${newName.trim()}" already exists as a system-level UOM. Please use a different name.`
+        : `Unit "${newName.trim()}" already exists. Please use a different name or edit the existing one.`;
+      setError(errorMsg);
+      return;
+    }
+    
+    // Check for duplicate short code
+    const { data: existingCodes, error: codeCheckError } = await supabase
+      .from('unit_of_measures')
+      .select('id, short_code, restaurant_id')
+      .or(`restaurant_id.is.null,restaurant_id.eq.${restaurantId}`)
+      .ilike('short_code', newShortCode.trim());
+    
+    if (codeCheckError) {
+      setError(codeCheckError.message);
+      return;
+    }
+    
+    if (existingCodes && existingCodes.length > 0) {
+      setError(`Short code "${newShortCode.trim()}" is already in use. Please use a different code.`);
+      return;
+    }
+    
+    // No duplicates found, proceed with creation
     const { error: createError } = await supabase
       .from('unit_of_measures')
       .insert({
@@ -309,11 +425,54 @@ export default function UomManager({ restaurantId, onClose, onSaved }) {
     if (createError) setError(createError.message);
     else {
       setNewName(''); setNewShortCode(''); setNewPrecision(0);
+      setError(''); // Clear any previous errors
       fetchUoms(); onSaved?.();
     }
   };
 
   const updateUom = async (id) => {
+    // Check for duplicate name (excluding current UOM being edited)
+    const { data: existingUoms, error: checkError } = await supabase
+      .from('unit_of_measures')
+      .select('id, name, restaurant_id')
+      .or(`restaurant_id.is.null,restaurant_id.eq.${restaurantId}`)
+      .ilike('name', editName.trim())
+      .neq('id', id);
+    
+    if (checkError) {
+      setError(checkError.message);
+      return;
+    }
+    
+    if (existingUoms && existingUoms.length > 0) {
+      const existing = existingUoms[0];
+      const isSystem = !existing.restaurant_id;
+      const errorMsg = isSystem 
+        ? `Unit "${editName.trim()}" already exists as a system-level UOM. Please use a different name.`
+        : `Unit "${editName.trim()}" already exists. Please use a different name.`;
+      setError(errorMsg);
+      return;
+    }
+    
+    // Check for duplicate short code (excluding current UOM)
+    const { data: existingCodes, error: codeCheckError } = await supabase
+      .from('unit_of_measures')
+      .select('id, short_code, restaurant_id')
+      .or(`restaurant_id.is.null,restaurant_id.eq.${restaurantId}`)
+      .ilike('short_code', editShortCode.trim())
+      .neq('id', id);
+    
+    if (codeCheckError) {
+      setError(codeCheckError.message);
+      return;
+    }
+    
+    if (existingCodes && existingCodes.length > 0) {
+      setError(`Short code "${editShortCode.trim()}" is already in use. Please use a different code.`);
+      return;
+    }
+    
+    // No duplicates found, proceed with update
     const { error: updateError } = await supabase
       .from('unit_of_measures')
       .update({
@@ -325,6 +484,7 @@ export default function UomManager({ restaurantId, onClose, onSaved }) {
     
     if (updateError) setError(updateError.message);
     else {
+       setError(''); // Clear any previous errors
        fetchUoms(); onSaved?.(); setEditingUomId(null);
     }
   };

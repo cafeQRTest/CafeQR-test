@@ -279,10 +279,7 @@ export function buildKotText(order, restaurantProfile) {
       const p = Number.isInteger(item.uom_precision) ? item.uom_precision : (qtyNum % 1 === 0 ? 0 : 2);
       let qtyStr = qtyNum.toFixed(p);
       
-      const uom = item.uom_short_code || item.uom || '';
-      if (uom && uom.toLowerCase() !== 'pc') {
-          qtyStr += ' ' + uom;
-      }
+      // KOT: Do NOT show UOM (kitchen doesn't need it)
       const qty = qtyStr.padStart(6).substring(0,6);
 
       // first line: name + qty at end
@@ -306,10 +303,8 @@ export function buildKotText(order, restaurantProfile) {
         const qtyNum = Number(ri.quantity || 1);
         const p = Number.isInteger(ri.uom_precision) ? ri.uom_precision : (qtyNum % 1 === 0 ? 0 : 2);
         let qtyStr = qtyNum.toFixed(p);
-        const uom = ri.uom_short_code || ri.uom || '';
-        if (uom && uom.toLowerCase() !== 'pc') {
-          qtyStr += ' ' + uom;
-        }
+        
+        // KOT: Do NOT show UOM (kitchen doesn't need it)
         const qty = qtyStr.padStart(6).substring(0,6);
 
         // prefix with "-" 

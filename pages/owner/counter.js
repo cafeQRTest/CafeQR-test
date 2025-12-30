@@ -862,7 +862,10 @@ const [orderMode, setOrderMode] = useState('settle');
              uomObj = item.uom[0] || null;
           }
           item.uom = uomObj;
-          item.uom_precision = uomObj?.precision ?? 2;
+          
+          // Use item's UOM precision, fallback to 0 if no UOM
+          const precision = uomObj?.precision ?? 0;
+          item.uom_precision = precision;
 
           const variants = variantDataMap.get(item.id) || [];
           const templateName = item.menu_item_variants?.[0]?.variant_templates?.name || 'Options';
@@ -896,8 +899,8 @@ const [orderMode, setOrderMode] = useState('settle');
             variant_template_name: item.has_variants ? templateName : null,
             addon_groups: addonGroups,
             has_addons: hasAddons,
-            uom_short_code: item.uom?.short_code || null,
-            uom_precision: item.uom?.precision || 0
+            uom_short_code: uomObj?.short_code || null,
+            uom_precision: precision
           };
         });
         
@@ -1559,8 +1562,9 @@ window.dispatchEvent(
     setProcessing(true);
     try {
       if (orderMode === 'kitchen') {
-        setPaymentDialogMode('kitchen');
-        setShowPaymentDialog(true);
+        // Kitchen mode: send directly without confirmation dialog
+        await doCreateKitchenOrder();
+        setProcessing(false);
       } else {
         if (isCreditSale) {
           await doCreateAndFinalizeOrder('credit', null, true);
@@ -1573,7 +1577,9 @@ window.dispatchEvent(
       setError('Error completing sale: ' + err.message);
       setTimeout(() => setError(''), 3000);
     } finally {
-      setProcessing(false);
+      if (orderMode !== 'kitchen') {
+        setProcessing(false);
+      }
     }
   };
 

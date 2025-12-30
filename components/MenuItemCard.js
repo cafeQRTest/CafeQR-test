@@ -160,11 +160,9 @@ export default function MenuItemCard({
     if (isOutOfStock) return;
 
     if (onQuantityChange) {
-      const start =
-        quantityStep > 0
-          ? clampQuantity(Math.max(minQuantity, quantityStep))
-          : clampQuantity(Math.max(minQuantity, 1));
-      onQuantityChange(item, start);
+      // Always start with 1 (or minQuantity if it's higher), not the step value
+      const initialQty = Math.max(minQuantity, 1);
+      onQuantityChange(item, clampQuantity(initialQty));
     } else if (onAdd) {
       onAdd(item);
     }

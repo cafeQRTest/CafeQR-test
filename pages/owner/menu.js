@@ -265,7 +265,7 @@ export default function MenuPage() {
     const { data: itemData } = await supabase
       .from("menu_items")
       .select(
-        "id, name, category, price, code_number, hsn, tax_rate, status, veg, is_packaged_good, compensation_cess_rate, ispopular, image_url, has_variants"
+        "id, name, category, price, code_number, hsn, tax_rate, status, veg, is_packaged_good, compensation_cess_rate, ispopular, image_url, has_variants, uom_id"
       )
       .eq("restaurant_id", restaurantId)
       .order("category", { ascending: true })
@@ -369,7 +369,7 @@ export default function MenuPage() {
         const { data: its, error: itsErr } = await supabase
           .from("menu_items")
           .select(
-            `id, name, category, price, code_number, hsn, tax_rate, status, veg, is_packaged_good, compensation_cess_rate, ispopular, image_url, has_variants,
+            `id, name, category, price, code_number, hsn, tax_rate, status, veg, is_packaged_good, compensation_cess_rate, ispopular, image_url, has_variants, uom_id,
             menu_item_variants(
               variant_templates(name)
             ),
