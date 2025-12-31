@@ -397,8 +397,9 @@ export async function downloadTextAndShare(order, bill, restaurantProfile) {
       0
     );
 
-    // Discount
+    // Discount & Round-off
     const orderDiscount = Number(order?.discount_amount || bill?.discount_amount || 0);
+    const roundOff = Number(order?.round_off_amount || bill?.round_off_amount || 0);
 
     const W = getReceiptWidth(restaurantProfile);
     const dashes = () => '-'.repeat(W);
@@ -538,12 +539,18 @@ export async function downloadTextAndShare(order, bill, restaurantProfile) {
       if (orderDiscount > 0) {
          lines.push(`Discount: -${orderDiscount.toFixed(2)}`);
       }
+      if (roundOff !== 0) {
+         lines.push(`Round off: ${roundOff > 0 ? '+' : ''}${roundOff.toFixed(2)}`);
+      }
       lines.push(`Grand Total: ${finalGrandTotal.toFixed(2)}`);
     } else {
       if (orderDiscount > 0) {
-         const beforeDiscount = finalGrandTotal + orderDiscount;
+         const beforeDiscount = finalGrandTotal + orderDiscount - roundOff;
          lines.push(`Subtotal: ${beforeDiscount.toFixed(2)}`);
          lines.push(`Discount: -${orderDiscount.toFixed(2)}`);
+      }
+      if (roundOff !== 0) {
+         lines.push(`Round off: ${roundOff > 0 ? '+' : ''}${roundOff.toFixed(2)}`);
       }
       lines.push(`Total: ${finalGrandTotal.toFixed(2)}`);
     }
@@ -655,8 +662,9 @@ export function buildReceiptText(order, bill, restaurantProfile) {
       0
     );
     
-    // Discount
+    // Discount & Round-off
     const orderDiscount = Number(order?.discount_amount || bill?.discount_amount || 0);
+    const roundOff = Number(order?.round_off_amount || bill?.round_off_amount || 0);
 
     const W = getReceiptWidth(restaurantProfile);
     const dashes = () => '-'.repeat(W);
@@ -778,12 +786,18 @@ export function buildReceiptText(order, bill, restaurantProfile) {
       if (orderDiscount > 0) {
          lines.push(`Discount: -${orderDiscount.toFixed(2)}`);
       }
+      if (roundOff !== 0) {
+         lines.push(`Round off: ${roundOff > 0 ? '+' : ''}${roundOff.toFixed(2)}`);
+      }
       lines.push(`Grand Total: ${finalGrandTotal.toFixed(2)}`);
     } else {
       if (orderDiscount > 0) {
-         const beforeDiscount = finalGrandTotal + orderDiscount;
+         const beforeDiscount = finalGrandTotal + orderDiscount - roundOff;
          lines.push(`Subtotal: ${beforeDiscount.toFixed(2)}`);
          lines.push(`Discount: -${orderDiscount.toFixed(2)}`);
+      }
+      if (roundOff !== 0) {
+         lines.push(`Round off: ${roundOff > 0 ? '+' : ''}${roundOff.toFixed(2)}`);
       }
       lines.push(`Total: ${finalGrandTotal.toFixed(2)}`);
     }

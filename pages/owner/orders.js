@@ -14,6 +14,7 @@ import { downloadInvoicePdf } from '../../lib/downloadInvoicePdf'
 import VariantSelector from '../../components/VariantSelector'
 import NiceSelect from '../../components/NiceSelect'
 import { round2, roundP, formatQtyP } from '../../lib/qty'
+import { calculateRoundOff } from '../../lib/roundOff'
 import DiscountModal from '../../components/DiscountModal'
 
 const BRAND = {
@@ -643,9 +644,37 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
       };
   }, [localItems, discount, order.totalAmount, originalTotal]);
 
+  const { restaurant } = useRestaurant();
+  const roundOffConfig = {
+    round_off_enabled: restaurant?.round_off_enabled,
+    round_off_mode: restaurant?.round_off_mode || 'automatic',
+    round_off_auto_factor: Number(restaurant?.round_off_auto_factor || 1),
+    round_off_manual_limit: Number(restaurant?.round_off_manual_limit || 10)
+  };
+
+  // Calculate Initial Round-off
+  const factor = Number(roundOffConfig?.round_off_auto_factor || 1.0);
+  const autoRounded = roundOffConfig?.round_off_enabled && roundOffConfig?.round_off_mode === 'automatic' 
+    ? Math.round(finalTotal / factor) * factor 
+    : finalTotal;
+
+  const [settledAmount, setSettledAmount] = useState(autoRounded);
+  
+  // Re-sync settled amount if finalTotal (bill total) changes (e.g. discount added)
+  useEffect(() => {
+    const nextFactor = Number(roundOffConfig?.round_off_auto_factor || 1.0);
+    const nextRounded = roundOffConfig?.round_off_enabled && roundOffConfig?.round_off_mode === 'automatic' 
+      ? Math.round(finalTotal / nextFactor) * nextFactor 
+      : finalTotal;
+    setSettledAmount(nextRounded);
+  }, [finalTotal, roundOffConfig.round_off_enabled, roundOffConfig.round_off_mode, roundOffConfig.round_off_auto_factor]);
+
+  const manualRoundOff = settledAmount - finalTotal;
+  const settledTotal = settledAmount;
+  
   const effectiveTotal = mode === 'collect'
-      ? Math.max(0, finalTotal - (order.alreadyPaidAmount || 0))
-      : (mode === 'refund' ? Number(order.refundAmount ?? 0) : finalTotal);
+      ? Math.max(0, settledTotal - (order.alreadyPaidAmount || 0))
+      : (mode === 'refund' ? Number(order.refundAmount ?? 0) : settledTotal);
 
   // Update item in local state
   const handleUpdateLocalItem = (id, validItem) => {
@@ -669,23 +698,24 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
   };
 
   const handleConfirm = () => {
+    const commonDetails = {
+      mode,
+      discount_amount: discount.type === 'amount' ? discount.value : (subtotalAfterItemDisc * discount.value / 100),
+      round_off_amount: manualRoundOff,
+      updated_items: localItems
+    };
+
     if (paymentMethod === 'mixed') {
       if (!validateMixedPayment()) return;
       onConfirm(paymentMethod, {
+        ...commonDetails,
         cash_amount: Number(cashAmount).toFixed(2),
         online_amount: Number(onlineAmount).toFixed(2),
         online_method: onlineMethod,
-        is_mixed: true,
-        mode,
-        discount_amount: discount.type === 'amount' ? discount.value : (subtotalAfterItemDisc * discount.value / 100),
-        updated_items: localItems // Pass updated items to handler
+        is_mixed: true
       });
     } else {
-      onConfirm(paymentMethod, {
-        mode,
-        discount_amount: discount.type === 'amount' ? discount.value : (subtotalAfterItemDisc * discount.value / 100),
-        updated_items: localItems
-      });
+      onConfirm(paymentMethod, commonDetails);
     }
   };
 
@@ -775,14 +805,73 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
             )}
            
            {(mode === 'collect' || mode === 'refund') && (
-             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-                <span style={{ fontSize: 11, color: mode === 'collect' ? '#10b981' : '#ef4444', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                   {mode === 'collect' ? 'Collect' : 'Refund'}
-                </span>
-                <span style={{ fontSize: 18, fontWeight: 900, color: mode === 'collect' ? '#0f172a' : '#ef4444' }}>
-                   ₹{effectiveTotal.toFixed(2)}
-                </span>
-             </div>
+             <>
+               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                  <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Settled Total</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#0f172a' }}>
+                     ₹{settledTotal.toFixed(2)}
+                  </span>
+               </div>
+               
+               {roundOffConfig.round_off_enabled && roundOffConfig.round_off_mode === 'manual' && mode === 'collect' && (
+                  <div style={{ 
+                    marginTop: 12, 
+                    padding: 14, 
+                    background: '#fff7ed', 
+                    borderRadius: 12, 
+                    border: '1.5px solid #fdba74',
+                    boxShadow: '0 2px 8px rgba(249, 115, 22, 0.05)'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                      <span style={{ fontSize: 11, color: '#ea580c', fontWeight: 800, textTransform: 'uppercase' }}>Received Amount</span>
+                      <span style={{ fontSize: 10, color: Math.abs(manualRoundOff) > roundOffConfig.round_off_manual_limit ? '#ef4444' : '#9a3412', opacity: 0.8 }}>
+                        Limit: ±₹{roundOffConfig.round_off_manual_limit}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '9px', color: '#9a3412', marginBottom: 10, fontWeight: 500, lineHeight: 1.3 }}>
+                       Enter the exact amount paid by the customer to automatically handle rounding.
+                    </div>
+                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center', background: '#fff', borderRadius: 8, border: '1.5px solid #fed7aa', overflow: 'hidden' }}>
+                       <span style={{ paddingLeft: 10, fontSize: 14, fontWeight: 700, color: '#94a3b8' }}>₹</span>
+                       <input 
+                         type="number" 
+                         step="0.01"
+                         value={settledAmount}
+                         onChange={(e) => {
+                           const val = Number(e.target.value || 0);
+                           const diff = val - finalTotal;
+                           const limit = Number(roundOffConfig.round_off_manual_limit || 0);
+                           if (Math.abs(diff) <= limit) {
+                             setSettledAmount(val);
+                           }
+                         }}
+                         style={{ 
+                           width: '100%', padding: '8px 6px', border: 'none', outline: 'none',
+                           fontSize: 14, fontWeight: 700, color: '#1e293b'
+                         }}
+                       />
+                    </div>
+                  </div>
+               )}
+
+               {manualRoundOff !== 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+                    <span style={{ fontSize: 10, color: '#94a3b8' }}>Adjustment</span>
+                    <span style={{ fontSize: 10, color: manualRoundOff > 0 ? '#10b981' : '#ef4444' }}>
+                      {manualRoundOff > 0 ? '+' : ''}{manualRoundOff.toFixed(2)}
+                    </span>
+                  </div>
+               )}
+
+               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, borderTop: '1px solid #f1f5f9', paddingTop: 8 }}>
+                  <span style={{ fontSize: 11, color: mode === 'collect' ? '#10b981' : '#ef4444', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                     {mode === 'collect' ? 'Collect' : 'Refund'}
+                  </span>
+                  <span style={{ fontSize: 18, fontWeight: 900, color: mode === 'collect' ? '#0f172a' : '#ef4444' }}>
+                     ₹{effectiveTotal.toFixed(2)}
+                  </span>
+               </div>
+             </>
            )}
 
         </div>
@@ -2491,15 +2580,16 @@ const complete = async (orderId, actualPaymentMethod = null, details = null) => 
       finalPaymentMethod = 'credit';
     }
 
-    // Extract discount & mixed details
+    // Extract discount, round-off & mixed details
     const discountAmount = details?.discount_amount;
+    const roundOffAmount = details?.round_off_amount || 0;
     const updatedItems = details?.updated_items; // Array of items with potential new discounts
     const isMixed = details?.is_mixed;
     let mixedPaymentData = null;
 
     if (isMixed) {
         // Remove non-payment metadata
-        const { mode, discount_amount, is_mixed, updated_items, ...rest } = details || {};
+        const { mode, discount_amount, round_off_amount, is_mixed, updated_items, ...rest } = details || {};
         mixedPaymentData = rest;
     } else if (details && !details.mode && !details.discount_amount) {
         // Fallback for legacy calls if any (direct mixed details passed)
@@ -2555,7 +2645,8 @@ const complete = async (orderId, actualPaymentMethod = null, details = null) => 
         actual_payment_method: finalPaymentMethod 
       }),
       ...(mixedPaymentData && { mixed_payment_details: mixedPaymentData }),
-      ...(discountAmount !== undefined && { discount_amount: discountAmount })
+      ...(discountAmount !== undefined && { discount_amount: discountAmount }),
+      round_off_amount: roundOffAmount
     };
     
     // IMPORTANT: Recalculate totals when discount changes
@@ -2585,9 +2676,9 @@ const complete = async (orderId, actualPaymentMethod = null, details = null) => 
         // Update total_inc_tax with recalculated value (includes line discounts)
         updatePayload.total_inc_tax = Number(recalculatedTotalInc.toFixed(2));
         
-        // Now calculate total_amount: total_inc_tax - order_discount
+        // Now calculate total_amount: total_inc_tax - order_discount + round_off
         const finalDiscount = Number(discountAmount || 0);
-        updatePayload.total_amount = Number((recalculatedTotalInc - finalDiscount).toFixed(2));
+        updatePayload.total_amount = Number((recalculatedTotalInc - finalDiscount + roundOffAmount).toFixed(2));
       } else {
         // Fallback: fetch from database if no updatedItems
         const { data: orderItems } = await supabase
@@ -2609,7 +2700,7 @@ const complete = async (orderId, actualPaymentMethod = null, details = null) => 
           
           updatePayload.total_inc_tax = Number(recalculatedTotalInc.toFixed(2));
           const finalDiscount = Number(discountAmount || 0);
-          updatePayload.total_amount = Number((recalculatedTotalInc - finalDiscount).toFixed(2));
+          updatePayload.total_amount = Number((recalculatedTotalInc - finalDiscount + roundOffAmount).toFixed(2));
         } else {
           // Last fallback: use existing total_inc_tax
           const { data: currentOrder } = await supabase
@@ -2620,7 +2711,7 @@ const complete = async (orderId, actualPaymentMethod = null, details = null) => 
           
           if (currentOrder) {
             const finalDiscount = Number(discountAmount || 0);
-            updatePayload.total_amount = Number((currentOrder.total_inc_tax - finalDiscount).toFixed(2));
+            updatePayload.total_amount = Number((currentOrder.total_inc_tax - finalDiscount + roundOffAmount).toFixed(2));
           }
         }
       }
@@ -2640,6 +2731,7 @@ const { data: updatedInvoice, error: invoiceErr} = await supabase
     payment_method: finalPaymentMethod,
     mixed_payment_details: mixedPaymentData,
     status: 'paid',
+    round_off_amount: roundOffAmount,
     ...(discountAmount !== undefined && { discount_amount: discountAmount }),
     ...(updatePayload.total_amount !== undefined && { paid_amount: updatePayload.total_amount })
   })

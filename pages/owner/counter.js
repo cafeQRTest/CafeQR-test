@@ -19,7 +19,17 @@ import { round2, roundP, normalizeQty, formatQty2, formatQtyP } from '../../lib/
 // -------------------------------
 // Inline Payment Confirm Dialog
 // -------------------------------
-function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false, mode = 'settle' }) {
+function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false, mode = 'settle', roundOffConfig }) {
+  const isRoundOffEnabled = !!roundOffConfig?.round_off_enabled;
+  const isAuto = roundOffConfig?.round_off_mode === 'automatic';
+  
+  // Calculate Initial Round-off
+  const factor = Number(roundOffConfig?.round_off_auto_factor || 1.0);
+  const autoRounded = isRoundOffEnabled && isAuto ? Math.round(amount / factor) * factor : amount;
+  
+  const [settledAmount, setSettledAmount] = useState(autoRounded);
+  const manualRoundOff = settledAmount - amount;
+  const settledTotal = settledAmount;
   const BRAND = mode === 'kitchen'
     ? { orange: '#f97316', orangeDark: '#ea580c', bgSoft: '#fff7ed', border: '#e5e7eb', text: '#111827' }
     : { orange: '#16a34a', orangeDark: '#15803d', bgSoft: '#ecfdf3', border: '#e5e7eb', text: '#111827' };
@@ -60,7 +70,7 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false, mode 
     const cash = Number(cashAmount || 0);
     const online = Number(onlineAmount || 0);
     if (cash <= 0 || online <= 0) { alert('Both cash and online must be > 0'); return false; }
-    if (Math.abs((cash + online) - total) > 0.01) { alert(`Split must equal ₹${total.toFixed(2)}`); return false; }
+    if (Math.abs((cash + online) - settledTotal) > 0.01) { alert(`Split must equal ₹${settledTotal.toFixed(2)}`); return false; }
     return true;
   };
 
@@ -68,16 +78,21 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false, mode 
     if (disabled) return;
     try {
       setSubmitting(true);
+      const details = {
+        round_off_amount: Number(manualRoundOff.toFixed(2))
+      };
+      
       if (paymentMethod === 'mixed') {
         if (!validateMixed()) { setSubmitting(false); return; }
         await onConfirm('mixed', {
+          ...details,
           cash_amount: Number(cashAmount).toFixed(2),
           online_amount: Number(onlineAmount).toFixed(2),
           online_method: onlineMethod,
           is_mixed: true
         });
       } else {
-        await onConfirm(paymentMethod, null);
+        await onConfirm(paymentMethod, details);
       }
     } finally { setSubmitting(false); }
   };
@@ -124,10 +139,80 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false, mode 
             borderRadius: 8,
             border: `2px solid ${BRAND.orange}`
           }}>
-            <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>Amount:</span>
-            <span style={{ fontSize: '16px', fontWeight: 700, color: BRAND.orange }}>₹{total.toFixed(2)}</span>
+            <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>Settled Total:</span>
+            <span style={{ fontSize: '16px', fontWeight: 700, color: BRAND.orange }}>₹{settledAmount.toFixed(2)}</span>
           </div>
+          {manualRoundOff !== 0 && (
+            <div style={{ fontSize: '11px', color: manualRoundOff > 0 ? '#16a34a' : '#dc2626', fontWeight: 600, marginTop: 4 }}>
+              ({manualRoundOff > 0 ? '+' : ''}{manualRoundOff.toFixed(2)} Round-off)
+            </div>
+          )}
         </div>
+
+         {isRoundOffEnabled && !isAuto && mode !== 'kitchen' && (
+            <div style={{ 
+              marginBottom: 20, 
+              background: BRAND.bgSoft, 
+              padding: '16px', 
+              borderRadius: 14, 
+              border: `1.5px solid ${BRAND.orange}20`,
+              boxShadow: `0 4px 12px ${BRAND.orange}08`
+            }}>
+               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                 <label style={{ fontSize: 12, fontWeight: 800, color: BRAND.orange, textTransform: 'uppercase', letterSpacing: '0.02em' }}>
+                   Received Amount
+                 </label>
+                 <span style={{ fontSize: 11, fontWeight: 600, color: '#64748b', opacity: 0.8 }}>
+                   Limit: ±₹{Number(roundOffConfig.round_off_manual_limit).toFixed(2)}
+                 </span>
+               </div>
+               <div style={{ fontSize: '10px', color: '#64748b', marginBottom: 12, fontWeight: 500 }}>
+                 Enter the amount paid by the customer to automatically calculate rounding.
+               </div>
+               <div style={{ display: 'flex', gap: 10, alignItems: 'stretch' }}>
+                 <div style={{ 
+                   flex: 1, 
+                   position: 'relative', 
+                   display: 'flex', 
+                   alignItems: 'center',
+                   background: '#fff',
+                   borderRadius: 10,
+                   border: '2px solid #e2e8f0',
+                   transition: 'border-color 0.2s',
+                   overflow: 'hidden'
+                 }}>
+                   <span style={{ paddingLeft: 12, fontSize: 16, fontWeight: 700, color: '#94a3b8' }}>₹</span>
+                   <input 
+                     type="number" 
+                     step="0.01"
+                     value={settledAmount}
+                     onChange={(e) => {
+                       const val = Number(e.target.value || 0);
+                       const diff = val - amount;
+                       const limit = Number(roundOffConfig.round_off_manual_limit || 0);
+                       if (Math.abs(diff) <= limit) {
+                         setSettledAmount(val);
+                       }
+                     }}
+                     style={{ 
+                       flex: 1, padding: '10px 8px', border: 'none', outline: 'none',
+                       fontSize: 15, fontWeight: 700, color: '#1e293b'
+                     }}
+                   />
+                 </div>
+                 <button 
+                   onClick={() => setSettledAmount(amount)}
+                   style={{ 
+                     background: '#fff', border: '2px solid #e2e8f0', color: '#64748b',
+                     padding: '0 12px', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                     transition: 'all 0.2s', display: 'flex', alignItems: 'center'
+                   }}
+                   onMouseEnter={(e) => { e.target.style.borderColor = '#cbd5e1'; e.target.style.color = '#334155'; }}
+                   onMouseLeave={(e) => { e.target.style.borderColor = '#e2e8f0'; e.target.style.color = '#64748b'; }}
+                 >Reset</button>
+               </div>
+            </div>
+         )}
 
         <div style={{ display: 'grid', gap: 10, marginBottom: 16 }}>
           {mode === 'kitchen' ? (
@@ -234,7 +319,7 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false, mode 
                     setCashAmount(val);
                     const c = Number(val);
                     if (!isNaN(c)) {
-                      const rem = Math.max(0, total - c);
+                      const rem = Math.max(0, settledTotal - c);
                       setOnlineAmount(rem.toFixed(2));
                     }
                   }}
@@ -284,7 +369,7 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false, mode 
                 fontWeight: 600,
                 color: '#1e293b'
               }}>
-                Total ₹{total.toFixed(2)} → ₹{cashAmount || 0} + ₹{onlineAmount || 0} ({onlineMethod.toUpperCase()})
+                Total ₹{settledTotal.toFixed(2)} → ₹{cashAmount || 0} + ₹{onlineAmount || 0} ({onlineMethod.toUpperCase()})
               </div>
             </div>
           </div>
@@ -684,6 +769,12 @@ const [orderMode, setOrderMode] = useState('settle');
     default_tax_rate: 0,
     prices_include_tax: true
   });
+  const [roundOffConfig, setRoundOffConfig] = useState({
+    round_off_enabled: false,
+    round_off_mode: 'automatic',
+    round_off_auto_factor: 1.0,
+    round_off_manual_limit: 10.0
+  });
 
   // Upsells for cart
   const [cartUpsells, setCartUpsells] = useState([]);
@@ -925,10 +1016,12 @@ const [orderMode, setOrderMode] = useState('settle');
     shipping_pincode,
     phone,
     shipping_phone,
-    print_logo_bitmap,
-    print_logo_cols,
     print_logo_rows,
-    features_menu_images_enabled
+    features_menu_images_enabled,
+    round_off_enabled,
+    round_off_mode,
+    round_off_auto_factor,
+    round_off_manual_limit
   `)
   .eq('restaurant_id', restaurantId)
   .limit(1)
@@ -943,8 +1036,15 @@ if (profile?.tables_count) {
 
 setProfileTax({
   gst_enabled: !!profile?.gst_enabled,
-  default_tax_rate: Number(profile?.default_tax_rate ?? 0),
+  default_tax_rate: Number(profile?.default_tax_rate || 0),
   prices_include_tax: !!profile?.prices_include_tax,
+});
+
+setRoundOffConfig({
+  round_off_enabled: !!profile?.round_off_enabled,
+  round_off_mode: profile?.round_off_mode || 'automatic',
+  round_off_auto_factor: profile?.round_off_auto_factor ?? 1.0,
+  round_off_manual_limit: profile?.round_off_manual_limit ?? 10.0,
 });
 
 
@@ -1384,6 +1484,7 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
       credit_customer_id: isCredit ? selectedCreditCustomerId : null,
       original_payment_method: isCredit ? null : finalPaymentMethod,
       discount_amount: discountVal,
+      round_off_amount: mixedDetails?.round_off_amount || 0,
       ...(finalPaymentMethod === 'mixed' && mixedDetails
         ? { mixed_payment_details: mixedDetails }
         : {}),
@@ -1562,7 +1663,6 @@ window.dispatchEvent(
     setProcessing(true);
     try {
       if (orderMode === 'kitchen') {
-        // Kitchen mode: send directly without confirmation dialog
         await doCreateKitchenOrder();
         setProcessing(false);
       } else {
@@ -2761,6 +2861,7 @@ const isVariantItem = !!item.has_variants && (item.variants?.length || 0) > 0;
           amount={Math.max(0, cartTotals.totalInc - (discount.type === 'amount' ? discount.value : (cartTotals.totalInc * discount.value / 100)))}
           busy={processing}
           mode={paymentDialogMode}
+          roundOffConfig={roundOffConfig}
           onConfirm={async (method, details) => {
             if (processing) return;
             setProcessing(true);

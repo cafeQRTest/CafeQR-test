@@ -25,12 +25,12 @@ const BRAND = {
 
 function computeOrderTotalDisplay(order) {
   const toNum = (v) => (v == null ? null : Number(v));
-  const a = toNum(order?.total_inc_tax);
-  if (Number.isFinite(a) && a>0) return a;
   const b = toNum(order?.total_amount);
-  if (Number.isFinite(b) && b>0) return b;
+  if (Number.isFinite(b) && b > 0) return b;
+  const a = toNum(order?.total_inc_tax);
+  if (Number.isFinite(a) && a > 0) return a;
   const c = toNum(order?.total);
-  if (Number.isFinite(c) && c>0) return c;
+  if (Number.isFinite(c) && c > 0) return c;
   return 0;
 }
 
@@ -892,10 +892,31 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
 
             {/* Summary Box */}
             <div style={{ background: '#FFF9F2', borderRadius: 8, padding: 16 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12, fontSize: 13, fontWeight: 600, color: '#64748b' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 13, fontWeight: 600, color: '#64748b' }}>
                 <span>Tax Amount</span>
                 <span style={{ color: '#334155' }}>₹{Number(itemsModalOrder.total_tax || 0).toFixed(2)}</span>
               </div>
+
+              {Number(itemsModalOrder.discount_amount || 0) > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 13, fontWeight: 600, color: '#ef4444' }}>
+                  <span>Discount</span>
+                  <span>-₹{Number(itemsModalOrder.discount_amount).toFixed(2)}</span>
+                </div>
+              )}
+
+              {Number(itemsModalOrder.round_off_amount || 0) !== 0 && (
+                <div style={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  marginBottom: 8, 
+                  fontSize: 13, 
+                  fontWeight: 600, 
+                  color: Number(itemsModalOrder.round_off_amount) > 0 ? '#10b981' : '#ef4444' 
+                }}>
+                  <span>Round-off</span>
+                  <span>{Number(itemsModalOrder.round_off_amount) > 0 ? '+' : ''}₹{Number(itemsModalOrder.round_off_amount).toFixed(2)}</span>
+                </div>
+              )}
               
               <div style={{ borderTop: '1px dashed #fdba74', margin: '8px 0 12px 0' }}></div>
 

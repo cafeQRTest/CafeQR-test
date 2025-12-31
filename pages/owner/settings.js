@@ -685,7 +685,10 @@ export default function SettingsPage() {
     delivery_radius_km: 10,
     owner_lat: '',
     owner_lng: '',
-
+    round_off_enabled: false,
+    round_off_mode: 'automatic',
+    round_off_auto_factor: 1.0,
+    round_off_manual_limit: 10.0,
   });
 
   const [originalTables, setOriginalTables] = useState(0);
@@ -762,7 +765,10 @@ export default function SettingsPage() {
             delivery_radius_km: profile.delivery_radius_km ?? 10,
             owner_lat: profile.location ? profile.location.coordinates?.[1] ?? '' : '',
             owner_lng: profile.location ? profile.location.coordinates?.[0] ?? '' : '',
-
+            round_off_enabled: !!profile.round_off_enabled,
+            round_off_mode: profile.round_off_mode || 'automatic',
+            round_off_auto_factor: profile.round_off_auto_factor ?? 1.0,
+            round_off_manual_limit: profile.round_off_manual_limit ?? 10.0,
           }));
           setOriginalTables(profile.tables_count || 0);
           setIsFirstTime(false);
@@ -834,6 +840,10 @@ export default function SettingsPage() {
           zomato_api_key: form.zomato_api_key,
           zomato_api_secret: form.zomato_api_secret,
           zomato_webhook_secret: form.zomato_webhook_secret,
+          round_off_enabled: form.round_off_enabled,
+          round_off_mode: form.round_off_mode,
+          round_off_auto_factor: Number(form.round_off_auto_factor),
+          round_off_manual_limit: Number(form.round_off_manual_limit),
       };
 
       await supabase.from('restaurant_profiles').upsert(payload, { onConflict: 'restaurant_id' });
@@ -1315,6 +1325,77 @@ export default function SettingsPage() {
                  <Switch checked={form.features_counter_send_to_kitchen_enabled} />
               </FeatureCard>
 
+            </SectionBody>
+          </SectionCard>
+
+          {/* ROUND-OFF SETTINGS CARD */}
+          <SectionCard>
+            <SectionHeader>
+              <SectionIcon>🔢</SectionIcon>
+              <div>
+                <SectionTitle>Round-off Settings</SectionTitle>
+                <div style={{ fontSize: 13, color: 'gray', fontWeight: 400 }}>Configure how order totals are rounded</div>
+              </div>
+            </SectionHeader>
+            <SectionBody>
+              <FormField span={2}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '8px 0' }}>
+                  <input 
+                    type="checkbox" 
+                    id="round-off-enabled" 
+                    checked={form.round_off_enabled} 
+                    onChange={onChange('round_off_enabled')}
+                    style={{ width: 20, height: 20, cursor: 'pointer', accentColor: '#f97316' }}
+                  />
+                  <label htmlFor="round-off-enabled" style={{ fontSize: 16, fontWeight: 600, color: '#0f172a', cursor: 'pointer' }}>
+                    Enable Round-off
+                  </label>
+                </div>
+                <HelperText>Apply rounding to final payment amounts</HelperText>
+              </FormField>
+
+              {form.round_off_enabled && (
+                <>
+                  <FormField>
+                    <Label>Round-off Mode</Label>
+                    <NiceSelect
+                      value={form.round_off_mode}
+                      onChange={(val) => setForm({ ...form, round_off_mode: val })}
+                      options={[
+                        { value: 'automatic', label: 'Automatic' },
+                        { value: 'manual', label: 'Manual' },
+                      ]}
+                    />
+                    <HelperText>Choose between automatic rules or manual limits</HelperText>
+                  </FormField>
+
+                  {form.round_off_mode === 'automatic' ? (
+                    <FormField>
+                      <Label>Auto Round-off Factor</Label>
+                      <Input 
+                        type="number" 
+                        step="0.01"
+                        value={form.round_off_auto_factor} 
+                        onChange={onChange('round_off_auto_factor')} 
+                        placeholder="e.g. 1.00 or 5.00"
+                      />
+                      <HelperText>The factor to which the amount will be rounded (e.g. 1.00 for nearest ₹1)</HelperText>
+                    </FormField>
+                  ) : (
+                    <FormField>
+                      <Label>Max Manual Round-off (Limit)</Label>
+                      <Input 
+                        type="number" 
+                        step="0.01"
+                        value={form.round_off_manual_limit} 
+                        onChange={onChange('round_off_manual_limit')} 
+                        placeholder="e.g. 10.00"
+                      />
+                      <HelperText>The maximum amount that can be manually rounded off</HelperText>
+                    </FormField>
+                  )}
+                </>
+              )}
             </SectionBody>
           </SectionCard>
 

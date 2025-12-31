@@ -40,6 +40,7 @@ export default async function handler(req, res) {
       number_of_customers = null, // optional
       custom_created_at = null,
       discount_amount = 0,
+      round_off_amount = 0,
     } = req.body;
 
     if (!restaurant_id || !Array.isArray(items) || items.length === 0) {
@@ -233,7 +234,8 @@ export default async function handler(req, res) {
           total_tax: Number(totalTax.toFixed(2)),
           total_inc_tax: Number(totalInc.toFixed(2)),
           discount_amount: Number(discount_amount ?? 0),
-          total_amount: Number((totalInc - (discount_amount || 0)).toFixed(2)),
+          round_off_amount: Number(round_off_amount ?? 0),
+          total_amount: Number((totalInc - (discount_amount || 0) + (round_off_amount || 0)).toFixed(2)),
           prices_include_tax: serviceInclude,
           gst_enabled: gstEnabled,
           mixed_payment_details: processedMixedDetails,
@@ -310,6 +312,8 @@ export default async function handler(req, res) {
         total_tax: Number(totalTax.toFixed(2)),
         total_inc_tax: Number(totalInc.toFixed(2)),
         discount_amount: Number(discount_amount ?? 0),
+        round_off_amount: Number(round_off_amount ?? 0),
+        total_amount: Number((totalInc - (discount_amount || 0) + (round_off_amount || 0)).toFixed(2)),
         items: preparedItems.map((pi) => ({
           ...pi,
           name: pi.item_name,

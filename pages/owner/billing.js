@@ -590,6 +590,18 @@ const exportHsnSummary = async () => {
                       <span>GST Total</span>
                       <span>{formatMoney(selectedInvoice.total_tax)}</span>
                     </div>
+                    {Number(selectedInvoice.discount_amount || 0) > 0 && (
+                      <div className="sum-row" style={{ color: '#ef4444' }}>
+                        <span>Discount</span>
+                        <span>-{formatMoney(selectedInvoice.discount_amount)}</span>
+                      </div>
+                    )}
+                    {Number(selectedInvoice.round_off_amount || 0) !== 0 && (
+                      <div className="sum-row" style={{ color: Number(selectedInvoice.round_off_amount) > 0 ? '#10b981' : '#ef4444' }}>
+                        <span>Round-off</span>
+                        <span>{Number(selectedInvoice.round_off_amount) > 0 ? '+' : ''}{formatMoney(selectedInvoice.round_off_amount)}</span>
+                      </div>
+                    )}
                     <div className="sum-row grand">
                       <span>Grand Total</span>
                       <span>{formatMoney(selectedInvoice.total_inc_tax)}</span>

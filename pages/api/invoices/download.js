@@ -90,6 +90,7 @@ export default async function handler(req, res) {
         prices_include_tax: profile?.prices_include_tax ?? true,
         mixed_payment_details: order.mixed_payment_details || null,
         discount_amount: invoice?.discount_amount ?? order.discount_amount ?? 0,
+        round_off_amount: invoice?.round_off_amount ?? order.round_off_amount ?? 0,
       },
 
       items: (invoiceItems || []).map((row) => {

@@ -117,7 +117,7 @@ export function RestaurantProvider({ children }) {
             const { data: prof } = await supabase
               .from('restaurant_profiles')
               .select(
-                'features_credit_enabled,features_production_enabled,features_inventory_enabled,features_table_ordering_enabled'
+                'features_credit_enabled,features_production_enabled,features_inventory_enabled,features_table_ordering_enabled,round_off_enabled,round_off_mode,round_off_auto_factor,round_off_manual_limit'
               )
               .eq('restaurant_id', found.id)
               .maybeSingle();
@@ -127,9 +127,15 @@ export function RestaurantProvider({ children }) {
               production_enabled: !!prof?.features_production_enabled,
               inventory_enabled: !!prof?.features_inventory_enabled,
               table_ordering_enabled: !!prof?.features_table_ordering_enabled,
+              round_off: {
+                enabled: !!prof?.round_off_enabled,
+                mode: prof?.round_off_mode || 'automatic',
+                factor: Number(prof?.round_off_auto_factor || 1),
+                limit: Number(prof?.round_off_manual_limit || 10)
+              }
             };
 
-            found = { ...found, features };
+            found = { ...found, features, ...prof };
           } catch {
             // ignore profile read errors; leave features undefined/absent
           }
