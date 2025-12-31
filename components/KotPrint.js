@@ -48,11 +48,10 @@ function markPrinted(orderId, kind = 'bill') {
 
 function getOrderTypeLabelLocal(order) {
   if (!order) return '';
-  if (order.order_type === 'parcel') return 'Parcel';
-  if (order.order_type === 'dine-in') return 'Dine-in';
-  if (order.order_type === 'counter') {
-    return order.table_number ? `Table ${order.table_number}` : 'Counter';
+  if (order.table_number && order.table_number !== null) {
+     return `Table ${order.table_number}`;
   }
+  if (order.order_type === 'parcel') return 'Parcel';
   return '';
 }
 

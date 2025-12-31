@@ -3315,16 +3315,11 @@ colOrders =
 
 function getOrderTypeLabel(order) {
   if (!order) return '';
-  let label = '';
-  if (order.order_type === 'parcel') label = 'Parcel';
-  else if (order.order_type === 'dine-in') label = 'Dine-in';
-  else if (order.order_type === 'counter') label = 'Counter';
-  else label = order.order_type || 'Order';
-
-  if (order.table_number) {
-    return `${label} • Table ${order.table_number}`;
+  if (order.table_number && order.table_number !== null) {
+    return `Table ${order.table_number}`;
   }
-  return label;
+  if (order.order_type === 'parcel') return 'Parcel';
+  return '';
 }
 
 // OrderCard component (with print button)

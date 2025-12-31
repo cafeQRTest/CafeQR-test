@@ -22,10 +22,10 @@ function toDisplayItems(order) {
 // Label logic identical to owner page
 function getOrderTypeLabel(order) {
   if (!order) return '';
+  if (order.table_number && order.table_number !== null) {
+     return `Table ${order.table_number}`;
+  }
   if (order.order_type === 'parcel') return 'Parcel';
-  if (order.table_number) return `Table ${order.table_number}`;
-  if (order.order_type === 'dine-in') return 'Dine-in';
-  if (order.order_type === 'counter') return 'Counter';
   return '';
 }
 

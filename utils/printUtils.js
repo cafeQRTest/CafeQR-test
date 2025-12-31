@@ -18,14 +18,10 @@ function toDisplayItems(order) {
 
 function getOrderTypeLabel(order) {
   if (!order) return '';
-  if (order.order_type === 'parcel') return 'Parcel';
-  if (order.order_type === 'dine-in') return 'Dine-in';
-  if (order.order_type === 'counter') {
-    if (order.table_number && order.table_number !== null) {
-      return `Table ${order.table_number}`;
-    }
-    return 'Counter';
+  if (order.table_number && order.table_number !== null) {
+    return `Table ${order.table_number}`;
   }
+  if (order.order_type === 'parcel') return 'Parcel';
   return '';
 }
 
@@ -230,11 +226,7 @@ export function buildKotText(order, restaurantProfile) {
       '';
 
     const orderId = order?.id?.slice(0, 8)?.toUpperCase() || 'N/A';
-    const orderType = getOrderTypeLabel(order);
-    const tableLabel =
-      order?.order_type === 'counter' && order?.table_number
-        ? `Table ${order.table_number}`
-        : orderType;
+    const tableLabel = getOrderTypeLabel(order);
 
     const orderDate = new Date( order.created_at);
     const dateStr = orderDate.toLocaleDateString('en-IN', {
@@ -262,7 +254,7 @@ export function buildKotText(order, restaurantProfile) {
     lines.push(center('*** KITCHEN ORDER TICKET ***', W));
     lines.push(`${dateStr} ${timeStr}`);
     lines.push(`Order: #${orderId}`);
-    lines.push(`For: ${tableLabel}`);
+    if (tableLabel) lines.push(`For: ${tableLabel}`);
     if (order.number_of_customers) {
       lines.push(`No. of Customers: ${order.number_of_customers}`);
     }
@@ -443,7 +435,7 @@ export async function downloadTextAndShare(order, bill, restaurantProfile) {
         lines.push(`Invoice: ${invoiceNo}`);
     if (billNo) lines.push(`Bill No: ${billNo}`);
     // lines.push(`Order: #${orderId}`);
-    lines.push(`Order Type: ${orderType}`);
+    if (orderType) lines.push(`Order Type: ${orderType}`);
     if (order?.number_of_customers) {
       lines.push(`No. of Customers: ${order.number_of_customers}`);
     }
@@ -695,7 +687,7 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     if (billNo) {
       lines.push(`Bill No: ${billNo}`);
     }
-    lines.push(`Order Type: ${orderType}`);
+    if (orderType) lines.push(`Order Type: ${orderType}`);
     if (order?.number_of_customers) {
       lines.push(`No. of Customers: ${order.number_of_customers}`);
     }
