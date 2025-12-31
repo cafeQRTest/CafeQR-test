@@ -83,7 +83,7 @@ export default function BillingPage() {
   const isMixed = (inv) => inv?.payment_method === 'mixed' && inv?.mixed_payment_details;
 
   const prettyMethod = (m) => {
-    if (m === 'none' || m === 'unassigned') return 'Other / Not tagged';
+    if (m === 'none' || m === 'unassigned') return '';
     if (m === 'upi') return 'UPI';
     if (m === 'card') return 'Card';
     if (m === 'online') return 'Online';
@@ -92,6 +92,15 @@ export default function BillingPage() {
     if (m === 'mixed') return 'Mixed';
     if (m === 'unknown') return 'Unknown';
     return m || 'Other';
+  };
+
+  const getStatusLabel = (status) => {
+    const s = String(status || '').toLowerCase();
+    if (s === 'paid') return 'Paid';
+    if (s === 'unpaid') return 'Unpaid';
+    if (s === 'open') return 'Open';
+    if (s === 'void') return 'Void';
+    return status || 'Unassigned';
   };
    
   
@@ -441,12 +450,12 @@ const exportHsnSummary = async () => {
                     ) 
                   },
                   { header: 'Date', accessor: 'date_ordered', cell: (r) => new Date(r.date_ordered || r.invoice_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) },
-                  { header: 'Customer', accessor: 'customer_name', cell: (r) => r.customer_name || 'Counter Guest' },
+                  { header: 'Customer', accessor: 'customer_name', cell: (r) => r.customer_name || '' },
                   { header: 'Taxable', accessor: 'subtotal_ex_tax', cell: (r) => formatMoney(r.subtotal_ex_tax) },
                   { header: 'Tax', accessor: 'total_tax', cell: (r) => <span style={{ color: '#dc2626', fontWeight: 600 }}>{formatMoney(r.total_tax)}</span> },
                   { header: 'Total', accessor: 'total_inc_tax', cell: (r) => <span style={{ fontWeight: 800, color: '#0f172a' }}>{formatMoney(r.total_inc_tax)}</span> },
                   { header: 'Payment', accessor: 'payment_method', cell: (r) => <span className={`status-pill ${r.payment_method}`}>{prettyMethod(r.payment_method)}</span> },
-                  { header: 'Status', accessor: 'status', cell: (r) => <span className={`status-pill status-${r.status}`}>{r.status === 'open' ? 'Open' : r.status === 'void' ? 'Void' : 'Paid'}</span> },
+                   { header: 'Status', accessor: 'status', cell: (r) => <span className={`status-pill status-${r.status}`}>{getStatusLabel(r.status)}</span> },
                   {
                     header: 'Actions',
                     accessor: 'actions',
@@ -511,28 +520,32 @@ const exportHsnSummary = async () => {
 
                 <div className="modal-body">
                   <div className="details-grid">
-                    <div className="detail-item">
-                      <div className="d-label"><FaUser /> Customer</div>
-                      <div className="d-value">{selectedInvoice.customer_name || 'Counter Guest'}</div>
-                    </div>
+                    {selectedInvoice.customer_name && (
+                      <div className="detail-item">
+                        <div className="d-label"><FaUser /> Customer</div>
+                        <div className="d-value">{selectedInvoice.customer_name}</div>
+                      </div>
+                    )}
                     <div className="detail-item">
                       <div className="d-label"><FaCalendarDay /> Date</div>
                       <div className="d-value">{new Date(selectedInvoice.date_ordered || selectedInvoice.invoice_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}</div>
                     </div>
-                    <div className="detail-item">
-                      <div className="d-label"><FaWallet /> Payment</div>
-                      <div className="d-value">
-                        <span className={`status-pill ${selectedInvoice.payment_method}`}>
-                          {prettyMethod(selectedInvoice.payment_method)}
-                        </span>
+                    {prettyMethod(selectedInvoice.payment_method) && (
+                      <div className="detail-item">
+                        <div className="d-label"><FaWallet /> Payment</div>
+                        <div className="d-value">
+                          <span className={`status-pill ${selectedInvoice.payment_method}`}>
+                            {prettyMethod(selectedInvoice.payment_method)}
+                          </span>
+                        </div>
                       </div>
-                    </div>
+                    )}
                     <div className="detail-item">
                       <div className="d-label"><FaCheckCircle /> Status</div>
                       <div className="d-value">
-                         <span className={`status-pill status-${selectedInvoice.status}`}>
-                           {selectedInvoice.status === 'open' ? 'Open' : selectedInvoice.status === 'void' ? 'Void' : 'Paid'}
-                         </span>
+                          <span className={`status-pill status-${selectedInvoice.status}`}>
+                            {getStatusLabel(selectedInvoice.status)}
+                          </span>
                       </div>
                     </div>
                   </div>
@@ -857,9 +870,10 @@ const exportHsnSummary = async () => {
         .status-pill.mixed { background: #f5f3ff; color: #7c3aed; }
 
         /* Invoice Status */
-        .status-pill.status-paid { background: #f0fdf4; color: #16a34a; }
-        .status-pill.status-open { background: #fff7ed; color: #ea580c; }
-        .status-pill.status-void { background: #fef2f2; color: #dc2626; }
+         .status-pill.status-paid { background: #f0fdf4; color: #16a34a; }
+         .status-pill.status-open { background: #fff7ed; color: #ea580c; }
+         .status-pill.status-void { background: #fef2f2; color: #dc2626; }
+         .status-pill.status-unpaid { background: #fff1f2; color: #e11d48; }
 
         @media (max-width: 1024px) {
            .expenses-kpis { grid-template-columns: repeat(2, 1fr); }
