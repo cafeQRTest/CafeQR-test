@@ -3,6 +3,30 @@ import React, { useEffect, useState } from 'react';
 import { printUniversal } from '../utils/printGateway';
 
 export default function PrinterSetupCard() {
+
+// top state
+const [paperMm, setPaperMm] = useState(() => {
+  if (typeof window === 'undefined') return '58';
+  return localStorage.getItem('PRINT_PAPER_MM') || '58';
+});
+
+const [leftDots, setLeftDots] = useState(() => {
+  if (typeof window === 'undefined') return '12';
+  return localStorage.getItem('PRINT_LEFT_MARGIN_DOTS') || '12';
+});
+
+const [rightDots, setRightDots] = useState(() => {
+  if (typeof window === 'undefined') return '12';
+  return localStorage.getItem('PRINT_RIGHT_MARGIN_DOTS') || '12';
+});
+
+const persistPaperSettings = () => {
+  localStorage.setItem('PRINT_PAPER_MM', paperMm);
+  localStorage.setItem('PRINT_WIDTH_COLS', cols);
+  localStorage.setItem('PRINT_LEFT_MARGIN_DOTS', leftDots);
+  localStorage.setItem('PRINT_RIGHT_MARGIN_DOTS', rightDots);
+};
+
   // Wired (Windows helper)
   const [listUrl, setListUrl] = useState(
     typeof window !== 'undefined'
@@ -55,6 +79,7 @@ export default function PrinterSetupCard() {
       await nav.serial.requestPort({});
       localStorage.setItem('PRINTER_MODE', 'bt-serial');
       localStorage.setItem('PRINTER_READY', '1');
+      persistPaperSettings();
       // clear Windows helper config when switching modes
       localStorage.removeItem('PRINT_WIN_PRINTER_NAME');
       localStorage.removeItem('PRINT_WIN_PRINTER_NAME_KOT');
@@ -87,6 +112,8 @@ export default function PrinterSetupCard() {
         localStorage.removeItem('PRINT_WIN_PRINTER_NAME');
         localStorage.removeItem('PRINT_WIN_PRINTER_NAME_KOT');
         localStorage.removeItem('PRINT_WIN_URL');
+        persistPaperSettings();
+
         setMsg('✓ USB printer saved for silent printing');
         return;
       }
@@ -120,7 +147,11 @@ export default function PrinterSetupCard() {
     localStorage.setItem('PRINTER_MODE', 'winspool');
     localStorage.setItem('PRINTER_READY', '1');
     localStorage.setItem('PRINT_WIN_AUTOCUT', autoCut ? '1' : '0');
+    localStorage.setItem('PRINT_PAPER_MM', paperMm);
     localStorage.setItem('PRINT_WIDTH_COLS', cols);
+    localStorage.setItem('PRINT_LEFT_MARGIN_DOTS', leftDots);
+    localStorage.setItem('PRINT_RIGHT_MARGIN_DOTS', rightDots);
+
     setMsg(
       pickBill
         ? `Saved bill printer${pickKot ? ' and kitchen KOT printer' : ''}.`
@@ -129,19 +160,27 @@ export default function PrinterSetupCard() {
   };
 
   // Test both printers through the same pipeline
-  const testBillPrinter = async () => {
-    try {
-      const res = await printUniversal({
-        text: '*** TEST BILL PRINTER ***\nCafe QR\n',
-        allowPrompt: true,
-        allowSystemDialog: false,
-        jobKind: 'bill'
-      });
-      setMsg(`✓ Bill printer test via ${res && res.via ? res.via : 'unknown'}`);
-    } catch (e) {
-      setMsg(`✗ Bill printer test failed: ${e && e.message ? e.message : e}`);
-    }
-  };
+const testBillPrinter = async () => {
+  try {
+    const ruler48 = '|' + '-'.repeat(46) + '|'; // visual edges
+    const txt =
+      '*** TEST BILL PRINTER ***\n' +
+      'Shreyans 80mm alignment\n' +
+      ruler48 + '\n' +
+      '123456789012345678901234567890123456789012345678\n';
+
+    const res = await printUniversal({
+      text: txt,
+      allowPrompt: true,
+      allowSystemDialog: false,
+      jobKind: 'bill'
+    });
+
+    setMsg(`✓ Bill printer test via ${res && res.via ? res.via : 'unknown'}`);
+  } catch (e) {
+    setMsg(`✗ Bill printer test failed: ${e && e.message ? e.message : e}`);
+  }
+};
 
   const testKotPrinter = async () => {
     try {
@@ -277,35 +316,75 @@ export default function PrinterSetupCard() {
             </label>
           </div>
 
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: 8,
-              alignItems: 'center',
-              fontSize: 13
-            }}
-          >
-            <span>Paper width:</span>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <input
-                type="radio"
-                value="32"
-                checked={cols === '32'}
-                onChange={e => setCols(e.target.value)}
-              />
-              2" / 58 mm (32 cols)
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <input
-                type="radio"
-                value="42"
-                checked={cols === '42'}
-                onChange={e => setCols(e.target.value)}
-              />
-              3" / 80 mm (≈42 cols)
-            </label>
-          </div>
+<div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', fontSize: 13 }}>
+  <span>Paper width:</span>
+
+  <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+    <input
+      type="radio"
+      checked={paperMm === '58'}
+      onChange={() => { setPaperMm('58'); setCols('32'); }}
+    />
+    2" / 58 mm (32 cols)
+  </label>
+
+  <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+    <input
+      type="radio"
+      checked={paperMm === '80' && cols === '48'}
+      onChange={() => { setPaperMm('80'); setCols('48'); }}
+    />
+    3" / 80 mm (48 cols)
+  </label>
+
+  <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+    <input
+      type="radio"
+      checked={paperMm === '80' && cols === '42'}
+      onChange={() => { setPaperMm('80'); setCols('42'); }}
+    />
+    3" / 80 mm (42 cols)
+  </label>
+
+<div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', fontSize: 13 }}>
+  <span>Side margins (dots):</span>
+
+  <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+    Left
+    <input
+      value={leftDots}
+      onChange={(e) => setLeftDots(e.target.value.replace(/[^\d]/g, ''))}
+      style={{ width: 70, padding: 6, fontSize: 13 }}
+      inputMode="numeric"
+    />
+  </label>
+
+  <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+    Right
+    <input
+      value={rightDots}
+      onChange={(e) => setRightDots(e.target.value.replace(/[^\d]/g, ''))}
+      style={{ width: 70, padding: 6, fontSize: 13 }}
+      inputMode="numeric"
+    />
+  </label>
+
+  <button
+    onClick={() => {
+      // quick presets
+      if (paperMm === '80') { setLeftDots('12'); setRightDots('12'); }
+      else { setLeftDots('8'); setRightDots('8'); }
+      setMsg('Margin dots preset applied. Click Save (or re-select WebUSB/Serial) to persist.');
+    }}
+    style={{ padding: '6px 10px', fontSize: 13 }}
+  >
+    Preset
+  </button>
+</div>
+
+</div>
+
+
 
           <a
             href={WIN_HELPER_URL}

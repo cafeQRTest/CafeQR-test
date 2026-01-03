@@ -26,6 +26,10 @@ export async function printUniversal(opts: Options) {
   inFlight = true;
   const release = () => setTimeout(() => { inFlight = false; }, 800);
 
+  const paperMm = Number(localStorage.getItem("PRINT_PAPER_MM") || 0);
+  const autoScale = paperMm >= 76 ? "large" : "normal";
+
+
   const payload = textToEscPos(opts.text, {
     codepage: opts.codepage,
     feed: 1,
