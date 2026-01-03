@@ -1522,6 +1522,7 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
       restaurant_id: restaurantId,
       order_type,
       table_number,
+      number_of_customers: orderData.number_of_customers ?? null, // ✅ ADD
       items,
       created_at: new Date().toISOString(),
       restaurant_name: restaurant?.name || printProfile?.restaurant_name || null,
@@ -1635,6 +1636,7 @@ const orderForPrint = {
   restaurant_id: restaurantId,
   order_type,
   table_number,
+  number_of_customers: orderData.number_of_customers ?? null, // ✅ ADD
   items,
   created_at: new Date().toISOString(),
   restaurant_name: restaurant?.name || printProfile?.restaurant_name || null,
