@@ -160,6 +160,12 @@ useEffect(() => {
     if (lockRef.current) return;
     lockRef.current = true;
 
+const normalizedOrder = {
+  ...order,
+  number_of_customers:
+    order?.number_of_customers ?? order?.numberofcustomers ?? order?.numberOfCustomers ?? null,
+};
+
 const text =
   kind === 'kot'
     ? buildKotText(order, restaurantProfile)
