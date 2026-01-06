@@ -15,6 +15,7 @@ import { useAlert } from '../../context/AlertContext';
 import HorizontalScrollRow from '../../components/HorizontalScrollRow';
 import PremiumTimeSelect from '../../components/PremiumTimeSelect';
 import { round2, roundP, normalizeQty, formatQty2, formatQtyP } from '../../lib/qty';
+import { markPrinted } from '../../lib/usePrintService';
 
 // -------------------------------
 // Inline Payment Confirm Dialog
@@ -28,6 +29,11 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false, mode 
   const autoRounded = isRoundOffEnabled && isAuto ? Math.round(amount / factor) * factor : amount;
   
   const [settledAmount, setSettledAmount] = useState(autoRounded);
+  const [displayValue, setDisplayValue] = useState(autoRounded.toFixed(2)); // Control input string
+  
+  // Sync if settledAmount updates externally (e.g. valid edit) - actually we drive settledAmount from input
+  // But strictly for Reset or Init, we need this.
+  
   const manualRoundOff = settledAmount - amount;
   const settledTotal = settledAmount;
   const BRAND = mode === 'kitchen'
@@ -185,14 +191,23 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false, mode 
                    <input 
                      type="number" 
                      step="0.01"
-                     value={settledAmount}
+                     value={displayValue}
                      onChange={(e) => {
-                       const val = Number(e.target.value || 0);
-                       const diff = val - amount;
-                       const limit = Number(roundOffConfig.round_off_manual_limit || 0);
-                       if (Math.abs(diff) <= limit) {
-                         setSettledAmount(val);
+                       const raw = e.target.value;
+                       setDisplayValue(raw);
+                       
+                       const val = Number(raw);
+                       if (!isNaN(val)) {
+                         const diff = val - amount;
+                         const limit = Number(roundOffConfig.round_off_manual_limit || 0);
+                         if (Math.abs(diff) <= limit) {
+                           setSettledAmount(val);
+                         }
                        }
+                     }}
+                     onBlur={() => {
+                        // On blur, format to 2 decimals
+                        setDisplayValue(settledAmount.toFixed(2));
                      }}
                      style={{ 
                        flex: 1, padding: '10px 8px', border: 'none', outline: 'none',
@@ -201,7 +216,10 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false, mode 
                    />
                  </div>
                  <button 
-                   onClick={() => setSettledAmount(amount)}
+                   onClick={() => {
+                     setSettledAmount(amount);
+                     setDisplayValue(amount.toFixed(2));
+                   }}
                    style={{ 
                      background: '#fff', border: '2px solid #e2e8f0', color: '#64748b',
                      padding: '0 12px', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer',
@@ -801,75 +819,74 @@ const [orderMode, setOrderMode] = useState('settle');
     const serviceInclude = gstEnabled ? !!profile?.prices_include_tax : false;
 
     let subtotalEx = 0;
-    let totalTax = 0;
-    let totalInc = 0;
-
+    
+    // We only need the Sum of Ex-Tax Line Nets here
     for (const it of cartItems) {
       const qty = Number(it.quantity ?? 1);
       const unit = Number(it.price ?? 0);
+      const baseAmount = unit * qty;
+
+      const d = it.discount || { type: 'amount', value: 0 };
+      let itemDiscountAmount = d.type === 'amount' ? d.value : (baseAmount * d.value / 100);
+      itemDiscountAmount = Math.min(itemDiscountAmount, baseAmount);
+      
+      const lineNet = baseAmount - itemDiscountAmount; 
 
       const isPackaged = !!it.is_packaged_good;
       const itemTaxRate = Number(it.tax_rate ?? NaN);
       let effectiveRate = 0;
-
       if (gstEnabled) {
-        if (isPackaged) {
-          effectiveRate = Number.isFinite(itemTaxRate) && itemTaxRate > 0 ? itemTaxRate : baseRate;
-        } else {
-          effectiveRate = baseRate;
-        }
-        if (!(effectiveRate > 0)) effectiveRate = baseRate;
+         if (isPackaged) effectiveRate = Number.isFinite(itemTaxRate) && itemTaxRate > 0 ? itemTaxRate : baseRate;
+         else effectiveRate = baseRate;
+         if (!(effectiveRate > 0)) effectiveRate = baseRate;
       }
 
-      // ITEM DISCOUNT: Apply to ex-tax amount only
-      const d = it.discount || { type: 'amount', value: 0 };
-      const rawLineTotal = unit * qty;
-      let itemDiscountAmount = d.type === 'amount' ? d.value : (rawLineTotal * d.value / 100);
-      itemDiscountAmount = Math.min(itemDiscountAmount, rawLineTotal); // Cap at line total
-
-      let unitEx, unitInc, lineEx, taxAmt, lineInc;
-
-      // Calculate with discount applied to base price (ex-tax)
-      if (isPackaged || serviceInclude) {
-        // Prices include tax: reverse calculate ex-tax, apply discount, recalculate
-        const originalUnitEx = effectiveRate > 0 ? unit / (1 + effectiveRate / 100) : unit;
-        const originalLineEx = originalUnitEx * qty;
-        
-        // Apply discount to ex-tax amount
-        lineEx = Math.max(0, originalLineEx - itemDiscountAmount);
-        unitEx = lineEx / qty;
-        
-        // Calculate tax on discounted ex-tax amount
-        taxAmt = (effectiveRate / 100) * lineEx;
-        lineInc = lineEx + taxAmt;
-        unitInc = lineInc / qty;
+      let lineNetEx = 0;
+      if (gstEnabled && (isPackaged || serviceInclude)) {
+          // If price includes tax, strip it to get Ex-Tax Net
+          const taxFraction = effectiveRate / (100 + effectiveRate);
+          lineNetEx = lineNet * (1 - taxFraction); // or lineNet / (1 + rate/100)
       } else {
-        // Prices exclude tax: apply discount to ex-tax, then add tax
-        const originalLineEx = unit * qty;
-        
-        // Apply discount to ex-tax amount
-        lineEx = Math.max(0, originalLineEx - itemDiscountAmount);
-        unitEx = lineEx / qty;
-        
-        // Calculate tax on discounted ex-tax amount
-        taxAmt = (effectiveRate / 100) * lineEx;
-        lineInc = lineEx + taxAmt;
-        unitInc = lineInc / qty;
+          // Exclusive or No Tax
+          lineNetEx = lineNet;
       }
-
-      subtotalEx += Number(lineEx.toFixed(2));
-      totalTax += Number(taxAmt.toFixed(2));
-      totalInc += Number(lineInc.toFixed(2));
+      
+      subtotalEx += lineNetEx;
     }
 
-    return {
-      subtotalEx: Number(subtotalEx.toFixed(2)),
-      totalTax: Number(totalTax.toFixed(2)),
-      totalInc: Number(totalInc.toFixed(2))
-    };
+    return { subtotalEx: Number(subtotalEx.toFixed(2)) };
   }
 
-  const cartTotals = useMemo(() => computeCartTotals(cart, profileTax), [cart, profileTax]);
+  const cartTotals = useMemo(() => {
+    const { subtotalEx } = computeCartTotals(cart, profileTax);
+    
+    // Calculate Order Discount Amount
+    let orderDiscAmt = 0;
+    if (discount.type === 'amount') {
+        orderDiscAmt = discount.value;
+    } else {
+        // Apply % on Ex-Tax Subtotal
+        orderDiscAmt = subtotalEx * (discount.value / 100);
+    }
+    // Cap discount
+    if (orderDiscAmt > subtotalEx) orderDiscAmt = subtotalEx;
+
+    const taxableAmount = Math.max(0, subtotalEx - orderDiscAmt);
+    
+    const gstRate = profileTax.gst_enabled ? (profileTax.default_tax_rate || 5) : 0;
+    const finalTax = profileTax.gst_enabled ? (taxableAmount * gstRate / 100) : 0;
+    
+    const finalTotal = taxableAmount + finalTax;
+    
+    return {
+       subtotalEx,
+       orderDiscAmt,
+       taxableAmount,
+       finalTax,
+       finalTotal,
+       totalInc: finalTotal 
+    };
+  }, [cart, profileTax, discount]);
 
 
 
@@ -1465,9 +1482,8 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
     const isCredit = isCreditSale;
 
     // Calculate discount
-    const discountVal = discount.type === 'amount' 
-      ? discount.value 
-      : (cartTotals.totalInc * discount.value / 100);
+    // Use calculated discount amount from cartTotals
+    const discountVal = cartTotals.orderDiscAmt;
 
     const orderData = {
       restaurant_id: restaurantId,
@@ -1484,6 +1500,7 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
       credit_customer_id: isCredit ? selectedCreditCustomerId : null,
       original_payment_method: isCredit ? null : finalPaymentMethod,
       discount_amount: discountVal,
+      total_discount_percent: discount.type === 'percent' ? discount.value : 0,
       round_off_amount: mixedDetails?.round_off_amount || 0,
       ...(finalPaymentMethod === 'mixed' && mixedDetails
         ? { mixed_payment_details: mixedDetails }
@@ -1528,9 +1545,10 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
       restaurant_name: restaurant?.name || printProfile?.restaurant_name || null,
       _profile: printProfile || null,
       bill: {
-        grand_total: cartTotals.totalInc,
+        grand_total: cartTotals.finalTotal,
         subtotal: cartTotals.subtotalEx,
-        tax_total: cartTotals.totalTax,
+        tax_total: cartTotals.finalTax,
+        order_discount_total: cartTotals.orderDiscAmt,
         invoice_no: result.invoice_no || null,
         bill_no: result.bill_no || null,
       },
@@ -1588,10 +1606,8 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
         : 0
     }));
 
-    // Calculate discount
-    const discountVal = discount.type === 'amount' 
-      ? discount.value 
-      : (cartTotals.totalInc * discount.value / 100);
+    // Use calculated discount amount from cartTotals
+    const discountVal = cartTotals.orderDiscAmt;
 
     const isCredit = isCreditSale;
 
@@ -1607,9 +1623,9 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
       items,
       is_credit: isCredit,
       credit_customer_id: isCredit ? selectedCreditCustomerId : null,
-      credit_customer_id: isCredit ? selectedCreditCustomerId : null,
       original_payment_method: null,
       discount_amount: discountVal,
+      total_discount_percent: discount.type === 'percent' ? discount.value : 0,
       custom_created_at: new Date(
         Number(orderDate.split('-')[0]),
         Number(orderDate.split('-')[1]) - 1,
@@ -1643,12 +1659,13 @@ const orderForPrint = {
   _profile: printProfile || null,
 };
 
-// Immediate KOT print for this counter order
-window.dispatchEvent(
-  new CustomEvent('auto-print-order', {
-    detail: { ...orderForPrint, autoPrint: true, kind: 'kot' },
-  })
-);
+    // Immediate KOT print for this counter order
+    markPrinted(result.order_id, 'kot', restaurantId);
+    window.dispatchEvent(
+      new CustomEvent('auto-print-order', {
+        detail: { ...orderForPrint, autoPrint: true, kind: 'kot' },
+      })
+    );
 
     setCart([]); setCustomerName(''); setCustomerPhone(''); setNumberOfCustomers(''); setPaymentMethod('cash');
     setOrderSelect(''); setIsCreditSale(false); setSelectedCreditCustomerId(''); setCreditCustomerBalance(0);
@@ -2739,14 +2756,21 @@ const isVariantItem = !!item.has_variants && (item.variants?.length || 0) > 0;
                       <span>Subtotal (ex-tax)</span>
                       <span style={{ fontWeight: 600, color: '#1e293b' }}>₹{cartTotals.subtotalEx.toFixed(2)}</span>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#64748b' }}>
-                      <span>GST Amount</span>
-                      <span style={{ fontWeight: 600, color: '#1e293b' }}>₹{cartTotals.totalTax.toFixed(2)}</span>
-                    </div>
 
-                    {/* Discount Row - Only visible for Counter/Settle Now modes */}
+                    {/* Discount Row */}
                     {orderMode !== 'kitchen' && (
-                      discount.value > 0 ? (
+                      discount.value === 0 ? (
+                        <div style={{  }}>
+                          <button 
+                            onClick={() => setShowDiscountModal(true)}
+                            style={{
+                                  background: 'none', border: 'none', color: THEME.main, fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: 0, textDecoration: 'underline'
+                            }}
+                          >
+                            + Add Discount
+                          </button>
+                        </div>
+                      ) : (
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#ef4444' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                             <span>Discount {discount.type === 'percent' ? `(${discount.value}%)` : ''}</span>
@@ -2758,21 +2782,24 @@ const isVariantItem = !!item.has_variants && (item.variants?.length || 0) > 0;
                               }}
                             >×</button>
                           </div>
-                          <span style={{ fontWeight: 600 }}>-₹{(discount.type === 'amount' ? discount.value : (cartTotals.totalInc * discount.value / 100)).toFixed(2)}</span>
-                        </div>
-                      ) : (
-                        <div style={{  }}>
-                          <button 
-                            onClick={() => setShowDiscountModal(true)}
-                            style={{
-                                  background: 'none', border: 'none', color: THEME.main, fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: 0, textDecoration: 'underline'
-                            }}
-                          >
-                            + Add Discount
-                          </button>
+                          <span style={{ fontWeight: 600 }}>-₹{cartTotals.orderDiscAmt.toFixed(2)}</span>
                         </div>
                       )
                     )}
+                    
+                    {/* Taxable Amount (Only show if discount exists) */}
+                    {cartTotals.orderDiscAmt > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#64748b' }}>
+                        <span>Net Amount</span>
+                        <span style={{ fontWeight: 600, color: '#1e293b' }}>₹{cartTotals.taxableAmount.toFixed(2)}</span>
+                        </div>
+                    )}
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#64748b' }}>
+                      <span>GST Amount</span>
+                      <span style={{ fontWeight: 600, color: '#1e293b' }}>₹{cartTotals.finalTax.toFixed(2)}</span>
+                    </div>
+
                     <div style={{ 
                       display: 'flex', 
                       justifyContent: 'space-between', 
@@ -2784,7 +2811,7 @@ const isVariantItem = !!item.has_variants && (item.variants?.length || 0) > 0;
                       color: '#0f172a',
                     }}>
                       <span>Total</span>
-                      <span style={{ color: THEME.main }}>₹{(Math.max(0, cartTotals.totalInc - (discount.type === 'amount' ? discount.value : (cartTotals.totalInc * discount.value / 100)))).toFixed(2)}</span>
+                      <span style={{ color: THEME.main }}>₹{cartTotals.finalTotal.toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
@@ -2827,10 +2854,10 @@ const isVariantItem = !!item.has_variants && (item.variants?.length || 0) > 0;
                   ) : (
                     <span>
                       {orderMode === 'kitchen'
-                        ? `Send to Kitchen • ₹${(Math.max(0, cartTotals.totalInc - (discount.type === 'amount' ? discount.value : (cartTotals.totalInc * discount.value / 100)))).toFixed(2)}`
+                        ? `Send to Kitchen • ₹${cartTotals.finalTotal.toFixed(2)}`
                         : isCreditSale
-                        ? `Credit & Settle • ₹${(Math.max(0, cartTotals.totalInc - (discount.type === 'amount' ? discount.value : (cartTotals.totalInc * discount.value / 100)))).toFixed(2)}`
-                        : `Complete Sale • ₹${(Math.max(0, cartTotals.totalInc - (discount.type === 'amount' ? discount.value : (cartTotals.totalInc * discount.value / 100)))).toFixed(2)}`}
+                        ? `Credit & Settle • ₹${cartTotals.finalTotal.toFixed(2)}`
+                        : `Complete Sale • ₹${cartTotals.finalTotal.toFixed(2)}`}
                     </span>
                   )}
                 </button>
@@ -2845,13 +2872,9 @@ const isVariantItem = !!item.has_variants && (item.variants?.length || 0) > 0;
                  onUpdateCartItem={onUpdateCartItem}
                  currentTotalDiscount={discount}
                  theme={THEME}
-                 totalAmount={cartTotals.totalInc + (discount.type === 'amount' ? discount.value : (cartTotals.totalInc * discount.value / 100))} 
-                 // Note: totalAmount passed is the Post-Item-Discount but Pre-Global-Discount sum. 
-                 // Actually cartTotals.totalInc ALREADY has item discounts deducted due to computeCartTotals update above.
-                 // So totalAmount={cartTotals.totalInc} is correct basis for Global Discount?
-                 // Wait, if Global Discount is 10%, it should be on the Current Total. 
-                 // Logic in Modal uses totalAmount for validation.
-                 // cartTotals.totalInc is now the "Subtotal after item discounts".
+                 totalAmount={cartTotals.subtotalEx} 
+                 // Note: We pass Subtotal Ex-Tax because Order Discount is applied Pre-Tax. 
+                 // Percentage should be of SubtotalEx. Amount cannot exceed SubtotalEx.
             />
           </div>
         </div>
@@ -2859,8 +2882,8 @@ const isVariantItem = !!item.has_variants && (item.variants?.length || 0) > 0;
 
       {/* Payment/Confirmation Dialog */}
       {showPaymentDialog && (
-        <PaymentConfirmDialog
-          amount={Math.max(0, cartTotals.totalInc - (discount.type === 'amount' ? discount.value : (cartTotals.totalInc * discount.value / 100)))}
+         <PaymentConfirmDialog
+          amount={cartTotals.finalTotal}
           busy={processing}
           mode={paymentDialogMode}
           roundOffConfig={roundOffConfig}

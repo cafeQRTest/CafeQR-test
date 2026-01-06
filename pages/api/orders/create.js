@@ -40,6 +40,7 @@ export default async function handler(req, res) {
       number_of_customers = null, // optional
       custom_created_at = null,
       discount_amount = 0,
+      total_discount_percent = 0, // NEW: Capture percentage
       round_off_amount = 0,
     } = req.body;
 
@@ -102,71 +103,68 @@ export default async function handler(req, res) {
         profile?.prices_include_tax === '1');
 
     // 4) Compute totals
-    let subtotalEx = 0;
-    let totalTax = 0;
-    let totalInc = 0;
+    let subtotalEx = 0; // Sum of Line Nets EX-TAX
 
+    
+    // We will accumulate subtotalExGst (Sum of Line Nets EX-TAX).
+    let subtotalExGst = 0;
+    
+    // We need to track line details for insertion
     const preparedItems = items.map((it) => {
       const qty = Number(it.quantity ?? 1);
-      const unit = Number(it.price ?? 0);
+      const unit = Number(it.price ?? 0); // Face Value Unit Price
       const menuItem = menuItems?.find((mi) => mi.id === it.id);
       const isPackaged = !!(menuItem?.is_packaged_good || it.is_packaged_good);
+      
+      // Determine Item Tax Rate
       const itemTaxRate = Number(menuItem?.tax_rate ?? it.tax_rate ?? 0);
-      let effectiveRate = isPackaged && gstEnabled ? itemTaxRate : serviceRate;
-      if ((effectiveRate == null || effectiveRate <= 0) && gstEnabled) {
-        effectiveRate = baseRate;
-      }
-
-      // Calculate Tax and Totals
-      let unitEx, unitInc, lineEx, tax, lineInc;
+      let effectiveRate = gstEnabled ? (isPackaged ? itemTaxRate : baseRate) : 0;
+      if (!Number.isFinite(effectiveRate) || effectiveRate < 0) effectiveRate = gstEnabled ? baseRate : 0;
       
-      // ITEM DISCOUNT: Apply to ex-tax amount only
+      const baseAmount = unit * qty;
+      
+      // Calculate Line Discount
       const d = it.discount || {};
-      let itemDiscount = Number(it.discount_amount || 0);
-      if (!itemDiscount && d.type) {
-         const rawLineTotal = unit * qty;
-         itemDiscount = d.type === 'amount' 
-           ? Number(d.value) 
-           : (rawLineTotal * Number(d.value) / 100);
-      }
+      let lineDiscountAmt = Number(it.discount_amount || 0);
+      let lineDiscountPct = Number(it.discount_percent || 0);
       
-      // Calculate base ex-tax amounts
-      if (isPackaged || serviceInclude) {
-        // Prices include tax: extract ex-tax first
-        const originalUnitEx = effectiveRate > 0 ? unit / (1 + effectiveRate / 100) : unit;
-        const originalLineEx = originalUnitEx * qty;
-        
-        // Apply discount to ex-tax amount
-        lineEx = Math.max(0, originalLineEx - itemDiscount);
-        unitEx = lineEx / qty;
-        
-        // Calculate tax on discounted ex-tax amount
-        tax = (effectiveRate / 100) * lineEx;
-        lineInc = lineEx + tax;
-        unitInc = lineInc / qty;
-      } else {
-        // Prices exclude tax: discount ex-tax directly
-        const originalLineEx = unit * qty;
-        
-        // Apply discount to ex-tax amount
-        lineEx = Math.max(0, originalLineEx - itemDiscount);
-        unitEx = lineEx / qty;
-        
-        // Calculate tax on discounted ex-tax amount
-        tax = (effectiveRate / 100) * lineEx;
-        lineInc = lineEx + tax;
-        unitInc = lineInc / qty;
+      if (!lineDiscountAmt && d.type) {
+         if (d.type === 'amount') {
+             lineDiscountAmt = Number(d.value);
+             if (baseAmount > 0) lineDiscountPct = (lineDiscountAmt / baseAmount) * 100;
+         } else {
+             lineDiscountPct = Number(d.value);
+             lineDiscountAmt = baseAmount * (lineDiscountPct / 100);
+         }
+      } else if (lineDiscountAmt > 0 && lineDiscountPct === 0 && baseAmount > 0) {
+          lineDiscountPct = (lineDiscountAmt / baseAmount) * 100;
+      } else if (lineDiscountPct > 0 && lineDiscountAmt === 0) {
+          lineDiscountAmt = baseAmount * (lineDiscountPct / 100);
       }
 
-      const unitExR = Number(unitEx.toFixed(2));
-      const unitIncR = Number(unitInc.toFixed(2));
-      const lineExR = Number(lineEx.toFixed(2));
-      const taxR = Number(tax.toFixed(2));
-      const lineIncR = Number(lineInc.toFixed(2));
+      // Line Net (Face value after discount)
+      const lineNet = baseAmount - lineDiscountAmt;
+      
+      // Calculate Ex-Tax Content
+      let lineGst = 0;
+      let lineNetEx = 0;
+      
+      if (gstEnabled) {
+          if (serviceInclude || (isPackaged && serviceInclude)) {
+              // Inclusive: Tax is inside lineNet
+              const taxFactor = 1 + (effectiveRate / 100);
+              lineNetEx = lineNet / taxFactor;
+              lineGst = lineNet - lineNetEx;
+          } else {
+              // Exclusive: Tax is on top
+              lineNetEx = lineNet;
+              lineGst = lineNet * (effectiveRate / 100);
+          }
+      } else {
+          lineNetEx = lineNet;
+      }
 
-      subtotalEx += lineExR;
-      totalTax += taxR;
-      totalInc += lineIncR;
+      subtotalExGst += lineNetEx;
 
       return {
         order_id: null,
@@ -176,17 +174,50 @@ export default async function handler(req, res) {
         item_name: it.name,
         variant_option_id: it.variant_id || it.variant_option_id || null,
         variant_name: it.variant_name || null,
-        unit_price_ex_tax: unitExR,
-        unit_price_inc_tax: unitIncR,
-        unit_tax_amount: Number((unitIncR - unitExR).toFixed(2)),
+        
+        // These fields are legacy/display references
+        unit_price_ex_tax: Number((lineNetEx / qty).toFixed(2)),
+        unit_price_inc_tax: Number(((lineNetEx + lineGst) / qty).toFixed(2)),
+        unit_tax_amount: Number((lineGst / qty).toFixed(2)),
+        
         tax_rate: effectiveRate,
         hsn: it.hsn || null,
         is_packaged_good: isPackaged,
         uom_short_code: it.uom_short_code || menuItem?.uom?.short_code || null,
         uom_precision: it.uom_precision ?? menuItem?.uom?.precision ?? 0,
-        discount_amount: Number(itemDiscount.toFixed(2)),
+        
+        discount_amount: Number(lineDiscountAmt.toFixed(2)),
+        discount_percent: Number(lineDiscountPct.toFixed(2)),
       };
     });
+
+    // Apply Order Level Discount
+    // Order Discount is applied to Subtotal Ex-Gst
+    let orderDiscountAmt = Number(discount_amount || 0);
+    let orderDiscountPct = Number(total_discount_percent || 0);
+
+    // Consistency Check
+    if (orderDiscountPct > 0) {
+        orderDiscountAmt = subtotalExGst * (orderDiscountPct / 100);
+    } else if (orderDiscountAmt > 0 && subtotalExGst > 0) {
+        orderDiscountPct = (orderDiscountAmt / subtotalExGst) * 100;
+    }
+    
+    // Taxable Amount (Subtotal Ex Tax - Order Discount)
+    const taxableAmount = Math.max(0, subtotalExGst - orderDiscountAmt);
+    
+    // Calculate Final Tax on Taxable Amount
+    // We apply the baseRate (Global GST Rate) on the Taxable Amount.
+    const finalGstRate = gstEnabled ? baseRate : 0;
+    const totalGstCalc = gstEnabled ? taxableAmount * (finalGstRate / 100) : 0;
+    
+    const grandTotal = taxableAmount + totalGstCalc;
+    
+    // Update main variables for insertion
+    subtotalEx = subtotalExGst; 
+    const totalTax = totalGstCalc;
+    const totalInc = grandTotal;
+
 
     // 5) Mixed payment validation
     let processedPaymentMethod = payment_method;
@@ -233,9 +264,10 @@ export default async function handler(req, res) {
           subtotal_ex_tax: Number(subtotalEx.toFixed(2)),
           total_tax: Number(totalTax.toFixed(2)),
           total_inc_tax: Number(totalInc.toFixed(2)),
-          discount_amount: Number(discount_amount ?? 0),
+          discount_amount: Number(orderDiscountAmt.toFixed(2)), // Storing Order Discount Amount
+          total_discount_percent: Number(orderDiscountPct.toFixed(2)), // Storing Order Discount %
           round_off_amount: Number(round_off_amount ?? 0),
-          total_amount: Number((totalInc - (discount_amount || 0) + (round_off_amount || 0)).toFixed(2)),
+          total_amount: Number((grandTotal + (round_off_amount || 0)).toFixed(2)),
           prices_include_tax: serviceInclude,
           gst_enabled: gstEnabled,
           mixed_payment_details: processedMixedDetails,
@@ -290,7 +322,7 @@ export default async function handler(req, res) {
       console.error('InvoiceService failed:', invoiceErr);
       return res
         .status(500)
-        .json({ error: 'Failed to create invoice via service' });
+        .json({ error: 'Failed to create invoice via service: ' + (invoiceErr.message || JSON.stringify(invoiceErr)) });
     }
 
     // 10) Build response payload for fast client-side print
@@ -311,9 +343,9 @@ export default async function handler(req, res) {
         subtotal_ex_tax: Number(subtotalEx.toFixed(2)),
         total_tax: Number(totalTax.toFixed(2)),
         total_inc_tax: Number(totalInc.toFixed(2)),
-        discount_amount: Number(discount_amount ?? 0),
+        discount_amount: Number(orderDiscountAmt.toFixed(2)),
         round_off_amount: Number(round_off_amount ?? 0),
-        total_amount: Number((totalInc - (discount_amount || 0) + (round_off_amount || 0)).toFixed(2)),
+        total_amount: Number((grandTotal + (round_off_amount || 0)).toFixed(2)),
         items: preparedItems.map((pi) => ({
           ...pi,
           name: pi.item_name,

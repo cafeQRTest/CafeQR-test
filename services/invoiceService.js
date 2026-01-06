@@ -1,238 +1,235 @@
-// services/invoiceService.js - CORRECTED
-
-
-import { createClient } from '@supabase/supabase-js'
-import { generateBillPdf } from '../lib/generateBillPdf'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-)
-
-function getFiscalYear(date = new Date()) {
-  const d = new Date(date)
-  const month = d.getMonth()
-  const year = d.getFullYear()
-  return month >= 3
-    ? `FY${year % 100}-${(year + 1) % 100}`
-    : `FY${(year - 1) % 100}-${year % 100}`
-}
-
-function getFiscalYearStartDate(fy) {
-  const match = fy.match(/FY(\d+)-(\d+)/)
-  if (!match) return new Date()
-  const startYear = 2000 + parseInt(match[1])
-  return new Date(startYear, 3, 1)
-}
-
-// --- UNIVERSAL INVOICE NUMBER GENERATOR ---
-export async function getNextInvoiceNumber(restaurant_id, fy, fyStartDateStr) {
-  // Get max invoice_no from existing invoices
-  const { data: invData } = await supabase
-    .from('invoices')
-    .select('invoice_no')
-    .eq('restaurant_id', restaurant_id)
-    .like('invoice_no', `${fy}/%`)
-    .order('invoice_no', { ascending: false })
-    .limit(1)
-
-  let maxIssued = 0
-  if (invData?.[0]?.invoice_no) {
-    const seq = String(invData[0].invoice_no).match(/(\d+)$/)
-    maxIssued = seq ? parseInt(seq[1], 10) : 0
-  }
-  // Counter
-  const { data: ctr } = await supabase
-    .from('invoice_counters')
-    .select('last_number')
-    .eq('restaurant_id', restaurant_id)
-    .eq('fy_start', fyStartDateStr)
-    .maybeSingle()
-  const counter = ctr ? parseInt(ctr.last_number, 10) : 0
-
-  return Math.max(maxIssued, counter) + 1
-}
-
-// --- DAILY BILL NUMBER GENERATOR (Resets daily at 00:00 IST) ---
-export async function getNextBillNumber(restaurant_id) {
-  // Get current time in IST (UTC + 5:30)
-  const now = new Date()
-  const istOffset = 5.5 * 60 * 60 * 1000 // IST is UTC+5:30
-  const istTime = new Date(now.getTime() + istOffset)
-  
-  // Get start of day in IST (00:00 IST)
-  const startOfDayIST = new Date(istTime)
-  startOfDayIST.setUTCHours(0, 0, 0, 0)
-  
-  // Convert back to UTC for database query
-  const startOfDayUTC = new Date(startOfDayIST.getTime() - istOffset)
-  const startOfDay = startOfDayUTC.toISOString()
-  
-  // Get max bill_no from invoices created today (IST)
-  const { data: invData } = await supabase
-    .from('invoices')
-    .select('bill_no')
-    .eq('restaurant_id', restaurant_id)
-    .gte('created_at', startOfDay)
-    .order('bill_no', { ascending: false })
-    .limit(1)
-
-  const maxBillNo = invData?.[0]?.bill_no || 0
-  return maxBillNo + 1
-}
+import { createClient } from '@supabase/supabase-js';
+import { generateBillPdf } from '../lib/generateBillPdf';
 
 export class InvoiceService {
-  static async createInvoiceFromOrder(orderId, regenerationReason = null) {
+  static async createInvoiceFromOrder(orderId, restaurantId = null) {
     try {
-      // Load order, restaurant, profile
+      // 1. Setup Supabase
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL,
+        process.env.SUPABASE_SERVICE_ROLE_KEY
+      );
+
+      // 2. Fetch order details if not fully provided
       const { data: order, error: orderErr } = await supabase
         .from('orders')
-        .select('*, order_items(*)')
+        .select('*')
         .eq('id', orderId)
-        .single()
-      if (orderErr || !order)
-        throw new Error(`Order ${orderId} not found`)
+        .single();
 
+      if (orderErr) throw orderErr;
+
+      // 3. Fetch restaurant details
+      const finalRestId = restaurantId || order.restaurant_id;
       const { data: restaurant, error: restErr } = await supabase
         .from('restaurants')
-        .select('*')
-        .eq('id', order.restaurant_id)
-        .single()
-      if (restErr || !restaurant)
-        throw new Error(`Restaurant ${order.restaurant_id} not found`)
+        .select('*, restaurant_profiles(gst_enabled, gst_rate, prices_include_tax, default_tax_rate)')
+        .eq('id', finalRestId)
+        .single();
 
-      const { data: profile } = await supabase
-        .from('restaurant_profiles')
-        .select('*')
-        .eq('restaurant_id', order.restaurant_id)
-        .maybeSingle()
+      if (restErr) throw restErr;
+      const profile = restaurant.restaurant_profiles;
 
-      // Correct fiscal year (use order.created_at if available)
-      const fy = getFiscalYear(order.created_at || new Date())
-      const fyStartDate = getFiscalYearStartDate(fy)
-      const fyStartDateStr = fyStartDate.toISOString().split('T')[0]
-      
-      // Safe atomic sequence (retry max 5)
-      let ok = false
-      let invoiceNo, nextNum, inv, nextBillNo
-      for (let tries = 0; tries < 5 && !ok; tries++) {
-        nextNum = await getNextInvoiceNumber(restaurant.id, fy, fyStartDateStr)
-        invoiceNo = `${fy}/${String(nextNum).padStart(6, '0')}`
-        nextBillNo = await getNextBillNumber(restaurant.id)
-        
-        // ✅ FIXED: Declare payMethod BEFORE it's used in generateBillPdf
-        const payMethod = order.payment_method || order.actual_payment_method || 'cash'
-        
-        const { data, error } = await supabase
-          .from('invoices')
-          .insert({
-            restaurant_id: restaurant.id,
-            order_id: order.id,
-            invoice_no: invoiceNo,
-            bill_no: nextBillNo,
-            invoice_date: order.created_at || new Date().toISOString(),
-            round_off_amount: order.round_off_amount || 0,
-            customer_name: order.customer_name || null,
-            customer_gstin: order.customer_gstin || null,
-            billing_address: order.billing_address || null,
-            shipping_address: order.shipping_address || null,
-            gst_enabled: order.gst_enabled ?? profile?.gst_enabled ?? false,
-            prices_include_tax: profile?.prices_include_tax ?? true,
-            subtotal_ex_tax: order.subtotal_ex_tax ?? order.subtotal ?? 0,
-            total_tax: order.total_tax ?? order.tax_amount ?? 0,
-            total_inc_tax: order.total_amount ?? ((order.total_inc_tax ?? 0) - (order.discount_amount || 0) + (order.round_off_amount || 0)),
-            discount_amount: order.discount_amount || 0,
-            cgst: (order.gst_enabled ?? profile?.gst_enabled) ? ((order.total_tax ?? order.tax_amount ?? 0) / 2) : 0,
-            sgst: (order.gst_enabled ?? profile?.gst_enabled) ? ((order.total_tax ?? order.tax_amount ?? 0) / 2) : 0,
-            igst: 0,
-            payment_method: payMethod,
-            status: payMethod === 'none' ? 'unpaid' : 'paid',
-            // FIXED: Use total_amount (AFTER discount) not total_inc_tax (BEFORE discount)
-            paid_amount: payMethod === 'none' ? 0 : (order.total_amount ?? 0),
-            mixed_payment_details: order.mixed_payment_details || null,
-            generation_method: regenerationReason ? 'regenerated' : 'auto',
-            regenerated_from_invoice_id: null,
-            regeneration_reason: regenerationReason || null,
-            date_ordered: order.date_ordered || order.created_at || new Date().toISOString()
-          })
-          .select()
-          .single()
+      // 4. Fetch order items
+      const { data: items, error: itemsErr } = await supabase
+        .from('order_items')
+        .select('*, menu_items(name)')
+        .eq('order_id', orderId);
 
-        if (!error && data) {
-          ok = true
-          inv = data
-          // Upsert invoice_counters
-          await supabase.from('invoice_counters').upsert({
-            restaurant_id: restaurant.id,
-            fy_start: fyStartDateStr,
-            last_number: nextNum
-          }, { onConflict: 'restaurant_id,fy_start' })
+      if (itemsErr) throw itemsErr;
 
-        } else if (error?.message?.includes('unique') && !error?.message?.includes('bill_no')) {
-          // If invoice_no duplicate, try again
-          // Note: if bill_no is duplicate (unlikely with just insert), it might error but we don't have unique constraint on bill_no alone, usually it's fine unless we added unique index on bill_no+date+restaurant.
-          // The retry loop is mainly for invoice_no.
-          continue
-        } else if (error) {
-          throw new Error(error.message)
+      // 5. Determine GST settings
+      const gstEnabled = (order.gst_enabled ?? profile?.gst_enabled) ?? false;
+      const rawRate = restaurant.gst_rate || profile.default_tax_rate || 5;
+      const gstRate = gstEnabled ? (Number(rawRate) / 100) : 0;
+      const pricesIncludeTax = (order.prices_include_tax ?? profile?.prices_include_tax) ?? false;
+
+      // 6. Process each item (Standard ERP calculation)
+      let totalLineDiscounts = 0;
+      let subtotalExGst = 0;
+
+      const invoiceItems = items.map((item) => {
+        const qty = Number(item.quantity) || 0;
+        const price = Number(item.price) || 0;
+        const baseAmount = qty * price;
+
+        // Line-wise discount
+        let lineDiscountPct = Number(item.discount_percent || 0);
+        let lineDiscountAmt = Number(item.discount_amount || 0);
+
+        if (lineDiscountPct > 0 && lineDiscountAmt === 0) {
+            lineDiscountAmt = baseAmount * (lineDiscountPct / 100);
+        } else if (lineDiscountAmt > 0 && lineDiscountPct === 0 && baseAmount > 0) {
+            lineDiscountPct = (lineDiscountAmt / baseAmount) * 100;
         }
-      }
-      if (!ok) throw new Error('Failed to produce unique invoice number')
 
-      // Invoice line items
-      await supabase.from('invoice_items').delete().eq('invoice_id', inv.id)
-      let items = order.order_items || order.items || []
-      if (!Array.isArray(items)) items = []
-      let lineNo = 1
-      for (const it of items) {
-        const qty = Number(it.quantity ?? 1)
-        const taxRate = Number(it.tax_rate ?? profile?.default_tax_rate ?? 0)
+        totalLineDiscounts += lineDiscountAmt;
 
-        let unitRateForDB, taxAmt, lineEx, lineInc
+        // Line net (Face Value after discount)
+        const lineNet = baseAmount - lineDiscountAmt;
 
-        // Use pre-calculated discounted values from order_items if available
-        // This ensures the Invoice matches the Order exactly (including item discounts)
-        if (it.unit_price_ex_tax !== undefined && it.unit_price_inc_tax !== undefined) {
-             const unitEx = Number(it.unit_price_ex_tax);
-             const unitInc = Number(it.unit_price_inc_tax);
-             
-             lineEx = Number((unitEx * qty).toFixed(2))
-             lineInc = Number((unitInc * qty).toFixed(2))
-             taxAmt = Number((lineInc - lineEx).toFixed(2))
-             unitRateForDB = unitEx
+        // Line GST logic (Strip tax if inclusive)
+        let lineGst = 0;
+        let lineTaxRate = gstRate;
+        let lineNetEx = 0; // The pure taxable base contribution
+        
+        if (gstEnabled) {
+          if (pricesIncludeTax) {
+            // Inclusive: Tax is inside lineNet
+            const taxFactor = gstRate / (1 + gstRate);
+            lineGst = lineNet * taxFactor;
+            lineNetEx = lineNet - lineGst;
+          } else {
+            // Exclusive: Tax is on top
+            lineGst = lineNet * gstRate;
+            lineNetEx = lineNet;
+          }
         } else {
-           // Fallback calculation for legacy items or non-standard payload
-           const price = Number(it.is_packaged_good && !inv.prices_include_tax ? it.unit_price_ex_tax : (it.price ?? 0))
-           const ex = price * qty
-           const tax = (taxRate / 100) * ex
-           const inc = ex + tax
-           
-           lineEx = Number(ex.toFixed(2))
-           lineInc = Number(inc.toFixed(2))
-           taxAmt = Number(tax.toFixed(2))
-           unitRateForDB = price
+            lineNetEx = lineNet;
+            lineGst = 0;
+            lineTaxRate = 0;
         }
+        
+        subtotalExGst += lineNetEx;
 
-        await supabase.from('invoice_items').insert({
-          invoice_id: inv.id,
-          line_no: lineNo++,
-          item_name: it.variant_name ? `${it.item_name || it.name} (${it.variant_name})` : (it.item_name || it.name || 'Item'),
-          hsn: it.hsn || null,
-          qty,
-          unit_rate_ex_tax: unitRateForDB,
-          tax_rate: taxRate,
-          tax_amount: taxAmt,
-          line_total_ex_tax: lineEx,
-          line_total_inc_tax: lineInc,
-          uom_precision: it.uom_precision ?? 0,
-          uom_short_code: it.uom_short_code || null,
-          discount_amount: Number(it.discount_amount || 0)
-        })
+        return {
+          item_name: item.item_name || item.name || item.menu_items?.name,
+          quantity: qty,
+          unit_price: price, 
+          discount_percent: lineDiscountPct,
+          discount_amount: Math.round(lineDiscountAmt * 100) / 100,
+          line_net: Math.round(lineNetEx * 100) / 100, // Storing Ex-Tax Net for strict accounting
+          tax_rate: lineTaxRate * 100,
+          tax_amount: Math.round(lineGst * 100) / 100, 
+          amount_inc_gst: Math.round((lineNetEx + lineGst) * 100) / 100, 
+        };
+      });
+
+      // 7. Apply Order-Level Discount
+      // Order Discount applies to the Subtotal Ex-Tax
+      let orderDiscountPct = Number(order.total_discount_percent) || 0; 
+      let orderDiscountAmt = Number(order.discount_amount) || 0;
+      
+      // Calculate derived amount if needed
+      if (orderDiscountPct > 0) {
+          orderDiscountAmt = subtotalExGst * (orderDiscountPct / 100);
+      } else if (orderDiscountAmt > 0 && subtotalExGst > 0) {
+           orderDiscountPct = (orderDiscountAmt / subtotalExGst) * 100;
       }
-      return { invoiceId: inv.id, invoiceNo }
-    } catch (err) {
-      console.error('Invoice generation error:', err)
-      throw err
+      
+      const taxableAmount = Math.max(0, subtotalExGst - orderDiscountAmt);
+
+      // 8. Calculate GST on Final Taxable Amount
+      // (Simplified: Single rate on total taxable)
+      const totalGst = gstEnabled ? Math.round(taxableAmount * gstRate * 100) / 100 : 0;
+
+      // 9. Grand Total
+      const roundOff = Number(order.round_off_amount || 0);
+      const grandTotal = Math.round((taxableAmount + totalGst + roundOff) * 100) / 100;
+
+      // 10. Generate Invoice Number
+      const invoiceNo = await this.generateInvoiceNumber(restaurant.id);
+      
+      // 11. Prepare Invoice Header
+      const invoiceData = {
+        restaurant_id: finalRestId,
+        order_id: order.id,
+        invoice_no: invoiceNo,
+        invoice_date: new Date().toISOString().split('T')[0],
+        
+        line_subtotal: Math.round(subtotalExGst * 100) / 100,
+        line_discount_total: Math.round(totalLineDiscounts * 100) / 100,
+        
+        order_discount_percent: Math.round(orderDiscountPct * 100) / 100,
+        order_discount_total: Math.round(orderDiscountAmt * 100) / 100,
+        
+        taxable_amount: Math.round(taxableAmount * 100) / 100,
+        total_tax: totalGst,
+        gst_rate: gstEnabled ? gstRate * 100 : 0,
+        
+        subtotal_ex_gst: Math.round(taxableAmount * 100) / 100, // Legacy/Compatible field for Taxable Amount
+        total_inc_gst: grandTotal,
+        total_inc_tax: grandTotal,
+        round_off_amount: roundOff,
+        
+        payment_method: order.payment_method,
+        created_at: new Date().toISOString(),
+        customer_name: order.customer_name
+      };
+
+      // 12. Upsert Invoice
+      const { data: invoice, error: invErr } = await supabase
+        .from('invoices')
+        .upsert([invoiceData], { onConflict: 'order_id' })
+        .select()
+        .single();
+
+      if (invErr) throw invErr;
+
+      // 13. Insert Lines
+      const invoiceLineItems = invoiceItems.map((item, idx) => ({
+        invoice_id: invoice.id,
+        line_no: idx + 1,
+        item_name: item.item_name,
+        qty: item.quantity,
+        unit_rate_ex_tax: item.unit_price, // Fallback to face value if rigorous ex-tax unit calc not available
+        discount_percent: item.discount_percent,
+        discount_amount: item.discount_amount,
+        line_net: item.line_net,
+        // Populate redundant schema fields
+        line_total_ex_tax: item.line_net, 
+        line_total_inc_tax: item.amount_inc_gst,
+        
+        tax_rate: item.tax_rate,
+        tax_amount: item.tax_amount,
+        amount_inc_gst: item.amount_inc_gst
+      }));
+
+      await supabase.from('invoice_items').delete().eq('invoice_id', invoice.id);
+      
+      const { error: lineErr } = await supabase
+        .from('invoice_items')
+        .insert(invoiceLineItems);
+
+      if (lineErr) throw lineErr;
+
+      return {
+        invoiceId: invoice.id,
+        invoiceNo: invoice.invoice_no,
+        success: true
+      };
+
+    } catch (error) {
+      console.error('Invoice creation error:', error);
+      throw error;
     }
   }
+
+  static async generateInvoiceNumber(restaurantId) {
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY
+    );
+
+    const today = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    
+    const { data } = await supabase
+      .from('invoices')
+      .select('invoice_no')
+      .eq('restaurant_id', restaurantId)
+      .ilike('invoice_no', `INV-%-${today}`)
+      .order('invoice_no', { ascending: false })
+      .limit(1);
+
+    let nextSeq = 1;
+    if (data && data.length > 0) {
+       const parts = data[0].invoice_no.split('-');
+       if (parts.length >= 2) {
+          const num = parseInt(parts[1], 10);
+          if (!isNaN(num)) nextSeq = num + 1;
+       }
+    }
+    return `INV-${String(nextSeq).padStart(4, '0')}-${today}`;
+  }
 }
+

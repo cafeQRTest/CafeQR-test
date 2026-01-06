@@ -11,14 +11,26 @@ function b2(n) {
 }
 
 function toDisplayItems(order) {
-  if (Array.isArray(order?.items) && order.items.length) return order.items;
+  if (Array.isArray(order?.items) && order.items.length) {
+      // Map cart items (Counter) to standardized format
+      return order.items.map(i => ({
+          name: i.name,
+          quantity: i.quantity,
+          price: i.price,
+          // Cart items have discount object { type, value } or just value
+          discount_amount: i.discount_amount || (i.discount ? Number(i.discount.value || 0) : 0),
+          uom: i.uom || "",
+          uom_short_code: i.uom_short_code || "",
+          uom_precision: i.uom_precision
+      }));
+  }
 
   if (Array.isArray(order?.order_items) && order.order_items.length) {
     return order.order_items.map((oi) => ({
       name: oi.menu_items?.name || oi.item_name || "Item",
-      quantity: oi.quantity,
-      price: oi.price,
-      discount_amount: oi.discount_amount || 0,
+      quantity: Number(oi.quantity || 0),
+      price: Number(oi.price || oi.unit_price || 0),
+      discount_amount: Number(oi.discount_amount || 0),
       uom: oi.uom_short_code || "",
       uom_short_code: oi.uom_short_code || "",
       uom_precision: oi.uom_precision ?? 0,
@@ -92,7 +104,8 @@ function getReceiptWidthCols(restaurantProfile) {
 
   // If paper mm is known, pick sane default for 80mm vs 58mm
   const paperMm = getLocalNum("PRINT_PAPER_MM", 0);
-  const autoDefault = paperMm >= 76 ? 48 : 32;
+  // Default to 48 (3-inch) if not specified, it's clearer. 32 is too narrow for modern receipts.
+  const autoDefault = paperMm >= 76 ? 48 : (paperMm > 0 ? 32 : 48); 
 
   const cols = fromLocal || fromProfile || autoDefault;
   return Math.max(20, Math.min(64, cols));
@@ -102,16 +115,17 @@ function getLayout(restaurantProfile) {
   const cols = getReceiptWidthCols(restaurantProfile);
 
   // Visual left/right margin in *columns*
-  const marginCols = cols >= 48 ? 2 : 1;
+  const marginCols = cols >= 48 ? 1 : 0; 
   const innerCols = Math.max(16, cols - marginCols * 2);
 
-  // Physical printer dots (used for proper paper alignment)
-  const paperMm = getLocalNum("PRINT_PAPER_MM", cols >= 48 ? 80 : 58);
-  const dotWidth = paperMm >= 76 ? 576 : 384;
+  // Physical printer dots
+  // Reduced to 512 (64mm) for 80mm paper to prevent clipping
+  const paperMm = getLocalNum("PRINT_PAPER_MM", cols >= 45 ? 80 : 58);
+  const dotWidth = paperMm >= 76 ? 512 : 384; 
 
-  // You can fine-tune these if a specific printer starts too left/right
-  const leftDots = getLocalNum("PRINT_LEFT_MARGIN_DOTS", paperMm >= 76 ? 12 : 8);
-  const rightDots = getLocalNum("PRINT_RIGHT_MARGIN_DOTS", paperMm >= 76 ? 12 : 8);
+  // Margins
+  const leftDots = getLocalNum("PRINT_LEFT_MARGIN_DOTS", paperMm >= 76 ? 0 : 0); 
+  const rightDots = getLocalNum("PRINT_RIGHT_MARGIN_DOTS", paperMm >= 76 ? 0 : 0);
 
   const areaDots = Math.max(200, dotWidth - leftDots - rightDots);
 
@@ -165,11 +179,28 @@ function buildLogoEscPos(restaurantProfile) {
   return out;
 }
 
-function getBillCols(innerW) {
-  // Designed for inner widths ~30 (58mm) and ~44 (80mm with margins)
-  if (innerW >= 44) return { name: 20, qty: 6, rate: 7, total: 8 }; // 20+1+6+1+7+1+8=44
-  if (innerW >= 38) return { name: 16, qty: 6, rate: 7, total: 7 }; // 16+1+6+1+7+1+7=38
-  return { name: 14, qty: 6, rate: 4, total: 6 }; // 14+1+6+1+4+1+6=32 (fits innerW>=30 with clipping)
+function getBillCols(innerW, hasDiscount) {
+  // WITH DISCOUNT
+  if (hasDiscount && innerW >= 28) {
+      // 80mm (innerW ~46): Q5+R7+D7+T8=27. Spaces=4. Needs W-31.
+      if (innerW >= 46) return { name: innerW - 31, qty: 5, rate: 7, disc: 7, total: 8 };
+      
+      // 58mm (innerW ~30): Q4+R5+D5+T6=20. Spaces=4. Needs W-24.
+      if (innerW >= 30) return { name: Math.max(2, innerW - 24), qty: 4, rate: 5, disc: 5, total: 6 };
+      
+      // Fallback
+      return { name: 4, qty: 4, rate: 4, disc: 4, total: 5 }; 
+  }
+
+  // STANDARD (No Disc)
+  // Large: Q6+R8+T9=23. Spaces=3. Needs W-26.
+  if (innerW >= 44) return { name: innerW - 26, qty: 6, rate: 8, disc: 0, total: 9 }; 
+  
+  // Med: Q6+R7+T8=21. Spaces=3. Needs W-24.
+  if (innerW >= 38) return { name: innerW - 24, qty: 6, rate: 7, disc: 0, total: 8 };
+  
+  // Small: Q5+R5+T6=16. Spaces=3. Needs W-19.
+  return { name: Math.max(4, innerW - 19), qty: 5, rate: 5, disc: 0, total: 6 }; 
 }
 
 export function buildKotText(order, restaurantProfile) {
@@ -337,14 +368,24 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     const orderDiscount = Number(order?.discount_amount || bill?.discount_amount || 0);
     const roundOff = Number(order?.round_off_amount || bill?.round_off_amount || 0);
 
-    // Columns for ITEMS
-    const cols = getBillCols(W);
+    // Helper to get discount amount regardless of item source (API vs Cart)
+    const getDisc = (it) => {
+        if (it?.discount_amount !== undefined) return Number(it.discount_amount);
+        if (it?.discount?.value) return Number(it.discount.value); 
+        return 0;
+    };
+
+    const hasLineDiscount = items.some(it => getDisc(it) > 0);
+    const cols = getBillCols(W, hasLineDiscount);
     const nameW = cols.name;
     const qtyW = cols.qty;
     const rateW = cols.rate;
+    const discW = cols.disc;
     const totalW = cols.total;
 
     const lines = [];
+
+    // ... (Headers remain matching existing code, omitting for brevity in Replacement) ...
 
     // HEADER (inside inner width + margins)
     lines.push(withMargins(center(restaurantName, W), layout));
@@ -369,6 +410,7 @@ export function buildReceiptText(order, bill, restaurantProfile) {
       leftAlign("ITEM", nameW) +
       " " + rightAlign("QTY", qtyW) +
       " " + rightAlign("RATE", rateW) +
+      (discW > 0 ? " " + rightAlign("DISC", discW) : "") +
       " " + rightAlign("TOTAL", totalW);
     lines.push(withMargins(header, layout));
     lines.push(withMargins(dashes(), layout));
@@ -381,20 +423,26 @@ export function buildReceiptText(order, bill, restaurantProfile) {
 
       const rateNum = Number(it?.price || 0);
       const qtyNum = Number(it?.quantity || 1);
+      const itemDiscount = getDisc(it);
 
       const p = Number.isInteger(it?.uom_precision) ? it.uom_precision : qtyNum % 1 === 0 ? 0 : 2;
       let qtyStr = qtyNum.toFixed(p);
       const uom = it?.uom_short_code || it?.uom || "";
       if (uom && uom.toLowerCase() !== "pc") qtyStr += " " + uom;
 
-      const totalNum = rateNum * qtyNum;
-      const rateStr = rateNum % 1 === 0 ? rateNum.toFixed(0) : rateNum.toFixed(2);
-      const totalStr = totalNum % 1 === 0 ? totalNum.toFixed(0) : totalNum.toFixed(2);
+      // Base total before discount (for reference, but we show Net in Total Col)
+      const grossLineTotal = rateNum * qtyNum;
+      const netLineTotal = grossLineTotal - itemDiscount;
+
+      const rateStr = rateNum.toFixed(2);
+      const totalStr = netLineTotal.toFixed(2);
+      const discStr = discW > 0 && itemDiscount > 0 ? "-" + itemDiscount.toFixed(2) : (discW > 0 ? "0.00" : "");
 
       const row1 =
         leftAlign(nameLines[0], nameW) +
         " " + rightAlign(qtyStr, qtyW) +
         " " + rightAlign(rateStr, rateW) +
+        (discW > 0 ? " " + rightAlign(discStr, discW) : "") +
         " " + rightAlign(totalStr, totalW);
 
       lines.push(withMargins(row1, layout));
@@ -403,29 +451,66 @@ export function buildReceiptText(order, bill, restaurantProfile) {
 
     lines.push(withMargins(dashes(), layout));
 
-    // TOTALS (right-aligned nicely)
-    let finalGrandTotal;
-    if (order?.total_amount && Number(order.total_amount) > 0) finalGrandTotal = Number(order.total_amount);
-    else if (bill?.total_amount && Number(bill.total_amount) > 0) finalGrandTotal = Number(bill.total_amount);
-    else finalGrandTotal = Number(effectiveGrandTotal || 0) - orderDiscount;
-
-    if (taxAmount > 0) {
-      const grossTotal = finalGrandTotal + orderDiscount;
-      const netAmt = grossTotal - taxAmount;
-
-      lines.push(withMargins(kvLine("Net Amt:", netAmt.toFixed(2), W), layout));
-      lines.push(withMargins(kvLine("Tax:", taxAmount.toFixed(2), W), layout));
-      if (orderDiscount > 0) lines.push(withMargins(kvLine("Discount:", "-" + orderDiscount.toFixed(2), W), layout));
-      if (roundOff !== 0) lines.push(withMargins(kvLine("Round off:", `${roundOff > 0 ? "+" : ""}${roundOff.toFixed(2)}`, W), layout));
-      lines.push(withMargins(kvLine("Grand Total:", finalGrandTotal.toFixed(2), W), layout));
+    // TOTALS
+    // Use explicit fields from Backend if available
+    const oSubtotalEx = Number(order?.subtotal_ex_tax || order?.subtotal_ex_gst || 0);
+    const oTotalTax = Number(order?.total_tax || bill?.total_tax || 0);
+    const oDiscount = Number(order?.discount_amount || bill?.discount_amount || 0);
+    const oRoundOff = Number(order?.round_off_amount || bill?.round_off_amount || 0);
+    const oGrandTotal = Number(order?.total_amount || bill?.total_amount || 0);
+    
+    // Fallback logic if explicit subtotal is missing (legacy support)
+    let displaySubtotal = oSubtotalEx;
+    let displayNet = oSubtotalEx - oDiscount; // Assuming subtotal is PRE-discount
+    
+    // If we rely on calculation:
+    if (oSubtotalEx === 0 && oGrandTotal > 0) {
+        // Reverse engineer roughly for display if fields missing
+         displayNet = oGrandTotal - oTotalTax - oRoundOff;
+         displaySubtotal = displayNet + oDiscount;
     } else {
-      if (orderDiscount > 0) {
-        const beforeDiscount = finalGrandTotal + orderDiscount - roundOff;
-        lines.push(withMargins(kvLine("Subtotal:", beforeDiscount.toFixed(2), W), layout));
-        lines.push(withMargins(kvLine("Discount:", "-" + orderDiscount.toFixed(2), W), layout));
-      }
-      if (roundOff !== 0) lines.push(withMargins(kvLine("Round off:", `${roundOff > 0 ? "+" : ""}${roundOff.toFixed(2)}`, W), layout));
-      lines.push(withMargins(kvLine("Total:", finalGrandTotal.toFixed(2), W), layout));
+        // Correct forward logic:
+         // If subtotal_ex_tax is actually the Taxable Amount (after discount) in some contexts, be careful.
+         // But per our "Discount Before Tax" logic:
+         // Subtotal (Sum of Line Nets Ex-Tax) -> Order Discount -> Taxable Amount -> Tax -> Total
+         
+         // In `create.js`: subtotalEx = subtotalExGst (Sum of Line NETS ex tax).
+         // Line Net = Base - Line Discount.
+         // So `subtotal_ex_tax` in order table is ALREADY net of line discounts, but BEFORE order discount.
+         displaySubtotal = oSubtotalEx;
+         displayNet = Math.max(0, oSubtotalEx - oDiscount);
+    }
+
+    if (displaySubtotal > 0 || oTotalTax > 0) {
+        // 1. Subtotal (Ex-Tax)
+        lines.push(withMargins(kvLine("Subtotal:", displaySubtotal.toFixed(2), W), layout));
+        
+        // 2. Discount (Order Level)
+        if (oDiscount > 0) {
+            lines.push(withMargins(kvLine("Discount:", "-" + oDiscount.toFixed(2), W), layout));
+        }
+
+        // 3. Net / Taxable Amount
+        // Only show if different from subtotal or if tax involved
+        if (oTotalTax > 0 || oDiscount > 0) {
+            lines.push(withMargins(kvLine("Net Amt:", displayNet.toFixed(2), W), layout));
+        }
+
+        // 4. GST
+        if (oTotalTax > 0) {
+            lines.push(withMargins(kvLine("GST:", oTotalTax.toFixed(2), W), layout));
+        }
+
+        // 5. Round Off
+        if (oRoundOff !== 0) {
+             lines.push(withMargins(kvLine("Round Off:", (oRoundOff > 0 ? "+" : "") + oRoundOff.toFixed(2), W), layout));
+        }
+
+        // 6. Grand Total
+        lines.push(withMargins(kvLine("Grand Total:", oGrandTotal.toFixed(2), W), layout));
+    } else {
+        // Fallback simple display
+         lines.push(withMargins(kvLine("Total:", oGrandTotal.toFixed(2), W), layout));
     }
 
     lines.push(withMargins(dashes(), layout));

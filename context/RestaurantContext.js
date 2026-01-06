@@ -117,7 +117,7 @@ export function RestaurantProvider({ children }) {
             const { data: prof } = await supabase
               .from('restaurant_profiles')
               .select(
-                'features_credit_enabled,features_production_enabled,features_inventory_enabled,features_table_ordering_enabled,round_off_enabled,round_off_mode,round_off_auto_factor,round_off_manual_limit'
+                'features_credit_enabled,features_production_enabled,features_inventory_enabled,features_table_ordering_enabled,round_off_enabled,round_off_mode,round_off_auto_factor,round_off_manual_limit,gst_enabled,gstin,fssai_license,prices_include_tax,default_tax_rate'
               )
               .eq('restaurant_id', found.id)
               .maybeSingle();
