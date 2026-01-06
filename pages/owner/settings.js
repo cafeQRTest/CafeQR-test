@@ -670,6 +670,7 @@ export default function SettingsPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [showToast, setShowToast] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [form, setForm] = useState({
     legal_name: '', restaurant_name: '', phone: '', support_email: '',
     shipping_address_line1: '', shipping_address_line2: '', shipping_city: '', shipping_state: '', shipping_pincode: '',
@@ -683,6 +684,7 @@ export default function SettingsPage() {
     swiggy_api_key: '', swiggy_api_secret: '', swiggy_webhook_secret: '',
     zomato_api_key: '', zomato_api_secret: '', zomato_webhook_secret: '',
     delivery_radius_km: 10,
+    online_payment_enabled: false,
     owner_lat: '',
     owner_lng: '',
     round_off_enabled: false,
@@ -763,6 +765,7 @@ export default function SettingsPage() {
             features_counter_send_to_kitchen_enabled: profile.features_counter_send_to_kitchen_enabled !== false,
             swiggy_enabled: !!(profile.swiggy_api_key), zomato_enabled: !!(profile.zomato_api_key),
             delivery_radius_km: profile.delivery_radius_km ?? 10,
+            online_payment_enabled: !!profile.online_payment_enabled,
             owner_lat: profile.location ? profile.location.coordinates?.[1] ?? '' : '',
             owner_lng: profile.location ? profile.location.coordinates?.[0] ?? '' : '',
             round_off_enabled: !!profile.round_off_enabled,
@@ -830,6 +833,7 @@ export default function SettingsPage() {
           features_inventory_enabled: form.features_inventory_enabled,
           features_production_enabled: form.features_production_enabled,
           features_counter_send_to_kitchen_enabled: form.features_counter_send_to_kitchen_enabled,
+          online_payment_enabled: form.online_payment_enabled,
           
           swiggy_enabled: form.swiggy_enabled,
           swiggy_api_key: form.swiggy_api_key,
@@ -1254,6 +1258,35 @@ export default function SettingsPage() {
             <SectionBody>
               
               <FeatureCard 
+                 checked={form.online_payment_enabled} 
+                 onClick={() => setForm(f => ({ ...f, online_payment_enabled: !f.online_payment_enabled }))}
+              >
+                 <FeatureIcon active={form.online_payment_enabled}>💳</FeatureIcon>
+                 <FeatureText>
+                    <FeatureTitle>Online Payment</FeatureTitle>
+                    <FeatureDesc>Allow Razorpay on customer app</FeatureDesc>
+                 </FeatureText>
+                 <Switch checked={form.online_payment_enabled} />
+              </FeatureCard>
+
+              {form.online_payment_enabled && (
+                <FeatureCard 
+                   onClick={() => {
+                      setForm(f => ({...f, use_own_gateway: true}));
+                      setShowPaymentModal(true);
+                   }}
+                   checked={form.use_own_gateway}
+                >
+                    <FeatureIcon active={form.use_own_gateway}>⚙️</FeatureIcon>
+                    <FeatureText>
+                        <FeatureTitle>Use Custom Gateway</FeatureTitle>
+                        <FeatureDesc>Manage Razorpay API Keys</FeatureDesc>
+                    </FeatureText>
+                    <Switch checked={form.use_own_gateway} />
+                </FeatureCard>
+              )}
+
+              <FeatureCard 
                  checked={form.features_menu_images_enabled} 
                  onClick={() => setForm(f => ({ ...f, features_menu_images_enabled: !f.features_menu_images_enabled }))}
               >
@@ -1482,6 +1515,60 @@ export default function SettingsPage() {
 
       </form>
     </PageContainer>
+
+    {/* PAYMENT CONFIG MODAL */}
+    {showPaymentModal && (
+      <div style={{
+         position:'fixed', top:0, left:0, right:0, bottom:0,
+         background:'rgba(0,0,0,0.5)', backdropFilter:'blur(4px)',
+         zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center',
+         padding:16
+      }} onClick={() => setShowPaymentModal(false)}>
+         <div onClick={e => e.stopPropagation()} style={{
+             background:'white', width:'100%', maxWidth:500,
+             borderRadius:24, padding:32,
+             boxShadow:'0 20px 50px -10px rgba(0,0,0,0.15)',
+             animation: 'fadeInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)'
+         }}>
+             <h2 style={{margin:'0 0 8px', fontSize:20, fontWeight:700, color:'#0f172a'}}>Razorpay Configuration</h2>
+             <p style={{margin:'0 0 24px', color:'#64748b', fontSize:14, lineHeight:1.5}}>
+                Enter your Razorpay merchant credentials to enable online payments.
+             </p>
+             
+             <div style={{display:'flex', flexDirection:'column', gap:20}}>
+                
+                <div style={{display:'flex', flexDirection:'column', gap:16}}>
+                    <FormField>
+                        <Label>Razorpay Key ID</Label>
+                        <Input value={form.razorpay_key_id} onChange={onChange('razorpay_key_id')} placeholder="rzp_live_..." />
+                    </FormField>
+                    <FormField>
+                        <Label>Razorpay Key Secret</Label>
+                        <Input type="password" value={form.razorpay_key_secret} onChange={onChange('razorpay_key_secret')} placeholder="Your secret key" />
+                    </FormField>
+                </div>
+
+                <div style={{display:'flex', gap:12, marginTop:8}}>
+                    <button 
+                       onClick={() => {
+                          setForm(f => ({...f, use_own_gateway: false}));
+                          setShowPaymentModal(false);
+                       }}
+                       style={{
+                          flex:1, background:'#fef2f2', color:'#ef4444', 
+                          border:'none', borderRadius:12, fontWeight:600, fontSize:15, cursor:'pointer', padding:'12px'
+                       }}
+                    >
+                       Disable
+                    </button>
+                    <ActionButton primary onClick={() => setShowPaymentModal(false)} style={{flex:1}}>
+                       Save & Done
+                    </ActionButton>
+                </div>
+             </div>
+         </div>
+      </div>
+    )}
 
     {showUomManager && (
       <UomManager 
