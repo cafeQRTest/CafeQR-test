@@ -161,7 +161,7 @@ export default function OwnerOverview() {
       try {
         const { data, error } = await supabase
           .from('orders')
-          .select('id, created_at, date_ordered, status, total_inc_tax, gst_enabled, total_tax, subtotal_ex_tax') // Simplified select
+          .select('id, created_at, date_ordered, status, total_inc_tax, gst_enabled, total_tax, subtotal_ex_tax, discount_amount, round_off_amount') // Simplified select
           .eq('restaurant_id', restaurantId)
           .order('date_ordered', { ascending: false })
           .limit(10);
@@ -264,8 +264,13 @@ export default function OwnerOverview() {
                                     ₹{Number(unitInc).toFixed(2)} × {it.quantity}
                                  </div>
                               </div>
-                              <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>
+                              <div style={{ fontSize: 14, fontWeight: 700, color: '#111827', textAlign: 'right' }}>
                                  ₹{Number(itemTotal).toFixed(2)}
+                                 {Number(it.discount_amount || 0) > 0 && (
+                                   <div style={{ fontSize: 11, color: '#ef4444', fontWeight: 600 }}>
+                                      - ₹{Number(it.discount_amount).toFixed(2)}
+                                   </div>
+                                )}
                               </div>
                            </div>
                          );
@@ -279,12 +284,29 @@ export default function OwnerOverview() {
 
                 <div style={{ marginTop: 24, padding: 16, background: BRAND.soft, borderRadius: 12, border: '1px solid #ffedd5' }}>
                    {Number(selectedOrder.total_tax || 0) > 0 && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                          <span style={{ fontSize: 13, color: '#6b7280', fontWeight: 600 }}>Tax Amount</span>
                          <span style={{ fontSize: 14, fontWeight: 700, color: '#374151' }}>{formatCurrency(Number(selectedOrder.total_tax || 0))}</span>
                       </div>
                    )}
-                   <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: Number(selectedOrder.total_tax || 0) > 0 ? 12 : 0, borderTop: Number(selectedOrder.total_tax || 0) > 0 ? '1px dashed #fdba74' : 'none' }}>
+                   
+                   {Number(selectedOrder.discount_amount || 0) > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                         <span style={{ fontSize: 13, color: '#ef4444', fontWeight: 600 }}>Discount</span>
+                         <span style={{ fontSize: 14, fontWeight: 700, color: '#ef4444' }}>- {formatCurrency(Number(selectedOrder.discount_amount))}</span>
+                      </div>
+                   )}
+
+                   {Number(selectedOrder.round_off_amount || 0) !== 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                         <span style={{ fontSize: 13, color: Number(selectedOrder.round_off_amount) > 0 ? '#10b981' : '#ef4444', fontWeight: 600 }}>Round Off</span>
+                         <span style={{ fontSize: 14, fontWeight: 700, color: Number(selectedOrder.round_off_amount) > 0 ? '#10b981' : '#ef4444' }}>
+                            {Number(selectedOrder.round_off_amount) > 0 ? '+' : ''}{formatCurrency(Number(selectedOrder.round_off_amount))}
+                         </span>
+                      </div>
+                   )}
+
+                   <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 12, borderTop: '1px dashed #fdba74' }}>
                       <span style={{ fontSize: 15, fontWeight: 800, color: '#111827' }}>Total Amount</span>
                       <span style={{ fontSize: 18, fontWeight: 800, color: BRAND.orange }}>
                         {formatCurrency(Number(selectedOrder.total_inc_tax || selectedOrder.total_amount || 0))}

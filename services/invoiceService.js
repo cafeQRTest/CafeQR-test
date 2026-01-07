@@ -140,6 +140,8 @@ export class InvoiceService {
         line_subtotal: Math.round(subtotalExGst * 100) / 100,
         line_discount_total: Math.round(totalLineDiscounts * 100) / 100,
         
+        // Map to both possible column names for compatibility
+        discount_amount: Math.round(orderDiscountAmt * 100) / 100,
         order_discount_percent: Math.round(orderDiscountPct * 100) / 100,
         order_discount_total: Math.round(orderDiscountAmt * 100) / 100,
         

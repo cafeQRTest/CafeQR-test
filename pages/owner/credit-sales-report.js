@@ -140,9 +140,11 @@ const customerTiles = useMemo(() => {
   try {
     const { startUtc, endUtc } = istSpanUtcISO(startDate, endDate);
     const { data: orders, error: ordersErr } = await supabase
-      .from('v_credit_orders_effective')
-      .select('id, credit_customer_id, customer_name, customer_phone, total_amount, total_tax, total_inc_tax, created_at, date_ordered, status')
+      .from('orders')
+      .select('id, credit_customer_id, customer_name, customer_phone, total_amount, total_tax, total_inc_tax, created_at, date_ordered, status, discount_amount, round_off_amount')
       .eq('restaurant_id', restaurantId)
+      .eq('is_credit', true)
+      .neq('status', 'cancelled')
       .gte('date_ordered', startUtc)
       .lt('date_ordered', endUtc)
       .order('date_ordered', { ascending: false });
@@ -540,8 +542,13 @@ const customerTiles = useMemo(() => {
                                    ₹{Number(unitInc).toFixed(2)} × {it.quantity}
                                 </div>
                              </div>
-                             <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>
+                             <div style={{ fontSize: 14, fontWeight: 700, color: '#111827', textAlign: 'right' }}>
                                 ₹{Number(itemTotal).toFixed(2)}
+                                {Number(it.discount_amount || 0) > 0 && (
+                                   <div style={{ fontSize: 11, color: '#ef4444', fontWeight: 600 }}>
+                                      - ₹{Number(it.discount_amount).toFixed(2)}
+                                   </div>
+                                )}
                              </div>
                          </div>
                        );
@@ -555,12 +562,29 @@ const customerTiles = useMemo(() => {
 
               <div style={{ marginTop: 24, padding: 16, background: '#fff7ed', borderRadius: 12, border: '1px solid #ffedd5' }}>
                  {Number(selectedOrder.total_tax || 0) > 0 && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                        <span style={{ fontSize: 13, color: '#6b7280', fontWeight: 600 }}>Tax Amount</span>
                        <span style={{ fontSize: 14, fontWeight: 700, color: '#374151' }}>₹{Number(selectedOrder.total_tax || 0).toFixed(2)}</span>
                     </div>
                  )}
-                 <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: Number(selectedOrder.total_tax || 0) > 0 ? 12 : 0, borderTop: Number(selectedOrder.total_tax || 0) > 0 ? '1px dashed #fdba74' : 'none' }}>
+
+                 {Number(selectedOrder.discount_amount || 0) > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                       <span style={{ fontSize: 13, color: '#ef4444', fontWeight: 600 }}>Discount</span>
+                       <span style={{ fontSize: 14, fontWeight: 700, color: '#ef4444' }}>- ₹{Number(selectedOrder.discount_amount).toFixed(2)}</span>
+                    </div>
+                 )}
+
+                 {Number(selectedOrder.round_off_amount || 0) !== 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                       <span style={{ fontSize: 13, color: Number(selectedOrder.round_off_amount) > 0 ? '#16a34a' : '#ef4444', fontWeight: 600 }}>Round Off</span>
+                       <span style={{ fontSize: 14, fontWeight: 700, color: Number(selectedOrder.round_off_amount) > 0 ? '#16a34a' : '#ef4444' }}>
+                          {Number(selectedOrder.round_off_amount) > 0 ? '+' : ''}₹{Number(selectedOrder.round_off_amount).toFixed(2)}
+                       </span>
+                    </div>
+                 )}
+
+                 <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 12, borderTop: '1px dashed #fdba74' }}>
                     <span style={{ fontSize: 15, fontWeight: 800, color: '#111827' }}>Total Amount</span>
                     <span style={{ fontSize: 18, fontWeight: 800, color: '#ea580c' }}>
                       ₹{Number(selectedOrder.total_inc_tax || selectedOrder.total_amount || 0).toFixed(2)}

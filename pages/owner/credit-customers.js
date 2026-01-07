@@ -101,10 +101,12 @@ const loadCustomers = async () => {
 const loadCustomerOrders = async (customerId) => {
   try {
     const { data: orders, error } = await supabase
-      .from('v_credit_orders_effective')
-      .select('*')
+      .from('orders')
+      .select('id, created_at, date_ordered, status, total_amount, total_tax, total_inc_tax, discount_amount, round_off_amount, customer_name') // Added fields
       .eq('restaurant_id', restaurantId)
       .eq('credit_customer_id', customerId)
+      .eq('is_credit', true)
+      .neq('status', 'cancelled')
       .order('date_ordered', { ascending: false })
       .limit(20);
     if (error) throw error;
@@ -695,7 +697,14 @@ const handleViewOrder = async (order) => {
                                <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>{it.name}</div>
                                <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>₹{Number(it.price).toFixed(2)} × {it.quantity}</div>
                             </div>
-                            <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>₹{(Number(it.price) * Number(it.quantity)).toFixed(2)}</div>
+                            <div style={{ fontSize: 14, fontWeight: 700, color: '#111827', textAlign: 'right' }}>
+                              ₹{(Number(it.price) * Number(it.quantity)).toFixed(2)}
+                              {Number(it.discount_amount || 0) > 0 && (
+                                   <div style={{ fontSize: 11, color: '#ef4444', fontWeight: 600 }}>
+                                      - ₹{Number(it.discount_amount).toFixed(2)}
+                                   </div>
+                                )}
+                            </div>
                          </div>
                       ))
                    ) : (
@@ -707,12 +716,29 @@ const handleViewOrder = async (order) => {
 
                 <div style={{ marginTop: 24, padding: 16, background: BRAND.soft, borderRadius: 12, border: '1px solid #ffedd5' }}>
                    {Number(selectedOrder.total_tax || 0) > 0 && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                          <span style={{ fontSize: 13, color: '#6b7280', fontWeight: 600 }}>Tax Amount</span>
                          <span style={{ fontSize: 14, fontWeight: 700, color: '#374151' }}>{fmt.format(Number(selectedOrder.total_tax || 0))}</span>
                       </div>
                    )}
-                   <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: Number(selectedOrder.total_tax || 0) > 0 ? 12 : 0, borderTop: Number(selectedOrder.total_tax || 0) > 0 ? '1px dashed #fdba74' : 'none' }}>
+
+                   {Number(selectedOrder.discount_amount || 0) > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                         <span style={{ fontSize: 13, color: '#ef4444', fontWeight: 600 }}>Discount</span>
+                         <span style={{ fontSize: 14, fontWeight: 700, color: '#ef4444' }}>- {fmt.format(Number(selectedOrder.discount_amount))}</span>
+                      </div>
+                   )}
+
+                   {Number(selectedOrder.round_off_amount || 0) !== 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                         <span style={{ fontSize: 13, color: Number(selectedOrder.round_off_amount) > 0 ? '#16a34a' : '#ef4444', fontWeight: 600 }}>Round Off</span>
+                         <span style={{ fontSize: 14, fontWeight: 700, color: Number(selectedOrder.round_off_amount) > 0 ? '#16a34a' : '#ef4444' }}>
+                            {Number(selectedOrder.round_off_amount) > 0 ? '+' : ''}{fmt.format(Number(selectedOrder.round_off_amount))}
+                         </span>
+                      </div>
+                   )}
+
+                   <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 12, borderTop: '1px dashed #fdba74' }}>
                       <span style={{ fontSize: 15, fontWeight: 800, color: '#111827' }}>Total Amount</span>
                       <span style={{ fontSize: 18, fontWeight: 800, color: BRAND.orange }}>
                         {fmt.format(Number(selectedOrder.total_inc_tax || selectedOrder.total_amount || 0))}

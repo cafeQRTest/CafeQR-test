@@ -543,6 +543,7 @@ function toDisplayItems(order) {
       uom_short_code: oi.uom_short_code || null,
       uom_precision: oi.uom_precision ?? oi.menu_items?.uom?.precision ?? 0,
       notes: oi.notes,
+      discount_amount: oi.discount_amount,
     }));
   }
   // Fallback to JSONB items (legacy or if order_items missing)
@@ -3517,8 +3518,13 @@ colOrders =
                       </div>
                       {it.variant_name && <div style={{ fontSize: 9, color: '#94a3b8', marginTop: 1, marginLeft: 20 }}>{it.variant_name}</div>}
                     </div>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: '#1e293b' }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: '#1e293b', textAlign: 'right' }}>
                       ₹{((it.quantity || 1) * (it.price || 0)).toFixed(2)}
+                      {Number(it.discount_amount || 0) > 0 && (
+                          <div style={{ fontSize: 10, color: '#ef4444', fontWeight: 600 }}>
+                            - ₹{Number(it.discount_amount).toFixed(2)}
+                          </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -3531,8 +3537,24 @@ colOrders =
                   <span style={{ color: '#94a3b8', fontWeight: 500 }}>Tax</span>
                   <span style={{ fontWeight: 600, color: '#64748b' }}>₹{Number(itemsModalOrder.total_tax || itemsModalOrder.tax_amount || itemsModalOrder.tax || 0).toFixed(2)}</span>
                 </div>
+
+                {Number(itemsModalOrder.discount_amount || 0) > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, marginTop: 4 }}>
+                    <span style={{ color: '#ef4444', fontWeight: 500 }}>Discount</span>
+                    <span style={{ fontWeight: 600, color: '#ef4444' }}>- ₹{Number(itemsModalOrder.discount_amount).toFixed(2)}</span>
+                  </div>
+                )}
+
+                {Number(itemsModalOrder.round_off_amount || 0) !== 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, marginTop: 4 }}>
+                    <span style={{ color: itemsModalOrder.round_off_amount > 0 ? '#10b981' : '#ef4444', fontWeight: 500 }}>Round Off</span>
+                    <span style={{ fontWeight: 600, color: itemsModalOrder.round_off_amount > 0 ? '#10b981' : '#ef4444' }}>
+                      {itemsModalOrder.round_off_amount > 0 ? '+' : ''}₹{Number(itemsModalOrder.round_off_amount).toFixed(2)}
+                    </span>
+                  </div>
+                )}
                 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 1 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 6 }}>
                   <span style={{ fontSize : 14, fontWeight: 800, color: '#0f172a', letterSpacing: '-0.01em' }}>Grand Total</span>
                   <span style={{ fontSize: 20, fontWeight: 900, color: BRAND.orange }}>
                     ₹{computeOrderTotalDisplay(itemsModalOrder).toFixed(2)}

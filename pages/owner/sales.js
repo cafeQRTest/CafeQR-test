@@ -189,7 +189,9 @@ export default function SalesPage() {
           mixed_payment_details,
           order_type,
           table_number,
-          date_ordered
+          date_ordered,
+          discount_amount,
+          round_off_amount
         `)
         .eq('restaurant_id', restaurantId)
         .gte('date_ordered', startUtc)

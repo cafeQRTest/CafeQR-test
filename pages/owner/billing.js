@@ -575,8 +575,13 @@ const exportHsnSummary = async () => {
                                   {item.variant_name ? ` (${item.variant_name})` : ''}
                                 </span>
                               </div>
-                              <div className="item-price">
-                                {formatMoney(price * item.quantity)}
+                              <div className="item-price" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                                <span>{formatMoney(price * item.quantity)}</span>
+                                {Number(item.discount_amount || 0) > 0 && (
+                                   <span style={{ fontSize: '0.75rem', color: '#ef4444' }}>
+                                      -{formatMoney(item.discount_amount)}
+                                   </span>
+                                )}
                               </div>
                             </div>
                           );
@@ -590,10 +595,10 @@ const exportHsnSummary = async () => {
                       <span>GST Total</span>
                       <span>{formatMoney(selectedInvoice.total_tax)}</span>
                     </div>
-                    {Number(selectedInvoice.discount_amount || 0) > 0 && (
+                    {(Number(selectedInvoice.discount_amount || 0) > 0 || Number(selectedInvoice.order_discount_total || 0) > 0) && (
                       <div className="sum-row" style={{ color: '#ef4444' }}>
                         <span>Discount</span>
-                        <span>-{formatMoney(selectedInvoice.discount_amount)}</span>
+                        <span>-{formatMoney(selectedInvoice.discount_amount || selectedInvoice.order_discount_total)}</span>
                       </div>
                     )}
                     {Number(selectedInvoice.round_off_amount || 0) !== 0 && (
