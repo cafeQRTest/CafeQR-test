@@ -10,6 +10,13 @@ function b2(n) {
   return b(n & 0xff) + b((n >> 8) & 0xff);
 }
 
+// ESC/POS Modes
+const MODE_RESET = ESC + "!" + b(0);
+const MODE_BOLD = ESC + "E" + b(1);
+const MODE_NO_BOLD = ESC + "E" + b(0);
+const MODE_DOUBLE = ESC + "!" + b(0x11); // Double-height + Double-width
+const MODE_NORMAL = ESC + "!" + b(0);
+
 function toDisplayItems(order) {
   // Counter/cart shape
   if (Array.isArray(order?.items) && order.items.length) {
@@ -74,7 +81,6 @@ function rightAlign(s, w) {
   const x = clip(s, w);
   return " ".repeat(Math.max(0, w - x.length)) + x;
 }
-// Keeps the *end* of the string if it overflows (helps decimals)
 function rightAlignEnd(s, w) {
   const x = String(s ?? "");
   const y = x.length > w ? x.slice(-w) : x;
@@ -122,18 +128,20 @@ function getReceiptWidthCols(restaurantProfile) {
 function getLayout(restaurantProfile) {
   const cols = getReceiptWidthCols(restaurantProfile);
 
-  // Tight margins: 0 cols for 2-inch, 1 col for 3-inch
-  // This reclaims 2 characters on 58mm paper immediately.
-  const marginCols = cols >= 48 ? 1 : 0;
-  const innerCols = Math.max(16, cols - marginCols * 2);
+  // REMOVED EXTRA MARGINS to fix 3-inch shift.
+  // We use 0 margin cols and let the printer's physical dot margins handle centering.
+  const marginCols = 0;
+  const innerCols = Math.max(16, cols);
 
-  // Printer dots (ESC/POS common defaults)
+  // Printer dots
   const paperMm = getLocalNum("PRINT_PAPER_MM", cols >= 48 ? 80 : 58);
   const dotWidth = paperMm >= 76 ? 576 : 384;
 
-  // Use tighter physical margins (0 dots) if not overridden
-  const leftDots = getLocalNum("PRINT_LEFT_MARGIN_DOTS", 0);
-  const rightDots = getLocalNum("PRINT_RIGHT_MARGIN_DOTS", 0);
+  // Set EQUAL margins (e.g. 8 dots each side) to ensure perfect centering
+  // You can override these in LocalStorage via the Printer Setup UI if needed.
+  const defaultMargin = 8; 
+  const leftDots = getLocalNum("PRINT_LEFT_MARGIN_DOTS", defaultMargin);
+  const rightDots = getLocalNum("PRINT_RIGHT_MARGIN_DOTS", defaultMargin);
 
   const areaDots = Math.max(200, dotWidth - leftDots - rightDots);
 
@@ -150,13 +158,14 @@ function getLayout(restaurantProfile) {
 }
 
 function withMargins(line, layout) {
+  // Since marginCols is now 0, this just returns the line clipped to width
   return " ".repeat(layout.marginCols) + clip(line, layout.innerCols);
 }
 
 function escposPageSetup(layout) {
   return (
     ESC + "@" + // reset
-    ESC + "a" + b(0) + // left align
+    ESC + "a" + b(0) + // left align (default for text)
     GS + "L" + b2(layout.leftDots) + // left margin in dots
     GS + "W" + b2(layout.areaDots) + // printable area width in dots
     ESC + "M" + b(0) + // Font A
@@ -174,7 +183,7 @@ function buildLogoEscPos(restaurantProfile) {
   const bytesPerRow = Math.ceil(cols / 8);
 
   let out = "";
-  out += ESC + "a" + b(1); // center
+  out += ESC + "a" + b(1); // center alignment for logo
   out += GS + "v" + "0" + b(0) + b2(bytesPerRow) + b2(rows);
 
   for (let y = 0; y < rows; y++) {
@@ -189,22 +198,14 @@ function buildLogoEscPos(restaurantProfile) {
   }
 
   out += "\r\n";
-  out += ESC + "a" + b(0); // left
+  out += ESC + "a" + b(0); // reset to left alignment
   return out;
 }
 
-/**
- * Column widths that ALWAYS fit within innerW.
- * On narrow paper (2 inch), we FORCE disable the separate DISC column
- * to keep QTY/RATE/TOTAL readable.
- */
 function getBillCols(innerW, hasDiscount) {
-  // If paper is narrow (<38 cols), dropping DISC column saves layout.
-  // We will print discount on the next line instead.
   const showDiscCol = hasDiscount && innerW >= 38;
-  const gaps = showDiscCol ? 4 : 3; // spaces between columns
+  const gaps = showDiscCol ? 4 : 3;
 
-  // Tighter numeric columns for small paper
   let qty = innerW >= 44 ? 6 : innerW >= 38 ? 6 : 4;
   let rate = innerW >= 44 ? 7 : innerW >= 38 ? 7 : 5;
   let disc = showDiscCol ? (innerW >= 44 ? 7 : 6) : 0;
@@ -213,11 +214,10 @@ function getBillCols(innerW, hasDiscount) {
   const fixed = qty + rate + total + disc + gaps;
   let name = innerW - fixed;
 
-  // Safety: if name is too squashed, shrink numbers further
   if (name < 8) {
     qty = 3;
     rate = 5;
-    disc = 0; // force hide disc col if really tight
+    disc = 0;
     total = 6;
     const fixed2 = qty + rate + total + disc + gaps;
     name = Math.max(6, innerW - fixed2);
@@ -243,6 +243,7 @@ export function buildKotText(order, restaurantProfile) {
         "RESTAURANT"
     ).toUpperCase();
 
+    // ... (Standard Address/Phone Logic - unchanged) ...
     const addressParts = [
       restaurantProfile?.shipping_address_line1,
       restaurantProfile?.shipping_address_line2,
@@ -250,10 +251,9 @@ export function buildKotText(order, restaurantProfile) {
       restaurantProfile?.shipping_state,
       restaurantProfile?.shipping_pincode,
     ].filter(Boolean);
-    const address =
-      addressParts.length > 0
-        ? addressParts.join(", ")
-        : order?.restaurant_address || "";
+    const address = addressParts.length
+      ? addressParts.join(", ")
+      : order?.restaurant_address || "";
 
     const phone =
       restaurantProfile?.shipping_phone ||
@@ -281,7 +281,12 @@ export function buildKotText(order, restaurantProfile) {
 
     const lines = [];
 
-    lines.push(withMargins(center(restaurantName, W), layout));
+    // === HEADER ===
+    // Restaurant Name: Bold + Double Size
+    // We add the command directly into the string array.
+    // The printGateway handles binary, so we can mix text and commands.
+    lines.push(MODE_DOUBLE + center(restaurantName, W) + MODE_NORMAL);
+
     wrapText(address, W).forEach((l) =>
       lines.push(withMargins(center(l, W), layout))
     );
@@ -374,6 +379,7 @@ export function buildKotText(order, restaurantProfile) {
 export async function downloadTextAndShare(order, bill, restaurantProfile) {
   try {
     const text = buildReceiptText(order, bill, restaurantProfile)
+      // Strip ESC/POS commands (like \x1b!...) for plain text sharing
       .replace(/[\x00-\x1f\x7f]/g, (c) =>
         c === "\n" || c === "\r" || c === "\t" ? c : ""
       )
@@ -454,6 +460,7 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     );
     const orderDiscount = Number(order?.discount_amount || bill?.discount_amount || 0);
     const roundOff = Number(order?.round_off_amount || bill?.round_off_amount || 0);
+    const oGrandTotal = Number(order?.total_amount || bill?.total_amount || 0);
 
     const getDisc = (it) => {
       if (it?.discount_amount !== undefined) return Number(it.discount_amount);
@@ -462,16 +469,15 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     };
 
     const hasLineDiscount = items.some((it) => getDisc(it) > 0);
-
-    // Get optimized columns.
-    // If layout.cols < 38, `showDiscCol` will be false to save space.
     const cols = getBillCols(W, hasLineDiscount);
     const { name, qty, rate, disc, total, showDiscCol } = cols;
 
     const lines = [];
 
-    // Header
-    lines.push(withMargins(center(restaurantName, W), layout));
+    // === HEADER ===
+    // Restaurant Name: BOLD + DOUBLE SIZE
+    lines.push(MODE_DOUBLE + center(restaurantName, W) + MODE_NORMAL);
+
     wrapText(address, W).forEach((l) =>
       lines.push(withMargins(center(l, W), layout))
     );
@@ -500,7 +506,7 @@ export function buildReceiptText(order, bill, restaurantProfile) {
 
     lines.push(withMargins(dashes(), layout));
 
-    // Items header
+    // Items Header
     let header =
       leftAlign("ITEM", name) +
       " " +
@@ -535,7 +541,6 @@ export function buildReceiptText(order, bill, restaurantProfile) {
       let qtyStr = qtyNum.toFixed(p);
       const uom = it?.uom_short_code || it?.uom || "";
 
-      // Only show UOM inline if there's enough space (>=34 chars)
       if (W >= 34 && uom && uom.toLowerCase() !== "pc") qtyStr += " " + uom;
 
       const grossLineTotal = rateNum * qtyNum;
@@ -550,7 +555,6 @@ export function buildReceiptText(order, bill, restaurantProfile) {
           ? "0.00"
           : "";
 
-      // Row line 1
       let row1 =
         leftAlign(nameLines[0], name) +
         " " +
@@ -565,12 +569,10 @@ export function buildReceiptText(order, bill, restaurantProfile) {
 
       lines.push(withMargins(row1, layout));
 
-      // Remainder of name
       for (let i = 1; i < nameLines.length; i++) {
         lines.push(withMargins(nameLines[i], layout));
       }
 
-      // If we hid the discount column but there IS a discount, print it on next line
       if (!showDiscCol && itemDiscount > 0) {
         lines.push(
           withMargins(
@@ -586,43 +588,45 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     // Totals
     const oSubtotalEx = Number(order?.subtotal_ex_tax || order?.subtotal_ex_gst || 0);
     const oTotalTax = Number(order?.total_tax || bill?.total_tax || 0);
-    const oDiscount = Number(order?.discount_amount || bill?.discount_amount || 0);
-    const oRoundOff = Number(order?.round_off_amount || bill?.round_off_amount || 0);
-    const oGrandTotal = Number(order?.total_amount || bill?.total_amount || 0);
+    const displayNet = oSubtotalEx - orderDiscount;
 
-    let displaySubtotal = oSubtotalEx;
-    let displayNet = oSubtotalEx - oDiscount;
-
-    if (oSubtotalEx === 0 && oGrandTotal > 0) {
-      displayNet = oGrandTotal - oTotalTax - oRoundOff;
-      displaySubtotal = displayNet + oDiscount;
-    } else {
-      displaySubtotal = oSubtotalEx;
-      displayNet = Math.max(0, oSubtotalEx - oDiscount);
-    }
-
-    if (displaySubtotal > 0 || oTotalTax > 0) {
-      lines.push(withMargins(kvLine("Subtotal:", displaySubtotal.toFixed(2), W), layout));
-      if (oDiscount > 0)
-        lines.push(withMargins(kvLine("Discount:", "-" + oDiscount.toFixed(2), W), layout));
-      if (oTotalTax > 0 || oDiscount > 0)
+    if (oSubtotalEx > 0 || oTotalTax > 0) {
+      lines.push(withMargins(kvLine("Subtotal:", oSubtotalEx.toFixed(2), W), layout));
+      
+      if (orderDiscount > 0) {
+        lines.push(withMargins(kvLine("Discount:", "-" + orderDiscount.toFixed(2), W), layout));
         lines.push(withMargins(kvLine("Net Amt:", displayNet.toFixed(2), W), layout));
-      if (oTotalTax > 0)
+      }
+
+      if (oTotalTax > 0) {
         lines.push(withMargins(kvLine("GST:", oTotalTax.toFixed(2), W), layout));
-      if (oRoundOff !== 0)
+      }
+
+      if (roundOff !== 0) {
         lines.push(
           withMargins(
             kvLine(
               "Round Off:",
-              (oRoundOff > 0 ? "+" : "") + oRoundOff.toFixed(2),
+              (roundOff > 0 ? "+" : "") + roundOff.toFixed(2),
               W
             ),
             layout
           )
         );
-      lines.push(withMargins(kvLine("Grand Total:", oGrandTotal.toFixed(2), W), layout));
+      }
+      // === GRAND TOTAL: BOLD + DOUBLE SIZE ===
+      lines.push(
+        MODE_DOUBLE +
+        withMargins(kvLine("Grand Total:", oGrandTotal.toFixed(2), W), layout) +
+        MODE_NORMAL
+      );
     } else {
-      lines.push(withMargins(kvLine("Total:", oGrandTotal.toFixed(2), W), layout));
+      // === TOTAL (Simple): BOLD + DOUBLE SIZE ===
+      lines.push(
+        MODE_DOUBLE +
+        withMargins(kvLine("Total:", oGrandTotal.toFixed(2), W), layout) +
+        MODE_NORMAL
+      );
     }
 
     lines.push(withMargins(dashes(), layout));
