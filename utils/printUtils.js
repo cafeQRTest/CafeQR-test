@@ -139,26 +139,30 @@ function getReceiptWidthCols(restaurantProfile) {
 function getLayout(restaurantProfile) {
   const cols = getReceiptWidthCols(restaurantProfile);
 
-  // Physical paper width
   const paperMm = getLocalNum("PRINT_PAPER_MM", cols >= 48 ? 80 : 58);
   const dotWidth = paperMm >= 76 ? 576 : 384;
 
-  // Equal margins (dots)
   const defaultMargin = paperMm >= 76 ? 12 : 8;
   const leftDots = getLocalNum("PRINT_LEFT_MARGIN_DOTS", defaultMargin);
   const rightDots = getLocalNum("PRINT_RIGHT_MARGIN_DOTS", defaultMargin);
 
-  // Printable area width in dots (GS W). [web:116]
+  // GS W sets printable area width (dots). [web:116]
   const areaDots = Math.max(200, dotWidth - leftDots - rightDots);
 
-  // ---- IMPORTANT FIX (Guard columns) ----
-  // Many 58mm setups behave like "31 usable columns" even when configured as 32.
-  // So we reserve 1 col as a safety guard to prevent last char wrapping.
+  // Guard cols: useful mainly on 58mm; keep optional on 80mm.
   const guardColsDefault = paperMm >= 76 ? 0 : 1;
   const guardCols = getLocalNum("PRINT_GUARD_COLS", guardColsDefault);
 
+  // Font A is 12×24 dots (your escposPageSetup uses ESC M 0 => Font A). [web:134]
+  // If margins shrink areaDots, max printable columns shrink too (e.g. 552 dots => 46 cols).
+  const charDots = 12;
+  const maxColsFromDots = paperMm >= 76 ? Math.floor(areaDots / charDots) : cols;
+
   const marginCols = 0;
-  const innerCols = Math.max(16, cols - guardCols);
+  const innerCols = Math.max(
+    16,
+    Math.min(cols - guardCols, maxColsFromDots)
+  );
 
   return {
     cols,
@@ -170,6 +174,7 @@ function getLayout(restaurantProfile) {
     rightDots,
     areaDots,
     guardCols,
+    maxColsFromDots,
   };
 }
 
@@ -677,6 +682,7 @@ export function buildReceiptText(order, bill, restaurantProfile) {
 
     lines.push(withMargins(dashes(), layout));
     lines.push(withMargins(center("** THANK YOU! VISIT AGAIN !! **", W), layout));
+    lines.push(withMargins(center("Powered by Cafe QR", W), layout));
     lines.push("");
 
     const body = lines.join("\n");
