@@ -17,6 +17,17 @@ const MODE_NO_BOLD = ESC + "E" + b(0);
 const MODE_DOUBLE = ESC + "!" + b(0x11); // Double-height + Double-width
 const MODE_NORMAL = ESC + "!" + b(0);
 
+// Alignment Commands
+const ALIGN_LEFT = ESC + "a" + b(0);
+const ALIGN_CENTER = ESC + "a" + b(1);
+const ALIGN_RIGHT = ESC + "a" + b(2);
+const MODE_TALL = ESC + "!" + b(0x01); // double-height only
+// Character size via GS ! n  (more reliable for sizing than spacing tricks)
+const SIZE_NORMAL = GS + "!" + b(0x00);      // normal
+const SIZE_DH = GS + "!" + b(0x01);          // double-height only (safe on 58mm)
+
+
+
 function toDisplayItems(order) {
   // Counter/cart shape
   if (Array.isArray(order?.items) && order.items.length) {
@@ -128,22 +139,26 @@ function getReceiptWidthCols(restaurantProfile) {
 function getLayout(restaurantProfile) {
   const cols = getReceiptWidthCols(restaurantProfile);
 
-  // REMOVED EXTRA MARGINS to fix 3-inch shift.
-  // We use 0 margin cols and let the printer's physical dot margins handle centering.
-  const marginCols = 0;
-  const innerCols = Math.max(16, cols);
-
-  // Printer dots
+  // Physical paper width
   const paperMm = getLocalNum("PRINT_PAPER_MM", cols >= 48 ? 80 : 58);
   const dotWidth = paperMm >= 76 ? 576 : 384;
 
-  // Set EQUAL margins (e.g. 8 dots each side) to ensure perfect centering
-  // You can override these in LocalStorage via the Printer Setup UI if needed.
-  const defaultMargin = 8; 
+  // Equal margins (dots)
+  const defaultMargin = paperMm >= 76 ? 12 : 8;
   const leftDots = getLocalNum("PRINT_LEFT_MARGIN_DOTS", defaultMargin);
   const rightDots = getLocalNum("PRINT_RIGHT_MARGIN_DOTS", defaultMargin);
 
+  // Printable area width in dots (GS W). [web:116]
   const areaDots = Math.max(200, dotWidth - leftDots - rightDots);
+
+  // ---- IMPORTANT FIX (Guard columns) ----
+  // Many 58mm setups behave like "31 usable columns" even when configured as 32.
+  // So we reserve 1 col as a safety guard to prevent last char wrapping.
+  const guardColsDefault = paperMm >= 76 ? 0 : 1;
+  const guardCols = getLocalNum("PRINT_GUARD_COLS", guardColsDefault);
+
+  const marginCols = 0;
+  const innerCols = Math.max(16, cols - guardCols);
 
   return {
     cols,
@@ -154,26 +169,25 @@ function getLayout(restaurantProfile) {
     leftDots,
     rightDots,
     areaDots,
+    guardCols,
   };
 }
 
 function withMargins(line, layout) {
-  // Since marginCols is now 0, this just returns the line clipped to width
   return " ".repeat(layout.marginCols) + clip(line, layout.innerCols);
 }
 
 function escposPageSetup(layout) {
   return (
     ESC + "@" + // reset
-    ESC + "a" + b(0) + // left align (default for text)
-    GS + "L" + b2(layout.leftDots) + // left margin in dots
-    GS + "W" + b2(layout.areaDots) + // printable area width in dots
+    ESC + "a" + b(0) + // left align (default)
+    GS + "L" + b2(layout.leftDots) + // left margin
+    GS + "W" + b2(layout.areaDots) + // printable area width
     ESC + "M" + b(0) + // Font A
     ESC + "E" + b(0) // bold off
   );
 }
 
-// Build ESC/POS raster bit image (GS v 0) from print_logo_* fields
 function buildLogoEscPos(restaurantProfile) {
   const bits = restaurantProfile?.print_logo_bitmap;
   const cols = Number(restaurantProfile?.print_logo_cols || 0);
@@ -183,7 +197,7 @@ function buildLogoEscPos(restaurantProfile) {
   const bytesPerRow = Math.ceil(cols / 8);
 
   let out = "";
-  out += ESC + "a" + b(1); // center alignment for logo
+  out += ALIGN_CENTER;
   out += GS + "v" + "0" + b(0) + b2(bytesPerRow) + b2(rows);
 
   for (let y = 0; y < rows; y++) {
@@ -198,7 +212,7 @@ function buildLogoEscPos(restaurantProfile) {
   }
 
   out += "\r\n";
-  out += ESC + "a" + b(0); // reset to left alignment
+  out += ALIGN_LEFT;
   return out;
 }
 
@@ -243,7 +257,6 @@ export function buildKotText(order, restaurantProfile) {
         "RESTAURANT"
     ).toUpperCase();
 
-    // ... (Standard Address/Phone Logic - unchanged) ...
     const addressParts = [
       restaurantProfile?.shipping_address_line1,
       restaurantProfile?.shipping_address_line2,
@@ -282,16 +295,18 @@ export function buildKotText(order, restaurantProfile) {
     const lines = [];
 
     // === HEADER ===
-    // Restaurant Name: Bold + Double Size
-    // We add the command directly into the string array.
-    // The printGateway handles binary, so we can mix text and commands.
-    lines.push(MODE_DOUBLE + center(restaurantName, W) + MODE_NORMAL);
+    // Use PRINTER ALIGNMENT (ALIGN_CENTER) for the double-width header
+    // so it ignores column counting errors.
+    lines.push(ALIGN_CENTER);
+    lines.push(MODE_DOUBLE + restaurantName + MODE_NORMAL);
+    lines.push(ALIGN_LEFT); // Switch back to left for the rest
 
     wrapText(address, W).forEach((l) =>
       lines.push(withMargins(center(l, W), layout))
     );
     if (phone)
       lines.push(withMargins(center(`Contact No.: ${phone}`, W), layout));
+    
     lines.push(withMargins(dashes(), layout));
 
     lines.push(withMargins(center("*** KITCHEN ORDER TICKET ***", W), layout));
@@ -379,7 +394,7 @@ export function buildKotText(order, restaurantProfile) {
 export async function downloadTextAndShare(order, bill, restaurantProfile) {
   try {
     const text = buildReceiptText(order, bill, restaurantProfile)
-      // Strip ESC/POS commands (like \x1b!...) for plain text sharing
+      // Strip ESC/POS commands
       .replace(/[\x00-\x1f\x7f]/g, (c) =>
         c === "\n" || c === "\r" || c === "\t" ? c : ""
       )
@@ -471,12 +486,15 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     const hasLineDiscount = items.some((it) => getDisc(it) > 0);
     const cols = getBillCols(W, hasLineDiscount);
     const { name, qty, rate, disc, total, showDiscCol } = cols;
+    const totalMode = layout.paperMm >= 76 ? MODE_DOUBLE : MODE_TALL;
 
     const lines = [];
 
     // === HEADER ===
-    // Restaurant Name: BOLD + DOUBLE SIZE
-    lines.push(MODE_DOUBLE + center(restaurantName, W) + MODE_NORMAL);
+    // Use Printer Center Alignment to avoid manual padding issues in Double Mode
+    lines.push(ALIGN_CENTER);
+    lines.push(MODE_DOUBLE + restaurantName + MODE_NORMAL);
+    lines.push(ALIGN_LEFT);
 
     wrapText(address, W).forEach((l) =>
       lines.push(withMargins(center(l, W), layout))
@@ -615,18 +633,46 @@ export function buildReceiptText(order, bill, restaurantProfile) {
         );
       }
       // === GRAND TOTAL: BOLD + DOUBLE SIZE ===
-      lines.push(
-        MODE_DOUBLE +
-        withMargins(kvLine("Grand Total:", oGrandTotal.toFixed(2), W), layout) +
-        MODE_NORMAL
-      );
+      // FIX: Manually calculate spacing for double-width characters with buffer.
+      // Double width means characters are effectively 2x wide, so we have W/2 columns.
+      // We subtract 2 extra columns for safety buffer to prevent wrapping.
+      const label = "Grand Total:";
+      const val = oGrandTotal.toFixed(2);
+      // Floor(W/2) minus 1 or 2 for margin safety on 58mm printers
+      const effectiveW = Math.floor(W / 2) - 1; 
+      
+      let spacing = effectiveW - label.length - val.length;
+      if (spacing < 1) spacing = 1;
+      
+      const gtLine = label + " ".repeat(spacing) + val;
+      
+  lines.push(
+    MODE_BOLD +
+      SIZE_DH +
+      withMargins(kvLine("Grand Total:", oGrandTotal.toFixed(2), W), layout) +
+      SIZE_NORMAL +
+      MODE_NO_BOLD
+  );
+
     } else {
       // === TOTAL (Simple): BOLD + DOUBLE SIZE ===
-      lines.push(
-        MODE_DOUBLE +
-        withMargins(kvLine("Total:", oGrandTotal.toFixed(2), W), layout) +
-        MODE_NORMAL
-      );
+      const label = "Total:";
+      const val = oGrandTotal.toFixed(2);
+      // Floor(W/2) minus 1 or 2 for margin safety on 58mm printers
+      const effectiveW = Math.floor(W / 2) - 1;
+      
+      let spacing = effectiveW - label.length - val.length;
+      if (spacing < 1) spacing = 1;
+      
+      const gtLine = label + " ".repeat(spacing) + val;
+      
+  lines.push(
+    MODE_BOLD +
+      SIZE_DH +
+      withMargins(kvLine("Total:", oGrandTotal.toFixed(2), W), layout) +
+      SIZE_NORMAL +
+      MODE_NO_BOLD
+  )
     }
 
     lines.push(withMargins(dashes(), layout));

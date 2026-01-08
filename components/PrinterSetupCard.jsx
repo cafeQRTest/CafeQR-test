@@ -11,13 +11,13 @@ const [paperMm, setPaperMm] = useState(() => {
 });
 
 const [leftDots, setLeftDots] = useState(() => {
-  if (typeof window === 'undefined') return '12';
-  return localStorage.getItem('PRINT_LEFT_MARGIN_DOTS') || '12';
+  if (typeof window === 'undefined') return '0';
+  return localStorage.getItem('PRINT_LEFT_MARGIN_DOTS') || '0';
 });
 
 const [rightDots, setRightDots] = useState(() => {
-  if (typeof window === 'undefined') return '12';
-  return localStorage.getItem('PRINT_RIGHT_MARGIN_DOTS') || '12';
+  if (typeof window === 'undefined') return '0';
+  return localStorage.getItem('PRINT_RIGHT_MARGIN_DOTS') || '0';
 });
 
 const persistPaperSettings = () => {
