@@ -34,7 +34,7 @@ export async function printUniversal(opts: Options) {
     codepage: opts.codepage,
     feed: 1,
     cut: 'full',
-    scale: opts.scale || 'normal',
+    scale: opts.scale || autoScale,
   });
 
   console.log(

@@ -45,7 +45,6 @@ function markPrinted(orderId, kind = 'bill') {
   }
 }
 
-
 function getOrderTypeLabelLocal(order) {
   if (!order) return '';
   if (order.table_number && order.table_number !== null) {
@@ -94,96 +93,115 @@ async function ensurePrinterConfigured() {
 
 export default function KotPrint({ order, onClose, onPrint, autoPrint = true, kind = 'bill' }) {
   const [status, setStatus] = useState('');
-  const [bill, setBill] = useState(order?.bill || null);                // ← use embedded bill if present
-  const [restaurantProfile, setRestaurantProfile] = useState(order?._profile || null); // already there
-  const [loadingData, setLoadingData] = useState(!order?._profile && kind !== 'kot');   // KOT doesn't need bill
+  
+  // Local state to hold the "hydrated" order (with full items/discounts)
+  const [fullOrder, setFullOrder] = useState(order);
+  const [bill, setBill] = useState(order?.bill || null);
+  const [restaurantProfile, setRestaurantProfile] = useState(order?._profile || null);
+  
+  // If we are auto-printing, we might rely on props, but for safety we'll loading state
+  // For manual print (autoPrint=false), we DEFINITELY want to load fresh data.
+  const [loadingData, setLoadingData] = useState(true);
+
   const ranRef = useRef(false);
   const lockRef = useRef(false);
 
-  // Load bill + restaurant profile on mount
-useEffect(() => {
-  let alive = true;
-  (async () => {
-    try {
-      // If we already have everything we need, just stop loading
-      if (restaurantProfile && (kind === 'kot' || bill)) {
-        setLoadingData(false);
-        return;
-      }
+  // Load bill + restaurant profile + FULL ORDER ITEMS on mount
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const supabase = getSupabase();
+        
+        // 1. Fetch Full Order Details (ensure items & discounts are present)
+        // This fixes the "Missing Discount on Reprint" issue
+        if (order?.id) {
+           const { data: freshOrder } = await supabase
+            .from('orders')
+            .select('*, order_items(*, menu_items(name))')
+            .eq('id', order.id)
+            .maybeSingle();
+            
+           if (alive && freshOrder) {
+             setFullOrder(freshOrder);
+             // Also grab profile/bill from fresh order if not set
+             if (!restaurantProfile && freshOrder._profile) setRestaurantProfile(freshOrder._profile);
+             if (!bill && freshOrder.bill) setBill(freshOrder.bill);
+           }
+        }
 
-      const supabase = getSupabase();
-      let nextBill = bill || order?.bill || null;
-      let nextProfile = restaurantProfile || order?._profile || null;
+        let nextBill = bill || order?.bill || null;
+        let nextProfile = restaurantProfile || order?._profile || null;
 
-      // Fetch bill from DB only if needed and relevant (for bills, not KOT)
-      if (!nextBill && kind !== 'kot' && order?.id) {
-        const b = await supabase
-          .from('invoices')
-          .select('*, bill_no')
-          .eq('order_id', order.id)
-          .maybeSingle();
+        // 2. Fetch Invoice (if missing)
+        if (!nextBill && kind !== 'kot' && order?.id) {
+          const b = await supabase
+            .from('invoices')
+            .select('*, bill_no')
+            .eq('order_id', order.id)
+            .maybeSingle();
+          if (alive && b?.data) nextBill = b.data;
+        }
+
+        // 3. Fetch Profile (if missing)
+        if (!nextProfile && order?.restaurant_id) {
+          const [rp, rn] = await Promise.all([
+            supabase
+              .from('restaurant_profiles')
+              .select('restaurant_name,shipping_address_line1,shipping_address_line2,shipping_city,shipping_state,shipping_pincode,phone,shipping_phone,print_logo_bitmap,print_logo_cols,print_logo_rows,fssai_license,gstin,gst_enabled')
+              .eq('restaurant_id', order.restaurant_id)
+              .maybeSingle(),
+            supabase
+              .from('restaurants')
+              .select('name')
+              .eq('id', order.restaurant_id)
+              .maybeSingle(),
+          ]);
+          if (alive) {
+            if (rp?.data) nextProfile = rp.data;
+            // Patch restaurant name if missing
+            if (rn?.data?.name && fullOrder) fullOrder.restaurant_name = rn.data.name;
+          }
+        }
+
         if (!alive) return;
-        if (b?.data) nextBill = b.data;
+        if (nextBill) setBill(nextBill);
+        if (nextProfile) setRestaurantProfile(nextProfile);
+        
+      } catch (err) {
+        console.error("Error hydrating print data:", err);
+      } finally {
+        if (alive) setLoadingData(false);
       }
-
-      // Fetch restaurant profile only if needed
-      if (!nextProfile && order?.restaurant_id) {
-        const [rp, rn] = await Promise.all([
-          supabase
-            .from('restaurant_profiles')
-            .select('restaurant_name,shipping_address_line1,shipping_address_line2,shipping_city,shipping_state,shipping_pincode,phone,shipping_phone,print_logo_bitmap,print_logo_cols,print_logo_rows,fssai_license,gstin,gst_enabled')
-            .eq('restaurant_id', order.restaurant_id)
-            .maybeSingle(),
-          supabase
-            .from('restaurants')
-            .select('name')
-            .eq('id', order.restaurant_id)
-            .maybeSingle(),
-        ]);
-        if (!alive) return;
-        if (rp?.data) nextProfile = rp.data;
-        if (rn?.data?.name) order.restaurant_name = rn.data.name;
-      }
-
-      if (!alive) return;
-      if (nextBill && nextBill !== bill) setBill(nextBill);
-      if (nextProfile && nextProfile !== restaurantProfile) setRestaurantProfile(nextProfile);
-    } finally {
-      if (alive) setLoadingData(false);
-    }
-  })();
-  return () => { alive = false; };
-}, [order, kind, bill, restaurantProfile]);
+    })();
+    return () => { alive = false; };
+  }, [order?.id, kind]); // Depend on ID, not full object, to avoid loops
 
 
   const doPrint = useCallback(async () => {
     if (lockRef.current) return;
     lockRef.current = true;
 
-const normalizedOrder = {
-  ...order,
-  number_of_customers:
-    order?.number_of_customers ?? order?.numberofcustomers ?? order?.numberOfCustomers ?? null,
-};
+    // Use fullOrder which has the fetched items
+    const normalizedOrder = {
+      ...fullOrder,
+      number_of_customers:
+        fullOrder?.number_of_customers ?? fullOrder?.numberofcustomers ?? fullOrder?.numberOfCustomers ?? null,
+    };
 
-const text =
-  kind === 'kot'
-    ? buildKotText(order, restaurantProfile)
-    : buildReceiptText(order, bill, restaurantProfile);
+    const text =
+      kind === 'kot'
+        ? buildKotText(normalizedOrder, restaurantProfile)
+        : buildReceiptText(normalizedOrder, bill, restaurantProfile);
+        
     const onAndroidPWA = isAndroidPWA();
     const onNativeAndroid = isNativeAndroid();
     const onDesktopStandalone = isDesktopPWA();
 
-    let cols = 32;
-    try {
-    const raw = window.localStorage.getItem('PRINT_WIDTH_COLS') || '';
-    const n = Number(raw) || 0;
-    if (n > 0) cols = n;
-    } catch {}
-    const scale = cols >= 40 ? 'large' : 'normal';
+    const scale = 'normal';
 
     try {
-      // 1) Android PWA: deep‑link immediately under user gesture
+      // 1) Android PWA: deep‑link immediately
       if (onAndroidPWA) {
         try {
           openThermerWithText(text);
@@ -193,13 +211,13 @@ const text =
             openRawBTWithText(text);
             onPrint?.();
           } catch {
-            // fall through to share/download
+            // fall through
           }
         }
         return;
       }
 
-      // 2) Other platforms: use silent transports via printUniversal
+      // 2) Other platforms: silent transport
       const allowSystemDialog = onNativeAndroid ? false : (onDesktopStandalone ? false : true);
       await printUniversal({
         text,
@@ -210,16 +228,15 @@ const text =
         allowPrompt: false,
         allowSystemDialog,
         scale,
-        jobKind: kind === 'kot' ? 'kot' : 'bill'   // NEW
-         
+        jobKind: kind === 'kot' ? 'kot' : 'bill'
       });
       onPrint?.();
       onClose?.();
       return;
     } catch {
-      // 3) Last resort anywhere: share / download plain text bill
+      // 3) Last resort: download/share
       try {
-        await downloadTextAndShare(order, bill, restaurantProfile);
+        await downloadTextAndShare(fullOrder, bill, restaurantProfile);
         onPrint?.();
       } catch {
         setStatus('✗ Printing failed');
@@ -229,39 +246,31 @@ const text =
         lockRef.current = false;
       }, 600);
     }
-  }, [order, bill, restaurantProfile, onPrint, onClose]);
+  }, [fullOrder, bill, restaurantProfile, onPrint, onClose, kind]);
 
-  // Auto‑run (foreground or global orchestrator) once data is ready
+  // Auto‑run once data is ready
   useEffect(() => {
-  if (!autoPrint || !order || loadingData) return;
+    if (!autoPrint || !order?.id || loadingData) return;
 
-  const id = order.id;
-  if (!id) return;
+    const id = order.id;
+    if (hasPrintedRecently(id, kind)) return;
 
-  // If we already printed this kind for this order recently, skip.
-  if (hasPrintedRecently(id, kind)) {
-    return;
-  }
+    markPrinted(id, kind);
+    if (ranRef.current) return;
+    ranRef.current = true;
 
-  markPrinted(id, kind);
-
-  // Local guard to avoid double calls inside the same component instance
-  if (ranRef.current) return;
-  ranRef.current = true;
-
-  doPrint();
-}, [autoPrint, loadingData, order, kind, doPrint]);
+    doPrint();
+  }, [autoPrint, loadingData, order?.id, kind, doPrint]);
 
 
   // Android PWA explicit modal
   if (isAndroidPWA()) {
     const amount = Number(
-      bill?.grand_total ?? bill?.total_inc_tax ?? order?.total_inc_tax ?? order?.total ?? 0
+      bill?.grand_total ?? bill?.total_inc_tax ?? fullOrder?.total_inc_tax ?? fullOrder?.total ?? 0
     );
+    // eslint-disable-next-line
     useEffect(() => {
-      const onKey = ev => {
-        if (ev.key === 'Escape') onClose?.();
-      };
+      const onKey = ev => { if (ev.key === 'Escape') onClose?.(); };
       window.addEventListener('keydown', onKey);
       return () => window.removeEventListener('keydown', onKey);
     }, [onClose]);
@@ -274,22 +283,22 @@ const text =
             <button className="x" onClick={onClose} aria-label="Close">✕</button>
           </div>
           <div className="pwa-preview">
-            <pre>{`Order: #${(order?.id || '').slice(0, 8).toUpperCase()}
-Type: ${getOrderTypeLabelLocal(order)}
+            <pre>{`Order: #${(fullOrder?.id || '').slice(0, 8).toUpperCase()}
+Type: ${getOrderTypeLabelLocal(fullOrder)}
 Amount: ₹${amount.toFixed(2)}`}</pre>
           </div>
           {status ? (
             <div className={`note ${status.includes('✗') ? 'err' : 'ok'}`}>{status}</div>
           ) : null}
-          <button className="primary" type="button" onClick={doPrint}>
-            🖨️ Print via Thermer
+          <button className="primary" type="button" onClick={doPrint} disabled={loadingData}>
+            {loadingData ? 'Loading...' : '🖨️ Print via Thermer'}
           </button>
         </div>
       </div>
     );
   }
 
-  // When desktop PWA and no saved printer, show one‑time setup nudge
+  // Desktop PWA One-time Setup
   if (isDesktopPWA() && !localStorage.getItem('PRINTER_READY')) {
     return (
       <div className="kot-overlay">
@@ -319,20 +328,40 @@ Amount: ₹${amount.toFixed(2)}`}</pre>
     );
   }
 
-  // For non‑Android web: show a tiny status modal only if something went wrong
+  // General Status Modal (Manual Print or Error)
+  // If autoPrint is false (Manual click), we show this modal with buttons usually,
+  // OR we just run the print immediately if it's a direct action.
+  // But typically KotPrint is a UI-less controller unless there's an error.
+  // HOWEVER, for manual print, we usually want to show "Printing..." feedback.
+  
   if (autoPrint && !status) return null;
 
   return (
     <div className="kot-overlay">
       <div className="kot-modal">
         <div className="kot-header">
-          <h2>Print Bill / KOT</h2>
+          <h2>{loadingData ? 'Loading Data...' : 'Printing...'}</h2>
           <button className="close-btn" onClick={onClose}>✕</button>
         </div>
         {status && (
           <div className={`status ${status.includes('✗') ? 'error' : 'success'}`}>{status}</div>
         )}
+        {!autoPrint && !loadingData && !status && (
+           <div style={{textAlign:'center', marginTop:10}}>
+             <p>Sending to printer...</p>
+             {/* We trigger print automatically when data loads even if autoPrint=false? 
+                 Usually KotPrint is mounted *to print*. 
+                 So we add a small effect to trigger it if manual mode. */}
+             <PrintTrigger manualTrigger={doPrint} />
+           </div>
+        )}
       </div>
     </div>
   );
+}
+
+// Helper to trigger print in manual mode once ready
+function PrintTrigger({ manualTrigger }) {
+  useEffect(() => { manualTrigger(); }, []); 
+  return null;
 }
