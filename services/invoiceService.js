@@ -213,25 +213,51 @@ export class InvoiceService {
       process.env.SUPABASE_SERVICE_ROLE_KEY
     );
 
-    const today = new Date().toISOString().split('T')[0].replace(/-/g, '');
-    
+    // 1. Calculate Fiscal Year (April to March)
+    const now = new Date();
+    const currentYear = now.getFullYear(); // e.g., 2026
+    const currentMonth = now.getMonth();   // 0 = Jan, 3 = April
+
+    let startYear, endYear;
+    if (currentMonth >= 3) {
+       // April onwards: FY is Current-Next (e.g., Apr 2025 is FY25-26)
+       startYear = currentYear;
+       endYear = currentYear + 1;
+    } else {
+       // Jan-March: FY is Prev-Current (e.g., Jan 2026 is FY25-26)
+       startYear = currentYear - 1;
+       endYear = currentYear;
+    }
+
+    const shortStart = String(startYear).slice(-2);
+    const shortEnd = String(endYear).slice(-2);
+    const prefix = `FY${shortStart}-${shortEnd}/`; 
+
+    // 2. Fetch latest invoice with this prefix
     const { data } = await supabase
       .from('invoices')
       .select('invoice_no')
       .eq('restaurant_id', restaurantId)
-      .ilike('invoice_no', `INV-%-${today}`)
-      .order('invoice_no', { ascending: false })
+      .ilike('invoice_no', `${prefix}%`) // Filter by current FY
+      .order('created_at', { ascending: false })
       .limit(1);
 
     let nextSeq = 1;
+
     if (data && data.length > 0) {
-       const parts = data[0].invoice_no.split('-');
-       if (parts.length >= 2) {
-          const num = parseInt(parts[1], 10);
-          if (!isNaN(num)) nextSeq = num + 1;
-       }
+      const lastNo = data[0].invoice_no;
+      // Extract sequence after the prefix
+      if (lastNo.startsWith(prefix)) {
+         const numericPart = lastNo.replace(prefix, '');
+         const lastSeq = parseInt(numericPart, 10);
+         if (!isNaN(lastSeq)) {
+            nextSeq = lastSeq + 1;
+         }
+      }
     }
-    return `INV-${String(nextSeq).padStart(4, '0')}-${today}`;
+
+    // 3. Return formatted ID (e.g., FY25-26/000128)
+    return `${prefix}${String(nextSeq).padStart(6, '0')}`;
   }
 }
 
