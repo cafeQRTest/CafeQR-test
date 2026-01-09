@@ -22,9 +22,10 @@ const ALIGN_LEFT = ESC + "a" + b(0);
 const ALIGN_CENTER = ESC + "a" + b(1);
 const ALIGN_RIGHT = ESC + "a" + b(2);
 const MODE_TALL = ESC + "!" + b(0x01); // double-height only
-// Character size via GS ! n  (more reliable for sizing than spacing tricks)
-const SIZE_NORMAL = GS + "!" + b(0x00);      // normal
-const SIZE_DH = GS + "!" + b(0x01);          // double-height only (safe on 58mm)
+// GS ! n = character size magnification (width/height). [web:133][web:138]
+const SIZE_1X = GS + "!" + b(0x00); // 1x width, 1x height
+const SIZE_2X = GS + "!" + b(0x11); // 2x width, 2x height
+const SIZE_2H = GS + "!" + b(0x01); // 1x width, 2x height (your current “DH”)
 
 
 
@@ -113,6 +114,12 @@ function kvLine(label, value, W) {
   if (l.length + v.length + 1 > W) return `${l} ${v}`;
   return l + " ".repeat(W - l.length - v.length) + v;
 }
+
+function kvLineScaled(label, value, W, scaleW = 1) {
+  const effW = Math.max(10, Math.floor(W / scaleW));
+  return kvLine(label, value, effW);
+}
+
 
 function getLocalNum(key, fallback = 0) {
   try {
@@ -302,9 +309,19 @@ export function buildKotText(order, restaurantProfile) {
     // === HEADER ===
     // Use PRINTER ALIGNMENT (ALIGN_CENTER) for the double-width header
     // so it ignores column counting errors.
-    lines.push(ALIGN_CENTER);
-    lines.push(MODE_DOUBLE + restaurantName + MODE_NORMAL);
-    lines.push(ALIGN_LEFT); // Switch back to left for the rest
+const is80 = layout.paperMm >= 76;
+
+lines.push(ALIGN_CENTER);
+
+// 80mm: true bigger text (2x width + 2x height)
+// 58mm: keep your previous MODE_DOUBLE if you like (it works well there)
+if (is80) {
+} else {
+  lines.push(MODE_DOUBLE + restaurantName + MODE_NORMAL);
+}
+
+lines.push(ALIGN_LEFT);
+
 
     wrapText(address, W).forEach((l) =>
       lines.push(withMargins(center(l, W), layout))
@@ -491,7 +508,6 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     const hasLineDiscount = items.some((it) => getDisc(it) > 0);
     const cols = getBillCols(W, hasLineDiscount);
     const { name, qty, rate, disc, total, showDiscCol } = cols;
-    const totalMode = layout.paperMm >= 76 ? MODE_DOUBLE : MODE_TALL;
 
     const lines = [];
 
@@ -651,13 +667,29 @@ export function buildReceiptText(order, bill, restaurantProfile) {
       
       const gtLine = label + " ".repeat(spacing) + val;
       
+const is80 = layout.paperMm >= 76;
+const gtLabel = (oSubtotalEx > 0 || oTotalTax > 0) ? "Grand Total:" : "Total:";
+const gtVal = oGrandTotal.toFixed(2);
+
+if (is80) {
+  // 2x width => use scaled width to avoid overflow/wrap
   lines.push(
     MODE_BOLD +
-      SIZE_DH +
-      withMargins(kvLine("Grand Total:", oGrandTotal.toFixed(2), W), layout) +
-      SIZE_NORMAL +
+      SIZE_2X +
+      withMargins(kvLineScaled(gtLabel, gtVal, W, 2), { ...layout, innerCols: Math.floor(W / 2) }) +
+      SIZE_1X +
       MODE_NO_BOLD
   );
+} else {
+  // 58mm: keep it tall (double-height only), stable for alignment
+  lines.push(
+    MODE_BOLD +
+      SIZE_2H +
+      withMargins(kvLine(gtLabel, gtVal, W), layout) +
+      SIZE_1X +
+      MODE_NO_BOLD
+  );
+}
 
     } else {
       // === TOTAL (Simple): BOLD + DOUBLE SIZE ===
@@ -673,9 +705,9 @@ export function buildReceiptText(order, bill, restaurantProfile) {
       
   lines.push(
     MODE_BOLD +
-      SIZE_DH +
+      SIZE_2H +
       withMargins(kvLine("Total:", oGrandTotal.toFixed(2), W), layout) +
-      SIZE_NORMAL +
+      SIZE_1X +
       MODE_NO_BOLD
   )
     }
