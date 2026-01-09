@@ -309,12 +309,23 @@ export function buildKotText(order, restaurantProfile) {
     // === HEADER ===
     // Use PRINTER ALIGNMENT (ALIGN_CENTER) for the double-width header
     // so it ignores column counting errors.
+
+// === RESTAURANT NAME (center + bold; 80mm = 2xW/2xH, 58mm = normal) ===
 const is80 = layout.paperMm >= 76;
 
-// === RESTAURANT NAME (2xW + 2xH, centered) ===
 lines.push(ALIGN_CENTER);
-lines.push(MODE_BOLD + SIZE_2X + restaurantName + SIZE_1X + MODE_NO_BOLD);
+
+lines.push(
+  MODE_BOLD +
+    (is80 ? SIZE_2X : SIZE_1X) +
+    restaurantName +
+    SIZE_1X +
+    MODE_NO_BOLD
+);
+
+// go back to normal flow
 lines.push(ALIGN_LEFT);
+
 
 
 
@@ -506,11 +517,23 @@ export function buildReceiptText(order, bill, restaurantProfile) {
 
     const lines = [];
 
-    // === HEADER ===
-    // Use Printer Center Alignment to avoid manual padding issues in Double Mode
-    lines.push(ALIGN_CENTER);
-    lines.push(MODE_DOUBLE + restaurantName + MODE_NORMAL);
-    lines.push(ALIGN_LEFT);
+// === RESTAURANT NAME (center + bold; 80mm = 2xW/2xH, 58mm = normal) ===
+const is80 = layout.paperMm >= 76;
+
+lines.push(ALIGN_CENTER);
+
+lines.push(
+  MODE_BOLD +
+    (is80 ? SIZE_2X : SIZE_1X) +
+    restaurantName +
+    SIZE_1X +
+    MODE_NO_BOLD
+);
+
+// go back to normal flow
+lines.push(ALIGN_LEFT);
+
+
 
     wrapText(address, W).forEach((l) =>
       lines.push(withMargins(center(l, W), layout))
@@ -648,6 +671,8 @@ export function buildReceiptText(order, bill, restaurantProfile) {
           )
         );
       }
+    lines.push(withMargins(dashes(), layout));
+
       // === GRAND TOTAL: BOLD + DOUBLE SIZE ===
       // FIX: Manually calculate spacing for double-width characters with buffer.
       // Double width means characters are effectively 2x wide, so we have W/2 columns.
@@ -662,7 +687,6 @@ export function buildReceiptText(order, bill, restaurantProfile) {
       
       const gtLine = label + " ".repeat(spacing) + val;
       
-const is80 = layout.paperMm >= 76;
 const gtLabel = (oSubtotalEx > 0 || oTotalTax > 0) ? "Grand Total:" : "Total:";
 const gtVal = oGrandTotal.toFixed(2);
 
