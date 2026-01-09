@@ -311,16 +311,11 @@ export function buildKotText(order, restaurantProfile) {
     // so it ignores column counting errors.
 const is80 = layout.paperMm >= 76;
 
+// === RESTAURANT NAME (2xW + 2xH, centered) ===
 lines.push(ALIGN_CENTER);
-
-// 80mm: true bigger text (2x width + 2x height)
-// 58mm: keep your previous MODE_DOUBLE if you like (it works well there)
-if (is80) {
-} else {
-  lines.push(MODE_DOUBLE + restaurantName + MODE_NORMAL);
-}
-
+lines.push(MODE_BOLD + SIZE_2X + restaurantName + SIZE_1X + MODE_NO_BOLD);
 lines.push(ALIGN_LEFT);
+
 
 
     wrapText(address, W).forEach((l) =>
