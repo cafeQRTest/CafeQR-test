@@ -1459,19 +1459,7 @@ export default function SettingsPage() {
              </SectionBody>
           </SectionCard>
           
-          {/* PRINTERS CARD */}
-          <SectionCard>
-             <SectionHeader>
-                <SectionIcon>🖨️</SectionIcon>
-                <div>
-                   <SectionTitle>Printers & Hardware</SectionTitle>
-                   <div style={{fontSize: 13, color:'gray', fontWeight:400}}>Connect thermal printers for receipts</div>
-                </div>
-             </SectionHeader>
-             <div style={{ padding: 36 }}>
-                <PrinterSetupCard />
-             </div>
-          </SectionCard>
+
 
           {/* KITCHEN LINK CARD */}
           <SectionCard>
@@ -1514,6 +1502,22 @@ export default function SettingsPage() {
 
 
       </form>
+
+<SectionCard>
+  <SectionHeader>
+    <SectionIcon>🖨️</SectionIcon>
+    <div>
+      <SectionTitle>Printers & Hardware</SectionTitle>
+      <div style={{ fontSize: 13, color: 'gray', fontWeight: 400 }}>
+        Connect thermal printers for receipts
+      </div>
+    </div>
+  </SectionHeader>
+  <div style={{ padding: 36 }}>
+<PrinterSetupCard restaurantId={restaurant?.id || localRestaurantId} />
+  </div>
+</SectionCard>
+
     </PageContainer>
 
     {/* PAYMENT CONFIG MODAL */}

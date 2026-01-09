@@ -14,7 +14,26 @@ type Options = {
   allowSystemDialog?: boolean;
   scale?: 'normal' | 'large';
   jobKind?: 'bill' | 'kot';
+
+  // NEW
+  winPrinterNames?: string[]; // winspool: override targets (route-specific)
+  btAddresses?: string[];     // android native: override targets (route-specific)
 };
+
+function readJsonArray(key: string): string[] {
+  try {
+    if (typeof window === 'undefined') return [];
+    const raw = window.localStorage.getItem(key);
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr.filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+function uniq(arr: string[]) {
+  return Array.from(new Set((arr || []).map(s => String(s).trim()).filter(Boolean)));
+}
 
 let inFlight = false;
 
@@ -26,9 +45,15 @@ export async function printUniversal(opts: Options) {
   inFlight = true;
   const release = () => setTimeout(() => { inFlight = false; }, 800);
 
-  const paperMm = Number(localStorage.getItem("PRINT_PAPER_MM") || 0);
-  const autoScale = paperMm >= 76 ? "large" : "normal";
+  // NOTE: This module can be imported in Next.js server build,
+  // but printUniversal should only be called in the browser.
+  if (typeof window === 'undefined') {
+    release();
+    throw new Error('PRINT_CALLED_ON_SERVER');
+  }
 
+  const paperMm = Number(window.localStorage.getItem('PRINT_PAPER_MM') || 0);
+  const autoScale = paperMm >= 76 ? 'large' : 'normal';
 
   const payload = textToEscPos(opts.text, {
     codepage: opts.codepage,
@@ -37,93 +62,92 @@ export async function printUniversal(opts: Options) {
     scale: opts.scale || autoScale,
   });
 
-  console.log(
-    'ESC/POS bytes (first 64):',
-    Array.from(payload.slice(0, 64))
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join(' ')
-  );
   const base64 = btoa(String.fromCharCode(...payload));
 
   // --- Windows helper config (PRINT_WIN_*) ---
   const winCfg = (kind: 'bill' | 'kot') => {
-    const url =
-      localStorage.getItem('PRINT_WIN_URL') || 'http://127.0.0.1:3333/printRaw';
+    const url = window.localStorage.getItem('PRINT_WIN_URL') || 'http://127.0.0.1:3333/printRaw';
 
-    const bill = localStorage.getItem('PRINT_WIN_PRINTER_NAME') || '';
-    const kot = localStorage.getItem('PRINT_WIN_PRINTER_NAME_KOT') || '';
+    // V2 arrays
+    const billNames = readJsonArray('PRINT_WIN_PRINTER_NAMES_BILL');
+    const kotNames = readJsonArray('PRINT_WIN_PRINTER_NAMES_KOT');
 
-    // For KOT: prefer dedicated kitchen printer, fall back to bill printer.
-    // For bill: prefer bill printer, fall back to KOT printer.
-    const name = kind === 'kot' ? kot || bill : bill || kot;
+    // V1 single fallback
+    const bill1 = window.localStorage.getItem('PRINT_WIN_PRINTER_NAME') || '';
+    const kot1 = window.localStorage.getItem('PRINT_WIN_PRINTER_NAME_KOT') || '';
 
-    return { url, name };
+    const fallback =
+      kind === 'kot'
+        ? (kot1 ? [kot1] : bill1 ? [bill1] : [])
+        : (bill1 ? [bill1] : kot1 ? [kot1] : []);
+
+    const names = uniq(
+      (kind === 'kot' ? kotNames : billNames).length
+        ? (kind === 'kot' ? kotNames : billNames)
+        : fallback
+    );
+
+    return { url, names };
   };
 
   const hasWinHelper =
-    !!localStorage.getItem('PRINT_WIN_URL') &&
-    (!!localStorage.getItem('PRINT_WIN_PRINTER_NAME') ||
-      !!localStorage.getItem('PRINT_WIN_PRINTER_NAME_KOT'));
+    !!window.localStorage.getItem('PRINT_WIN_URL') &&
+    (
+      readJsonArray('PRINT_WIN_PRINTER_NAMES_BILL').length > 0 ||
+      readJsonArray('PRINT_WIN_PRINTER_NAMES_KOT').length > 0 ||
+      !!window.localStorage.getItem('PRINT_WIN_PRINTER_NAME') ||
+      !!window.localStorage.getItem('PRINT_WIN_PRINTER_NAME_KOT')
+    );
 
-  const mode = localStorage.getItem('PRINTER_MODE') || '';
+  const mode = window.localStorage.getItem('PRINTER_MODE') || '';
 
   async function printWinspool(localOpts: Options) {
-    const { url, name } = winCfg(localOpts.jobKind === 'kot' ? 'kot' : 'bill');
-    if (!name) throw new Error('NO_WIN_PRINTER');
+    const kind: 'bill' | 'kot' = localOpts.jobKind === 'kot' ? 'kot' : 'bill';
+    const { url, names } = winCfg(kind);
+
+    const forced = uniq(localOpts.winPrinterNames || []);
+    const targets = forced.length ? forced : names;
+    if (!targets.length) throw new Error('NO_WIN_PRINTER');
 
     const autoCut =
       typeof window !== 'undefined' &&
       window.localStorage.getItem('PRINT_WIN_AUTOCUT') === '1';
 
     let txt = '';
+    txt += '\x1b@'; // reset
+    txt += localOpts.scale === 'large' ? '\x1d!\x01' : '\x1d!\x00';
 
-    // Reset + size
-    txt += '\x1b@'; // ESC @ reset
-    if (localOpts.scale === 'large') {
-      txt += '\x1d!\x01'; // double height
-    } else {
-      txt += '\x1d!\x00'; // normal
-    }
-
-    // IMPORTANT: txt already contains logoEsc + body text from buildReceiptText
     txt += (localOpts.text || '').replace(/\r?\n/g, '\r\n') + '\r\n\r\n\r\n';
+    if (autoCut) txt += '\x1dV\x00';
 
-    if (autoCut) {
-      txt += '\x1dV\x00'; // GS V 0 → full cut
-    }
-
-    // BINARY ENCODE: 1 JS char = 1 byte (no UTF‑8)
     let bin = '';
-    for (let i = 0; i < txt.length; i++) {
-      bin += String.fromCharCode(txt.charCodeAt(i) & 0xff);
-    }
+    for (let i = 0; i < txt.length; i++) bin += String.fromCharCode(txt.charCodeAt(i) & 0xff);
     const base64Plain = btoa(bin);
 
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 8000);
+    for (const printerName of targets) {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 8000);
 
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        printerName: name,
-        dataBase64: base64Plain,
-      }),
-      signal: ctrl.signal,
-    });
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ printerName, dataBase64: base64Plain }),
+        signal: ctrl.signal,
+      });
 
-    clearTimeout(t);
+      clearTimeout(t);
 
-    if (!resp.ok) {
-      const text = await resp.text().catch(() => '');
-      throw new Error('WIN_SPOOL_FAILED ' + text);
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => '');
+        throw new Error(`WIN_SPOOL_FAILED ${printerName} ${text}`);
+      }
     }
 
     return { via: 'winspool' as const };
   }
 
   try {
-    // 1) Native Android → use DevicePrinter (USB first, Bluetooth fallback)
+    // 1) Native Android → DevicePrinter (USB / BT)
     if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android') {
       // @ts-ignore
       const { DevicePrinter } = (window as any).Capacitor.Plugins;
@@ -131,101 +155,77 @@ export async function printUniversal(opts: Options) {
 
       const job: 'bill' | 'kot' = jobKind;
 
-      const addrKey =
-        job === 'kot' ? 'BT_PRINTER_ADDR_KOT' : 'BT_PRINTER_ADDR';
-      const nameHintKey =
-        job === 'kot'
-          ? 'BT_PRINTER_NAME_HINT_KOT'
-          : 'BT_PRINTER_NAME_HINT';
+      // V2 arrays
+      const addrArrKey = job === 'kot' ? 'BT_PRINTER_ADDRS_KOT' : 'BT_PRINTER_ADDRS_BILL';
+      const savedAddrs = uniq(readJsonArray(addrArrKey));
 
-      // Prefer dedicated KOT/bill address; fall back to the other if missing
-      let addr: string | undefined =
-        localStorage.getItem(addrKey) ||
-        localStorage.getItem(job === 'kot' ? 'BT_PRINTER_ADDR' : 'BT_PRINTER_ADDR_KOT') ||
-        undefined;
+      // V1 single fallback
+      const addrKey = job === 'kot' ? 'BT_PRINTER_ADDR_KOT' : 'BT_PRINTER_ADDR';
+      const addr1 = (window.localStorage.getItem(addrKey) || '').trim();
 
-      let nameHint: string | undefined =
-        localStorage.getItem(nameHintKey) ||
-        localStorage.getItem(
-          job === 'kot'
-            ? 'BT_PRINTER_NAME_HINT'
-            : 'BT_PRINTER_NAME_HINT_KOT'
-        ) ||
-        'pos';
+      const nameHintKey = job === 'kot' ? 'BT_PRINTER_NAME_HINT_KOT' : 'BT_PRINTER_NAME_HINT';
+      let nameHint: string | undefined = (window.localStorage.getItem(nameHintKey) || '').trim() || 'pos';
 
-      // NEW: Bluetooth picker is optional.
-      // If there is no saved BT address, we *try* the picker, but if it fails
-      // (no BT hardware / user cancels), we still go ahead and let the native
-      // plugin use USB (internal POS printer) or auto BT fallback.
-      if (!addr) {
+      const forced = uniq(opts.btAddresses || []);
+      let targets = forced.length ? forced : (savedAddrs.length ? savedAddrs : (addr1 ? [addr1] : []));
+
+      if (!targets.length) {
         try {
           const pick = await DevicePrinter.pickPrinter();
-          addr = pick?.address || undefined;
+          const addr = pick?.address || '';
           if (addr) {
-            try {
-              await DevicePrinter.pairDevice({ address: addr });
-            } catch { }
-            localStorage.setItem(addrKey, addr);
-            if (pick?.name) localStorage.setItem(nameHintKey, pick.name);
+            try { await DevicePrinter.pairDevice({ address: addr }); } catch {}
+            window.localStorage.setItem(addrKey, addr);
+            targets = [addr];
+            if (pick?.name) window.localStorage.setItem(nameHintKey, pick.name);
           }
-        } catch (err) {
-          console.warn(
-            '[print] pickPrinter skipped, falling back to USB / auto BT:',
-            err
-          );
+        } catch {
           nameHint = undefined;
+          targets = [undefined as any]; // one attempt: plugin may fallback to USB/internal
         }
       }
 
-      const res = await DevicePrinter.printRaw({
-        base64,
-        address: addr,        // may be undefined → USB‑only is fine
-        nameContains: nameHint,
-      });
+      for (const address of targets) {
+        await DevicePrinter.printRaw({ base64, address, nameContains: nameHint });
+      }
 
-      return { via: res?.via || 'android-pos' };
+      return { via: 'android-pos' as const };
     }
 
     const n: any = navigator as any;
 
-    // 1b) Windows helper (raw bytes to Windows spooler) if configured
+    // 1b) Windows helper mode
     if (hasWinHelper && mode === 'winspool') {
       try {
         return await printWinspool(opts);
       } catch (e) {
-        console.warn(
-          '[print] winspool failed, falling back to browser/device APIs',
-          e
-        );
+        console.warn('[print] winspool failed, falling back to browser/device APIs', e);
       }
     }
 
-    // 2) WebUSB (remembered device, then chooser if allowPrompt)
+    // 2) WebUSB
     if (n.usb) {
       try {
         const list: USBDevice[] = await n.usb.getDevices();
         if (list && list.length) {
           const device = list[0];
           await device.open();
-          if (device.configuration == null) {
-            await device.selectConfiguration(1);
-          }
-          const iface = device.configuration!.interfaces.find((i) =>
-            i.alternates.some((a) =>
-              a.endpoints.some((e) => e.direction === 'out')
-            )
+          if (device.configuration == null) await device.selectConfiguration(1);
+
+          const iface = device.configuration!.interfaces.find((i: any) =>
+            i.alternates.some((a: any) => a.endpoints.some((e: any) => e.direction === 'out'))
           );
           if (!iface) throw new Error('No USB OUT endpoint');
+
           await device.claimInterface(iface.interfaceNumber);
-          const outEp = iface.alternates[0].endpoints.find(
-            (e) => e.direction === 'out'
-          )!;
+          const outEp = iface.alternates[0].endpoints.find((e: any) => e.direction === 'out')!;
           await device.transferOut(outEp.endpointNumber, payload);
           await device.close();
+
           return { via: 'webusb' as const };
         }
       } catch {
-        // fall through to prompt or next transport
+        // fall through
       }
 
       if (opts.allowPrompt) {
@@ -234,33 +234,31 @@ export async function printUniversal(opts: Options) {
             opts.vendorId && opts.productId
               ? [{ vendorId: opts.vendorId, productId: opts.productId }]
               : [{}];
+
           // @ts-ignore
           const device: USBDevice = await n.usb.requestDevice({ filters });
           await device.open();
-          if (device.configuration == null) {
-            await device.selectConfiguration(1);
-          }
-          const iface = device.configuration!.interfaces.find((i) =>
-            i.alternates.some((a) =>
-              a.endpoints.some((e) => e.direction === 'out')
-            )
+          if (device.configuration == null) await device.selectConfiguration(1);
+
+          const iface = device.configuration!.interfaces.find((i: any) =>
+            i.alternates.some((a: any) => a.endpoints.some((e: any) => e.direction === 'out'))
           );
           if (!iface) throw new Error('No USB OUT endpoint');
+
           await device.claimInterface(iface.interfaceNumber);
           const alt = iface.alternates[0];
-          const outEp = alt.endpoints.find(
-            (e) => e.direction === 'out'
-          )!;
+          const outEp = alt.endpoints.find((e: any) => e.direction === 'out')!;
           await device.transferOut(outEp.endpointNumber, payload);
           await device.close();
+
           return { via: 'webusb' as const };
         } catch {
-          // continue to Web Serial / relay
+          // continue
         }
       }
     }
 
-    // 3) Web Serial (remembered port, then chooser if allowPrompt)
+    // 3) Web Serial
     if (n.serial) {
       try {
         const ports: SerialPort[] = await n.serial.getPorts();
@@ -271,10 +269,11 @@ export async function printUniversal(opts: Options) {
           await w.write(payload);
           w.releaseLock();
           await port.close();
+
           return { via: 'webserial' as const };
         }
       } catch {
-        // fall through to prompt or next transport
+        // fall through
       }
 
       if (opts.allowPrompt) {
@@ -286,6 +285,7 @@ export async function printUniversal(opts: Options) {
           await writer.write(payload);
           writer.releaseLock();
           await port.close();
+
           return { via: 'webserial' as const };
         } catch {
           // continue
@@ -293,7 +293,7 @@ export async function printUniversal(opts: Options) {
       }
     }
 
-    // 4) Local/Network relay (raw TCP 9100)
+    // 4) Relay TCP 9100
     if (opts.relayUrl && opts.ip) {
       await fetch(opts.relayUrl, {
         method: 'POST',
@@ -307,35 +307,22 @@ export async function printUniversal(opts: Options) {
       return { via: 'relay' as const };
     }
 
-    // If system dialog is not allowed (desktop PWA silent mode),
-    // stop here and let caller handle the failure.
     if (!opts.allowSystemDialog) {
       throw new Error('NO_PRINTER_CONFIGURED');
     }
 
-    // 5) Browser UI fallbacks (print dialog or Web Share)
+    // 5) Browser fallbacks
     const w = window.open('', '_blank', 'width=480,height=640');
     if (w) {
       w.document.write(
-        `<pre style="font:14px/1.4 monospace; white-space:pre-wrap">${opts.text.replace(
-          /</g,
-          '&lt;'
-        )}</pre>`
+        `<pre style="font:14px/1.4 monospace; white-space:pre-wrap">${opts.text.replace(/</g, '&lt;')}</pre>`
       );
       w.document.close();
       w.focus();
 
-      // Chromium sometimes throws "The provided callback is no longer runnable"
-      // if print() is called immediately after document.close().
-      // Using a small timeout and awaiting it ensures window stability.
       await new Promise<void>((resolve) => {
         setTimeout(() => {
-          try {
-            w.print();
-            w.close();
-          } catch (e) {
-            console.error('Browser print failed:', e);
-          }
+          try { w.print(); w.close(); } catch {}
           resolve();
         }, 250);
       });
@@ -348,7 +335,6 @@ export async function printUniversal(opts: Options) {
       return { via: 'share' as const };
     }
 
-    // Force caller (KotPrint) to do its own last‑resort handling
     throw new Error('NO_SILENT_PATH');
   } finally {
     release();

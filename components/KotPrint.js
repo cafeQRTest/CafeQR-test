@@ -9,6 +9,25 @@ import { Capacitor } from '@capacitor/core';
 const PRINT_DEDUP_KEY = 'KOTPRINT_PRINTED_V1';
 const PRINT_DEDUP_TTL_MS = 15_000; // 15 seconds
 
+function readJson(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function kotRoutesEnabled() {
+  return localStorage.getItem('PRINT_KOT_CATEGORY_ROUTING') === '1';
+}
+
+// IMPORTANT: adjust this getter to match your schema
+function getItemCategoryName(oi) {
+  return String(oi?.menu_items?.category || '').trim();
+}
+
+
 function hasPrintedRecently(orderId, kind = 'bill') {
   if (!orderId) return false;
   try {
@@ -118,7 +137,7 @@ export default function KotPrint({ order, onClose, onPrint, autoPrint = true, ki
         if (order?.id) {
            const { data: freshOrder } = await supabase
             .from('orders')
-            .select('*, order_items(*, menu_items(name))')
+            .select('*, order_items(*, menu_items(name, category))')
             .eq('id', order.id)
             .maybeSingle();
             
@@ -178,47 +197,39 @@ export default function KotPrint({ order, onClose, onPrint, autoPrint = true, ki
   }, [order?.id, kind]); // Depend on ID, not full object, to avoid loops
 
 
-  const doPrint = useCallback(async () => {
-    if (lockRef.current) return;
-    lockRef.current = true;
+const doPrint = useCallback(async () => {
+  if (lockRef.current) return;
+  lockRef.current = true;
 
-    // Use fullOrder which has the fetched items
+  try {
     const normalizedOrder = {
       ...fullOrder,
       number_of_customers:
-        fullOrder?.number_of_customers ?? fullOrder?.numberofcustomers ?? fullOrder?.numberOfCustomers ?? null,
+        fullOrder?.number_of_customers ??
+        fullOrder?.numberofcustomers ??
+        fullOrder?.numberOfCustomers ??
+        null,
     };
 
-    const text =
-      kind === 'kot'
-        ? buildKotText(normalizedOrder, restaurantProfile)
-        : buildReceiptText(normalizedOrder, bill, restaurantProfile);
-        
     const onAndroidPWA = isAndroidPWA();
     const onNativeAndroid = isNativeAndroid();
     const onDesktopStandalone = isDesktopPWA();
-
+    const allowSystemDialog = onNativeAndroid ? false : (onDesktopStandalone ? false : true);
     const scale = 'normal';
 
-    try {
-      // 1) Android PWA: deep‑link immediately
+    // 1) Bill OR KOT-routing disabled => normal single ticket
+    if (kind !== 'kot' || !kotRoutesEnabled()) {
+      const text =
+        kind === 'kot'
+          ? buildKotText(normalizedOrder, restaurantProfile)
+          : buildReceiptText(normalizedOrder, bill, restaurantProfile);
+
       if (onAndroidPWA) {
-        try {
-          openThermerWithText(text);
-          onPrint?.();
-        } catch {
-          try {
-            openRawBTWithText(text);
-            onPrint?.();
-          } catch {
-            // fall through
-          }
-        }
+        try { openThermerWithText(text); onPrint?.(); }
+        catch { try { openRawBTWithText(text); onPrint?.(); } catch {} }
         return;
       }
 
-      // 2) Other platforms: silent transport
-      const allowSystemDialog = onNativeAndroid ? false : (onDesktopStandalone ? false : true);
       await printUniversal({
         text,
         relayUrl: localStorage.getItem('PRINT_RELAY_URL') || undefined,
@@ -228,25 +239,86 @@ export default function KotPrint({ order, onClose, onPrint, autoPrint = true, ki
         allowPrompt: false,
         allowSystemDialog,
         scale,
-        jobKind: kind === 'kot' ? 'kot' : 'bill'
+        jobKind: kind,
       });
+
       onPrint?.();
       onClose?.();
       return;
-    } catch {
-      // 3) Last resort: download/share
-      try {
-        await downloadTextAndShare(fullOrder, bill, restaurantProfile);
-        onPrint?.();
-      } catch {
-        setStatus('✗ Printing failed');
-      }
-    } finally {
-      setTimeout(() => {
-        lockRef.current = false;
-      }, 600);
     }
-  }, [fullOrder, bill, restaurantProfile, onPrint, onClose, kind]);
+
+    // 2) KOT routing enabled => print per route (category-wise)
+    const routes = readJson('PRINT_KOT_ROUTES_V1', []).filter(r => r && r.enabled);
+    const allOrderItems = Array.isArray(fullOrder?.order_items) ? fullOrder.order_items : [];
+
+    // If no routes configured, fall back to normal KOT
+    if (!routes.length) {
+      const text = buildKotText(normalizedOrder, restaurantProfile);
+
+      if (onAndroidPWA) {
+        try { openThermerWithText(text); onPrint?.(); }
+        catch { try { openRawBTWithText(text); onPrint?.(); } catch {} }
+        return;
+      }
+
+      await printUniversal({
+        text,
+        allowPrompt: false,
+        allowSystemDialog,
+        scale,
+        codepage: 0,
+        jobKind: 'kot',
+      });
+
+      onPrint?.();
+      onClose?.();
+      return;
+    }
+
+    for (const r of routes) {
+      const cats = Array.isArray(r.categories) ? r.categories : [];
+      const subset = allOrderItems.filter(oi => cats.includes(getItemCategoryName(oi)));
+      if (!subset.length) continue;
+
+      const routedOrder = { ...fullOrder, order_items: subset };
+      const text = buildKotText(routedOrder, restaurantProfile);
+
+      if (onAndroidPWA) {
+        try { openThermerWithText(text); }
+        catch { try { openRawBTWithText(text); } catch {} }
+        continue;
+      }
+
+      await printUniversal({
+        text,
+        relayUrl: localStorage.getItem('PRINT_RELAY_URL') || undefined,
+        ip: localStorage.getItem('PRINTER_IP') || undefined,
+        port: Number(localStorage.getItem('PRINTER_PORT') || 9100),
+        codepage: 0,
+        allowPrompt: false,
+        allowSystemDialog,
+        scale,
+        jobKind: 'kot',
+        winPrinterNames: Array.isArray(r.printerNames) ? r.printerNames : [],
+      });
+    }
+
+    onPrint?.();
+    onClose?.();
+  } catch (e) {
+    // Last resort: download/share
+    try {
+      await downloadTextAndShare(fullOrder, bill, restaurantProfile);
+      onPrint?.();
+    } catch {
+      setStatus('✗ Printing failed');
+    }
+  } finally {
+    setTimeout(() => {
+      lockRef.current = false;
+    }, 600);
+  }
+}, [fullOrder, bill, restaurantProfile, onPrint, onClose, kind]);
 
   // Auto‑run once data is ready
   useEffect(() => {
