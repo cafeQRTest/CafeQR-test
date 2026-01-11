@@ -417,6 +417,7 @@ export default async function handler(req, res) {
       },
     };
 
+
     // 11) Fire-and-forget background tasks (inventory + low-stock alerts + notify-owner)
     (async () => {
       try {

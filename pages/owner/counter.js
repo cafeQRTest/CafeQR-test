@@ -902,7 +902,13 @@ function computeCartTotals(cartItems, profile) {
     // Rate
     let rate = 0;
     if (gstEnabled) {
-         rate = isPackaged ? itemTaxRate : baseRate;
+         // For packaged goods: use item rate if > 0, else fallback to default
+         // For normal items: always use default rate
+         if (isPackaged) {
+             rate = itemTaxRate > 0 ? itemTaxRate : baseRate;
+         } else {
+             rate = baseRate;
+         }
     }
     if (rate < 0) rate = 0;
 
@@ -988,7 +994,7 @@ const cartTotals = useMemo(() => {
     finalTax: Number(finalTax.toFixed(2)),
     finalTotal: Number(finalTotal.toFixed(2)),
     totalInc: Number(finalTotal.toFixed(2)),
-    subtotalEx: Number(finalTaxable.toFixed(2)),
+    subtotalEx: Number(taxableSubtotalBase.toFixed(2)), // Before order discount
   };
 }, [cart, profileTax, discount]);  
 
@@ -1636,6 +1642,7 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
       body: JSON.stringify(orderData),
     });
 
+
     if (!res.ok) {
       let msg = 'Failed to create order';
       try {
@@ -1646,6 +1653,7 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
     }
 
     const result = await res.json();
+
 
     const fullOrder = result.order_for_print || null;
 
@@ -1687,7 +1695,7 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
         },
       })
     );
-    console.log('[counter.js] orderForPrint.items:', orderForPrint.items);
+
 
     setCart([]); 
     setCustomerName(''); 
@@ -2918,13 +2926,12 @@ const isVariantItem = !!item.has_variants && (item.variants?.length || 0) > 0;
                       )
                     )}
                     
-                    {/* Taxable Amount (Only show if discount exists) */}
                     {/* Taxable Amount (Discounts or Exclusive Tax) */}
                     {(cartTotals.orderDiscAmt > 0 || (profileTax.gst_enabled && !profileTax.prices_include_tax)) && (
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#64748b' }}>
-                        <span>Taxable Base</span>
+                        <span>Taxable Amount</span>
                         <span style={{ fontWeight: 600, color: '#1e293b' }}>
-                          ₹{(cartTotals.taxableAmount + (cartTotals.nonTaxableTotal || 0)).toFixed(2)}
+                          ₹{cartTotals.taxableAmount.toFixed(2)}
                         </span>
                       </div>
                     )}

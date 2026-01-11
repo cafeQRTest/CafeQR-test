@@ -30,38 +30,12 @@ const SIZE_2H = GS + "!" + b(0x01); // 1x width, 2x height (your current â€œDHâ€
 
 
 function toDisplayItems(order) {
-  // Counter/cart shape
-  if (Array.isArray(order?.items) && order.items.length) {
-    return order.items.map((i) => {
-      let discountAmount = Number(i.discount_amount || 0);
-      console.log('[printUtils toDisplayItems] Item:', i.name, '| discount_amount:', i.discount_amount, '| discount obj:', i.discount);
-      if (!discountAmount && i.discount) {
-         const val = Number(i.discount.value || 0);
-         const base = Number(i.price || 0) * Number(i.quantity || 1);
-         if (i.discount.type === 'percent') {
-            discountAmount = base * (val / 100);
-         } else {
-            discountAmount = val;
-         }
-      }
-      console.log('[printUtils toDisplayItems] Calculated discountAmount:', discountAmount);
-
-      return {
-        name: i.name,
-        quantity: i.quantity,
-        price: i.price,
-        discount_amount: discountAmount,
-        uom: i.uom || "",
-        uom_short_code: i.uom_short_code || "",
-        uom_precision: i.uom_precision,
-      };
-    });
-  }
-
-  // DB/API shape
+  
+  // DB/API shape (HAS discount data) - CHECK THIS FIRST!
   if (Array.isArray(order?.order_items) && order.order_items.length) {
     return order.order_items.map((oi) => {
          let dAmt = Number(oi.discount_amount || 0);
+
          // Fallback if discount_amount is 0 but raw discount info exists (rare but safer)
          if (dAmt === 0 && (oi.discount_value || oi.discount_percent)) {
              const price = Number(oi.price || oi.unit_price || 0);
@@ -74,6 +48,7 @@ function toDisplayItems(order) {
                  dAmt = Number(oi.discount_value || 0);
              }
          }
+
          return {
           name: oi.menu_items?.name || oi.item_name || "Item",
           quantity: Number(oi.quantity || 0),
@@ -83,6 +58,34 @@ function toDisplayItems(order) {
           uom_short_code: oi.uom_short_code || "",
           uom_precision: oi.uom_precision ?? 0,
         };
+    });
+  }
+  
+  // Counter/cart shape (simple, may not have discount) - FALLBACK ONLY
+  if (Array.isArray(order?.items) && order.items.length) {
+    return order.items.map((i) => {
+      let discountAmount = Number(i.discount_amount || 0);
+
+      if (!discountAmount && i.discount) {
+         const val = Number(i.discount.value || 0);
+         const base = Number(i.price || 0) * Number(i.quantity || 1);
+         if (i.discount.type === 'percent') {
+            discountAmount = base * (val / 100);
+         } else {
+            discountAmount = val;
+         }
+      }
+
+
+      return {
+        name: i.name,
+        quantity: i.quantity,
+        price: i.price,
+        discount_amount: discountAmount,
+        uom: i.uom || "",
+        uom_short_code: i.uom_short_code || "",
+        uom_precision: i.uom_precision,
+      };
     });
   }
 
@@ -596,10 +599,9 @@ export function buildReceiptText(order, bill, restaurantProfile) {
 
       let nameStr = it?.name || "Item";
       // If narrow receipt and discount exists, append to name
-      console.log('[printUtils buildReceiptText] Item:', it.name, '| itemDiscount:', itemDiscount, '| showDiscCol:', showDiscCol);
       if (!showDiscCol && itemDiscount > 0.001) {
         nameStr += ` (Disc -${itemDiscount.toFixed(2)})`;
-        console.log('[printUtils buildReceiptText] Added discount to name:', nameStr);
+
       }
 
       const nameLines = wrapText(nameStr, name);

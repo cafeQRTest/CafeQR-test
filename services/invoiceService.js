@@ -108,14 +108,16 @@ export class InvoiceService {
       const roundOff = Number(order.round_off_amount || 0);
       const grandTotal = Number(order.total_amount || 0);
 
-      // 7. Generate Invoice Number
+      // 7. Generate Invoice Number and Bill Number
       const invoiceNo = await this.generateInvoiceNumber(finalRestId);
+      const billNo = await this.generateBillNumber(finalRestId);
 
       // 8. Prepare Invoice Header (STRICT MIRROR OF ORDER)
       const invoiceData = {
         restaurant_id: finalRestId,
         order_id: order.id,
         invoice_no: invoiceNo,
+        bill_no: billNo,
         invoice_date: new Date().toISOString().split('T')[0],
 
         line_subtotal: Number(subtotalExGst.toFixed(2)),
@@ -220,5 +222,28 @@ export class InvoiceService {
     }
 
     return `${prefix}${String(nextSeq).padStart(6, '0')}`;
+  }
+
+  static async generateBillNumber(restaurantId) {
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY
+    );
+
+    // Get the highest bill_no for this restaurant
+    const { data } = await supabase
+      .from('invoices')
+      .select('bill_no')
+      .eq('restaurant_id', restaurantId)
+      .not('bill_no', 'is', null)
+      .order('bill_no', { ascending: false })
+      .limit(1);
+
+    let nextBillNo = 1;
+    if (data?.length && data[0].bill_no) {
+      nextBillNo = Number(data[0].bill_no) + 1;
+    }
+
+    return nextBillNo;
   }
 }
