@@ -174,7 +174,7 @@ export async function printUniversal(opts: Options) {
           const pick = await DevicePrinter.pickPrinter();
           const addr = pick?.address || '';
           if (addr) {
-            try { await DevicePrinter.pairDevice({ address: addr }); } catch {}
+            try { await DevicePrinter.pairDevice({ address: addr }); } catch { }
             window.localStorage.setItem(addrKey, addr);
             targets = [addr];
             if (pick?.name) window.localStorage.setItem(nameHintKey, pick.name);
@@ -322,7 +322,14 @@ export async function printUniversal(opts: Options) {
 
       await new Promise<void>((resolve) => {
         setTimeout(() => {
-          try { w.print(); w.close(); } catch {}
+          try {
+            if (w && !w.closed) {
+              w.print();
+              w.close();
+            }
+          } catch (err) {
+            console.warn('[print] Failed to print window:', err);
+          }
           resolve();
         }, 250);
       });

@@ -39,13 +39,13 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false, mode 
   const autoRounded = isRoundOffEnabled && isAuto ? Math.round(amount / factor) * factor : amount;
   
   const [settledAmount, setSettledAmount] = useState(autoRounded);
-  const [displayValue, setDisplayValue] = useState(autoRounded.toFixed(2)); // Control input string
+  const [displayValue, setDisplayValue] = useState((autoRounded || 0).toFixed(2)); // Control input string
   
   // Sync if settledAmount updates externally (e.g. valid edit) - actually we drive settledAmount from input
   // But strictly for Reset or Init, we need this.
   
-  const manualRoundOff = settledAmount - amount;
-  const settledTotal = settledAmount;
+  const manualRoundOff = (settledAmount || 0) - (amount || 0);
+  const settledTotal = settledAmount || 0;
   const BRAND = mode === 'kitchen'
     ? { orange: '#f97316', orangeDark: '#ea580c', bgSoft: '#fff7ed', border: '#e5e7eb', text: '#111827' }
     : { orange: '#16a34a', orangeDark: '#15803d', bgSoft: '#ecfdf3', border: '#e5e7eb', text: '#111827' };
@@ -86,7 +86,7 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false, mode 
     const cash = Number(cashAmount || 0);
     const online = Number(onlineAmount || 0);
     if (cash <= 0 || online <= 0) { alert('Both cash and online must be > 0'); return false; }
-    if (Math.abs((cash + online) - settledTotal) > 0.01) { alert(`Split must equal ₹${settledTotal.toFixed(2)}`); return false; }
+    if (Math.abs((cash + online) - settledTotal) > 0.01) { alert(`Split must equal ₹${(settledTotal || 0).toFixed(2)}`); return false; }
     return true;
   };
 
@@ -95,7 +95,7 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false, mode 
     try {
       setSubmitting(true);
       const details = {
-        round_off_amount: Number(manualRoundOff.toFixed(2))
+        round_off_amount: Number((manualRoundOff || 0).toFixed(2))
       };
     
     if (isRoundOffOnly) {
@@ -164,11 +164,11 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false, mode 
             border: `2px solid ${BRAND.orange}`
           }}>
             <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>Settled Total:</span>
-            <span style={{ fontSize: '16px', fontWeight: 700, color: BRAND.orange }}>₹{settledAmount.toFixed(2)}</span>
+            <span style={{ fontSize: '16px', fontWeight: 700, color: BRAND.orange }}>₹{(settledAmount || 0).toFixed(2)}</span>
           </div>
           {manualRoundOff !== 0 && (
             <div style={{ fontSize: '11px', color: manualRoundOff > 0 ? '#16a34a' : '#dc2626', fontWeight: 600, marginTop: 4 }}>
-              ({manualRoundOff > 0 ? '+' : ''}{manualRoundOff.toFixed(2)} Round-off)
+              ({manualRoundOff > 0 ? '+' : ''}{(manualRoundOff || 0).toFixed(2)} Round-off)
             </div>
           )}
         </div>
@@ -187,7 +187,7 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false, mode 
                    Received Amount
                  </label>
                  <span style={{ fontSize: 11, fontWeight: 600, color: '#64748b', opacity: 0.8 }}>
-                   Limit: ±₹{Number(roundOffConfig.round_off_manual_limit).toFixed(2)}
+                   Limit: ±₹{Number(roundOffConfig?.round_off_manual_limit || 0).toFixed(2)}
                  </span>
                </div>
                <div style={{ fontSize: '10px', color: '#64748b', marginBottom: 12, fontWeight: 500 }}>
@@ -405,7 +405,7 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false, mode 
                 fontWeight: 600,
                 color: '#1e293b'
               }}>
-                Total ₹{settledTotal.toFixed(2)} → ₹{cashAmount || 0} + ₹{onlineAmount || 0} ({onlineMethod.toUpperCase()})
+                Total ₹{(settledTotal || 0).toFixed(2)} → ₹{cashAmount || 0} + ₹{onlineAmount || 0} ({onlineMethod?.toUpperCase() || ''})
               </div>
             </div>
           </div>
@@ -892,6 +892,7 @@ function computeCartTotals(cartItems, profile) {
 
   let taxableSubtotalBase = 0; // Normal Items: Sum of (Base - LineDisc)
   let nonTaxableTotal = 0;     // Packaged/Non-GST: Sum of Final Line Totals
+  let totalFixedPackagedTax = 0; // FIXED tax from Packaged/MRP items
 
   for (const item of cartItems) {
     const qty = Number(item.quantity ?? 1);
@@ -902,8 +903,6 @@ function computeCartTotals(cartItems, profile) {
     // Rate
     let rate = 0;
     if (gstEnabled) {
-         // For packaged goods: use item rate if > 0, else fallback to default
-         // For normal items: always use default rate
          if (isPackaged) {
              rate = itemTaxRate > 0 ? itemTaxRate : baseRate;
          } else {
@@ -916,11 +915,9 @@ function computeCartTotals(cartItems, profile) {
     const isInclusive = gstEnabled && (isPackaged || pricesIncludeTax);
 
     // 1. Base
-    let baseUnit = faceUnit;
-    if (isInclusive && rate > 0) {
-        baseUnit = faceUnit / (1 + rate/100);
-    }
+    const baseUnit = isInclusive && rate > 0 ? (faceUnit / (1 + rate/100)) : faceUnit;
     const totalBase = baseUnit * qty;
+    const taxOnMRP = isInclusive && rate > 0 ? (faceUnit - baseUnit) * qty : 0;
 
     // 2. Line Discount
     const d = item.discount || { type: 'amount', value: 0 };
@@ -928,31 +925,45 @@ function computeCartTotals(cartItems, profile) {
     if (d.type === 'amount') {
         lineDisc = Number(d.value);
     } else {
-        lineDisc = totalBase * (Number(d.value)/100);
+        // Line discount is applied to FACE VALUE (matches user rule for inclusive/packaged)
+        lineDisc = (faceUnit * qty) * (Number(d.value)/100);
     }
     // Cap
-    if (lineDisc > totalBase) lineDisc = totalBase;
+    if (lineDisc > (faceUnit * qty)) lineDisc = faceUnit * qty;
 
-    // 3. Taxable
-    const taxableLine = totalBase - lineDisc;
-
-    // 4. Tax
-    const taxLine = taxableLine * (rate/100);
-
-    // 5. Final
-    const lineTotal = taxableLine + taxLine;
-
-    // Accumulate
-    // Fix for No-GST case: "Normal" items should still go to taxableSubtotalBase 
-    // so they are eligible for Order Level Discounts. "Taxable" here means "Discountable Base".
+    // 3. Taxable & Tax (Branch by Item Type)
     if (!isPackaged) {
-        taxableSubtotalBase += taxableLine;
+        // Normal Items: GST is applied AFTER discount
+        const taxableLine = totalBase - (isInclusive ? (lineDisc / (1 + rate/100)) : lineDisc);
+        taxableSubtotalBase += Math.max(0, taxableLine);
     } else {
+        // Packaged Goods: GST stays FIXED based on MRP (User Rule)
+        // We round per line to ensure 21.875 -> 21.88 exactly as per user rule
+        const taxLine = Number(taxOnMRP.toFixed(2)); 
+        const lineTotal = Math.max(0, (faceUnit * qty) - lineDisc);
+        
         nonTaxableTotal += lineTotal;
+        totalFixedPackagedTax += taxLine;
     }
   }
 
-  return { taxableSubtotalBase, nonTaxableTotal };
+  return { 
+    taxableSubtotalBase, 
+    nonTaxableTotal, 
+    totalFixedPackagedTax: Number(totalFixedPackagedTax.toFixed(2)) 
+  };
+}
+
+/**
+ * roundOffAmount
+ * Helper for computeCartTotals/cartTotals
+ */
+function roundOffAmount(amount, config) {
+  if (!config?.round_off_enabled) return 0;
+  if (config.round_off_mode !== 'automatic') return 0; 
+  const factor = Number(config.round_off_auto_factor || 1.0);
+  const rounded = Math.round(amount / factor) * factor;
+  return rounded - amount;
 }
 
 /**
@@ -960,43 +971,59 @@ function computeCartTotals(cartItems, profile) {
  * Refactored to follow "Base -> Discount -> Tax -> Final" Golden Rule
  */
 const cartTotals = useMemo(() => {
-  const { taxableSubtotalBase, nonTaxableTotal } = computeCartTotals(cart, profileTax);
+  const { taxableSubtotalBase, nonTaxableTotal, totalFixedPackagedTax } = computeCartTotals(cart, profileTax);
+
+  // ---------- EXTRACT PACKAGED EX-TAX (for display only) ----------
+  const packagedExTax = nonTaxableTotal - totalFixedPackagedTax;
+  const gstRate = profileTax.gst_enabled ? Number(profileTax.default_tax_rate || 0) : 0;
+
+  // ---------- COMBINED EX-TAX BASE (for subtotalEx display) ----------
+  const combinedExTaxBase = taxableSubtotalBase + packagedExTax;
 
   // ---------- ORDER DISCOUNT ----------
-  // Applied to Taxable Base of Normal Items
+  // Applied ONLY to normal items
   let orderDiscAmt = 0;
+  const pricesIncludeTax = profileTax.gst_enabled ? !!profileTax.prices_include_tax : false;
   if (discount.type === 'amount') {
-      orderDiscAmt = Number(discount.value);
+      const rawVal = Number(discount.value);
+      // If inclusive, we strip tax from the discount so "10 off" means 10 off the total
+      orderDiscAmt = pricesIncludeTax ? (rawVal / (1 + gstRate/100)) : rawVal;
   } else {
       orderDiscAmt = taxableSubtotalBase * (Number(discount.value)/100);
   }
-  
-  // Cap discount
   orderDiscAmt = Math.min(orderDiscAmt, taxableSubtotalBase);
 
-  // ---------- FINAL TAXABLE (Normal) ----------
-  const finalTaxable = Math.max(0, taxableSubtotalBase - orderDiscAmt);
+  // ---------- FINAL CALCULATIONS ----------
+  const finalTaxableNormal = Math.max(0, taxableSubtotalBase - orderDiscAmt);
+  const finalTaxNormal = finalTaxableNormal * (gstRate / 100);
+  
+  const totalTax = finalTaxNormal + totalFixedPackagedTax;
+  const totalIncBeforeRound = (finalTaxableNormal + finalTaxNormal) + nonTaxableTotal;
 
-  // ---------- GST (Normal) ----------
-  const gstRate = profileTax.gst_enabled ? Number(profileTax.default_tax_rate || 0) : 0;
-  const finalTax = finalTaxable * (gstRate / 100);
+  // Round off logic
+  const roundOff = roundOffAmount(totalIncBeforeRound, restaurant?.round_off_config);
+  const totalAmount = totalIncBeforeRound + roundOff;
 
-  // ---------- FINAL TOTAL ----------
-  // Normal Items + Non-Taxable/Packaged Items
-  const normalTotal = finalTaxable + finalTax;
-  const finalTotal = normalTotal + nonTaxableTotal;
+  const finalRoundedTotal = Number(totalAmount.toFixed(2)) || 0;
 
   return {
-    grossSubtotal: Number((taxableSubtotalBase + nonTaxableTotal).toFixed(2)), // Approx gross for legacy reference
-    taxableSubtotal: Number(taxableSubtotalBase.toFixed(2)),
-    orderDiscAmt: Number(orderDiscAmt.toFixed(2)),
-    taxableAmount: Number(finalTaxable.toFixed(2)),
-    finalTax: Number(finalTax.toFixed(2)),
-    finalTotal: Number(finalTotal.toFixed(2)),
-    totalInc: Number(finalTotal.toFixed(2)),
-    subtotalEx: Number(taxableSubtotalBase.toFixed(2)), // Before order discount
+    subtotalEx: Number(combinedExTaxBase.toFixed(2)) || 0,
+    totalTax: Number(totalTax.toFixed(2)) || 0,
+    totalInc: Number(totalIncBeforeRound.toFixed(2)) || 0,
+    totalAmount: finalRoundedTotal,
+    roundOffAmount: roundOff || 0,
+    orderDiscount: orderDiscAmt || 0,
+    combinedExTaxBase: Number(combinedExTaxBase.toFixed(2)) || 0,
+    taxableSubtotal: Number(taxableSubtotalBase.toFixed(2)) || 0,
+    
+    // UI Aliases (to prevent crashes with old variable names)
+    finalTotal: finalRoundedTotal,
+    finalTax: Number(totalTax.toFixed(2)) || 0,
+    orderDiscAmt: orderDiscAmt || 0,
+    taxableAmount: Number((combinedExTaxBase - orderDiscAmt).toFixed(2)) || 0,
+    grossSubtotal: Number((taxableSubtotalBase + nonTaxableTotal).toFixed(2)) || 0,
   };
-}, [cart, profileTax, discount]);  
+}, [cart, profileTax, discount, restaurant?.round_off_config]);  
 
   // Startup loads
   useEffect(() => {
@@ -1621,6 +1648,13 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
       credit_customer_id: isCredit ? selectedCreditCustomerId : null,
       original_payment_method: isCredit ? null : finalPaymentMethod,
       discount_amount: discountVal,
+      base_tax_rate: Number(restaurant?.default_tax_rate || 5), // Pass rate context
+      override_totals: {
+           total_amount: cartTotals.finalTotal,
+           total_inc_tax: cartTotals.totalInc,
+           total_tax: cartTotals.finalTax,
+           subtotal_ex: cartTotals.subtotalEx
+      },
       total_discount_percent: discount.type === 'percent' ? discount.value : 0,
       round_off_amount: mixedDetails?.round_off_amount || 0,
       ...(finalPaymentMethod === 'mixed' && mixedDetails
@@ -1709,6 +1743,7 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
     setDiscount({ type: 'amount', value: 0 });
     setDrawerOpen(false); 
     setShowPaymentDialog(false);
+    setProcessing(false); // Reset processing state
     await loadCreditCustomers();
     setSuccess('Sale completed');
     setTimeout(() => setSuccess(''), 2000);
@@ -1742,6 +1777,9 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
     const discountVal = cartTotals.orderDiscAmt;
 
     const isCredit = isCreditSale;
+    
+    // Use calculated round-off from cartTotals
+    const kitchenRoundOff = cartTotals.roundOffAmount;
 
     const orderData = {
       restaurant_id: restaurantId,
@@ -1758,6 +1796,7 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
       original_payment_method: null,
       discount_amount: discountVal,
       total_discount_percent: discount.type === 'percent' ? discount.value : 0,
+      round_off_amount: kitchenRoundOff,
       custom_created_at: new Date(
         Number(orderDate.split('-')[0]),
         Number(orderDate.split('-')[1]) - 1,
@@ -1784,11 +1823,13 @@ const orderForPrint = {
   restaurant_id: restaurantId,
   order_type,
   table_number,
-  number_of_customers: orderData.number_of_customers ?? null, // ✅ ADD
+  number_of_customers: orderData.number_of_customers ?? null,
   items,
   created_at: new Date().toISOString(),
   restaurant_name: restaurant?.name || printProfile?.restaurant_name || null,
   _profile: printProfile || null,
+  invoice_no: result.invoice_no || null,
+  bill_no: result.bill_no || null,
 };
 
     // Immediate KOT print for this counter order
@@ -2452,7 +2493,7 @@ const isVariantItem = !!item.has_variants && (item.variants?.length || 0) > 0;
     <span style={{ opacity: 0.6 }}>|</span>
     <span>{cartItemsCountDisplay} {cartItemsCount === 1 ? 'Item' : 'Items'}</span>
     <span style={{ opacity: 0.6 }}>|</span>
-    <span>₹{cartTotals.finalTotal.toFixed(2)}</span>
+    <span>₹{(cartTotals?.finalTotal || 0).toFixed(2)}</span>
 
   </button>
 )}
@@ -2504,7 +2545,10 @@ const isVariantItem = !!item.has_variants && (item.variants?.length || 0) > 0;
                 {/* Right Side - Clear Cart Button (only shows when cart has items) */}
                 {cart.length > 0 ? (
                   <button
-                    onClick={() => setShowClearCartConfirm(true)}
+                    onClick={() => {
+                      setCart([]);
+                      setDiscount({ type: 'amount', value: 0 });
+                    }}
                     style={{
                       marginLeft: 'auto',
                       background: 'white',
@@ -2553,7 +2597,7 @@ const isVariantItem = !!item.has_variants && (item.variants?.length || 0) > 0;
                   border: '1px solid #fef3c7',
                   width: 'fit-content',
                 }}>
-                  Credit Balance: ₹{(creditCustomerBalance + cartTotals.totalInc).toFixed(2)}
+                  Credit Balance: ₹{(Number(creditCustomerBalance || 0) + (cartTotals?.totalInc || 0)).toFixed(2)}
                 </div>
               )}
             </div>
@@ -2750,11 +2794,11 @@ const isVariantItem = !!item.has_variants && (item.variants?.length || 0) > 0;
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
                               {(i.discount && i.discount.value > 0) && (
                                 <span style={{ fontSize: 11, color: '#9ca3af', textDecoration: 'line-through', lineHeight: 1 }}>
-                                  ₹{(i.price * i.quantity).toFixed(2)}
+                                  ₹{(Number(i.price || 0) * Number(i.quantity || 0)).toFixed(2)}
                                 </span>
                               )}
                               <span style={{ fontSize: 15, fontWeight: 700, color: '#111827', lineHeight: 1 }}>
-                              ₹{((i.price * i.quantity) - getItemDiscountAmount(i)).toFixed(2)}
+                              ₹{((Number(i.price || 0) * Number(i.quantity || 0)) - getItemDiscountAmount(i)).toFixed(2)}
                               </span>
                           </div>
                       
@@ -2893,7 +2937,7 @@ const isVariantItem = !!item.has_variants && (item.variants?.length || 0) > 0;
                   <div style={{ display: 'grid', gap: 10 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#64748b' }}>
                       <span>Subtotal (ex-tax)</span>
-                      <span style={{ fontWeight: 600, color: '#1e293b' }}>₹{cartTotals.subtotalEx.toFixed(2)}</span>
+                      <span style={{ fontWeight: 600, color: '#1e293b' }}>₹{(cartTotals?.subtotalEx || 0).toFixed(2)}</span>
                     </div>
 
                     {/* Discount Row */}
@@ -2921,30 +2965,30 @@ const isVariantItem = !!item.has_variants && (item.variants?.length || 0) > 0;
                               }}
                             >×</button>
                           </div>
-                          <span style={{ fontWeight: 600 }}>-₹{cartTotals.orderDiscAmt.toFixed(2)}</span>
+                           <span style={{ fontWeight: 600 }}>-₹{(cartTotals?.orderDiscAmt || 0).toFixed(2)}</span>
                         </div>
                       )
                     )}
                     
                     {/* Taxable Amount (Discounts or Exclusive Tax) */}
-                    {(cartTotals.orderDiscAmt > 0 || (profileTax.gst_enabled && !profileTax.prices_include_tax)) && (
+                    {((cartTotals?.orderDiscAmt || 0) > 0 || (profileTax.gst_enabled && !profileTax.prices_include_tax)) && (
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#64748b' }}>
                         <span>Taxable Amount</span>
                         <span style={{ fontWeight: 600, color: '#1e293b' }}>
-                          ₹{cartTotals.taxableAmount.toFixed(2)}
+                          ₹{(cartTotals?.taxableAmount || 0).toFixed(2)}
                         </span>
                       </div>
                     )}
 
 
                     {/* Tax Breakdown */}
-                    {cartTotals.finalTax > 0 && (
+                    {(cartTotals?.finalTax || 0) > 0 && (
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#64748b' }}>
                         <span>
                           {profileTax.prices_include_tax ? 'GST (Included)' : 'GST (+)'}
                         </span>
                         <span style={{ fontWeight: 600, color: '#1e293b' }}>
-                          ₹{cartTotals.finalTax.toFixed(2)}
+                          ₹{(cartTotals?.finalTax || 0).toFixed(2)}
                         </span>
                       </div>
                     )}
@@ -2962,7 +3006,7 @@ const isVariantItem = !!item.has_variants && (item.variants?.length || 0) > 0;
                     }}>
                       <span>Total</span>
                       <span style={{ color: THEME.main }}>
-  ₹{cartTotals.finalTotal.toFixed(2)}
+  ₹{(cartTotals?.finalTotal || 0).toFixed(2)}
 
 </span>
                     </div>
@@ -3007,10 +3051,10 @@ const isVariantItem = !!item.has_variants && (item.variants?.length || 0) > 0;
                   ) : (
                     <span>
                       {orderMode === 'kitchen'
-                        ? `Send to Kitchen • ₹${cartTotals.finalTotal.toFixed(2)}`
+                        ? `Send to Kitchen • ₹${(cartTotals?.finalTotal || 0).toFixed(2)}`
                         : isCreditSale
-                        ? `Credit & Settle • ₹${cartTotals.finalTotal.toFixed(2)}`
-                        : `Complete Sale • ₹${cartTotals.finalTotal.toFixed(2)}`}
+                        ? `Credit & Settle • ₹${(cartTotals?.finalTotal || 0).toFixed(2)}`
+                        : `Complete Sale • ₹${(cartTotals?.finalTotal || 0).toFixed(2)}`}
                     </span>
                   )}
                 </button>

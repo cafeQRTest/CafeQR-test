@@ -50,7 +50,9 @@ function toDisplayItems(order) {
          }
 
          return {
-          name: oi.menu_items?.name || oi.item_name || "Item",
+          name: oi.variant_name 
+            ? `${oi.menu_items?.name || oi.item_name || "Item"} (${oi.variant_name})`
+            : (oi.menu_items?.name || oi.item_name || "Item"),
           quantity: Number(oi.quantity || 0),
           price: Number(oi.price || oi.unit_price || 0),
           discount_amount: dAmt,
@@ -377,6 +379,7 @@ lines.push(ALIGN_LEFT);
     lines.push(withMargins(center("*** KITCHEN ORDER TICKET ***", W), layout));
     lines.push(withMargins(`${dateStr} ${timeStr}`, layout));
     lines.push(withMargins(`Order: #${orderId}`, layout));
+    if (order?.bill_no) lines.push(withMargins(`Bill No: ${order.bill_no}`, layout));
     if (tableLabel) lines.push(withMargins(`For: ${tableLabel}`, layout));
     if (order?.number_of_customers)
       lines.push(

@@ -24,13 +24,6 @@ const DiscountModal = ({ visible, onClose, onSaveTotal, cart = [], onUpdateCartI
     if (numVal < 0) { alert('Positive numbers only'); return; }
     if (type === 'percent' && numVal > 100) { alert('Max 100%'); return; }
     
-    // Validate against current total
-    const calcAmount = type === 'amount' ? numVal : (totalAmount * numVal / 100);
-    if (calcAmount > totalAmount + 0.01) { // tolerance
-       alert(`Global discount cannot exceed total (${totalAmount.toFixed(2)})`);
-       return;
-    }
-
     onSaveTotal({ type, value: numVal });
     onClose();
   };
@@ -108,7 +101,7 @@ const DiscountModal = ({ visible, onClose, onSaveTotal, cart = [], onUpdateCartI
                     <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 12, borderBottom: '1px solid #f1f5f9', paddingBottom: 12 }}>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontWeight: 600, fontSize: 14 }}>{item.name}</div>
-                        <div style={{ fontSize: 12, color: '#64748b' }}>₹{item.price} × {item.quantity}{item.uom_short_code ? ` ${item.uom_short_code}` : ''} = <strong>₹{itemTotal.toFixed(2)}</strong></div>
+                        <div style={{ fontSize: 12, color: '#64748b' }}>₹{item.price} × {item.quantity}{item.uom_short_code ? ` ${item.uom_short_code}` : ''} = <strong>₹{(itemTotal || 0).toFixed(2)}</strong></div>
                       </div>
                       
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
@@ -135,7 +128,7 @@ const DiscountModal = ({ visible, onClose, onSaveTotal, cart = [], onUpdateCartI
                           }}
                           style={{ width: 80, padding: '6px', borderRadius: 6, border: `1px solid ${d.value > 0 ? theme.main : '#e2e8f0'}`, textAlign: 'right', fontWeight: 600, fontSize: 14, outline: 'none' }}
                         />
-                        {effective > 0 && <div style={{ fontSize: 11, color: '#ef4444' }}>-₹{effective.toFixed(2)}</div>}
+                        {effective > 0 && <div style={{ fontSize: 11, color: '#ef4444' }}>-₹{(effective || 0).toFixed(2)}</div>}
                       </div>
                     </div>
                   );

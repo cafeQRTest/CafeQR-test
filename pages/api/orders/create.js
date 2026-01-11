@@ -71,10 +71,10 @@ export default async function handler(req, res) {
       .eq('restaurant_id', restaurant_id)
       .maybeSingle();
 
-    // 3) Load restaurant display name
+    // 3) Load restaurant display name and default tax rate (mirroring frontend orders.js logic)
     const { data: restaurantRow, error: restaurantErr } = await supabase
       .from('restaurants')
-      .select('name')
+      .select('name, default_tax_rate')
       .eq('id', restaurant_id)
       .maybeSingle();
 
@@ -91,7 +91,8 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Failed to load settings' });
     }
 
-    const baseRate = Number(profile?.default_tax_rate ?? 5);
+    // Align baseRate STRICTLY with frontend: check request body, then restaurants table, then default 5.
+    const baseRate = Number(req.body.base_tax_rate ?? (restaurantRow?.default_tax_rate || 5));
     const gstEnabled = !!profile?.gst_enabled;
     const inventoryAlertsEnabled = !!profile?.features_inventory_enabled;
     const serviceRate = gstEnabled ? baseRate : 0;
@@ -106,7 +107,7 @@ export default async function handler(req, res) {
     // 4) Compute totals
     let taxableSubtotalBase = 0;   // Sum of (Base - LineDisc) for Normal GST items
     let nonTaxableTotal = 0;       // Sum of Final Line Totals for Packaged/Non-GST items
-    let totalTaxRecorded = 0;      // Accumulated tax from all lines (for display)
+    let packagedTaxFixedSum = 0;   // FIXED tax sum from Packaged/MRP items
 
     const preparedItems = items.map((it) => {
       const qty = Number(it.quantity ?? 1);
@@ -119,7 +120,13 @@ export default async function handler(req, res) {
       
       let rate = 0;
       if (gstEnabled) {
-          rate = isPackaged ? itemTaxRate : baseRate;
+          // For packaged goods: use item rate if > 0, else fallback to default
+          // For normal items: always use default rate
+          if (isPackaged) {
+              rate = itemTaxRate > 0 ? itemTaxRate : baseRate;
+          } else {
+              rate = baseRate;
+          }
       }
       if (rate < 0) rate = 0;
       
@@ -127,58 +134,50 @@ export default async function handler(req, res) {
       // Packaged goods are always inclusive (MRP). Normal items depend on profile.
       const isInclusive = gstEnabled && (isPackaged || serviceInclude);
 
-      // STEP 1: BASE PRICE (Unit)
-      let baseUnit = faceUnit;
-      if (isInclusive && rate > 0) {
-          baseUnit = faceUnit / (1 + rate / 100);
-      }
-      
+      // 1. Base
+      const baseUnit = isInclusive && rate > 0 ? (faceUnit / (1 + rate/100)) : faceUnit;
       const totalBase = baseUnit * qty;
+      const taxOnMRP = isInclusive && rate > 0 ? (faceUnit - baseUnit) * qty : 0;
 
-      // STEP 2: LINE DISCOUNT (Applied to Base)
+      // 2. Line Discount
       let lineDiscountAmt = 0;
       let lineDiscountPct = 0;
-      
       const d = it.discount;
       if (d && Number(d.value) > 0) {
           if (d.type === 'amount') {
               lineDiscountAmt = Number(d.value);
-              // Calculate percent for reference
-              if (totalBase > 0) lineDiscountPct = (lineDiscountAmt / totalBase) * 100;
           } else {
-              // Percent
-              lineDiscountPct = Number(d.value);
-              lineDiscountAmt = totalBase * (lineDiscountPct / 100);
+              // Line discount on Face Value
+              lineDiscountAmt = (faceUnit * qty) * (Number(d.value)/100);
           }
       } else if (Number(it.discount_amount) > 0) {
-          // Fallback: Client sent pre-calculated discount_amount
           lineDiscountAmt = Number(it.discount_amount);
-          if (totalBase > 0) lineDiscountPct = (lineDiscountAmt / totalBase) * 100;
-      } else if (lineDiscountAmt > 0 && totalBase > 0 && lineDiscountPct === 0) {
-           lineDiscountPct = (lineDiscountAmt / totalBase) * 100;
       }
       
       // Cap discount
-      if (lineDiscountAmt > totalBase) lineDiscountAmt = totalBase;
+      if (lineDiscountAmt > (faceUnit * qty)) lineDiscountAmt = faceUnit * qty;
 
-      // STEP 3: TAXABLE AMOUNT (Discounted Base)
-      const taxableLine = totalBase - lineDiscountAmt;
+      let finalTaxableLine = 0;
+      let taxLine = 0;
+      let finalLineTotal = 0;
 
-      // STEP 4: TAX
-      // Calculate tax on the discounted base
-      const taxLine = taxableLine * (rate / 100);
-
-      // STEP 5: FINAL LINE TOTAL
-      const lineTotal = taxableLine + taxLine;
-
-      // Accumulate
       if (!isPackaged) {
-          taxableSubtotalBase += taxableLine;
-          if (gstEnabled) totalTaxRecorded += taxLine;
+          // Normal Items: GST follows the discount
+          finalTaxableLine = totalBase - (isInclusive ? (lineDiscountAmt / (1 + rate/100)) : lineDiscountAmt);
+          taxLine = finalTaxableLine * (rate / 100);
+          finalLineTotal = finalTaxableLine + taxLine;
+          
+          taxableSubtotalBase += Math.max(0, finalTaxableLine);
       } else {
-          // Packaged goods: No Order Discount, direct sum
-          nonTaxableTotal += lineTotal;
-          if (gstEnabled && isPackaged) totalTaxRecorded += taxLine; 
+          // Packaged Goods: GST stays FIXED from MRP (User Rule)
+          // Round per item to ensure 21.875 -> 21.88
+          const roundedTaxLine = Number(taxOnMRP.toFixed(2));
+          taxLine = roundedTaxLine;
+          finalLineTotal = Math.max(0, (faceUnit * qty) - lineDiscountAmt);
+          finalTaxableLine = finalLineTotal - taxLine;
+          
+          nonTaxableTotal += finalLineTotal;
+          packagedTaxFixedSum += taxLine;
       }
 
       return {
@@ -191,8 +190,8 @@ export default async function handler(req, res) {
         variant_name: it.variant_name || null,
         
         // Storing Base & Tax details
-        unit_price_ex_tax: Number((baseUnit).toFixed(2)),
-        unit_price_inc_tax: Number(((baseUnit + baseUnit * (rate/100))).toFixed(2)),
+        unit_price_ex_tax: Number(baseUnit.toFixed(2)),
+        unit_price_inc_tax: Number((baseUnit + (taxOnMRP/qty)).toFixed(2)),
         unit_tax_amount: Number((taxLine / qty).toFixed(2)),
         
         tax_rate: rate,
@@ -207,60 +206,40 @@ export default async function handler(req, res) {
     });
 
     // STEP 6: ORDER LEVEL DISCOUNT
-    // Applies to the Sum of Taxable Bases of Normal Items
+    // Applies ONLY to the Sum of Taxable Bases of Normal Items
     let orderDiscountAmt = Number(discount_amount || 0);
     let orderDiscountPct = Number(total_discount_percent || 0);
 
     if (orderDiscountPct > 0) {
         orderDiscountAmt = taxableSubtotalBase * (orderDiscountPct / 100);
     } else if (orderDiscountAmt > 0 && taxableSubtotalBase > 0) {
-        orderDiscountPct = (orderDiscountAmt / taxableSubtotalBase) * 100;
+        // SCALE the rupee discount for inclusive shops so "10 off total" works
+        const scaledDisc = serviceInclude ? (orderDiscountAmt / (1 + baseRate / 100)) : orderDiscountAmt;
+        orderDiscountPct = (scaledDisc / taxableSubtotalBase) * 100;
+        orderDiscountAmt = scaledDisc;
     } else {
         orderDiscountAmt = 0;
         orderDiscountPct = 0;
     }
     
-    // Cap order discount
+    // Cap order discount at normal base
     if (orderDiscountAmt > taxableSubtotalBase) orderDiscountAmt = taxableSubtotalBase;
 
-    // STEP 7: FINAL CALCULATIONS
-    // Normal Items Final Taxable
-    const finalNormalTaxable = taxableSubtotalBase - orderDiscountAmt;
-    
-    // Normal Items Final Tax
+    // STEP 7: FINAL CALCULATIONS (Golden Rule)
+    const finalNormalTaxable = Math.max(0, taxableSubtotalBase - orderDiscountAmt);
     const finalNormalTax = gstEnabled ? finalNormalTaxable * (baseRate / 100) : 0;
     
-    // Normal Items Subtotal (with tax)
-    const normalItemsTotal = finalNormalTaxable + finalNormalTax;
-    
-    // Grand Total = Normal Total + Non-Taxable/Packaged Total
-    const grandTotal = normalItemsTotal + nonTaxableTotal;
+    // Final Totals for DB - Allow OVERRIDE from Trusted Frontend if provided
+    const overrides = req.body.override_totals || {};
 
-    // Prepare legacy fields for DB
-    let subtotalEx = Number((taxableSubtotalBase - orderDiscountAmt).toFixed(2));
-    // Packaged items strictly shouldn't be in 'subtotal_ex_tax' if it implies "Taxable Subtotal".
-    // But for legacy display, usually subtotal includes everything before tax.
-    // Given the new flow, 'subtotal_ex_tax' is ambiguous. 
-    // We'll store 'finalNormalTaxable' + 'nonTaxableTotal' (minus its tax?) 
-    // Actually, sticking to the standard: subtotal_ex_tax usually means "The amount on which tax is calculated" OR "Amount before Tax".
+    const packagedBaseTotal = nonTaxableTotal - packagedTaxFixedSum;
+    const grossSubtotalEx = Number((taxableSubtotalBase + packagedBaseTotal).toFixed(2));
+    const finalSubtotalEx = overrides.subtotal_ex ?? grossSubtotalEx; 
     
-    // Let's use:
-    subtotalEx = Number(finalNormalTaxable.toFixed(2));
-    
-    // Total Tax (Normal + Packaged)
-    // Packaged tax was calculated line-by-line. We need to sum it to `finalNormalTax`.
-    // We didn't track packaged tax separately in a variable above, let's fix that approximation.
-    // Re-sum packaged tax:
-    const packagedTax = preparedItems.reduce((acc, pi) => {
-        if (pi.is_packaged_good && gstEnabled) {
-             const t = pi.quantity * pi.unit_tax_amount; // derived from line calc
-             return acc + t;
-        }
-        return acc;
-    }, 0);
-    
-    const totalTax = finalNormalTax + packagedTax;
-    const totalInc = grandTotal; 
+    const finalTotalTax = overrides.total_tax ?? Number((finalNormalTax + packagedTaxFixedSum).toFixed(2));
+    const finalTotalInc = overrides.total_inc_tax ?? Number((finalNormalTaxable + finalNormalTax + nonTaxableTotal).toFixed(2)); 
+    const finalRoundOff = Number(round_off_amount || 0);
+    const finalGrandTotal = overrides.total_amount ?? Number((finalTotalInc + finalRoundOff).toFixed(2)); 
     
 
 
@@ -272,7 +251,7 @@ export default async function handler(req, res) {
     if (payment_method === 'mixed' && mixed_payment_details) {
       const { cash_amount, online_amount, online_method } = mixed_payment_details;
       const mixedTotal = Number(cash_amount || 0) + Number(online_amount || 0);
-      const orderTotal = Number((totalInc + (Number(round_off_amount) || 0)).toFixed(2));
+      const orderTotal = finalGrandTotal;
       if (Math.abs(mixedTotal - orderTotal) > 0.01) {
         return res.status(400).json({
           error: `Mixed payment amounts do not match order total (Expected: ${orderTotal}, Got: ${mixedTotal})`,
@@ -307,13 +286,13 @@ export default async function handler(req, res) {
           restaurant_name: finalRestaurantName,
           customer_name: customer_name || null,
           customer_phone: customer_phone || null,
-          subtotal_ex_tax: Number(subtotalEx.toFixed(2)),
-          total_tax: Number(totalTax.toFixed(2)),
-          total_inc_tax: Number(totalInc.toFixed(2)),
-          discount_amount: Number(orderDiscountAmt.toFixed(2)), // Storing Order Discount Amount
-          total_discount_percent: Number(orderDiscountPct.toFixed(2)), // Storing Order Discount %
-          round_off_amount: Number(round_off_amount ?? 0),
-          total_amount: Number((grandTotal + (round_off_amount || 0)).toFixed(2)),
+          subtotal_ex_tax: finalSubtotalEx,
+          total_tax: finalTotalTax,
+          total_inc_tax: finalTotalInc,
+          discount_amount: Number(orderDiscountAmt.toFixed(2)), 
+          total_discount_percent: Number(orderDiscountPct.toFixed(2)), 
+          round_off_amount: finalRoundOff,
+          total_amount: finalGrandTotal,
           prices_include_tax: serviceInclude,
           gst_enabled: gstEnabled,
           mixed_payment_details: processedMixedDetails,
@@ -362,6 +341,16 @@ export default async function handler(req, res) {
         .single();
 
       invoice = invoiceData;
+      
+      // Fallback: If bill_no is missing (old invoices), generate it now
+      if (!invoice.bill_no) {
+        const newBillNo = await InvoiceService.generateBillNumber(restaurant_id);
+        await supabase
+          .from('invoices')
+          .update({ bill_no: newBillNo })
+          .eq('id', invoice.id);
+        invoice.bill_no = newBillNo;
+      }
     } catch (invoiceErr) {
       await supabase.from('order_items').delete().eq('order_id', order.id);
       await supabase.from('orders').delete().eq('id', order.id);
@@ -386,15 +375,15 @@ export default async function handler(req, res) {
         table_number: table_number || null,
         customer_name,
         customer_phone,
-        subtotal_ex_tax: Number(subtotalEx.toFixed(2)),
-        total_tax: Number(totalTax.toFixed(2)),
-        total_inc_tax: Number(totalInc.toFixed(2)),
+        subtotal_ex_tax: Number(finalSubtotalEx.toFixed(2)),
+        total_tax: Number(finalTotalTax.toFixed(2)),
+        total_inc_tax: Number(finalTotalInc.toFixed(2)),
         discount_amount: Number(orderDiscountAmt.toFixed(2)),
         total_discount_percent: Number(orderDiscountPct.toFixed(2)),
         round_off_amount: Number(round_off_amount ?? 0),
         number_of_customers: number_of_customers || null,
         prices_include_tax: serviceInclude,
-        total_amount: Number((grandTotal + (round_off_amount || 0)).toFixed(2)),
+        total_amount: Number(finalGrandTotal.toFixed(2)),
         items: preparedItems.map((pi) => ({
           name: pi.variant_name ? `${pi.item_name} (${pi.variant_name})` : pi.item_name,
           quantity: pi.quantity,

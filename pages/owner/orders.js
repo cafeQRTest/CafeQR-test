@@ -558,7 +558,6 @@ function toDisplayItems(order) {
 }
 
 // Enhanced PaymentConfirmDialog component
-// Enhanced PaymentConfirmDialog component
 function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [showMixedForm, setShowMixedForm] = useState(false);
@@ -567,38 +566,24 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
   const [onlineMethod, setOnlineMethod] = useState('upi');
   const { restaurant } = useRestaurant();
   const mode = order.mode || null;
-  const originalTotal = computeOrderTotalDisplay(order);
-
-
 
   const handleMethodSelect = (method) => {
     setPaymentMethod(method);
-    if (method === 'mixed') {
-      setShowMixedForm(true);
-    } else {
-      setShowMixedForm(false);
+    setShowMixedForm(method === 'mixed');
+    if (method !== 'mixed') {
       setCashAmount('');
       setOnlineAmount('');
     }
   };
 
-
-
-  // --- DISCOUNT INTEGRATION ---
-  // Theme for Modal
   const THEME = { main: BRAND.orange, soft: '#fff7ed', light: '#fed7aa' };
 
-  // Initialize local items for discount editing
-  // We need to map order_items to a structure compatible with DiscountModal (like 'cart')
   const [localItems, setLocalItems] = useState(() => {
-     const items = order.order_items || order.items || []; // order_items uses relation, items is jsonb logic
-     // normalize
+     const items = order.order_items || order.items || [];
      return items.map(i => ({
         ...i,
-        cartId: i.id, // Database ID serves as cartId
-        // Ensure discount object structure
+        cartId: i.id,
         discount: i.discount_amount ? { type: 'amount', value: i.discount_amount } : (i.discount || { type: 'amount', value: 0 }),
-        // Price should be base price
         price: i.price,
         quantity: i.quantity,
         name: i.menu_items?.name || i.name
@@ -606,96 +591,93 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
   });
 
   const [discount, setDiscount] = useState(() => {
-      // Initialize global discount
       const dVal = order.discount_amount || 0;
       return dVal > 0 ? { type: 'amount', value: dVal } : { type: 'amount', value: 0 };
   });
 
   const [isDiscountModalOpen, setIsDiscountModalOpen] = useState(false);
 
-  // Recalculate totals based on localItems + global discount (Robust Logic - Exclusive Basis)
-  const { subtotalAfterItemDisc, finalTotal, globalDiscountAmount } = useMemo(() => {
+  const { subtotalEx, taxableAmount, finalTax, finalTotal, globalDiscountAmount, grossTotalInc, subtotalAfterItemDisc } = useMemo(() => {
     const gstEnabled = !!restaurant?.gst_enabled;
     const pricesIncludeTax = !!restaurant?.prices_include_tax;
     const defaultRate = Number(restaurant?.default_tax_rate || 5);
 
-    let sumEx = 0;
-    let sumTax = 0;
+    let taxableBase = 0;
+    let packagedIncTotal = 0;
+    let fixedPackagedTax = 0;
+    let packagedBaseExAuto = 0;
     
-    // 1. Calculate Aggregates from Lines (Strictly Exclusive Base)
     localItems.forEach(i => {
-        // Raw Props
         const qty = Number(i.quantity || 0);
-        const price = Number(i.price || 0);
-        const rawLineTotal = price * qty;
+        const facePrice = Number(i.price || 0);
+        const isPkg = !!i.is_packaged_good;
         
-        // Determine Rates
-        const isPackaged = !!i.is_packaged_good;
-        let rate = Number(i.tax_rate ?? defaultRate);
-        if (!Number.isFinite(rate)) rate = defaultRate;
-        
-        // DERIVE EX-TAX BASE
-        let lineExBase = rawLineTotal;
-        if (gstEnabled && (pricesIncludeTax || isPackaged)) {
-            lineExBase = rawLineTotal / (1 + (rate / 100));
-        }
-        
-        // CALCULATE ITEM DISCOUNT (On Ex Base)
-        const d = i.discount || { type: 'amount', value: 0 };
-        let itemDiscVal = 0;
-        if (d.type === 'amount') {
-            itemDiscVal = Number(d.value || 0);
-        } else {
-            // Percent of Exclusive
-            itemDiscVal = lineExBase * (Number(d.value || 0) / 100);
-        }
-        
-        // Cap discount at ExBase
-        if (itemDiscVal > lineExBase) itemDiscVal = lineExBase;
-
-        // Line Net (Ex-Tax)
-        const lineExNet = lineExBase - itemDiscVal;
-        
-        // Calculate Tax on Net Ex
-        let lineGst = 0;
+        let rate = 0;
         if (gstEnabled) {
-             lineGst = lineExNet * (rate / 100);
+            rate = isPkg ? (Number(i.tax_rate || 0) > 0 ? Number(i.tax_rate || 0) : defaultRate) : defaultRate;
         }
+        const isInc = gstEnabled && (isPkg || pricesIncludeTax);
+        
+        const basePrice = isInc && rate > 0 ? (facePrice / (1 + rate/100)) : facePrice;
+        const totalBase = basePrice * qty;
+        const taxOnMRP = isInc && rate > 0 ? (facePrice - basePrice) * qty : 0;
+        
+        const d = i.discount || { type: 'amount', value: 0 };
+        let lDisc = 0;
+        if (d.type === 'amount') lDisc = Number(d.value || 0);
+        else lDisc = (facePrice * qty) * (Number(d.value || 0) / 100);
+        
+        if (lDisc > facePrice * qty) lDisc = facePrice * qty;
+        
+        if (!isPkg) {
+            const taxableLine = totalBase - (isInc ? (lDisc / (1 + rate/100)) : lDisc);
+            taxableBase += Math.max(0, taxableLine);
+        } else {
+            const lineFixedTax = Number(taxOnMRP.toFixed(2));
+            const lineTotalInc = Math.max(0, (facePrice * qty) - lDisc);
+            packagedIncTotal += lineTotalInc;
+            fixedPackagedTax += lineFixedTax;
+            packagedBaseExAuto += (lineTotalInc - lineFixedTax);
+        }
+    });
 
-        sumEx += lineExNet;
-        sumTax += lineGst;
+    let orderDiscAmt = 0;
+    const gRate = gstEnabled ? defaultRate : 0;
+    if (discount.type === 'amount') {
+        const raw = Number(discount.value || 0);
+        orderDiscAmt = pricesIncludeTax ? (raw / (1 + gRate/100)) : raw;
+    } else {
+        orderDiscAmt = taxableBase * (Number(discount.value || 0) / 100);
+    }
+    orderDiscAmt = Math.min(orderDiscAmt, taxableBase);
+    
+    const finalTaxableNormal = Math.max(0, taxableBase - orderDiscAmt);
+    const taxNormal = finalTaxableNormal * (gRate / 100);
+    
+    const totalTaxPool = taxNormal + fixedPackagedTax;
+    const totalIncNoRound = (finalTaxableNormal + taxNormal) + packagedIncTotal;
+
+    let grossVal = 0;
+    localItems.forEach(i => {
+        const q = Number(i.quantity || 0);
+        const p = Number(i.price || 0);
+        let r = 0;
+        if (gstEnabled) r = i.is_packaged_good ? (Number(i.tax_rate || 0) > 0 ? Number(i.tax_rate || 0) : defaultRate) : defaultRate;
+        if (gstEnabled && (i.is_packaged_good || pricesIncludeTax) || r === 0) grossVal += p * q;
+        else grossVal += p * q * (1 + r / 100);
     });
     
-    // 2. Weighted Average Rate
-    let impliedRate = defaultRate;
-    if (sumEx > 0.01) {
-        impliedRate = (sumTax / sumEx) * 100;
-    } else if (sumEx === 0 && sumTax === 0) {
-        return { subtotalAfterItemDisc: 0, finalTotal: 0, globalDiscountAmount: 0 };
-    }
-    
-    // 3. Global Discount (Applied on Ex-Tax Sum)
-    let globalD_Ex = 0;
-    if (discount.type === 'amount') {
-        globalD_Ex = discount.value;
-    } else {
-        globalD_Ex = sumEx * (discount.value / 100);
-    }
-    if (globalD_Ex > sumEx) globalD_Ex = sumEx;
-    
-    // 4. Final Totals
-    const taxableAmount = Math.max(0, sumEx - globalD_Ex);
-    const finalTax = taxableAmount * (impliedRate / 100);
-    const final = taxableAmount + finalTax;
-    
     return { 
-        subtotalAfterItemDisc: sumEx, // This is now likely sum of Ex-Nets? 
-        // Actually for discount modal "totalAmount" prop, usually we pass the base amount. 
-        // But here we return sumEx (Net Ex Total).
-        finalTotal: final,
-        globalDiscountAmount: globalD_Ex 
+        subtotalEx: Number((taxableBase + packagedBaseExAuto).toFixed(2)),
+        taxableAmount: Number((finalTaxableNormal + packagedBaseExAuto).toFixed(2)),
+        finalTax: Number(totalTaxPool.toFixed(2)),
+        finalTotal: Number(totalIncNoRound.toFixed(2)),
+        globalDiscountAmount: orderDiscAmt,
+        grossTotalInc: grossVal,
+        subtotalAfterItemDisc: taxableBase
     };
-  }, [localItems, discount, restaurant]);
+  }, [localItems, discount, restaurant, restaurant?.gst_enabled, restaurant?.prices_include_tax, restaurant?.default_tax_rate]);
+
   const roundOffConfig = {
     round_off_enabled: restaurant?.round_off_enabled,
     round_off_mode: restaurant?.round_off_mode || 'automatic',
@@ -703,77 +685,66 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
     round_off_manual_limit: Number(restaurant?.round_off_manual_limit || 10)
   };
 
-  // Calculate Initial Round-off
-  const factor = Number(roundOffConfig?.round_off_auto_factor || 1.0);
-  const autoRounded = roundOffConfig?.round_off_enabled && roundOffConfig?.round_off_mode === 'automatic' 
+  const factor = Number(roundOffConfig.round_off_auto_factor || 1.0);
+  const autoRounded = roundOffConfig.round_off_enabled && roundOffConfig.round_off_mode === 'automatic' 
     ? Math.round(finalTotal / factor) * factor 
     : finalTotal;
 
   const [settledAmount, setSettledAmount] = useState(autoRounded);
+  const [displayValue, setDisplayValue] = useState(autoRounded.toFixed(2));
   
-  // Re-sync settled amount if finalTotal (bill total) changes (e.g. discount added)
   useEffect(() => {
-    const nextFactor = Number(roundOffConfig?.round_off_auto_factor || 1.0);
-    const nextRounded = roundOffConfig?.round_off_enabled && roundOffConfig?.round_off_mode === 'automatic' 
-      ? Math.round(finalTotal / nextFactor) * nextFactor 
+    const nextF = Number(roundOffConfig.round_off_auto_factor || 1.0);
+    const nextR = roundOffConfig.round_off_enabled && roundOffConfig.round_off_mode === 'automatic' 
+      ? Math.round(finalTotal / nextF) * nextF 
       : finalTotal;
-    setSettledAmount(nextRounded);
+    setSettledAmount(nextR);
+    setDisplayValue(nextR.toFixed(2));
   }, [finalTotal, roundOffConfig.round_off_enabled, roundOffConfig.round_off_mode, roundOffConfig.round_off_auto_factor]);
 
-  const manualRoundOff = settledAmount - finalTotal;
-  const settledTotal = settledAmount;
+  const manualRoundOffValue = settledAmount - finalTotal;
+  const totalSavings = grossTotalInc - finalTotal;
   
   const effectiveTotal = mode === 'collect'
-      ? Math.max(0, settledTotal - (order.alreadyPaidAmount || 0))
-      : (mode === 'refund' ? Number(order.refundAmount ?? 0) : settledTotal);
+      ? Math.max(0, settledAmount - (order.alreadyPaidAmount || 0))
+      : (mode === 'refund' ? Number(order.refundAmount ?? 0) : settledAmount);
 
-  // Update item in local state
   const handleUpdateLocalItem = (id, validItem) => {
      setLocalItems(prev => prev.map(p => p.cartId === id ? validItem : p));
   };
 
-
   const validateMixedPayment = () => {
-    const cash = Number(cashAmount || 0);
-    const online = Number(onlineAmount || 0);
-    const sum = cash + online;
-    if (cash <= 0 || online <= 0) {
-      alert('Amounts must be greater than 0');
-      return false;
-    }
-    if (Math.abs(sum - effectiveTotal) > 0.01) {
-      alert(`Payment total should be ₹${effectiveTotal.toFixed(2)}`);
-      return false;
-    }
+    const c = Number(cashAmount || 0);
+    const o = Number(onlineAmount || 0);
+    const sum = c + o;
+    if (c <= 0 || o <= 0) { alert('Amounts must be greater than 0'); return false; }
+    if (Math.abs(sum - effectiveTotal) > 0.01) { alert(`Payment total should be ₹${effectiveTotal.toFixed(2)}`); return false; }
     return true;
   };
 
-  const handleConfirm = () => {
-    const commonDetails = {
+    const handleConfirm = () => {
+    const common = {
       mode,
       discount_amount: discount.type === 'amount' ? discount.value : (subtotalAfterItemDisc * discount.value / 100),
-      round_off_amount: manualRoundOff,
-      updated_items: localItems
+      round_off_amount: manualRoundOffValue,
+      updated_items: localItems,
+      base_tax_rate: Number(restaurant?.default_tax_rate || 5), // Enforce consistent rate
+      override_totals: {
+           total_amount: Number(settledAmount || 0),
+           total_inc_tax: Number(finalTotal || 0),
+           total_tax: Number(finalTax || 0),
+           subtotal_ex: Number(subtotalEx || 0)
+      }
     };
-
     if (paymentMethod === 'mixed') {
       if (!validateMixedPayment()) return;
-      onConfirm(paymentMethod, {
-        ...commonDetails,
-        cash_amount: Number(cashAmount).toFixed(2),
-        online_amount: Number(onlineAmount).toFixed(2),
-        online_method: onlineMethod,
-        is_mixed: true
-      });
+      onConfirm('mixed', { ...common, cash_amount: Number(cashAmount).toFixed(2), online_amount: Number(onlineAmount).toFixed(2), online_method: onlineMethod, is_mixed: true });
     } else {
-      onConfirm(paymentMethod, commonDetails);
+      onConfirm(paymentMethod, common);
     }
   };
 
-  const titlePrefix =
-    mode === 'collect' ? 'Payment Collection' : 
-    mode === 'refund' ? 'Process Refund' : 
-    'Complete Payment';
+  const titlePrefix = mode === 'collect' ? 'Payment Collection' : (mode === 'refund' ? 'Process Refund' : 'Complete Payment');
 
   return (
     <div
@@ -784,277 +755,169 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         zIndex: 10000, padding: 12
       }}
-      onClick={(e) => { e.stopPropagation(); onCancel(); }}
+      onClick={onCancel}
     >
       <div
         style={{
-          background: 'white', width: '100%', maxWidth: 340,
-          borderRadius: 16, padding: 20,
-          boxShadow: '0 12px 24px -10px rgba(0, 0, 0, 0.15)',
-          maxHeight: '90vh', overflowY: 'auto',
+          background: 'white', width: '100%', maxWidth: 360,
+          borderRadius: 20, padding: 24,
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+          maxHeight: '94vh', overflowY: 'auto',
           position: 'relative',
-          animation: 'fadeIn 0.2s ease-out',
         }}
         onClick={e => e.stopPropagation()}
       >
-        <div style={{ marginBottom: 16 }}>
-          <h3 style={{ fontSize: 18, fontWeight: 800, color: '#0f172a', margin: '0 0 2px 0', letterSpacing: '-0.01em' }}>{titlePrefix}</h3>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 600, color: '#94a3b8' }}>
-             <span>#{order.id.slice(0, 8)}</span>
-             <div style={{ width: 3, height: 3, borderRadius: '50%', background: '#f1f5f9' }}></div>
-             <span>{getOrderTypeLabel(order)}</span>
+        <div style={{ marginBottom: 20 }}>
+          <h3 style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', margin: '0 0 2px 0', letterSpacing: '-0.02em' }}>{titlePrefix}</h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            <span>#{order.id.slice(0, 8)}</span>
+            <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#e2e8f0' }}></div>
+            <span>{getOrderTypeLabel(order)}</span>
+          </div>
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            background: `linear-gradient(135deg, ${BRAND.orange} 0%, #ea580c 100%)`,
+            padding: '12px 16px', borderRadius: 14, marginTop: 16,
+            boxShadow: `0 8px 16px -4px ${BRAND.orange}40`
+          }}>
+            <span style={{ fontSize: '13px', fontWeight: 700, color: 'white', textTransform: 'uppercase', opacity: 0.9 }}>Settled Total</span>
+            <span style={{ fontSize: '20px', fontWeight: 900, color: 'white' }}>₹{settledAmount.toFixed(2)}</span>
           </div>
         </div>
 
-        {/* Financial Highlights - Minimal */}
-        {/* Financial Highlights - Clearer Hierarchy */}
-        <div style={{ marginBottom: 16, borderBottom: '1px solid #f8fafc', paddingBottom: 12 }}>
-           
-           {/* 1. Bill Calculation Section */}
-           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: 13, color: '#64748b' }}>
-              <span>Bill Amount</span>
-              <span style={{ fontWeight: 600, color: '#334155' }}>₹{finalTotal.toFixed(2)}</span>
-           </div>
-
-           {/* Discount Trigger */}
-           {mode === 'collect' && (
-               <div style={{ marginTop: 6, marginBottom: 8 }}>
-                   {(discount.value > 0 || localItems.some(i => i.discount?.value > 0)) ? (
-                       <div 
-                          onClick={() => setIsDiscountModalOpen(true)}
-                          style={{ 
-                            background: '#fff7ed', padding: '6px 10px', borderRadius: 8, 
-                            border: `1px dashed ${BRAND.orange}60`, cursor: 'pointer',
-                            display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-                          }}
-                       >
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                               <span style={{ fontSize: 12 }}>🏷️</span>
-                               <div>
-                                   <div style={{ fontSize: 11, fontWeight: 700, color: BRAND.orange }}>Discount Applied</div>
-                               </div>
-                            </div>
-                            <div style={{ fontWeight: 700, color: '#ea580c', fontSize: 11 }}>Edit</div>
-                       </div>
-                   ) : (
-                       <div 
-                           onClick={() => setIsDiscountModalOpen(true)}
-                           style={{ fontSize: 11, color: BRAND.orange, cursor: 'pointer', fontWeight: 600, textDecoration:'underline', padding: '2px 0' }}
-                       >
-                           + Add Discount
-                       </div>
-                   )}
-               </div>
-           )}
-
-           {/* Round Off Controls */}
-           {roundOffConfig.round_off_enabled && roundOffConfig.round_off_mode === 'manual' && mode === 'collect' && (
-              <div style={{ 
-                marginTop: 8, padding: 10, background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0'
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                  <span style={{ fontSize: 10, color: '#64748b', fontWeight: 700 }}>Adjusted Payment</span>
-                  <span style={{ fontSize: 9, color: Math.abs(manualRoundOff) > roundOffConfig.round_off_manual_limit ? '#ef4444' : '#94a3b8' }}>
-                    Limit: ±₹{roundOffConfig.round_off_manual_limit}
-                  </span>
-                </div>
-                <div style={{ position: 'relative', display: 'flex', alignItems: 'center', background: '#fff', borderRadius: 6, border: '1px solid #cbd5e1', overflow: 'hidden' }}>
-                   <span style={{ paddingLeft: 8, fontSize: 13, fontWeight: 600, color: '#94a3b8' }}>₹</span>
-                   <input 
-                     type="number" 
-                     step="0.01"
-                     value={settledAmount}
-                     onChange={(e) => {
-                       const val = Number(e.target.value || 0);
-                       const diff = val - finalTotal;
-                       const limit = Number(roundOffConfig.round_off_manual_limit || 0);
-                       if (Math.abs(diff) <= limit) {
-                         setSettledAmount(val);
-                       }
-                     }}
-                     style={{ 
-                       width: '100%', padding: '6px 4px', border: 'none', outline: 'none',
-                       fontSize: 13, fontWeight: 700, color: '#1e293b'
-                     }}
-                   />
-                </div>
-              </div>
-           )}
-
-           {/* Round Off Display (Auto or Manual) */}
-           {manualRoundOff !== 0 && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, marginBottom: 8 }}>
-                <span style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>Round Off</span>
-                <span style={{ fontSize: 11, color: manualRoundOff > 0 ? '#10b981' : '#ef4444' }}>
-                  {manualRoundOff > 0 ? '+' : ''}{manualRoundOff.toFixed(2)}
-                </span>
-              </div>
-           )}
-
-           <div style={{ height: 1, background: '#e2e8f0', margin: '8px 0 12px' }}></div>
-
-           {/* 2. Payment Status Section - The "Truth" */}
-           {(mode === 'collect' || mode === 'refund') && (
-             <>
-               {order.alreadyPaidAmount > 0.01 ? (
-                 // PARTIAL PAYMENT CONTEXT
-                 <>
-                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                      <span style={{ fontSize: 12, color: '#64748b' }}>Final Bill Total</span>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: '#334155' }}>₹{settledTotal.toFixed(2)}</span>
-                   </div>
-                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                      <span style={{ fontSize: 12, color: '#10b981' }}>Less: Already Paid</span>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: '#10b981' }}>- ₹{Number(order.alreadyPaidAmount).toFixed(2)}</span>
-                   </div>
-                   <div style={{ 
-                      display: 'flex', justifyContent: 'space-between', alignItems: 'center', 
-                      marginTop: 10, paddingTop: 10, borderTop: '2px dashed #e2e8f0' 
-                   }}>
-                      <span style={{ fontSize: 12, color: '#0f172a', fontWeight: 800, textTransform: 'uppercase' }}>
-                         Balance Due
-                      </span>
-                      <span style={{ fontSize: 20, fontWeight: 900, color: '#0f172a' }}>
-                         ₹{effectiveTotal.toFixed(2)}
-                      </span>
-                   </div>
-                 </>
-               ) : (
-                 // FULL PAYMENT CONTEXT
-                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: 12, color: mode === 'collect' ? '#0f172a' : '#ef4444', fontWeight: 700, textTransform: 'uppercase' }}>
-                       {mode === 'collect' ? 'Total Payable' : 'Refund Amount'}
-                    </span>
-                    <span style={{ fontSize: 22, fontWeight: 900, color: mode === 'collect' ? '#0f172a' : '#ef4444' }}>
-                       ₹{effectiveTotal.toFixed(2)}
-                    </span>
-                 </div>
-               )}
-             </>
-           )}
+        <div style={{ background: '#f8fafc', borderRadius: 16, padding: 16, marginBottom: 16, border: '1px solid #f1f5f9' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 13, color: '#64748b' }}>
+            <span>Gross Total (Incl. Tax)</span>
+            <span style={{ fontWeight: 700, color: '#0f172a' }}>₹{grossTotalInc.toFixed(2)}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 13, color: '#64748b' }}>
+            <span>Subtotal (Ex-Tax)</span>
+            <span style={{ fontWeight: 700, color: '#0f172a' }}>₹{subtotalEx.toFixed(2)}</span>
+          </div>
+          {totalSavings > 0.01 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 13, color: '#ef4444' }}>
+              <span style={{ fontWeight: 600 }}>Discount Applied</span>
+              <span style={{ fontWeight: 800 }}>-₹{totalSavings.toFixed(2)}</span>
+            </div>
+          )}
+          <div style={{ height: 1, background: '#e2e8f0', margin: '4px 0 8px' }}></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 13, color: '#334155' }}>
+            <span style={{ fontWeight: 600 }}>Taxable Amount</span>
+            <span style={{ fontWeight: 700 }}>₹{taxableAmount.toFixed(2)}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#334155' }}>
+            <span style={{ fontWeight: 600 }}>GST Total (+)</span>
+            <span style={{ fontWeight: 700 }}>₹{finalTax.toFixed(2)}</span>
+          </div>
         </div>
 
-        <DiscountModal 
-           visible={isDiscountModalOpen}
-           onClose={() => setIsDiscountModalOpen(false)}
-           onSaveTotal={setDiscount}
-           cart={localItems}
-           onUpdateCartItem={handleUpdateLocalItem}
-           currentTotalDiscount={discount}
-           theme={THEME}
-           totalAmount={subtotalAfterItemDisc}
-        />
-
-        {/* Method Selection Cards - Slim */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 20 }}>
-           {[
-             { id: 'cash', label: 'Cash', icon: '💵' },
-             { id: 'online', label: 'Online', icon: '💳' },
-             mode !== 'refund' && { id: 'mixed', label: 'Mixed', icon: '🔀' }
-           ].filter(Boolean).map(opt => (
-             <div 
-               key={opt.id}
-               onClick={() => handleMethodSelect(opt.id)}
-               style={{
-                 padding: '8px 12px', borderRadius: 10, cursor: 'pointer',
-                 border: `1.5px solid ${paymentMethod === opt.id ? BRAND.orange : '#f8fafc'}`,
-                 background: paymentMethod === opt.id ? `${BRAND.orange}05` : 'white',
-                 display: 'flex', alignItems: 'center', gap: 10,
-                 transition: 'all 0.1s ease'
-               }}
-             >
-                <div style={{ 
-                  width: 28, height: 28, borderRadius: 8, background: paymentMethod === opt.id ? BRAND.orange : '#f1f5f9',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14
-                }}>
-                   <span style={{ color: paymentMethod === opt.id ? 'white' : '#64748b' }}>{opt.icon}</span>
-                </div>
-                <div style={{ flex: 1 }}>
-                   <div style={{ fontSize: 13, fontWeight: 700, color: paymentMethod === opt.id ? '#0f172a' : '#64748b' }}>{opt.label}</div>
-                </div>
-                <div style={{ 
-                  width: 14, height: 14, borderRadius: '50%', border: `1.5px solid ${paymentMethod === opt.id ? BRAND.orange : '#cbd5e1'}`,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center'
-                }}>
-                   {paymentMethod === opt.id && <div style={{ width: 6, height: 6, borderRadius: '50%', background: BRAND.orange }} />}
-                </div>
-             </div>
-           ))}
-        </div>
-
-        {/* Mixed Split Form - Light & Compact */}
-        {showMixedForm && mode !== 'refund' && (
-          <div style={{ 
-            marginTop: -10, marginBottom: 16, padding: 12, background: '#f8fafc', 
-            borderRadius: 12, border: '1px solid #f1f5f9'
-          }}>
-             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
-                <div>
-                   <label style={{ fontSize: 8, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', display: 'block', marginBottom: 2 }}>Cash</label>
-                   <input 
-                     type="number" value={cashAmount} 
-                     onChange={e => {
-                        const val = e.target.value;
-                        setCashAmount(val);
-                        const c = Number(val);
-                        if (!isNaN(c)) {
-                           const rem = Math.max(0, effectiveTotal - c);
-                           setOnlineAmount(rem.toFixed(2));
-                        }
-                     }}
-                     placeholder="0.00" style={{ 
-                        width: '100%', padding: '6px 10px', borderRadius: 6, border: '1px solid #e2e8f0',
-                        fontSize: 12, fontWeight: 600, outline: 'none'
-                     }}
-                   />
-                </div>
-                <div>
-                   <label style={{ fontSize: 8, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', display: 'block', marginBottom: 2 }}>Online</label>
-                   <input 
-                     type="number" value={onlineAmount} onChange={e => setOnlineAmount(e.target.value)}
-                     placeholder="0.00" style={{ 
-                        width: '100%', padding: '6px 10px', borderRadius: 6, border: '1px solid #e2e8f0',
-                        fontSize: 12, fontWeight: 600, outline: 'none'
-                     }}
-                   />
-                </div>
-             </div>
-             <div style={{ marginBottom: 110 }}>
-                <label style={{ fontSize: 8, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', display: 'block', marginBottom: 2 }}>Channel</label>
-                <NiceSelect
-                  value={onlineMethod}
-                  onChange={setOnlineMethod}
-                  options={[
-                    { value: 'upi', label: 'UPI' },
-                    { value: 'card', label: 'Card' }
-                  ]}
-                />
-             </div>
+        {mode === 'collect' && (
+          <div style={{ marginBottom: 16, textAlign: 'center' }}>
+            {totalSavings > 0.01 ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 13 }}>
+                 <span style={{ fontWeight: 600, color: '#0f172a' }}>
+                    Discount Applied <span style={{ color: '#ea580c' }}>(-₹{totalSavings.toFixed(2)})</span>
+                 </span>
+                 <span 
+                   onClick={() => setIsDiscountModalOpen(true)}
+                   style={{ fontWeight: 700, color: '#ea580c', cursor: 'pointer', textDecoration: 'underline' }}
+                 >
+                   Edit
+                 </span>
+              </div>
+            ) : (
+              <div onClick={() => setIsDiscountModalOpen(true)} style={{ fontSize: 13, color: BRAND.orange, cursor: 'pointer', fontWeight: 700, textDecoration: 'underline', display: 'inline-block' }}>
+                + Add Discount
+              </div>
+            )}
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
-           <Button
-             onClick={onCancel}
-             variant="outline"
-             style={{ 
-               flex: 1, padding: '8px', borderRadius: 10, fontSize: 13, fontWeight: 700, height: 38,
-               borderColor: '#f1f5f9', color: '#94a3b8'
-             }}
-           >
-             Cancel
-           </Button>
-           <Button
-             onClick={handleConfirm}
-             style={{ 
-               flex: 1.5, padding: '8px', borderRadius: 10, 
-               background: BRAND.orange, color: 'white',
-               fontSize: 13, fontWeight: 700, height: 38
-             }}
-           >
-             Finish
-           </Button>
+        {roundOffConfig.round_off_enabled && roundOffConfig.round_off_mode === 'manual' && mode === 'collect' && (
+          <div style={{ marginTop: 8, padding: 16, background: '#fff7ed', borderRadius: 16, border: `1.5px solid ${BRAND.orange}20`, marginBottom: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <label style={{ fontSize: 11, fontWeight: 800, color: BRAND.orange, textTransform: 'uppercase' }}>Received Amount</label>
+              <span style={{ fontSize: 10, color: '#94a3b8' }}>Limit: ±₹{roundOffConfig.round_off_manual_limit.toFixed(2)}</span>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ flex: 1, height: 42, display: 'flex', alignItems: 'center', background: '#fff', borderRadius: 8, border: '1px solid #cbd5e1', padding: '0 10px' }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: '#94a3b8' }}>₹</span>
+                <input type="number" step="0.01" value={displayValue} onChange={e => {
+                  const raw = e.target.value; setDisplayValue(raw);
+                  const val = Number(raw);
+                  if (!isNaN(val)) {
+                    const diff = val - finalTotal;
+                    if (Math.abs(diff) <= roundOffConfig.round_off_manual_limit) setSettledAmount(val);
+                  }
+                }} onBlur={() => setDisplayValue(settledAmount.toFixed(2))} style={{ flex: 1, border: 'none', outline: 'none', fontSize: 15, fontWeight: 700, height: '100%', padding: 0, marginLeft: 4, width: '100%' }} />
+              </div>
+              <button onClick={() => { setSettledAmount(autoRounded); setDisplayValue(autoRounded.toFixed(2)); }} style={{ flex: '0 0 auto', height: 42, background: '#fff', border: '1px solid #cbd5e1', color: '#64748b', padding: '0 16px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Reset</button>
+            </div>
+          </div>
+        )}
+
+        {Math.abs(manualRoundOffValue) > 0.01 && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
+            <span style={{ fontSize: 13, color: '#64748b' }}>Round Off</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: manualRoundOffValue > 0 ? '#10b981' : '#ef4444' }}>{manualRoundOffValue > 0 ? '+' : ''}{manualRoundOffValue.toFixed(2)}</span>
+          </div>
+        )}
+
+        {order.alreadyPaidAmount > 0.01 && (
+          <div style={{ padding: '12px', background: '#ecfdf5', borderRadius: 12, marginBottom: 16, border: '1px solid #d1fae5' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+              <span style={{ fontSize: 12, color: '#065f46' }}>Gross Settled</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#065f46' }}>₹{settledAmount.toFixed(2)}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+              <span style={{ fontSize: 12, color: '#065f46' }}>Already Paid</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#065f46' }}>-₹{Number(order.alreadyPaidAmount).toFixed(2)}</span>
+            </div>
+            <div style={{ height: 1, background: '#a7f3d0', marginBottom: 8 }}></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 13, fontWeight: 800, color: '#064e3b' }}>Balance Due</span>
+              <span style={{ fontSize: 18, fontWeight: 900, color: '#064e3b' }}>₹{effectiveTotal.toFixed(2)}</span>
+            </div>
+          </div>
+        )}
+
+        <div style={{ fontSize: 12, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 10, letterSpacing: '0.05em' }}>Payment Method</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 20 }}>
+          {['cash', 'online', mode !== 'refund' ? 'mixed' : null].filter(Boolean).map(m => (
+            <div key={m} onClick={() => handleMethodSelect(m)} style={{
+              padding: '12px 8px', borderRadius: 14, border: `2px solid ${paymentMethod === m ? BRAND.orange : '#f1f5f9'}`,
+              background: paymentMethod === m ? `${BRAND.orange}05` : 'white', cursor: 'pointer', textAlign: 'center', transition: 'all 0.2s',
+              boxShadow: paymentMethod === m ? `0 4px 12px ${BRAND.orange}20` : 'none', transform: paymentMethod === m ? 'translateY(-2px)' : 'none'
+            }}>
+              <div style={{ fontSize: 20, marginBottom: 4 }}>{m === 'cash' ? '💵' : (m === 'online' ? '💳' : '🔀')}</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: paymentMethod === m ? BRAND.orange : '#64748b', textTransform: 'capitalize' }}>{m}</div>
+            </div>
+          ))}
         </div>
+
+        {showMixedForm && (
+          <div style={{ background: '#f8fafc', padding: 16, borderRadius: 16, border: '1px solid #f1f5f9', marginBottom: 20 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+              <div>
+                <label style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Cash</label>
+                <input type="number" value={cashAmount} onChange={e => { const val = e.target.value; setCashAmount(val); const c = Number(val); if (!isNaN(c)) setOnlineAmount(Math.max(0, effectiveTotal - c).toFixed(2)); }} style={{ width: '100%', padding: '10px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 14, fontWeight: 700 }} />
+              </div>
+              <div>
+                <label style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Online</label>
+                <input type="number" value={onlineAmount} onChange={e => setOnlineAmount(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 14, fontWeight: 700 }} />
+              </div>
+            </div>
+            <label style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Online Channel</label>
+            <NiceSelect value={onlineMethod} onChange={setOnlineMethod} options={[{ value: 'upi', label: 'UPI' }, { value: 'card', label: 'Card' }]} />
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: 10 }}>
+          <Button onClick={onCancel} variant="outline" style={{ flex: 1, padding: '12px', borderRadius: 12, fontSize: 14, fontWeight: 700, height: 48, borderColor: '#e2e8f0' }}>Cancel</Button>
+          <Button onClick={handleConfirm} style={{ flex: 1.5, padding: '12px', borderRadius: 12, background: `linear-gradient(135deg, ${BRAND.orange} 0%, #ea580c 100%)`, color: 'white', fontSize: 14, fontWeight: 800, height: 48, boxShadow: `0 8px 20px -6px ${BRAND.orange}60`, border: 'none' }}>Settle & Finish</Button>
+        </div>
+
+        <DiscountModal visible={isDiscountModalOpen} onClose={() => setIsDiscountModalOpen(false)} onSaveTotal={setDiscount} cart={localItems} onUpdateCartItem={handleUpdateLocalItem} currentTotalDiscount={discount} theme={THEME} totalAmount={subtotalAfterItemDisc} />
       </div>
     </div>
   );
@@ -2701,77 +2564,74 @@ const complete = async (orderId, actualPaymentMethod = null, details = null) => 
     // Get Tax Settings from Context (restaurant object in scope)
     const gstEnabled = !!restaurant?.gst_enabled;
     const pricesIncludeTax = !!restaurant?.prices_include_tax;
-    const defaultRate = Number(restaurant?.default_tax_rate || 5);
+    // Use the rate passed from dialog (guaranteed correct) or fallback
+    const defaultRate = Number(details?.base_tax_rate ?? restaurant?.default_tax_rate ?? 5);
+    // Processing flags
+    let normalSubtotalBase = 0; // Sum of (Base - LineDisc) for normal items
+    let packagedTotalInc = 0;   // Sum of (Base - LineDisc + Tax) for packaged items
+    let packagedTaxTotal = 0;   // Sum of Tax content only for packaged items
+    let lineUpdates = [];
 
-    let subtotalExGst = 0;
-    let sumTax = 0;
-
-    // We will collect updates to perform DB writes efficiently
-    const lineUpdates = [];
-
-    // Fetch existing invoice items if we need to update them
+    // Fetch existing invoice if it exists for this order
     let existingInvoiceItems = [];
     let invoiceId = null;
-    if (updatedItems && Array.isArray(updatedItems)) {
-        const { data: invoiceData } = await supabase.from('invoices').select('id').eq('order_id', orderId).single();
-        invoiceId = invoiceData?.id;
-        if (invoiceId) {
-             const { data: invItems } = await supabase.from('invoice_items').select('*').eq('invoice_id', invoiceId);
-             existingInvoiceItems = invItems || [];
-        }
+    const { data: invoiceData } = await supabase.from('invoices').select('id').eq('order_id', orderId).maybeSingle();
+    invoiceId = invoiceData?.id;
+
+    if (invoiceId && updatedItems && Array.isArray(updatedItems)) {
+         const { data: invItems } = await supabase.from('invoice_items').select('*').eq('invoice_id', invoiceId);
+         existingInvoiceItems = invItems || [];
     }
 
     // Process all items for calculation
     for (const item of calculationItems) {
          const qty = Number(item.quantity || 0);
-         const unit = Number(item.price || 0); // Face Value Unit Price
-         const baseAmount = unit * qty;
+         const faceUnit = Number(item.price || 0); // MRP / Face Value
+         const isPackaged = !!item.is_packaged_good;
+         
+         let rate = 0;
+         if (gstEnabled) {
+             rate = isPackaged ? (Number(item.tax_rate || 0) > 0 ? Number(item.tax_rate || 0) : defaultRate) : defaultRate;
+         }
+         const isInclusive = gstEnabled && (isPackaged || pricesIncludeTax);
 
-         // Resolve Item Discount
+         // 1. MRP Base & Fixed Tax
+         const baseUnit = isInclusive && rate > 0 ? (faceUnit / (1 + rate / 100)) : faceUnit;
+         const taxOnMRPTotal = isInclusive && rate > 0 ? (faceUnit - baseUnit) * qty : 0;
+
+         // 2. Line Discount
          let lineDiscountAmt = 0;
          if (item.discount) {
              if (item.discount.type === 'amount') {
                  lineDiscountAmt = Number(item.discount.value || 0);
              } else {
-                 lineDiscountAmt = baseAmount * (Number(item.discount.value || 0) / 100);
+                 lineDiscountAmt = (faceUnit * qty) * (Number(item.discount.value || 0) / 100);
              }
          } else if (item.discount_amount !== undefined) {
              lineDiscountAmt = Number(item.discount_amount);
          }
-         // Cap discount
-         if (lineDiscountAmt > baseAmount) lineDiscountAmt = baseAmount;
+         if (lineDiscountAmt > (faceUnit * qty)) lineDiscountAmt = faceUnit * qty;
 
-         // Line Net (Face Value after Discount) matches create.js
-         const lineNet = baseAmount - lineDiscountAmt;
-
-         // Determine Tax Rate
-         const isPackaged = !!item.is_packaged_good;
-         let rate = Number(item.tax_rate ?? defaultRate);
-         if (!Number.isFinite(rate)) rate = defaultRate;
-         
-         // Calculate Ex-Tax and Tax Content (Mirroring create.js)
-         let lineNetEx = 0;
-         let lineGst = 0;
-
-         if (gstEnabled) {
-             if (pricesIncludeTax || isPackaged) {
-                 // Inclusive: Tax is inside lineNet
-                 // lineNetEx = lineNet / (1 + rate/100)
-                 const taxFactor = 1 + (rate / 100);
-                 lineNetEx = lineNet / taxFactor;
-                 lineGst = lineNet - lineNetEx;
-             } else {
-                 // Exclusive: Tax is on top of lineNet
-                 lineNetEx = lineNet;
-                 lineGst = lineNet * (rate / 100);
-             }
+         // 3. Taxable & Tax (Branch by Item Type)
+         let currentLineTaxableEx = 0;
+         if (!isPackaged) {
+             // Normal Items: GST follows discount
+             const taxableLine = (baseUnit * qty) - (isInclusive ? (lineDiscountAmt / (1 + rate/100)) : lineDiscountAmt);
+             const taxLine = taxableLine * (rate / 100);
+             const lineTotal = taxableLine + taxLine;
+             
+             normalSubtotalBase += Math.max(0, taxableLine);
+             currentLineTaxableEx = taxableLine;
          } else {
-             lineNetEx = lineNet;
-             lineGst = 0;
+             // Packaged Goods: GST stays FIXED (User Rule)
+             // Round per item to ensure consistency (e.g. 21.88)
+             const roundedTaxLine = Number(taxOnMRPTotal.toFixed(2));
+             const lineTotal = Math.max(0, (faceUnit * qty) - lineDiscountAmt);
+             
+             packagedTotalInc += lineTotal;
+             packagedTaxTotal += roundedTaxLine;
+             currentLineTaxableEx = lineTotal - roundedTaxLine;
          }
-
-         subtotalExGst += lineNetEx;
-         sumTax += lineGst; // Note: For order total, we might re-calc tax on global taxable, but let's see.
 
          // Store for DB Update
          if (item.id && updatedItems && Array.isArray(updatedItems)) {
@@ -2780,106 +2640,86 @@ const complete = async (orderId, actualPaymentMethod = null, details = null) => 
                  name: item.item_name || item.name,
                  variant_name: item.variant_name,
                  discount_amount: lineDiscountAmt,
-                 line_net: lineNetEx // Store Ex-Tax Net for Invoice consistency
+                 line_net: currentLineTaxableEx 
              });
          }
-    };
+    }
 
-    // DB Updates for Line Items
-    if (updatedItems && Array.isArray(updatedItems)) {
-        await Promise.all(updatedItems.map(async (item) => {
-             const qty = Number(item.quantity || 0);
-             const unit = Number(item.price || 0);
-             const baseAmount = unit * qty; // Face Value
-
-             let dVal = 0;
-             if (item.discount) {
-                if (item.discount.type === 'amount') {
-                    dVal = Number(item.discount.value || 0);
-                } else {
-                    // Percent of Face Value (matches create.js & counter.js)
-                    dVal = baseAmount * (Number(item.discount.value || 0) / 100);
-                }
-             }
-             if (dVal > baseAmount) dVal = baseAmount;
-
-             // Determine Tax Rate for stripping logic
-             const isPackaged = !!item.is_packaged_good;
-             let rate = Number(item.tax_rate ?? defaultRate);
-             if (!Number.isFinite(rate)) rate = defaultRate;
-
-             // Calculate Line Net Ex-Tax (for Invoice Items)
-             const lineNet = baseAmount - dVal;
-             let lineNetEx = 0;
+    // DB Updates for Line Items (using pre-calculated lineUpdates)
+    if (lineUpdates.length > 0) {
+        await Promise.all(lineUpdates.map(async (upd) => {
+             // 1. Update order_items
+             await supabase.from('order_items')
+                 .update({ discount_amount: upd.discount_amount })
+                 .eq('id', upd.id);
              
-             if (gstEnabled) {
-                 if (pricesIncludeTax || isPackaged) {
-                     // Inclusive: Tax is inside lineNet
-                     const taxFactor = 1 + (rate / 100);
-                     lineNetEx = lineNet / taxFactor;
-                 } else {
-                     // Exclusive: Tax is on top
-                     lineNetEx = lineNet;
-                 }
-             } else {
-                 lineNetEx = lineNet;
-             }
-
-             if (item.id) {
-               await supabase.from('order_items').update({ discount_amount: dVal }).eq('id', item.id);
-               
-               if (invoiceId && existingInvoiceItems) {
-                 const itemName = item.item_name || item.name;
+             // 2. Update invoice_items (if invoice exists)
+             if (invoiceId && existingInvoiceItems) {
                  const invItem = existingInvoiceItems.find(ii => 
-                    ii.item_name === itemName && 
-                    (item.variant_name ? ii.variant_name === item.variant_name : true)
+                    ii.item_name === upd.name && 
+                    (upd.variant_name ? ii.variant_name === upd.variant_name : true)
                  );
                  if (invItem) {
                      await supabase.from('invoice_items').update({
-                         discount_amount: dVal,
-                         line_net: lineNetEx
+                         discount_amount: upd.discount_amount,
+                         line_net: upd.line_net
                      }).eq('id', invItem.id);
                  }
-               }
              }
         }));
     }
 
-    // 6. ORDER LEVEL CALCULATION (Exact Mirror of InvoiceService & create.js)
+    // 6. ORDER LEVEL CALCULATION (Golden Rule)
     
-    // Resolve Global Discount
+    // Resolve Global Discount (Applied only to normal items)
     let orderDiscountAmt = 0;
-    if (isMixed) {
-        orderDiscountAmt = Number(discountAmount || 0); // From mixed payload
-    } else if (details && details.discount_amount) {
+    let orderDiscountPercentProvided = 0;
+
+    if (details?.discount_amount) {
         orderDiscountAmt = Number(details.discount_amount);
-    } else if (details?.type) { 
-        // discount object passed directly?
-        if (details.type === 'amount') orderDiscountAmt = Number(details.value || 0);
-        else orderDiscountAmt = subtotalExGst * (Number(details.value || 0) / 100);
+    } else if (details?.type === 'amount') {
+        orderDiscountAmt = Number(details.value || 0);
+    }
+
+    // SCALE the rupee discount for inclusive shops
+    if (orderDiscountAmt > 0 && pricesIncludeTax) {
+        orderDiscountAmt = orderDiscountAmt / (1 + defaultRate/100);
+    }
+
+    if (details?.type === 'percent') {
+        orderDiscountPercentProvided = Number(details.value || 0);
+        orderDiscountAmt = normalSubtotalBase * (orderDiscountPercentProvided / 100);
     }
     
-    // Validation: Apply Order Discount on Ex-Tax Subtotal
-    if (orderDiscountAmt > subtotalExGst) orderDiscountAmt = subtotalExGst;
+    // Cap Order Discount at Normal Base
+    if (orderDiscountAmt > normalSubtotalBase) orderDiscountAmt = normalSubtotalBase;
     
-    // Taxable Amount (Subtotal Ex Tax - Order Discount)
-    const taxableAmount = Math.max(0, subtotalExGst - orderDiscountAmt);
+    // Taxable Amount (Normal Items After Order Discount)
+    const finalTaxableNormal = Math.max(0, normalSubtotalBase - orderDiscountAmt);
     
-    // Calculate Final Tax on Taxable Amount
-    // User Request: "gst_amount = taxable_amount × (gst_rate / 100)"
-    // We use the global default rate for this calculation to match InvoiceService.
-    const finalGstRate = gstEnabled ? defaultRate : 0;
-    const finalTaxCalc = gstEnabled ? taxableAmount * (finalGstRate / 100) : 0;
-    const totalIncCalc = taxableAmount + finalTaxCalc;
+    // Calculate Final GST (on normal discounted base)
+    const gstPct = gstEnabled ? defaultRate : 0;
+    const finalNormalTax = finalTaxableNormal * (gstPct / 100);
+    const normalTotalInc = finalTaxableNormal + finalNormalTax;
     
-    // Round Off
+    // GROSS SUBTOTAL (Before Order Discount)
+    const packagedBase = (packagedTotalInc - (packagedTaxTotal || 0));
+    const subtotalExForRecord = details?.override_totals?.subtotal_ex ?? Number((normalSubtotalBase + packagedBase).toFixed(2));
+    
+    // Total Tax (Normal + Packaged)
+    const combinedTotalTax = details?.override_totals?.total_tax ?? Number((finalNormalTax + (packagedTaxTotal || 0)).toFixed(2));
+    
+    // Combined Total Including Tax
+    const combinedTotalInc = details?.override_totals?.total_inc_tax ?? Number((normalTotalInc + packagedTotalInc).toFixed(2));
+    
+    // Final Grand Total (After Round-off)
     const finalRoundOff = Number(roundOffAmount || 0);
-    const finalGrandTotal = totalIncCalc + finalRoundOff;
+    const finalGrandTotal = details?.override_totals?.total_amount ?? Number((combinedTotalInc + finalRoundOff).toFixed(2));
 
     // Calculate Discount Percent for Record
-    let orderDiscountPct = 0;
-    if (subtotalExGst > 0) {
-        orderDiscountPct = (orderDiscountAmt / subtotalExGst) * 100;
+    let recordDiscountPct = 0;
+    if (normalSubtotalBase > 0) {
+        recordDiscountPct = (orderDiscountAmt / normalSubtotalBase) * 100;
     }
 
     // 7. Update Orders Table
@@ -2889,13 +2729,13 @@ const complete = async (orderId, actualPaymentMethod = null, details = null) => 
       payment_method: finalPaymentMethod,
       actual_payment_method: finalPaymentMethod,
       ...(mixedPaymentData && { mixed_payment_details: mixedPaymentData }),
-      subtotal_ex_tax: Number(subtotalExGst.toFixed(2)), // Added: Pre-Discount Ex-Tax Subtotal
+      subtotal_ex_tax: subtotalExForRecord, 
       discount_amount: orderDiscountAmt, 
-      total_discount_percent: Number(orderDiscountPct.toFixed(2)), // Added: Discount %
+      total_discount_percent: Number(recordDiscountPct.toFixed(2)), 
       round_off_amount: finalRoundOff,
-      total_inc_tax: Number(totalIncCalc.toFixed(2)), 
-      total_tax: Number(finalTaxCalc.toFixed(2)),            
-      total_amount: Number(finalGrandTotal.toFixed(2))       
+      total_tax: combinedTotalTax,            
+      total_inc_tax: combinedTotalInc, 
+      total_amount: finalGrandTotal       
     };
 
     await supabase
@@ -2907,13 +2747,13 @@ const complete = async (orderId, actualPaymentMethod = null, details = null) => 
     // 8. Update Invoices Table (Sync with Order Totals)
     if (invoiceId) {
         const invoicePayload = {
-            total_inc_tax: Number(finalGrandTotal.toFixed(2)),
-            subtotal_ex_gst: Number(taxableAmount.toFixed(2)), // Note: InvoiceService uses Taxable Amount for this column
-            taxable_amount: Number(taxableAmount.toFixed(2)),
-            total_tax: Number(finalTaxCalc.toFixed(2)),
-            total_inc_gst: Number(totalIncCalc.toFixed(2)),
+            total_inc_tax: finalGrandTotal,
+            subtotal_ex_gst: subtotalExForRecord, 
+            taxable_amount: subtotalExForRecord,
+            total_tax: combinedTotalTax,
+            total_inc_gst: combinedTotalInc,
             order_discount_total: Number(orderDiscountAmt.toFixed(2)),
-            order_discount_percent: Number(orderDiscountPct.toFixed(2)), // Added: Percent
+            order_discount_percent: Number(recordDiscountPct.toFixed(2)), 
             round_off_amount: finalRoundOff,
             payment_method: finalPaymentMethod
         };

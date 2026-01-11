@@ -85,28 +85,42 @@ export default async function handler(req, res) {
     // B. Items
     const pdfItems = (invoiceItems || []).map((row, idx) => {
       let finalName = row.item_name;
-      // Fallback if name is missing or "Unknown Item" (due to previous bug)
       if (!finalName || finalName === 'Unknown Item') {
           const match = order.order_items?.[idx]; 
-          // Simple index match logic - risky but better than "Unknown"
-          if (match) {
-             finalName = match.menu_items?.name || match.item_name || 'Item';
-          }
+          if (match) finalName = match.menu_items?.name || match.item_name || 'Item';
       }
 
       const qty = Number(row.qty || 0);
-      const price = Number(row.unit_rate_ex_tax || 0);
+      const rateEx = Number(row.unit_rate_ex_tax || 0);
+      const taxRate = Number(row.tax_rate || 0);
       const discAmt = Number(row.discount_amount || 0);
       
-      const lineNet = row.line_net ? Number(row.line_net) : (price * qty - discAmt);
+      // Determine if we should show inclusive or exclusive based on profile
+      const showInclusive = !!profile?.prices_include_tax;
+      
+      let displayRate = rateEx;
+      let displayLineTotal = row.line_total_inc_tax ? Number(row.line_total_inc_tax) : Number(row.line_total_ex_tax || 0) + Number(row.tax_amount || 0);
+
+      if (showInclusive && taxRate > 0) {
+          // If we want to show inclusive, we add tax to the ex-tax rate
+          displayRate = rateEx * (1 + taxRate / 100);
+          // Amount col should be (Rate * Qty) - Discount
+          // But wait, the discAmt is usually ex-tax if it was applied to ex-tax base.
+          // In counter.js/create.js, line discount is applied to FACE VALUE (Inclusive).
+          // So (Base Inclusive * Qty) - (Line Discount) is the finished inclusive line total.
+          displayLineTotal = (displayRate * qty) - discAmt;
+      } else {
+          // Exclusive view: Rate is ex-tax, Amount is line_net (ex-tax)
+          displayRate = rateEx;
+          displayLineTotal = row.line_net ? Number(row.line_net) : (rateEx * qty - discAmt);
+      }
 
       return {
         item_name: finalName,
         quantity: qty,
-        unit_price: price, // generateBillPdf uses 'unit_price' or 'price'
-        discount_percent: Number(row.discount_percent || 0),
+        unit_price: displayRate, 
         discount_amount: discAmt,
-        line_net: lineNet
+        line_net: displayLineTotal
       };
     });
 
@@ -115,16 +129,19 @@ export default async function handler(req, res) {
     const roundOff = Number(invoice?.round_off_amount || order.round_off_amount || 0);
     const grandTotal = Number(invoice?.total_amount || invoice?.total_inc_gst || order.total_amount || 0);
     
-    // Calculate line subtotal (Sum of Line Nets)
-    const lineSubtotal = pdfItems.reduce((sum, it) => sum + it.line_net, 0);
-    const lineDiscTotal = pdfItems.reduce((sum, it) => sum + it.discount_amount, 0);
+    // Calculate line subtotal (Sum of Ex-Tax Line Nets) for the summary breakdown
+    const lineSubtotalEx = (invoiceItems || []).reduce((sum, row) => sum + Number(row.line_net || 0), 0);
+    const lineDiscTotal = (invoiceItems || []).reduce((sum, row) => sum + Number(row.discount_amount || 0), 0);
+
+    const orderDiscAmt = Number(invoice?.order_discount_total || order.discount_amount || 0);
+    const taxableAmount = Math.max(0, lineSubtotalEx - orderDiscAmt);
 
     const totals = {
-      line_subtotal: lineSubtotal,
+      line_subtotal: lineSubtotalEx,
       line_discount_total: lineDiscTotal,
-      order_discount_total: Number(invoice?.discount_amount || order.discount_amount || 0),
-      order_discount_percent: Number(order.total_discount_percent || 0),
-      taxable_amount: Number(invoice?.taxable_amount || invoice?.subtotal_ex_gst || order.subtotal_ex_tax || 0),
+      order_discount_total: orderDiscAmt,
+      order_discount_percent: Number(invoice?.order_discount_percent || order.total_discount_percent || 0),
+      taxable_amount: taxableAmount,
       total_tax: totalTax,
       gst_rate: Number(invoice?.gst_rate || profile?.default_tax_rate || 5),
       round_off_amount: roundOff,
