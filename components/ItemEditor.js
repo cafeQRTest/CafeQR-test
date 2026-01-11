@@ -500,7 +500,7 @@ export default function ItemEditor({
       return {
         menu_item_id: menuItemId,
         option_id: option.id,
-        price: existing?.price || price, // Use variant price or base price
+        price: existing?.price || Number(Number(price).toFixed(2)), // Use variant price or base price
         is_available: existing?.is_available ?? true
       };
     });
@@ -584,7 +584,7 @@ if (code.trim()) {
         restaurant_id: restaurantId,
         code_number: code.trim() || null,
         name: name.trim(),
-        price: Number(price),
+        price: Number(Number(price).toFixed(2)),
         category: category.trim(),
         status,
         veg,
@@ -628,7 +628,7 @@ if (code.trim()) {
       if (!isEdit && savedItemId) {
         await supabase.rpc("upsert_library_item", {
           _name: name.trim(),
-          _price: Number(price),
+          _price: Number(Number(price).toFixed(2)),
           _veg: veg,
           _desc: null,
           _img_url: imageUrl || null,

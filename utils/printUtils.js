@@ -32,33 +32,64 @@ const SIZE_2H = GS + "!" + b(0x01); // 1x width, 2x height (your current â€œDHâ€
 function toDisplayItems(order) {
   // Counter/cart shape
   if (Array.isArray(order?.items) && order.items.length) {
-    return order.items.map((i) => ({
-      name: i.name,
-      quantity: i.quantity,
-      price: i.price,
-      discount_amount:
-        i.discount_amount || (i.discount ? Number(i.discount.value || 0) : 0),
-      uom: i.uom || "",
-      uom_short_code: i.uom_short_code || "",
-      uom_precision: i.uom_precision,
-    }));
+    return order.items.map((i) => {
+      let discountAmount = Number(i.discount_amount || 0);
+      console.log('[printUtils toDisplayItems] Item:', i.name, '| discount_amount:', i.discount_amount, '| discount obj:', i.discount);
+      if (!discountAmount && i.discount) {
+         const val = Number(i.discount.value || 0);
+         const base = Number(i.price || 0) * Number(i.quantity || 1);
+         if (i.discount.type === 'percent') {
+            discountAmount = base * (val / 100);
+         } else {
+            discountAmount = val;
+         }
+      }
+      console.log('[printUtils toDisplayItems] Calculated discountAmount:', discountAmount);
+
+      return {
+        name: i.name,
+        quantity: i.quantity,
+        price: i.price,
+        discount_amount: discountAmount,
+        uom: i.uom || "",
+        uom_short_code: i.uom_short_code || "",
+        uom_precision: i.uom_precision,
+      };
+    });
   }
 
   // DB/API shape
   if (Array.isArray(order?.order_items) && order.order_items.length) {
-    return order.order_items.map((oi) => ({
-      name: oi.menu_items?.name || oi.item_name || "Item",
-      quantity: Number(oi.quantity || 0),
-      price: Number(oi.price || oi.unit_price || 0),
-      discount_amount: Number(oi.discount_amount || 0),
-      uom: oi.uom_short_code || "",
-      uom_short_code: oi.uom_short_code || "",
-      uom_precision: oi.uom_precision ?? 0,
-    }));
+    return order.order_items.map((oi) => {
+         let dAmt = Number(oi.discount_amount || 0);
+         // Fallback if discount_amount is 0 but raw discount info exists (rare but safer)
+         if (dAmt === 0 && (oi.discount_value || oi.discount_percent)) {
+             const price = Number(oi.price || oi.unit_price || 0);
+             const qty = Number(oi.quantity || 0);
+             const base = price * qty;
+             if (oi.discount_type === 'percent' || oi.discount_percent > 0) {
+                 const pct = Number(oi.discount_percent || oi.discount_value || 0);
+                 dAmt = base * (pct / 100);
+             } else {
+                 dAmt = Number(oi.discount_value || 0);
+             }
+         }
+         return {
+          name: oi.menu_items?.name || oi.item_name || "Item",
+          quantity: Number(oi.quantity || 0),
+          price: Number(oi.price || oi.unit_price || 0),
+          discount_amount: dAmt,
+          uom: oi.uom_short_code || "",
+          uom_short_code: oi.uom_short_code || "",
+          uom_precision: oi.uom_precision ?? 0,
+        };
+    });
   }
 
   return [];
 }
+
+// ... (keep helper functions same until buildReceiptText)
 
 function getOrderTypeLabel(order) {
   if (!order) return "";
@@ -229,6 +260,8 @@ function buildLogoEscPos(restaurantProfile) {
 }
 
 function getBillCols(innerW, hasDiscount) {
+  // If narrow (e.g. 32 cols), showDiscCol is forced false to save space for name
+  // 38 is a safe threshold for 80mm-like width
   const showDiscCol = hasDiscount && innerW >= 38;
   const gaps = showDiscCol ? 4 : 3;
 
@@ -241,6 +274,7 @@ function getBillCols(innerW, hasDiscount) {
   let name = innerW - fixed;
 
   if (name < 8) {
+    // Fallback if calculations squeeze name too much
     qty = 3;
     rate = 5;
     disc = 0;
@@ -469,7 +503,7 @@ export function buildReceiptText(order, bill, restaurantProfile) {
       restaurantProfile?.shipping_address_line1,
       restaurantProfile?.shipping_address_line2,
       restaurantProfile?.shipping_city,
-      restaurantProfile?.shipping_state,
+      restaurantProfile?.shipping_address_state,
       restaurantProfile?.shipping_pincode,
     ].filter(Boolean);
     const address = addressParts.length
@@ -487,53 +521,38 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     const billNo = bill?.bill_no || order?.bill_no || "";
 
     const orderDate = new Date(order?.created_at);
-    const dateStr = orderDate.toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    });
+    const dateStr = orderDate.toLocaleDateString("en-IN");
     const timeStr = orderDate.toLocaleTimeString("en-IN", {
       hour: "2-digit",
       minute: "2-digit",
       hour12: true,
     });
 
-    const taxAmount = Number(
-      bill?.tax_total || bill?.total_tax || order?.tax_amount || order?.total_tax || 0
-    );
+    // ===== VALUES FROM BACKEND (DO NOT RECALCULATE) =====
     const orderDiscount = Number(order?.discount_amount || bill?.discount_amount || 0);
     const roundOff = Number(order?.round_off_amount || bill?.round_off_amount || 0);
-    const oGrandTotal = Number(order?.total_amount || bill?.total_amount || 0);
+    const oTotalTax = Number(order?.total_tax || bill?.total_tax || 0);
+    const oGrandTotal = Number(order?.total_amount ?? bill?.total_amount ?? 0);
 
-    const getDisc = (it) => {
-      if (it?.discount_amount !== undefined) return Number(it.discount_amount);
-      if (it?.discount?.value) return Number(it.discount.value);
-      return 0;
-    };
+    const getDisc = (it) => Number(it?.discount_amount || 0);
+    const hasLineDiscount = items.some((it) => getDisc(it) > 0.001);
 
-    const hasLineDiscount = items.some((it) => getDisc(it) > 0);
     const cols = getBillCols(W, hasLineDiscount);
     const { name, qty, rate, disc, total, showDiscCol } = cols;
 
     const lines = [];
+    const is80 = layout.paperMm >= 76;
 
-// === RESTAURANT NAME (center + bold; 80mm = 2xW/2xH, 58mm = normal) ===
-const is80 = layout.paperMm >= 76;
-
-lines.push(ALIGN_CENTER);
-
-lines.push(
-  MODE_BOLD +
-    (is80 ? SIZE_2X : SIZE_1X) +
-    restaurantName +
-    SIZE_1X +
-    MODE_NO_BOLD
-);
-
-// go back to normal flow
-lines.push(ALIGN_LEFT);
-
-
+    // ===== HEADER =====
+    lines.push(ALIGN_CENTER);
+    lines.push(
+      MODE_BOLD +
+        (is80 ? SIZE_2X : SIZE_1X) +
+        restaurantName +
+        SIZE_1X +
+        MODE_NO_BOLD
+    );
+    lines.push(ALIGN_LEFT);
 
     wrapText(address, W).forEach((l) =>
       lines.push(withMargins(center(l, W), layout))
@@ -541,29 +560,20 @@ lines.push(ALIGN_LEFT);
     if (phone)
       lines.push(withMargins(center(`Contact No.: ${phone}`, W), layout));
     if (restaurantProfile?.fssai_license)
-      lines.push(
-        withMargins(center(`FSSAI: ${restaurantProfile.fssai_license}`, W), layout)
-      );
-    if (restaurantProfile?.gst_enabled && restaurantProfile?.gstin)
-      lines.push(
-        withMargins(center(`GSTIN: ${restaurantProfile.gstin}`, W), layout)
-      );
+      lines.push(withMargins(center(`FSSAI: ${restaurantProfile.fssai_license}`, W), layout));
 
     lines.push(withMargins(dashes(), layout));
 
-    // Meta
     lines.push(withMargins(`${dateStr} ${timeStr}`, layout));
     if (invoiceNo) lines.push(withMargins(`Invoice: ${invoiceNo}`, layout));
     if (billNo) lines.push(withMargins(`Bill No: ${billNo}`, layout));
     if (orderType) lines.push(withMargins(`Order Type: ${orderType}`, layout));
     if (order?.number_of_customers)
-      lines.push(
-        withMargins(`No. of Customers: ${order.number_of_customers}`, layout)
-      );
+      lines.push(withMargins(`No. of Customers: ${order.number_of_customers}`, layout));
 
     lines.push(withMargins(dashes(), layout));
 
-    // Items Header
+    // ===== ITEMS HEADER =====
     let header =
       leftAlign("ITEM", name) +
       " " +
@@ -571,175 +581,97 @@ lines.push(ALIGN_LEFT);
       " " +
       rightAlign("RATE", rate);
 
-    if (showDiscCol) {
-      header += " " + rightAlign("DISC", disc);
-    }
+    if (showDiscCol) header += " " + rightAlign("DISC", disc);
     header += " " + rightAlign("TOTAL", total);
 
     lines.push(withMargins(header, layout));
     lines.push(withMargins(dashes(), layout));
 
-    // Items
+    // ===== ITEMS =====
     items.forEach((it) => {
-      const itemName = it?.name || "Item";
-      const nameLines = wrapText(itemName, name);
-      if (!nameLines.length) return;
-
-      const rateNum = Number(it?.price || 0);
-      const qtyNum = Number(it?.quantity || 1);
       const itemDiscount = getDisc(it);
+      const qtyNum = Number(it.quantity || 1);
+      const rateNum = Number(it.price || 0);
+      const netLineTotal = rateNum * qtyNum - itemDiscount;
 
-      const p = Number.isInteger(it?.uom_precision)
-        ? it.uom_precision
-        : qtyNum % 1 === 0
-        ? 0
-        : 2;
+      let nameStr = it?.name || "Item";
+      // If narrow receipt and discount exists, append to name
+      console.log('[printUtils buildReceiptText] Item:', it.name, '| itemDiscount:', itemDiscount, '| showDiscCol:', showDiscCol);
+      if (!showDiscCol && itemDiscount > 0.001) {
+        nameStr += ` (Disc -${itemDiscount.toFixed(2)})`;
+        console.log('[printUtils buildReceiptText] Added discount to name:', nameStr);
+      }
 
-      let qtyStr = qtyNum.toFixed(p);
-      const uom = it?.uom_short_code || it?.uom || "";
+      const nameLines = wrapText(nameStr, name);
+      
+      const qtyStr = Number.isInteger(qtyNum) ? qtyNum.toString() : qtyNum.toFixed(2);
+      const rateStr = rateNum.toFixed(2);
+      const totalStr = netLineTotal.toFixed(2);
 
-      if (W >= 34 && uom && uom.toLowerCase() !== "pc") qtyStr += " " + uom;
-
-      const grossLineTotal = rateNum * qtyNum;
-      const netLineTotal = grossLineTotal - itemDiscount;
-
-      const rateStr = rateNum % 1 === 0 ? rateNum.toFixed(0) : rateNum.toFixed(2);
-      const totalStr = netLineTotal % 1 === 0 ? netLineTotal.toFixed(0) : netLineTotal.toFixed(2);
       const discStr =
-        showDiscCol && itemDiscount > 0
-          ? "-" + itemDiscount.toFixed(2)
-          : showDiscCol
-          ? "0.00"
-          : "";
+        showDiscCol && itemDiscount > 0.001 ? "-" + itemDiscount.toFixed(2) : "";
 
-      let row1 =
+      let row =
         leftAlign(nameLines[0], name) +
         " " +
         rightAlignEnd(qtyStr, qty) +
         " " +
         rightAlignEnd(rateStr, rate);
 
-      if (showDiscCol) {
-        row1 += " " + rightAlignEnd(discStr, disc);
-      }
-      row1 += " " + rightAlignEnd(totalStr, total);
+      if (showDiscCol) row += " " + rightAlignEnd(discStr, disc);
+      row += " " + rightAlignEnd(totalStr, total);
 
-      lines.push(withMargins(row1, layout));
+      lines.push(withMargins(row, layout));
 
       for (let i = 1; i < nameLines.length; i++) {
         lines.push(withMargins(nameLines[i], layout));
-      }
-
-      if (!showDiscCol && itemDiscount > 0) {
-        lines.push(
-          withMargins(
-            leftAlign(" (Disc: -" + itemDiscount.toFixed(2) + ")", W),
-            layout
-          )
-        );
       }
     });
 
     lines.push(withMargins(dashes(), layout));
 
-    // Totals
-    const oSubtotalEx = Number(order?.subtotal_ex_tax || order?.subtotal_ex_gst || 0);
-    const oTotalTax = Number(order?.total_tax || bill?.total_tax || 0);
-    const displayNet = oSubtotalEx - orderDiscount;
+    // ===== TOTALS =====
+    const isInclusive = order?.prices_include_tax === true;
 
-    if (oSubtotalEx > 0 || oTotalTax > 0) {
-      lines.push(withMargins(kvLine("Subtotal:", oSubtotalEx.toFixed(2), W), layout));
-      
-      if (orderDiscount > 0) {
-        lines.push(withMargins(kvLine("Discount:", "-" + orderDiscount.toFixed(2), W), layout));
-        lines.push(withMargins(kvLine("Net Amt:", displayNet.toFixed(2), W), layout));
-      }
+    if (orderDiscount > 0) {
+      lines.push(withMargins(kvLine("Discount:", "-" + orderDiscount.toFixed(2), W), layout));
+    }
 
-      if (oTotalTax > 0) {
-        lines.push(withMargins(kvLine("GST:", oTotalTax.toFixed(2), W), layout));
-      }
+    if (oTotalTax > 0) {
+      lines.push(
+        withMargins(
+          kvLine(isInclusive ? "GST (Included):" : "GST:", oTotalTax.toFixed(2), W),
+          layout
+        )
+      );
+    }
 
-      if (roundOff !== 0) {
-        lines.push(
-          withMargins(
-            kvLine(
-              "Round Off:",
-              (roundOff > 0 ? "+" : "") + roundOff.toFixed(2),
-              W
-            ),
-            layout
-          )
-        );
-      }
+    if (roundOff !== 0) {
+      lines.push(
+        withMargins(
+          kvLine("Round Off:", (roundOff > 0 ? "+" : "") + roundOff.toFixed(2), W),
+          layout
+        )
+      );
+    }
+
     lines.push(withMargins(dashes(), layout));
 
-      // === GRAND TOTAL: BOLD + DOUBLE SIZE ===
-      // FIX: Manually calculate spacing for double-width characters with buffer.
-      // Double width means characters are effectively 2x wide, so we have W/2 columns.
-      // We subtract 2 extra columns for safety buffer to prevent wrapping.
-      const label = "Grand Total:";
-      const val = oGrandTotal.toFixed(2);
-      // Floor(W/2) minus 1 or 2 for margin safety on 58mm printers
-      const effectiveW = Math.floor(W / 2) - 1; 
-      
-      let spacing = effectiveW - label.length - val.length;
-      if (spacing < 1) spacing = 1;
-      
-      const gtLine = label + " ".repeat(spacing) + val;
-      
-const gtLabel = (oSubtotalEx > 0 || oTotalTax > 0) ? "Grand Total:" : "Total:";
-const gtVal = oGrandTotal.toFixed(2);
-
-if (is80) {
-  // 2x width => use scaled width to avoid overflow/wrap
-  lines.push(
-    MODE_BOLD +
-      SIZE_2X +
-      withMargins(kvLineScaled(gtLabel, gtVal, W, 2), { ...layout, innerCols: Math.floor(W / 2) }) +
-      SIZE_1X +
-      MODE_NO_BOLD
-  );
-} else {
-  // 58mm: keep it tall (double-height only), stable for alignment
-  lines.push(
-    MODE_BOLD +
-      SIZE_2H +
-      withMargins(kvLine(gtLabel, gtVal, W), layout) +
-      SIZE_1X +
-      MODE_NO_BOLD
-  );
-}
-
-    } else {
-      // === TOTAL (Simple): BOLD + DOUBLE SIZE ===
-      const label = "Total:";
-      const val = oGrandTotal.toFixed(2);
-      // Floor(W/2) minus 1 or 2 for margin safety on 58mm printers
-      const effectiveW = Math.floor(W / 2) - 1;
-      
-      let spacing = effectiveW - label.length - val.length;
-      if (spacing < 1) spacing = 1;
-      
-      const gtLine = label + " ".repeat(spacing) + val;
-      
-  lines.push(
-    MODE_BOLD +
-      SIZE_2H +
-      withMargins(kvLine("Total:", oGrandTotal.toFixed(2), W), layout) +
-      SIZE_1X +
-      MODE_NO_BOLD
-  )
-    }
+    // ===== GRAND TOTAL =====
+    lines.push(
+      MODE_BOLD +
+        (is80 ? SIZE_2X : SIZE_2H) +
+        withMargins(kvLine("Grand Total:", oGrandTotal.toFixed(2), W), layout) +
+        SIZE_1X +
+        MODE_NO_BOLD
+    );
 
     lines.push(withMargins(dashes(), layout));
     lines.push(withMargins(center("** THANK YOU! VISIT AGAIN !! **", W), layout));
     lines.push(withMargins(center("Powered by Cafe QR", W), layout));
     lines.push("");
 
-    const body = lines.join("\n");
-    const logoEsc = buildLogoEscPos(restaurantProfile);
-
-    return escposPageSetup(layout) + logoEsc + body;
+    return escposPageSetup(layout) + buildLogoEscPos(restaurantProfile) + lines.join("\n");
   } catch (e) {
     console.error(e);
     return "PRINT ERROR";

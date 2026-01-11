@@ -10,7 +10,7 @@ export class InvoiceService {
         process.env.SUPABASE_SERVICE_ROLE_KEY
       );
 
-      // 2. Fetch order details if not fully provided
+      // 2. Fetch order details
       const { data: order, error: orderErr } = await supabase
         .from('orders')
         .select('*')
@@ -38,13 +38,14 @@ export class InvoiceService {
 
       if (itemsErr) throw itemsErr;
 
-      // 5. Determine GST settings
+      // 5. GST settings (display only)
       const gstEnabled = (order.gst_enabled ?? profile?.gst_enabled) ?? false;
       const rawRate = restaurant.gst_rate || profile.default_tax_rate || 5;
-      const gstRate = gstEnabled ? (Number(rawRate) / 100) : 0;
-      const pricesIncludeTax = (order.prices_include_tax ?? profile?.prices_include_tax) ?? false;
+      const gstRate = gstEnabled ? Number(rawRate) / 100 : 0;
+      const pricesIncludeTax =
+        (order.prices_include_tax ?? profile?.prices_include_tax) ?? false;
 
-      // 6. Process each item (Standard ERP calculation)
+      // 6. Process line items (DISPLAY ONLY)
       let totalLineDiscounts = 0;
       let subtotalExGst = 0;
 
@@ -53,113 +54,92 @@ export class InvoiceService {
         const price = Number(item.price) || 0;
         const baseAmount = qty * price;
 
-        // Line-wise discount
         let lineDiscountPct = Number(item.discount_percent || 0);
         let lineDiscountAmt = Number(item.discount_amount || 0);
 
         if (lineDiscountPct > 0 && lineDiscountAmt === 0) {
-            lineDiscountAmt = baseAmount * (lineDiscountPct / 100);
+          lineDiscountAmt = baseAmount * (lineDiscountPct / 100);
         } else if (lineDiscountAmt > 0 && lineDiscountPct === 0 && baseAmount > 0) {
-            lineDiscountPct = (lineDiscountAmt / baseAmount) * 100;
+          lineDiscountPct = (lineDiscountAmt / baseAmount) * 100;
         }
 
         totalLineDiscounts += lineDiscountAmt;
 
-        // Line net (Face Value after discount)
         const lineNet = baseAmount - lineDiscountAmt;
 
-        // Line GST logic (Strip tax if inclusive)
         let lineGst = 0;
-        let lineTaxRate = gstRate;
-        let lineNetEx = 0; // The pure taxable base contribution
-        
+        let lineNetEx = 0;
+
         if (gstEnabled) {
           if (pricesIncludeTax) {
-            // Inclusive: Tax is inside lineNet
             const taxFactor = gstRate / (1 + gstRate);
             lineGst = lineNet * taxFactor;
             lineNetEx = lineNet - lineGst;
           } else {
-            // Exclusive: Tax is on top
             lineGst = lineNet * gstRate;
             lineNetEx = lineNet;
           }
         } else {
-            lineNetEx = lineNet;
-            lineGst = 0;
-            lineTaxRate = 0;
+          lineNetEx = lineNet;
         }
-        
+
         subtotalExGst += lineNetEx;
 
         return {
           item_name: item.item_name || item.name || item.menu_items?.name,
           quantity: qty,
-          unit_price: price, 
-          discount_percent: lineDiscountPct,
-          discount_amount: Math.round(lineDiscountAmt * 100) / 100,
-          line_net: Math.round(lineNetEx * 100) / 100, // Storing Ex-Tax Net for strict accounting
-          tax_rate: lineTaxRate * 100,
-          tax_amount: Math.round(lineGst * 100) / 100, 
-          amount_inc_gst: Math.round((lineNetEx + lineGst) * 100) / 100, 
+          unit_price: price,
+          discount_percent: Number(lineDiscountPct.toFixed(2)),
+          discount_amount: Number(lineDiscountAmt.toFixed(2)),
+          line_net: Number(lineNetEx.toFixed(2)),
+          tax_rate: gstEnabled ? gstRate * 100 : 0,
+          tax_amount: Number(lineGst.toFixed(2)),
+          amount_inc_gst: Number((lineNetEx + lineGst).toFixed(2)),
         };
       });
 
-      // 7. Apply Order-Level Discount
-      // Order Discount applies to the Subtotal Ex-Tax
-      let orderDiscountPct = Number(order.total_discount_percent) || 0; 
-      let orderDiscountAmt = Number(order.discount_amount) || 0;
-      
-      // Calculate derived amount if needed
-      if (orderDiscountPct > 0) {
-          orderDiscountAmt = subtotalExGst * (orderDiscountPct / 100);
-      } else if (orderDiscountAmt > 0 && subtotalExGst > 0) {
-           orderDiscountPct = (orderDiscountAmt / subtotalExGst) * 100;
-      }
-      
-      const taxableAmount = Math.max(0, subtotalExGst - orderDiscountAmt);
-
-      // 8. Calculate GST on Final Taxable Amount
-      // (Simplified: Single rate on total taxable)
-      const totalGst = gstEnabled ? Math.round(taxableAmount * gstRate * 100) / 100 : 0;
-
-      // 9. Grand Total
+      // ------------------------------------------------------------------
+      // ✅ OVERRIDE TOTALS FROM ORDER (SOURCE OF TRUTH)
+      // ------------------------------------------------------------------
+      const orderDiscountAmt = Number(order.discount_amount || 0);
+      const orderDiscountPct = Number(order.total_discount_percent || 0);
+      const taxableAmount = Number(order.subtotal_ex_tax || 0);
+      const totalGst = Number(order.total_tax || 0);
       const roundOff = Number(order.round_off_amount || 0);
-      const grandTotal = Math.round((taxableAmount + totalGst + roundOff) * 100) / 100;
+      const grandTotal = Number(order.total_amount || 0);
 
-      // 10. Generate Invoice Number
-      const invoiceNo = await this.generateInvoiceNumber(restaurant.id);
-      
-      // 11. Prepare Invoice Header
+      // 7. Generate Invoice Number
+      const invoiceNo = await this.generateInvoiceNumber(finalRestId);
+
+      // 8. Prepare Invoice Header (STRICT MIRROR OF ORDER)
       const invoiceData = {
         restaurant_id: finalRestId,
         order_id: order.id,
         invoice_no: invoiceNo,
         invoice_date: new Date().toISOString().split('T')[0],
-        
-        line_subtotal: Math.round(subtotalExGst * 100) / 100,
-        line_discount_total: Math.round(totalLineDiscounts * 100) / 100,
-        
-        // Map to both possible column names for compatibility
-        discount_amount: Math.round(orderDiscountAmt * 100) / 100,
-        order_discount_percent: Math.round(orderDiscountPct * 100) / 100,
-        order_discount_total: Math.round(orderDiscountAmt * 100) / 100,
-        
-        taxable_amount: Math.round(taxableAmount * 100) / 100,
-        total_tax: totalGst,
-        gst_rate: gstEnabled ? gstRate * 100 : 0,
-        
-        subtotal_ex_gst: Math.round(taxableAmount * 100) / 100, // Legacy/Compatible field for Taxable Amount
-        total_inc_gst: grandTotal,
-        total_inc_tax: grandTotal,
-        round_off_amount: roundOff,
-        
+
+        line_subtotal: Number(subtotalExGst.toFixed(2)),
+        line_discount_total: Number(totalLineDiscounts.toFixed(2)),
+
+        discount_amount: Number(orderDiscountAmt.toFixed(2)),
+        order_discount_percent: Number(orderDiscountPct.toFixed(2)),
+        order_discount_total: Number(orderDiscountAmt.toFixed(2)),
+
+        taxable_amount: Number(taxableAmount.toFixed(2)),
+        subtotal_ex_gst: Number(taxableAmount.toFixed(2)),
+        total_tax: Number(totalGst.toFixed(2)),
+        gst_rate: gstEnabled ? rawRate : 0,
+
+        total_inc_gst: Number(grandTotal.toFixed(2)),
+        total_inc_tax: Number(grandTotal.toFixed(2)),
+        round_off_amount: Number(roundOff.toFixed(2)),
+
         payment_method: order.payment_method,
         created_at: new Date().toISOString(),
-        customer_name: order.customer_name
+        customer_name: order.customer_name,
       };
 
-      // 12. Upsert Invoice
+      // 9. Upsert Invoice
       const { data: invoice, error: invErr } = await supabase
         .from('invoices')
         .upsert([invoiceData], { onConflict: 'order_id' })
@@ -168,27 +148,25 @@ export class InvoiceService {
 
       if (invErr) throw invErr;
 
-      // 13. Insert Lines
+      // 10. Insert Invoice Line Items
       const invoiceLineItems = invoiceItems.map((item, idx) => ({
         invoice_id: invoice.id,
         line_no: idx + 1,
         item_name: item.item_name,
         qty: item.quantity,
-        unit_rate_ex_tax: item.unit_price, // Fallback to face value if rigorous ex-tax unit calc not available
+        unit_rate_ex_tax: item.unit_price,
         discount_percent: item.discount_percent,
         discount_amount: item.discount_amount,
         line_net: item.line_net,
-        // Populate redundant schema fields
-        line_total_ex_tax: item.line_net, 
+        line_total_ex_tax: item.line_net,
         line_total_inc_tax: item.amount_inc_gst,
-        
         tax_rate: item.tax_rate,
         tax_amount: item.tax_amount,
-        amount_inc_gst: item.amount_inc_gst
+        amount_inc_gst: item.amount_inc_gst,
       }));
 
       await supabase.from('invoice_items').delete().eq('invoice_id', invoice.id);
-      
+
       const { error: lineErr } = await supabase
         .from('invoice_items')
         .insert(invoiceLineItems);
@@ -198,9 +176,8 @@ export class InvoiceService {
       return {
         invoiceId: invoice.id,
         invoiceNo: invoice.invoice_no,
-        success: true
+        success: true,
       };
-
     } catch (error) {
       console.error('Invoice creation error:', error);
       throw error;
@@ -213,51 +190,35 @@ export class InvoiceService {
       process.env.SUPABASE_SERVICE_ROLE_KEY
     );
 
-    // 1. Calculate Fiscal Year (April to March)
     const now = new Date();
-    const currentYear = now.getFullYear(); // e.g., 2026
-    const currentMonth = now.getMonth();   // 0 = Jan, 3 = April
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
 
     let startYear, endYear;
     if (currentMonth >= 3) {
-       // April onwards: FY is Current-Next (e.g., Apr 2025 is FY25-26)
-       startYear = currentYear;
-       endYear = currentYear + 1;
+      startYear = currentYear;
+      endYear = currentYear + 1;
     } else {
-       // Jan-March: FY is Prev-Current (e.g., Jan 2026 is FY25-26)
-       startYear = currentYear - 1;
-       endYear = currentYear;
+      startYear = currentYear - 1;
+      endYear = currentYear;
     }
 
-    const shortStart = String(startYear).slice(-2);
-    const shortEnd = String(endYear).slice(-2);
-    const prefix = `FY${shortStart}-${shortEnd}/`; 
+    const prefix = `FY${String(startYear).slice(-2)}-${String(endYear).slice(-2)}/`;
 
-    // 2. Fetch latest invoice with this prefix
     const { data } = await supabase
       .from('invoices')
       .select('invoice_no')
       .eq('restaurant_id', restaurantId)
-      .ilike('invoice_no', `${prefix}%`) // Filter by current FY
+      .ilike('invoice_no', `${prefix}%`)
       .order('created_at', { ascending: false })
       .limit(1);
 
     let nextSeq = 1;
-
-    if (data && data.length > 0) {
-      const lastNo = data[0].invoice_no;
-      // Extract sequence after the prefix
-      if (lastNo.startsWith(prefix)) {
-         const numericPart = lastNo.replace(prefix, '');
-         const lastSeq = parseInt(numericPart, 10);
-         if (!isNaN(lastSeq)) {
-            nextSeq = lastSeq + 1;
-         }
-      }
+    if (data?.length) {
+      const lastSeq = parseInt(data[0].invoice_no.replace(prefix, ''), 10);
+      if (!isNaN(lastSeq)) nextSeq = lastSeq + 1;
     }
 
-    // 3. Return formatted ID (e.g., FY25-26/000128)
     return `${prefix}${String(nextSeq).padStart(6, '0')}`;
   }
 }
-
