@@ -1,3 +1,5 @@
+//pages/api/owner/import-menu-items.js
+
 import { createClient } from "@supabase/supabase-js";
 
 const supabaseAdmin = createClient(

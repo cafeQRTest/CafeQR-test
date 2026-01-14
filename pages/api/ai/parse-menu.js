@@ -1,3 +1,5 @@
+//pages/api/ai/parse-menu
+
 export const config = {
   maxDuration: 60, // Vercel limit
   api: {

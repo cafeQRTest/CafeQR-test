@@ -14,6 +14,8 @@ import NiceSelect from "../../components/NiceSelect";
 import { getSupabase } from "../../services/supabase";
 import { useAlert } from "../../context/AlertContext";
 import styled, { keyframes } from "styled-components";
+import MenuExcelImport from "../../components/MenuExcelImport"; // adjust path
+
 const ToolBar = styled.div`
   display: flex;
   flex-direction: column;
@@ -175,6 +177,29 @@ export default function MenuPage() {
 
   const restaurantId = restaurant?.id || cachedRestId;
 
+
+
+
+
+
+
+
+const deleteIdsInChunks = useCallback(async (ids, chunkSize = 200) => {
+  if (!supabase) throw new Error("Client not ready");
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const chunk = ids.slice(i, i + chunkSize);
+    const { error } = await supabase
+      .from("menu_items")
+      .delete()
+      .in("id", chunk)
+      .eq("restaurant_id", restaurantId);
+
+    if (error) throw error;
+  }
+}, [supabase, restaurantId]);
+
+
+
   const [items, setItems] = useState(() => {
     if (typeof window !== 'undefined' && restaurantId) {
       const saved = localStorage.getItem(`menu_items_${restaurantId}`);
@@ -212,6 +237,73 @@ export default function MenuPage() {
   const [showLeftArrow, setShowLeftArrow] = useState(false);
   const [showRightArrow, setShowRightArrow] = useState(false);
 
+// 2) pagination state
+const PAGE_SIZE = 100;
+const [page, setPage] = useState(1);
+const [totalCount, setTotalCount] = useState(0);
+const totalPages = Math.max(1, Math.ceil((totalCount || 0) / PAGE_SIZE));
+
+// 3) now effects that depend on those states are safe
+useEffect(() => {
+  setPage(1);
+  setSelected(new Set());
+}, [filterText, filterCategory, vegOnly, pkgOnly]);
+
+
+const loadMenuItems = useCallback(async () => {
+  if (!supabase || !restaurantId) return;
+
+  setLoading(true);
+  setError("");
+
+  try {
+    const from = (page - 1) * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+
+    let q = supabase
+      .from("menu_items")
+      .select(
+        `id, name, category, price, code_number, hsn, tax_rate, status, veg, is_packaged_good, compensation_cess_rate, ispopular, image_url, has_variants, uom_id,
+         menu_item_variants(variant_templates(name)),
+         variant_pricing(option_id, price, variant_options(name)),
+         menu_item_upsells!menu_item_upsells_parent_menu_item_id_fkey(
+           upsell_menu_item_id,
+           upsell_item:menu_items!menu_item_upsells_upsell_menu_item_id_fkey(id, name, price)
+         )`,
+        { count: "exact" }
+      )
+      .eq("restaurant_id", restaurantId);
+
+    if (vegOnly) q = q.eq("veg", true);
+    if (pkgOnly) q = q.eq("is_packaged_good", true);
+    if (filterCategory !== "all") q = q.eq("category", filterCategory);
+
+    const search = filterText.trim();
+    if (search) {
+      q = q.or(
+        `name.ilike.%${search}%,category.ilike.%${search}%,code_number.ilike.%${search}%`
+      );
+    }
+
+    const { data, error, count } = await q
+      .order("category", { ascending: true })
+      .order("name", { ascending: true })
+      .range(from, to);
+
+    if (error) throw error;
+
+    setItems(data || []);
+    setTotalCount(count || 0);
+
+    // IMPORTANT: do NOT cache huge menu arrays in localStorage
+    // localStorage.setItem(`menu_items_${restaurantId}`, JSON.stringify(data || []));
+  } catch (e) {
+    setError(e.message || "Failed to load items");
+  } finally {
+    setLoading(false);
+  }
+}, [supabase, restaurantId, page, PAGE_SIZE, vegOnly, pkgOnly, filterCategory, filterText]);
+
   // Check scroll position to toggle arrows
   const checkScroll = () => {
     if (carouselRef.current) {
@@ -244,6 +336,8 @@ export default function MenuPage() {
   const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [showVariantManager, setShowVariantManager] = useState(false);
   const [showImageImport, setShowImageImport] = useState(false);
+  const [showExcelImport, setShowExcelImport] = useState(false);
+
 
   // Helper to refresh categories and items after edits
   const refreshCategories = useCallback(async () => {
@@ -283,6 +377,8 @@ export default function MenuPage() {
       localStorage.setItem('last_active_restaurant', restaurant.id);
     }
   }, [restaurant]);
+
+
 
   // 0. Load from Cache immediately when restaurantId is known
   useEffect(() => {
@@ -392,12 +488,10 @@ export default function MenuPage() {
         const newItems = its || [];
 
         setCategories(newCats);
-        setItems(newItems);
         
         // Cache to localStorage
         localStorage.setItem(`categories_${restaurantId}`, JSON.stringify(newCats));
-        localStorage.setItem(`menu_items_${restaurantId}`, JSON.stringify(newItems));
-        
+
         dataLoadedRef.current = true;
       } catch (e) {
         setError(e.message || "Failed to load");
@@ -407,6 +501,12 @@ export default function MenuPage() {
     };
     load();
   }, [checking, loadingRestaurant, restaurantId, supabase]);
+
+useEffect(() => {
+  if (checking || loadingRestaurant || !restaurantId || !supabase) return;
+  loadMenuItems();
+}, [checking, loadingRestaurant, restaurantId, supabase, loadMenuItems]);
+
 
   const visible = useMemo(() => {
     const q = filterText.trim().toLowerCase();
@@ -623,43 +723,46 @@ export default function MenuPage() {
               <Button variant="outline" onClick={() => applyBulk("out_of_stock")}>
                 Mark Out of Stock
               </Button>
-              <Button 
-                variant="outline" 
-                onClick={async () => {
-                  const count = selected.size;
-                  const ok = await showConfirm(
-                    `Are you sure you want to delete ${count} selected item${count > 1 ? 's' : ''}?`
-                  );
-                  if (!ok) return;
-                  
-                  try {
-                    setLoading(true);
-                    const { error: delError } = await supabase
-                      .from('menu_items')
-                      .delete()
-                      .in('id', Array.from(selected));
-                    
-                    if (delError) throw delError;
-                    
-                    setItems(prev => prev.filter(item => !selected.has(item.id)));
-                    setSelected(new Set());
-                    setError('');
-                  } catch (e) {
-                    setError(e.message || 'Failed to delete items');
-                  } finally {
-                    setLoading(false);
-                  }
-                }}
-                style={{ background: '#fee2e2', color: '#dc2626', borderColor: '#fecaca' }}
-              >
-                Delete Selected ({selected.size})
-              </Button>
+              <Button
+  variant="outline"
+  onClick={async () => {
+    const ids = Array.from(selected);
+    const count = ids.length;
+
+    const ok = await showConfirm(
+      `Are you sure you want to delete ${count} selected item${count > 1 ? "s" : ""}?`
+    );
+    if (!ok) return;
+
+    try {
+      setLoading(true);
+      await deleteIdsInChunks(ids, 200);
+
+      setSelected(new Set());
+      // Reload the current page after delete
+      await loadMenuItems();
+      setError("");
+    } catch (e) {
+      setError(e.message || "Failed to delete items");
+    } finally {
+      setLoading(false);
+    }
+  }}
+  style={{ background: "#fee2e2", color: "#dc2626", borderColor: "#fecaca" }}
+>
+  Delete Selected ({selected.size})
+</Button>
+
             </>
           )}
           <Button onClick={() => openEditor({})}>Add New Item</Button>
           <Button onClick={() => setShowImageImport(true)} style={{ position: 'relative', overflow: 'visible' }}>
             Import from Image
             <AIBadge>AI</AIBadge>
+          </Button>
+          <Button onClick={() => setShowExcelImport(true)}>
+          Import from Excel
+          <AIBadge>AI</AIBadge>
           </Button>
           <Button onClick={() => setShowLibrary(true)}>Add from Library</Button>
           <Button variant="outline" onClick={() => setShowCategoryManager(true)}>Categories</Button>
@@ -751,6 +854,8 @@ export default function MenuPage() {
                     checked={allSelected}
                     onChange={toggleSelectAll}
                   />
+
+
                 </th>
                 <th className="col-name" style={{ width: '200px' }}>Name</th>
                 <th className="hide-sm" style={{ width: '85px' }}>Code</th>
@@ -1056,6 +1161,28 @@ export default function MenuPage() {
             </tbody>
           </table>
         </div>
+<div style={{ display: "flex", justifyContent: "center", gap: 12, padding: "14px 0" }}>
+  <Button
+    variant="outline"
+    disabled={page <= 1 || loading}
+    onClick={() => setPage((p) => Math.max(1, p - 1))}
+  >
+    Previous
+  </Button>
+
+  <div style={{ paddingTop: 6, fontWeight: 600 }}>
+    Page {page} of {totalPages}
+  </div>
+
+  <Button
+    variant="outline"
+    disabled={page >= totalPages || loading}
+    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+  >
+    Next
+  </Button>
+</div>
+
       </div>
 
       {/* Detail Popup Modal */}
@@ -2222,6 +2349,51 @@ export default function MenuPage() {
           onClose={() => setShowVariantManager(false)}
         />
       )}
+{showExcelImport && (
+  <div
+    onClick={() => setShowExcelImport(false)}
+    style={{
+      position: "fixed",
+      inset: 0,
+      zIndex: 9999,
+      background: "rgba(0,0,0,0.6)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 16,
+    }}
+  >
+    <div
+      onClick={(e) => e.stopPropagation()}
+      style={{
+        width: "min(820px, 100%)",
+        maxHeight: "90vh",
+        overflow: "auto",
+        background: "#fff",
+        borderRadius: 12,
+        boxShadow: "0 20px 50px rgba(0,0,0,0.35)",
+      }}
+    >
+      <MenuExcelImport
+        restaurantId={restaurantId}
+        supabase={supabase}
+        existingItems={items}
+        defaults={{
+          category: "General",
+          veg: false,
+          ispackagedgood: false,
+          status: "available",
+          compensationcessrate: 0,
+        }}
+        onImported={(newItems) => {
+          if (newItems?.length) setItems((prev) => [...newItems, ...prev]);
+          setShowExcelImport(false);
+        }}
+        onClose={() => setShowExcelImport(false)}
+      />
+    </div>
+  </div>
+)}
 
       {showImageImport && (
         <MenuImageImport
