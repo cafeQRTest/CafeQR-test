@@ -675,6 +675,8 @@ const SectionLabel = ({ children }) => (
   </div>
 );
 
+
+
 // -------------------------------
 // Counter Sale Page
 // -------------------------------
@@ -838,6 +840,14 @@ const [orderMode, setOrderMode] = useState('settle');
   const [cartUpsells, setCartUpsells] = useState([]);
 
   const menuMapRef = useRef(new Map());
+
+const PAGE_SIZE = 80; // adjust (50/80/100)
+const [page, setPage] = useState(1);
+
+useEffect(() => {
+  setPage(1);
+}, [searchQuery, categoryFilter, filterMode]);
+
 
   // Helpers
   const cacheMenuIntoMap = (list) => {
@@ -1481,6 +1491,8 @@ const loadCreditCustomers = async () => {
       const itemCategory = item.category || 'Others';
       if (categoryFilter !== 'all' && itemCategory !== categoryFilter) return false;
 
+
+
       const hit =
         !q ||
         item.name.toLowerCase().includes(q) ||
@@ -1502,6 +1514,16 @@ const loadCreditCustomers = async () => {
     return base;
   }, [menuItems, filterMode, searchQuery, popCounts, categoryFilter]);
 
+// Pagination (AFTER filteredItems)
+const totalCount = filteredItems.length;
+const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+
+const pagedItems = useMemo(() => {
+  const start = (page - 1) * PAGE_SIZE;
+  return filteredItems.slice(start, start + PAGE_SIZE);
+}, [filteredItems, page]);
+
+
   const categoryChips = useMemo(() => {
     const set = new Set();
     (menuItems || []).forEach((item) => {
@@ -1513,16 +1535,17 @@ const loadCreditCustomers = async () => {
 
 
   const groupedItems = useMemo(
-    () =>
-      Object.entries(
-        filteredItems.reduce((acc, item) => {
-          const cat = item.category || 'Others';
-          (acc[cat] || (acc[cat] = [])).push(item);
-          return acc;
-        }, {})
-      ),
-    [filteredItems]
-  );
+  () =>
+    Object.entries(
+      pagedItems.reduce((acc, item) => {
+        const cat = item.category || 'Others';
+        (acc[cat] || (acc[cat] = [])).push(item);
+        return acc;
+      }, {})
+    ),
+  [pagedItems]
+);
+
 
   const cartItemsCount = useMemo(
     () => cart.reduce((s, i) => {
@@ -2151,6 +2174,8 @@ const orderForPrint = {
           border: '1px solid #f1f5f9',
           marginTop: '20px'
         }}>
+
+
           <div style={{ position: 'relative', marginBottom: '20px' }}>
             <input 
               type="text" 
@@ -2294,8 +2319,11 @@ const orderForPrint = {
               </button>
             );
           })}
+
         </div>
       )}
+
+
 
       <main className="counter-main-mobile-like">
         <section className="counter-menu-items">
@@ -2479,6 +2507,21 @@ const isVariantItem = !!item.has_variants && (item.variants?.length || 0) > 0;
           )}
         </section>
       </main>
+
+<div style={{ display: 'flex', justifyContent: 'center', gap: 12, padding: '12px 0' }}>
+  <button type="button" disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>
+    Previous
+  </button>
+
+  <div style={{ paddingTop: 6, fontWeight: 700 }}>
+    Page {page} of {totalPages} ({totalCount} items)
+  </div>
+
+  <button type="button" disabled={page >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))}>
+    Next
+  </button>
+</div>
+
 
       {cartItemsCount > 0 && (
   <button
