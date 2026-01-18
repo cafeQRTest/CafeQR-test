@@ -1,8 +1,35 @@
-//print-hub-win/print-hub.ps1
-
 param([int]$Port = 3333)
 
 $ErrorActionPreference = 'Stop'
+
+# ---- JSON COMPAT (PS2 fallback) -------------------------------------------
+# ConvertTo-Json/ConvertFrom-Json were introduced in PowerShell 3.0. [web:503][web:510]
+$script:HasConvertToJson   = !!(Get-Command ConvertTo-Json   -ErrorAction SilentlyContinue)
+$script:HasConvertFromJson = !!(Get-Command ConvertFrom-Json -ErrorAction SilentlyContinue)
+
+function New-JavaScriptSerializer {
+  # JavaScriptSerializer is available via System.Web.Extensions. [web:508][web:499]
+  try { Add-Type -AssemblyName System.Web.Extensions -ErrorAction SilentlyContinue } catch { }
+  $ser = New-Object System.Web.Script.Serialization.JavaScriptSerializer
+  try { $ser.MaxJsonLength = [Int32]::MaxValue } catch { }
+  return $ser
+}
+
+function To-JsonCompat($obj) {
+  if ($script:HasConvertToJson) {
+    return ($obj | ConvertTo-Json -Depth 5)
+  }
+  $ser = New-JavaScriptSerializer
+  return $ser.Serialize($obj)  # PS2 fallback. [web:499][web:508]
+}
+
+function From-JsonCompat([string]$json) {
+  if ($script:HasConvertFromJson) {
+    return ($json | ConvertFrom-Json)
+  }
+  $ser = New-JavaScriptSerializer
+  return $ser.DeserializeObject($json)  # PS2 fallback. [web:499][web:508]
+}
 
 # ---- PRINTER ENUMERATION (Get-Printer or WMI fallback) --------------------
 function Get-InstalledPrinters {
@@ -113,7 +140,6 @@ function New-HubListener {
 
   $prefix = "http://127.0.0.1:$Port/"
 
-  # Always use New-Object so it works on PowerShell 2/3/4/5+
   $listener = New-Object System.Net.HttpListener
   $listener.Prefixes.Clear()
   $listener.Prefixes.Add($prefix)
@@ -123,7 +149,7 @@ function New-HubListener {
     return $listener, $prefix
   } catch {
     $msg     = $_.Exception.Message
-    $account = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name  # e.g. MACHINE\User
+    $account = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 
     if ($msg -match 'Access is denied' -or
         $msg -match 'conflicts with an existing registration' -or
@@ -131,13 +157,9 @@ function New-HubListener {
 
       Write-Host "CafeQR: fixing URL ACL for $prefix (account $account)..." -ForegroundColor Yellow
 
-      # 1) Remove any stale reservation (ignore errors if it wasn't there)
       & netsh.exe http delete urlacl url=$prefix 2>$null | Out-Null
-
-      # 2) Add a fresh ACL for the real Windows identity
       & netsh.exe http add urlacl url=$prefix user="$account" listen=yes | Out-Null
 
-      # 3) Recreate listener and start again
       $listener = New-Object System.Net.HttpListener
       $listener.Prefixes.Clear()
       $listener.Prefixes.Add($prefix)
@@ -160,7 +182,7 @@ function Send-Json($ctx, [int]$status, $obj) {
   if (-not $ctx) { return }
   $resp = $ctx.Response
   Set-Cors $resp
-  $json  = $obj | ConvertTo-Json -Depth 5
+  $json  = To-JsonCompat $obj
   $bytes = [Text.Encoding]::UTF8.GetBytes($json)
   $resp.StatusCode   = $status
   $resp.ContentType  = "application/json; charset=utf-8"
@@ -186,8 +208,8 @@ try {
     if (-not $ctx) { continue }
 
     try {
-      $req  = $ctx.Request
-      $resp = $ctx.Response
+      $req    = $ctx.Request
+      $resp   = $ctx.Response
       $method = $req.HttpMethod
       $path   = $req.RawUrl
 
@@ -212,15 +234,27 @@ try {
       if ($method -eq 'POST' -and $path -like '/printRaw*') {
         $sr   = New-Object IO.StreamReader $req.InputStream, [Text.Encoding]::UTF8
         $raw  = $sr.ReadToEnd()
-        $body = $raw | ConvertFrom-Json
+        $body = From-JsonCompat $raw
 
-        if (-not $body.printerName -or -not $body.dataBase64) {
+        # body can be PSCustomObject (PS3+) or Dictionary/Hashtable (PS2 fallback)
+        $printerName = $null
+        $dataBase64  = $null
+
+        if ($body -is [System.Collections.IDictionary]) {
+          $printerName = $body["printerName"]
+          $dataBase64  = $body["dataBase64"]
+        } else {
+          $printerName = $body.printerName
+          $dataBase64  = $body.dataBase64
+        }
+
+        if (-not $printerName -or -not $dataBase64) {
           Send-Json $ctx 400 @{ error = 'printerName and dataBase64 required' }
           continue
         }
 
-        $bytes = [Convert]::FromBase64String($body.dataBase64)
-        $ok    = [RawPrinterHelper]::SendBytes($body.printerName, $bytes)
+        $bytes = [Convert]::FromBase64String($dataBase64)
+        $ok    = [RawPrinterHelper]::SendBytes($printerName, $bytes)
 
         if (-not $ok) {
           Send-Json $ctx 500 @{ error = 'Raw print failed (check printer name / driver)' }
@@ -232,9 +266,7 @@ try {
 
       Send-Json $ctx 404 @{ error = 'not found' }
     } catch {
-      try {
-        Send-Json $ctx 500 @{ error = $_.Exception.Message }
-      } catch { }
+      try { Send-Json $ctx 500 @{ error = $_.Exception.Message } } catch { }
     }
   }
 } finally {
