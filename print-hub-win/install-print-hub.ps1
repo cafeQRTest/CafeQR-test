@@ -6,26 +6,19 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# --- Win7/PS2-safe: prefer folder passed from .bat (%~dp0) ------------------
 function Resolve-RootDir {
   param([string]$RootDir)
 
-  # Prefer folder passed from .bat, but sanitize it first (strip quotes / trailing \). [web:497]
   if ($RootDir) {
     try {
-      $candidate = $RootDir.Trim()
-      $candidate = $candidate.Trim('"')
-      $candidate = $candidate.TrimEnd('\')  # avoids edge cases with quoted trailing backslash [web:497]
-
+      $candidate = $RootDir.Trim().Trim('"').TrimEnd('\')
       if (Test-Path -LiteralPath $candidate) {
         return (Resolve-Path -LiteralPath $candidate).Path
       }
-    } catch {
-      # If RootDir contains illegal characters, ignore and fall back
-    }
+    } catch { }
   }
 
-  # Fallbacks
+  # Fallbacks (Win7/PS2 can have null $PSScriptRoot). [web:459][web:449]
   if ($PSScriptRoot -and (Test-Path -LiteralPath $PSScriptRoot)) { return $PSScriptRoot }  # [web:459]
   if ($MyInvocation.MyCommand.Path) { return (Split-Path -Parent $MyInvocation.MyCommand.Path) } # [web:449]
   return (Get-Location).Path
@@ -33,7 +26,6 @@ function Resolve-RootDir {
 
 $root = Resolve-RootDir -RootDir $RootDir
 $scriptPath = Join-Path $root "print-hub.ps1"
-
 if (-not (Test-Path -LiteralPath $scriptPath)) {
   Write-Error "Cannot find print-hub.ps1 in: $root"
   exit 1
@@ -46,7 +38,7 @@ try {
   Write-Warning "Could not set execution policy for current user: $($_.Exception.Message)"
 }
 
-# --- 2) Create Startup shortcut (works on all supported Windows versions) ---
+# --- 2) Create Startup shortcut (works on all Windows versions) -------------
 try {
   $startupDir = [Environment]::GetFolderPath('Startup')
   if (-not (Test-Path -LiteralPath $startupDir)) {
@@ -67,39 +59,13 @@ try {
   $shortcut.Save()
 
   Write-Host "[Startup] Shortcut created: $lnkPath"
-  Write-Host "Print Hub will start automatically whenever this user logs in."
 } catch {
   Write-Warning "Could not create Startup shortcut: $($_.Exception.Message)"
 }
 
-# --- 3) Optional: Scheduled Task (Windows 8+ with ScheduledTasks module) ----
-if (Get-Command Register-ScheduledTask -ErrorAction SilentlyContinue) {
-  try {
-    $action   = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $arguments
-    $trigger  = New-ScheduledTaskTrigger -AtLogOn
-    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
-
-    Register-ScheduledTask `
-      -TaskName  $TaskName `
-      -Action    $action `
-      -Trigger   $trigger `
-      -Settings  $settings `
-      -RunLevel  Highest `
-      -Force | Out-Null
-
-    try { Start-ScheduledTask -TaskName $TaskName | Out-Null } catch { }
-
-    Write-Host "[Task] $TaskName installed."
-  } catch {
-    Write-Warning "Failed to create scheduled task: $($_.Exception.Message)"
-  }
-} else {
-  Write-Host "ScheduledTasks module not available; using only Startup shortcut."
-}
-
-# --- 4) Start once immediately so helper is live right away -----------------
+# --- 3) Start once immediately (important: use -ArgumentList explicitly) ----
 try {
-  Start-Process "powershell.exe" $arguments -WindowStyle Hidden
+  Start-Process -FilePath "powershell.exe" -ArgumentList $arguments -WorkingDirectory (Split-Path $scriptPath) -WindowStyle Hidden
   Write-Host "CafeQR Print Hub started for this session."
 } catch {
   Write-Warning "Could not start print-hub.ps1 immediately: $($_.Exception.Message)"

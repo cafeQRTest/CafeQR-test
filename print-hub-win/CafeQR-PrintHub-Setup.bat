@@ -12,9 +12,7 @@ if %errorlevel% NEQ 0 (
 echo Installing CafeQR Print Hub helper...
 echo.
 
-:: IMPORTANT:
-:: %~dp0 ends with "\". Passing it quoted can break argument parsing on some systems.
-:: Using "%~dp0." makes it end with "\." instead, which resolves to the same folder. [web:472]
+:: %~dp0 ends with "\"; use "%~dp0." to avoid quoted trailing-backslash parsing issues. [web:472][web:497]
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0install-print-hub.ps1" -RootDir "%~dp0."
 
 echo.
