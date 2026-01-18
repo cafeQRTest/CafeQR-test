@@ -1,28 +1,31 @@
 param(
   [int]$Port        = 3333,
-  [string]$TaskName = "CafeQR Print Hub"
+  [string]$TaskName = "CafeQR Print Hub",
+  [string]$RootDir  = $null
 )
 
 $ErrorActionPreference = 'Stop'
 
-# --- Win7/PS2-safe way to get script directory -----------------------------
-function Get-ScriptDir {
-  # PowerShell 3+ normally populates $PSScriptRoot, but it can be null in older hosts/versions. [web:459][web:460]
-  if ($PSScriptRoot -and (Test-Path $PSScriptRoot)) { return $PSScriptRoot } # [web:459]
+# --- Win7/PS2-safe: prefer folder passed from .bat (%~dp0) ------------------
+function Resolve-RootDir {
+  param([string]$RootDir)
 
-  # Fallback for older PowerShell (Win7 default) using $MyInvocation. [web:449][web:460]
-  $p = $MyInvocation.MyCommand.Path
-  if ($p) { return (Split-Path -Parent $p) } # [web:449]
+  if ($RootDir -and (Test-Path -LiteralPath $RootDir)) {
+    # Normalize (handles trailing \)
+    return (Resolve-Path -LiteralPath $RootDir).Path
+  }
 
-  # Last resort: current working directory (should rarely happen). [web:443]
-  return (Get-Location).Path # [web:443]
+  # Fallbacks (keep them, but Win7-safe)
+  if ($PSScriptRoot -and (Test-Path -LiteralPath $PSScriptRoot)) { return $PSScriptRoot }  # PS3+ [web:459]
+  if ($MyInvocation.MyCommand.Path) { return (Split-Path -Parent $MyInvocation.MyCommand.Path) } # [web:449]
+  return (Get-Location).Path
 }
 
-$root = Get-ScriptDir
+$root = Resolve-RootDir -RootDir $RootDir
 $scriptPath = Join-Path $root "print-hub.ps1"
 
-if (-not (Test-Path $scriptPath)) {
-  Write-Error "Cannot find print-hub.ps1 next to install-print-hub.ps1"
+if (-not (Test-Path -LiteralPath $scriptPath)) {
+  Write-Error "Cannot find print-hub.ps1 in: $root"
   exit 1
 }
 
@@ -36,7 +39,7 @@ try {
 # --- 2) Create Startup shortcut (works on all supported Windows versions) ---
 try {
   $startupDir = [Environment]::GetFolderPath('Startup')
-  if (-not (Test-Path $startupDir)) {
+  if (-not (Test-Path -LiteralPath $startupDir)) {
     New-Item -ItemType Directory -Path $startupDir -Force | Out-Null
   }
 

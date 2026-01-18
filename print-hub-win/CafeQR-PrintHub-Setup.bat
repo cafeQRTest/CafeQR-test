@@ -12,8 +12,8 @@ if %errorlevel% NEQ 0 (
 echo Installing CafeQR Print Hub helper...
 echo.
 
-:: --- 2) Run the PowerShell installer with ExecutionPolicy Bypass for this process ---
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0install-print-hub.ps1"
+:: --- 2) Run the PowerShell installer and PASS THE ROOT FOLDER ---
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0install-print-hub.ps1" -RootDir "%~dp0"
 
 echo.
 echo Done. You can now close this window.
