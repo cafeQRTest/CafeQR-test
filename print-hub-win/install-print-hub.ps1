@@ -65,7 +65,19 @@ try {
 
 # --- 3) Start once immediately (important: use -ArgumentList explicitly) ----
 try {
-  Start-Process -FilePath "powershell.exe" -ArgumentList $arguments -WorkingDirectory (Split-Path $scriptPath) -WindowStyle Hidden
+  $argList = @(
+    '-NoProfile'
+    '-WindowStyle','Hidden'
+    '-ExecutionPolicy','Bypass'
+    '-File', $scriptPath
+    '-Port', $Port
+  )
+
+  Start-Process -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" `
+    -ArgumentList $argList `
+    -WorkingDirectory (Split-Path -Parent $scriptPath) `
+    -WindowStyle Hidden
+
   Write-Host "CafeQR Print Hub started for this session."
 } catch {
   Write-Warning "Could not start print-hub.ps1 immediately: $($_.Exception.Message)"
