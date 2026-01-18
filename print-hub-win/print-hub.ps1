@@ -142,7 +142,11 @@ function Set-Cors([System.Net.HttpListenerResponse]$resp) {
 function Send-Json($ctx, [int]$status, $obj) {
   $resp = $ctx.Response
   Set-Cors $resp
+
+  # Force to "simple" types only: hashtable / array / string / number.
+  # This avoids JavaScriptSerializer circular-reference errors. [web:557][web:511]
   $json  = To-JsonCompat $obj
+
   $bytes = [Text.Encoding]::UTF8.GetBytes($json)
   $resp.StatusCode   = $status
   $resp.ContentType  = "application/json; charset=utf-8"
@@ -170,15 +174,22 @@ try {
       continue
     }
 
-    if ($req.HttpMethod -eq 'GET' -and $req.RawUrl -like '/health*') {
-      Send-Json $ctx 200 @{ ok = $true; host = $env:COMPUTERNAME; os = [Environment]::OSVersion.VersionString }
-      continue
-    }
+if ($req.HttpMethod -eq 'GET' -and $req.RawUrl -like '/health*') {
+  Send-Json $ctx 200 @{
+    ok   = $true
+    host = [string]$env:COMPUTERNAME
+    os   = [string][Environment]::OSVersion.VersionString
+  }
+  continue
+}
 
     if ($req.HttpMethod -eq 'GET' -and $req.RawUrl -like '/printers*') {
-      Send-Json $ctx 200 (Get-InstalledPrinters)
-      continue
-    }
+  # Return ONLY strings (printer names), not WMI objects. [web:558]
+  $names = @(Get-InstalledPrinters) | ForEach-Object { [string]$_ }
+  Send-Json $ctx 200 $names
+  continue
+}
+
 
     if ($req.HttpMethod -eq 'POST' -and $req.RawUrl -like '/printRaw*') {
       $sr   = New-Object IO.StreamReader $req.InputStream, [Text.Encoding]::UTF8
