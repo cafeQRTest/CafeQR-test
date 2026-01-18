@@ -10,13 +10,23 @@ $ErrorActionPreference = 'Stop'
 function Resolve-RootDir {
   param([string]$RootDir)
 
-  if ($RootDir -and (Test-Path -LiteralPath $RootDir)) {
-    # Normalize (handles trailing \)
-    return (Resolve-Path -LiteralPath $RootDir).Path
+  # Prefer folder passed from .bat, but sanitize it first (strip quotes / trailing \). [web:497]
+  if ($RootDir) {
+    try {
+      $candidate = $RootDir.Trim()
+      $candidate = $candidate.Trim('"')
+      $candidate = $candidate.TrimEnd('\')  # avoids edge cases with quoted trailing backslash [web:497]
+
+      if (Test-Path -LiteralPath $candidate) {
+        return (Resolve-Path -LiteralPath $candidate).Path
+      }
+    } catch {
+      # If RootDir contains illegal characters, ignore and fall back
+    }
   }
 
-  # Fallbacks (keep them, but Win7-safe)
-  if ($PSScriptRoot -and (Test-Path -LiteralPath $PSScriptRoot)) { return $PSScriptRoot }  # PS3+ [web:459]
+  # Fallbacks
+  if ($PSScriptRoot -and (Test-Path -LiteralPath $PSScriptRoot)) { return $PSScriptRoot }  # [web:459]
   if ($MyInvocation.MyCommand.Path) { return (Split-Path -Parent $MyInvocation.MyCommand.Path) } # [web:449]
   return (Get-Location).Path
 }
