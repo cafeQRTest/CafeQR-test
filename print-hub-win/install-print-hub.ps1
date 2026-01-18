@@ -1,12 +1,26 @@
 param(
-  [int]$Port      = 3333,
+  [int]$Port        = 3333,
   [string]$TaskName = "CafeQR Print Hub"
 )
 
 $ErrorActionPreference = 'Stop'
 
-# Full path to print-hub.ps1 in the same folder
-$scriptPath = Join-Path $PSScriptRoot "print-hub.ps1"
+# --- Win7/PS2-safe way to get script directory -----------------------------
+function Get-ScriptDir {
+  # PowerShell 3+ normally populates $PSScriptRoot, but it can be null in older hosts/versions. [web:459][web:460]
+  if ($PSScriptRoot -and (Test-Path $PSScriptRoot)) { return $PSScriptRoot } # [web:459]
+
+  # Fallback for older PowerShell (Win7 default) using $MyInvocation. [web:449][web:460]
+  $p = $MyInvocation.MyCommand.Path
+  if ($p) { return (Split-Path -Parent $p) } # [web:449]
+
+  # Last resort: current working directory (should rarely happen). [web:443]
+  return (Get-Location).Path # [web:443]
+}
+
+$root = Get-ScriptDir
+$scriptPath = Join-Path $root "print-hub.ps1"
+
 if (-not (Test-Path $scriptPath)) {
   Write-Error "Cannot find print-hub.ps1 next to install-print-hub.ps1"
   exit 1
@@ -35,7 +49,7 @@ try {
   $shortcut.TargetPath       = $targetExe
   $shortcut.Arguments        = $arguments
   $shortcut.WorkingDirectory = Split-Path $scriptPath
-  $shortcut.WindowStyle      = 7   # Minimized
+  $shortcut.WindowStyle      = 7
   $shortcut.IconLocation     = "$env:SystemRoot\System32\shell32.dll,277"
   $shortcut.Save()
 

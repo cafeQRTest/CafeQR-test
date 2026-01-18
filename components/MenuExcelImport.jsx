@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 function norm(s) {
   return String(s ?? "").trim();
@@ -55,15 +55,57 @@ export default function MenuExcelImport({
   const [parsingError, setParsingError] = useState("");
   const [busy, setBusy] = useState(false);
   const [resultMsg, setResultMsg] = useState("");
+  
+  const [existingNameSet, setExistingNameSet] = useState(new Set());
+  const [loadingExisting, setLoadingExisting] = useState(false);
+ 
+useEffect(() => {
+  if (!restaurantId || !supabase) return;
 
-const existingByNormName = useMemo(() => {
-  const set = new Set();
-  for (const it of existingItems || []) {
-    const nameKey = normKey(it?.name);
-    if (nameKey) set.add(nameKey);
-  }
-  return set;
-}, [existingItems]);
+  let cancelled = false;
+
+  (async () => {
+    setLoadingExisting(true);
+    try {
+      const set = new Set();
+      const pageSize = 1000;
+      let from = 0;
+
+      while (true) {
+        const { data, error } = await supabase
+          .from("menu_items")
+          .select("name")
+          .eq("restaurant_id", restaurantId)
+          .range(from, from + pageSize - 1);
+
+        if (error) throw error;
+
+        (data || []).forEach((r) => {
+          const k = normKey(r?.name);
+          if (k) set.add(k);
+        });
+
+        if (!data || data.length < pageSize) break;
+        from += pageSize;
+      }
+
+      if (!cancelled) setExistingNameSet(set);
+    } catch (e) {
+      // If this fails, we still allow import, but dupes might error again.
+      console.error(e);
+    } finally {
+      if (!cancelled) setLoadingExisting(false);
+    }
+  })();
+
+  return () => {
+    cancelled = true;
+  };
+}, [restaurantId, supabase]);
+
+
+
+const existingByNormName = existingNameSet;
 
   const parsed = useMemo(() => {
     const drafts = (rows || []).map((r, idx) => {
@@ -72,8 +114,7 @@ const existingByNormName = useMemo(() => {
       const category = pick(r, ["category", "cat", "group"]) || defaults.category;
 
       const code = pick(r, ["codenumber", "code", "acc", "ACC", "sku", "item_code"]);
-      const price =
-        toNumber(pick(r, ["price", "sell_rate", "SELL_RATE", "rate", "RATE", "mrp", "MRP", "amount"])) ?? null;
+
 
       const hsnRaw = pick(r, ["hsn", "hsn_code", "HSN_CODE", "hsncode"]);
       const hsn = norm(hsnRaw) ? norm(hsnRaw).replace(/\.0$/, "") : null;
@@ -81,11 +122,25 @@ const existingByNormName = useMemo(() => {
       const taxrateFromFile = toNumber(pick(r, ["taxrate", "tax", "TAX", "tax%", "gst", "gst%"]));
       const taxrate = taxrateFromFile ?? (defaults.taxrate ?? 0);
 
-      // packaged flag: use explicit column if available; otherwise use defaults.ispackagedgood
-      const ispackagedgood = toBool(
-        pick(r, ["ispackagedgood", "packaged", "pkg", "is_packaged"]),
-        defaults.ispackagedgood
-      );
+
+// Read MRP separately (if present)
+const mrp = toNumber(pick(r, ["mrp", "MRP"]));
+
+// Read selling price separately (if present)
+const sellRate =
+  toNumber(pick(r, ["price", "sell_rate", "SELL_RATE", "rate", "RATE", "amount"])) ?? null;
+
+// Packaged rule: if MRP exists => packaged item
+const ispackagedgood = mrp !== null;
+
+// IMPORTANT:
+// If packaged: store price as MRP (so you can’t exceed it)
+// Else: store the normal selling price
+const price = ispackagedgood ? mrp : sellRate;
+
+
+
+
 
       const cessFromFile =
         toNumber(pick(r, ["compensationcessrate", "cess", "CESS", "cess%", "cess_per", "CESS_PER"])) ??
@@ -107,6 +162,8 @@ const existingByNormName = useMemo(() => {
         veg,
         __rawTaxMissing: taxrateFromFile === null, // track for warnings
         __rawHsnMissing: !hsn,
+__sellAboveMrp: mrp !== null && sellRate !== null && sellRate > mrp,
+
       };
     });
 
@@ -161,6 +218,9 @@ newOnes = newOnes.filter((d) => {
 
       const hasRowError = errors.some((e) => e.startsWith(rowTag + ":"));
       if (!hasRowError) validNew.push(d);
+
+if (d.__sellAboveMrp) warnings.push(`${rowTag}: SELL_RATE is higher than MRP; using MRP as price.`);
+
     }
 
     return {
