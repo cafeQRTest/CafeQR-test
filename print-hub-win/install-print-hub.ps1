@@ -48,7 +48,7 @@ try {
   $wsh        = New-Object -ComObject WScript.Shell
   $lnkPath    = Join-Path $startupDir "CafeQR Print Hub.lnk"
   $targetExe  = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
-  $arguments  = "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$scriptPath`" -Port $Port"
+  $arguments = "-NoProfile -ExecutionPolicy Bypass -File ""$scriptPath"" -Port $Port"
 
   $shortcut = $wsh.CreateShortcut($lnkPath)
   $shortcut.TargetPath       = $targetExe
