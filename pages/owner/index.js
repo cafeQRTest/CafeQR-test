@@ -34,8 +34,8 @@ export default function OwnerOverview() {
   // 2. & 3. APPLY SINGLETON PATTERN
   const supabase = getSupabase();
   const { checking } = useRequireAuth(supabase);
-  const router = useRouter(); 
-  
+  const router = useRouter();
+
   const { restaurant, loading: restLoading, error: restError } = useRestaurant();
   const { subscription, loading: subLoading } = useSubscription();
 
@@ -43,13 +43,13 @@ export default function OwnerOverview() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
-  
+
   // Modal State
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [loadingItems, setLoadingItems] = useState(false);
 
   const restaurantId = restaurant?.id || '';
-  
+
   const BRAND = {
     orange: '#ea580c',
     soft: '#fff7ed'
@@ -58,10 +58,10 @@ export default function OwnerOverview() {
   // Subscription check
   useEffect(() => {
     if (!subLoading && subscription && !subscription.is_active) {
-       router.replace('/owner/subscription');
+      router.replace('/owner/subscription');
     }
   }, [subscription, subLoading, router]);
-  
+
   // Handle View Order (Copied logic from credit-customers)
   const handleViewOrder = async (order) => {
     // 1. First, check if the order object itself already has a JSON items array (standard for some views)
@@ -71,12 +71,12 @@ export default function OwnerOverview() {
         items = Array.isArray(order.items) ? order.items : JSON.parse(order.items);
       }
     } catch (e) { console.error('Parse error:', e); }
-  
+
     // 2. Set initial state so modal opens
     setSelectedOrder({ ...order, items: items.map(it => ({ ...it, name: it.name || it.item_name || 'Item' })) })
-    
+
     if (items.length > 0) return; // If we already have items from JSON, no need to fetch
-  
+
     setLoadingItems(true);
     try {
       // 3. Fetch from order_items table specifically
@@ -84,9 +84,9 @@ export default function OwnerOverview() {
         .from('order_items')
         .select('*')
         .eq('order_id', order.id)
-      
+
       if (dbError) throw dbError
-      
+
       if (dbItems && dbItems.length > 0) {
         const formatted = dbItems.map(it => ({
           ...it,
@@ -163,6 +163,7 @@ export default function OwnerOverview() {
           .from('orders')
           .select('id, created_at, date_ordered, status, total_inc_tax, gst_enabled, total_tax, subtotal_ex_tax, discount_amount, round_off_amount') // Simplified select
           .eq('restaurant_id', restaurantId)
+          .neq('status', 'cancelled')
           .order('date_ordered', { ascending: false })
           .limit(10);
         if (error) throw error;
@@ -214,11 +215,11 @@ export default function OwnerOverview() {
         )}
 
         <KpiGrid stats={stats} />
-        
+
         <div style={{ marginBottom: '32px' }}>
           <QuickActions />
         </div>
-        
+
         <RecentOrders orders={orders} loading={loading} onViewOrder={handleViewOrder} />
       </div>
 
@@ -226,94 +227,94 @@ export default function OwnerOverview() {
       {selectedOrder && (
         <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && setSelectedOrder(null)}>
           <div className="modal-panel">
-             <div className="modal-header">
-                <h3>Order Details #{String(selectedOrder.id).substring(0,8)}</h3>
-                <button className="close-x" onClick={() => setSelectedOrder(null)}><FaTimes /></button>
-             </div>
-             <div className="modal-body">
-                <div style={{ marginBottom: 20, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                   <div>
-                      <div className="detail-label">Time Ordered</div>
-                      <div className="detail-val">{new Date(selectedOrder.date_ordered || selectedOrder.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</div>
-                   </div>
-                   <div style={{ textAlign: 'right' }}>
-                      <div className="detail-label">Order Status</div>
-                      <div className="detail-val" style={{ color: BRAND.orange, textTransform: 'uppercase' }}>{selectedOrder.status}</div>
-                   </div>
+            <div className="modal-header">
+              <h3>Order Details #{String(selectedOrder.id).substring(0, 8)}</h3>
+              <button className="close-x" onClick={() => setSelectedOrder(null)}><FaTimes /></button>
+            </div>
+            <div className="modal-body">
+              <div style={{ marginBottom: 20, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                <div>
+                  <div className="detail-label">Time Ordered</div>
+                  <div className="detail-val">{new Date(selectedOrder.date_ordered || selectedOrder.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</div>
                 </div>
-
-                <div className="order-items-sec">
-                   <div className="detail-label" style={{ marginBottom: 12, borderBottom: '1px solid #f3f4f6', paddingBottom: 8 }}>Order Items</div>
-                   
-                   {loadingItems ? (
-                      <div style={{ textAlign: 'center', padding: '24px 0', color: '#64748b', fontSize: 13 }}>
-                        <div className="spinner" style={{ margin: '0 auto 8px' }}></div>
-                        Fetching items...
-                      </div>
-                   ) : (selectedOrder.items || []).length > 0 ? (
-                      selectedOrder.items.map((it, i) => {
-                         // Prefer fully calculated fields if available, else fallback
-                         const unitInc = it.unit_price_inc_tax ?? it.price;
-                         const itemTotal = it.unit_price_inc_tax ? (it.unit_price_inc_tax * it.quantity) : (it.price * it.quantity);
-
-                         return (
-                           <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #f8fafc' }}>
-                              <div>
-                                 <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>{it.name}</div>
-                                 <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>
-                                    ₹{Number(unitInc).toFixed(2)} × {it.quantity}
-                                 </div>
-                              </div>
-                              <div style={{ fontSize: 14, fontWeight: 700, color: '#111827', textAlign: 'right' }}>
-                                 ₹{Number(itemTotal).toFixed(2)}
-                                 {Number(it.discount_amount || 0) > 0 && (
-                                   <div style={{ fontSize: 11, color: '#ef4444', fontWeight: 600 }}>
-                                      - ₹{Number(it.discount_amount).toFixed(2)}
-                                   </div>
-                                )}
-                              </div>
-                           </div>
-                         );
-                      })
-                   ) : (
-                      <div style={{ textAlign: 'center', padding: '24px 0', color: '#9ca3af', fontSize: 13, fontStyle: 'italic' }}>
-                        No items found for this order
-                      </div>
-                   )}
+                <div style={{ textAlign: 'right' }}>
+                  <div className="detail-label">Order Status</div>
+                  <div className="detail-val" style={{ color: BRAND.orange, textTransform: 'uppercase' }}>{selectedOrder.status}</div>
                 </div>
+              </div>
 
-                <div style={{ marginTop: 24, padding: 16, background: BRAND.soft, borderRadius: 12, border: '1px solid #ffedd5' }}>
-                   {Number(selectedOrder.total_tax || 0) > 0 && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                         <span style={{ fontSize: 13, color: '#6b7280', fontWeight: 600 }}>Tax Amount</span>
-                         <span style={{ fontSize: 14, fontWeight: 700, color: '#374151' }}>{formatCurrency(Number(selectedOrder.total_tax || 0))}</span>
-                      </div>
-                   )}
-                   
-                   {Number(selectedOrder.discount_amount || 0) > 0 && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                         <span style={{ fontSize: 13, color: '#ef4444', fontWeight: 600 }}>Discount</span>
-                         <span style={{ fontSize: 14, fontWeight: 700, color: '#ef4444' }}>- {formatCurrency(Number(selectedOrder.discount_amount))}</span>
-                      </div>
-                   )}
+              <div className="order-items-sec">
+                <div className="detail-label" style={{ marginBottom: 12, borderBottom: '1px solid #f3f4f6', paddingBottom: 8 }}>Order Items</div>
 
-                   {Number(selectedOrder.round_off_amount || 0) !== 0 && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                         <span style={{ fontSize: 13, color: Number(selectedOrder.round_off_amount) > 0 ? '#10b981' : '#ef4444', fontWeight: 600 }}>Round Off</span>
-                         <span style={{ fontSize: 14, fontWeight: 700, color: Number(selectedOrder.round_off_amount) > 0 ? '#10b981' : '#ef4444' }}>
-                            {Number(selectedOrder.round_off_amount) > 0 ? '+' : ''}{formatCurrency(Number(selectedOrder.round_off_amount))}
-                         </span>
-                      </div>
-                   )}
+                {loadingItems ? (
+                  <div style={{ textAlign: 'center', padding: '24px 0', color: '#64748b', fontSize: 13 }}>
+                    <div className="spinner" style={{ margin: '0 auto 8px' }}></div>
+                    Fetching items...
+                  </div>
+                ) : (selectedOrder.items || []).length > 0 ? (
+                  selectedOrder.items.map((it, i) => {
+                    // Prefer fully calculated fields if available, else fallback
+                    const unitInc = it.unit_price_inc_tax ?? it.price;
+                    const itemTotal = it.unit_price_inc_tax ? (it.unit_price_inc_tax * it.quantity) : (it.price * it.quantity);
 
-                   <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 12, borderTop: '1px dashed #fdba74' }}>
-                      <span style={{ fontSize: 15, fontWeight: 800, color: '#111827' }}>Total Amount</span>
-                      <span style={{ fontSize: 18, fontWeight: 800, color: BRAND.orange }}>
-                        {formatCurrency(Number(selectedOrder.total_inc_tax || selectedOrder.total_amount || 0))}
-                      </span>
-                   </div>
+                    return (
+                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #f8fafc' }}>
+                        <div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>{it.name}</div>
+                          <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>
+                            ₹{Number(unitInc).toFixed(2)} × {it.quantity}
+                          </div>
+                        </div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: '#111827', textAlign: 'right' }}>
+                          ₹{Number(itemTotal).toFixed(2)}
+                          {Number(it.discount_amount || 0) > 0 && (
+                            <div style={{ fontSize: 11, color: '#ef4444', fontWeight: 600 }}>
+                              - ₹{Number(it.discount_amount).toFixed(2)}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '24px 0', color: '#9ca3af', fontSize: 13, fontStyle: 'italic' }}>
+                    No items found for this order
+                  </div>
+                )}
+              </div>
+
+              <div style={{ marginTop: 24, padding: 16, background: BRAND.soft, borderRadius: 12, border: '1px solid #ffedd5' }}>
+                {Number(selectedOrder.total_tax || 0) > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <span style={{ fontSize: 13, color: '#6b7280', fontWeight: 600 }}>Tax Amount</span>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: '#374151' }}>{formatCurrency(Number(selectedOrder.total_tax || 0))}</span>
+                  </div>
+                )}
+
+                {Number(selectedOrder.discount_amount || 0) > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <span style={{ fontSize: 13, color: '#ef4444', fontWeight: 600 }}>Discount</span>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: '#ef4444' }}>- {formatCurrency(Number(selectedOrder.discount_amount))}</span>
+                  </div>
+                )}
+
+                {Number(selectedOrder.round_off_amount || 0) !== 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <span style={{ fontSize: 13, color: Number(selectedOrder.round_off_amount) > 0 ? '#10b981' : '#ef4444', fontWeight: 600 }}>Round Off</span>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: Number(selectedOrder.round_off_amount) > 0 ? '#10b981' : '#ef4444' }}>
+                      {Number(selectedOrder.round_off_amount) > 0 ? '+' : ''}{formatCurrency(Number(selectedOrder.round_off_amount))}
+                    </span>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 12, borderTop: '1px dashed #fdba74' }}>
+                  <span style={{ fontSize: 15, fontWeight: 800, color: '#111827' }}>Total Amount</span>
+                  <span style={{ fontSize: 18, fontWeight: 800, color: BRAND.orange }}>
+                    {formatCurrency(Number(selectedOrder.total_inc_tax || selectedOrder.total_amount || 0))}
+                  </span>
                 </div>
-             </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -469,20 +470,20 @@ function KpiGrid({ stats }) {
   return (
     <div className="kpi-grid">
       {tiles.map((t, i) => (
-        <div 
-          key={t.label} 
-          className="kpi-card" 
+        <div
+          key={t.label}
+          className="kpi-card"
           onClick={() => router.push(t.path)}
-          style={{ 
-            '--kpi-color': t.color, 
-            '--kpi-bg-hover': t.bgHover, 
+          style={{
+            '--kpi-color': t.color,
+            '--kpi-bg-hover': t.bgHover,
             '--kpi-border-hover': t.borderHover,
             animationDelay: `${i * 0.2}s`
           }}
         >
           <div className="kpi-content">
-             <div className="kpi-label">{t.label}</div>
-             <div className="kpi-value">{t.value}</div>
+            <div className="kpi-label">{t.label}</div>
+            <div className="kpi-value">{t.value}</div>
           </div>
         </div>
       ))}
@@ -684,7 +685,7 @@ function RecentOrders({ orders, loading, onViewOrder }) {
                 <th>Order ID</th>
                 <th>Time</th>
                 <th>Status</th>
-                <th style={{textAlign: 'right'}}>Total</th>
+                <th style={{ textAlign: 'right' }}>Total</th>
               </tr>
             </thead>
             <tbody>
@@ -692,15 +693,15 @@ function RecentOrders({ orders, loading, onViewOrder }) {
                 <tr key={o.id} onClick={() => onViewOrder && onViewOrder(o)} style={{ cursor: 'pointer' }}>
                   <td><strong>#{String(o.id).slice(0, 8)}</strong></td>
                   <td>
-                    {o.date_ordered || o.created_at ? new Date(o.date_ordered || o.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '--'}
+                    {o.date_ordered || o.created_at ? new Date(o.date_ordered || o.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--'}
                   </td>
                   <td>
-                     <span className={`status-pill ${String(o.status || 'new')}`}>
-                        {String(o.status || 'new').replace('_', ' ')}
-                     </span>
+                    <span className={`status-pill ${String(o.status || 'new')}`}>
+                      {String(o.status || 'new').replace('_', ' ')}
+                    </span>
                   </td>
-                  <td style={{textAlign: 'right', fontWeight: 800, color: '#0f172a'}}>
-                     {formatCurrency(o.total_inc_tax ?? 0)}
+                  <td style={{ textAlign: 'right', fontWeight: 800, color: '#0f172a' }}>
+                    {formatCurrency(o.total_inc_tax ?? 0)}
                   </td>
                 </tr>
               ))}
