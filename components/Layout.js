@@ -44,6 +44,9 @@ const ROLE_ALLOWED_PREFIXES = {
     '/owner/sales',
     '/owner/expenses',
     '/owner/billing',
+    '/owner/customers',
+    '/owner/loyalty',
+
     // manager CANNOT see /owner/settings or /owner/subscription
   ],
   staff: [
@@ -601,6 +604,17 @@ function Sidebar({ collapsed, onSignOut, isSigningOut }) {
         ]
       : [];
 
+  const customersSection = [
+  ...(feature.customers_enabled
+    ? [{ href: '/owner/customers', label: 'Customers', icon: <FaIdBadge /> }]
+    : []),
+  ...(feature.loyalty_enabled
+    ? [{ href: '/owner/loyalty', label: 'Loyalty', icon: <FaCrown /> }]
+    : []),
+];
+
+
+
   const insights = [
     { href: '/owner/analytics', label: 'Analytics', icon: <FaChartBar /> },
     { href: '/owner/sales', label: 'Sales', icon: <FaCreditCard /> },
@@ -687,8 +701,15 @@ function Sidebar({ collapsed, onSignOut, isSigningOut }) {
         {addons.map(renderItem)}
         {credit.map(renderItem)}
 
+{!collapsed && customersSection.length > 0 && (
+  <div style={sectionStyle}>Customers</div>
+)}
+{customersSection.map(renderItem)}
+
+
         {!collapsed && <div style={sectionStyle}>Insights</div>}
         {insights.map(renderItem)}
+
 
         {!collapsed && <div style={sectionStyle}>Account</div>}
         {account.map(renderItem)}
@@ -914,6 +935,17 @@ function MobileSidebar({ onNavigate, onSignOut, isSigningOut }) {
       ].filter((it) => canAccess(it.href, role))
     : [];
 
+  const customers = [
+  ...(feature.customers_enabled
+    ? [{ href: '/owner/customers', label: 'Customers', icon: <FaIdBadge /> }]
+    : []),
+  ...(feature.loyalty_enabled
+    ? [{ href: '/owner/loyalty', label: 'Loyalty', icon: <FaCrown /> }]
+    : []),
+].filter((it) => canAccess(it.href, role));
+
+
+
   const insights = [
     { href: '/owner/analytics', label: 'Analytics', icon: <FaChartBar /> },
     { href: '/owner/sales', label: 'Sales', icon: <FaCreditCard /> },
@@ -965,10 +997,15 @@ function MobileSidebar({ onNavigate, onSignOut, isSigningOut }) {
       title: addons.length || credit.length ? 'Add-ons' : null,
       items: [...addons, ...credit],
     },
+    {
+      title: customers.length ? 'Customers' : null,
+      items: customers,
+    },
     { title: 'Insights', items: insights },
     { title: 'Account', items: account },
     { title: integrations.length ? 'Integrations' : null, items: integrations },
   ];
+
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
