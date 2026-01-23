@@ -16,6 +16,8 @@ const nextConfig = {
   images: { unoptimized: true },
   eslint: { ignoreDuringBuilds: true },
   typescript: { ignoreBuildErrors: true },
+  output: isNative ? 'export' : undefined,
+
   webpack(config, { webpack }) {
     config.plugins.push(
       new webpack.DefinePlugin({
