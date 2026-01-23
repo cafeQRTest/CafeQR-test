@@ -873,7 +873,7 @@ export default function SettingsPage() {
           for (let i = prevCount + 1; i <= newCount; i++) {
             newQrCodes.push({
               tableNumber: String(i),
-              qrUrl: `${origin}/menu/${restaurant.id}?table=${i}`
+              qrUrl: `${origin}/order?r=${restaurant.id}&t=${i}`
             });
           }
           
