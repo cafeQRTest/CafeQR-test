@@ -7,6 +7,8 @@
 // - Returns order_for_print (same as create) + changed_items (delta KOT with qty diff)
 
 import { createClient } from '@supabase/supabase-js';
+import { InvoiceService } from '../../../services/invoiceService';
+import { OrderService } from '../../../services/orderService';
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -203,7 +205,7 @@ export default async function handler(req, res) {
     const inserts = [];
     const updates = [];
     const changedItems = [];
-    const removed_items = [];
+    const kot_removed_items = []; // Renamed
     const added_items = []; 
 
     // 6a) Restore stock for fully removed items
@@ -215,15 +217,16 @@ export default async function handler(req, res) {
       await restoreStockForItems(supabase, restaurant_id, removedItems);
 
       for (const ri of removedItems) {
-        removed_items.push({
+        kot_removed_items.push({
           menu_item_id: ri.menu_item_id,
           name: ri.item_name,
-          quantity: ri.quantity,
-          price: ri.price,
+          quantity: Number(ri.quantity),
+          price: Number(ri.price),
           hsn: ri.hsn,
           action: 'REMOVED_FULL',
           old_qty: ri.quantity,
           new_qty: 0,
+          variant_name: ri.variant_name,
           uom_short_code: ri.uom_short_code,
           uom_precision: ri.uom_precision,
         });
@@ -375,6 +378,7 @@ export default async function handler(req, res) {
               action: 'INCREASED',
               old_qty: current.quantity,
               new_qty: newLine.quantity,
+              variant_name: newLine.variant_name,
               uom_short_code: newLine.uom_short_code,
               uom_precision: newLine.uom_precision,
             });
@@ -390,15 +394,16 @@ export default async function handler(req, res) {
               { ...current, quantity: removedQty },
             ]);
 
-            removed_items.push({
+            kot_removed_items.push({
               menu_item_id: menuItemId,
               name: newLine.name,
-              quantity: removedQty,
-              price: newLine.price,
+              quantity: Number(removedQty),
+              price: Number(newLine.price),
               hsn: newLine.hsn,
               action: 'REMOVED_PARTIAL',
               old_qty: current.quantity,
               new_qty: newLine.quantity,
+              variant_name: newLine.variant_name,
               uom_short_code: newLine.uom_short_code,
               uom_precision: newLine.uom_precision,
             });
@@ -440,34 +445,46 @@ export default async function handler(req, res) {
     // 9) Re-read current order_items and recalc totals from true state
     const { data: updatedItems, error: updItemsErr } = await supabase
       .from('order_items')
-      .select('menu_item_id, quantity, price')
+      .select('menu_item_id, item_name, quantity, price, is_packaged_good, tax_rate, hsn, variant_option_id, variant_name, uom_short_code, uom_precision, discount_amount')
       .eq('order_id', order_id);
 
     if (updItemsErr) {
       return res.status(500).json({ error: 'Failed to reload order items' });
     }
 
-    const newTotals = await recalculateOrderTotals(supabase, restaurant_id, updatedItems || []);
+    // Capture the existing discount state if any (though usually edits might reset or preserve bill discount)
+    // For now, assume table-level discount_amount exists in the main order record.
+    const { data: orderHeader } = await supabase.from('orders').select('discount_amount, total_discount_percent').eq('id', order_id).single();
 
-    const { error: orderUpdErr } = await supabase
-      .from('orders')
-      .update({
-        status: 'new',
-        subtotal_ex_tax: newTotals.subtotal_ex_tax,
-        total_tax: newTotals.total_tax,
-        total_inc_tax: newTotals.total_inc_tax,
-        total_amount: newTotals.total_amount,
-        // Update table_number if provided (undefined check ensures we don't wipe it if not sent)
-        ...(table_number !== undefined && { table_number }),
-        // Update order_type if provided (e.g. switching to parcel)
-        ...(req.body.order_type && { order_type: req.body.order_type })
-      })
-      .eq('id', order_id)
-      .eq('restaurant_id', restaurant_id);
+    const { calculateOrderTotals } = await import('../../../utils/orderCalculations');
+    const newTotals = calculateOrderTotals(
+        updatedItems.map(i => ({ ...i, id: i.menu_item_id })), // Map to expected shape
+        { 
+            type: (orderHeader?.total_discount_percent > 0) ? 'percent' : 'amount',
+            value: (orderHeader?.total_discount_percent > 0) ? orderHeader.total_discount_percent : (orderHeader?.discount_amount || 0)
+        },
+        profile
+    );
 
-    if (orderUpdErr) {
-      return res.status(500).json({ error: 'Failed to update order totals' });
-    }
+    // 9) Persist via Unified Service
+    const orderResult = await OrderService.persistCalculatedOrder(supabase, {
+      orderId: order_id,
+      restaurantId: restaurant_id,
+      calculationResult: newTotals,
+      metadata: {
+        status: orderHeader?.status || 'new',
+        payment_status: orderHeader?.payment_status || 'pending',
+        payment_method: orderHeader?.payment_method || 'cash',
+        customer_name: orderHeader?.customer_name,
+        customer_phone: orderHeader?.customer_phone,
+        number_of_customers: orderHeader?.number_of_customers,
+        order_type: req.body.order_type || orderHeader?.order_type,
+        table_number: table_number !== undefined ? table_number : orderHeader?.table_number,
+        is_credit: orderHeader?.is_credit,
+        credit_customer_id: orderHeader?.credit_customer_id,
+        created_at: orderHeader?.created_at
+      }
+    });
 
     // 9a) CREDIT LEDGER SYNC
     await syncCreditLedgerForOrder({
@@ -478,115 +495,6 @@ export default async function handler(req, res) {
       newTotals,
       reason,
     });
-
-    // 10) FULL INVOICE SYNC (delete-all + insert-all)
-    const { data: invoice, error: invErr } = await supabase
-      .from('invoices')
-      .select('id')
-      .eq('order_id', order_id)
-      .eq('restaurant_id', restaurant_id)
-      .maybeSingle();
-
-    if (invoice && !invErr) {
-      // 10.1 update invoice header totals
-      // Load invoice to check gst_enabled
-      const { data: invoiceData } = await supabase
-        .from('invoices')
-        .select('gst_enabled')
-        .eq('id', invoice.id)
-        .single();
-      
-      const gstEnabled = invoiceData?.gst_enabled ?? false;
-      const halfTax = gstEnabled ? newTotals.total_tax / 2 : 0;
-      
-      await supabase
-        .from('invoices')
-        .update({
-          subtotal_ex_tax: newTotals.subtotal_ex_tax,
-          total_tax: newTotals.total_tax,
-          total_inc_tax: newTotals.total_inc_tax,
-          cgst: halfTax,
-          sgst: halfTax,
-          igst: 0,
-        })
-        .eq('id', invoice.id);
-
-      // 10.2 delete ALL existing invoice_items
-      const { data: existingInvItems } = await supabase
-        .from('invoice_items')
-        .select('id')
-        .eq('invoice_id', invoice.id);
-
-      if (existingInvItems?.length) {
-        const ids = existingInvItems.map((i) => i.id);
-        await supabase.from('invoice_items').delete().in('id', ids);
-      }
-
-      // 10.3 load full current order_items
-      const { data: fullOrderItems, error: fullItemsErr } = await supabase
-        .from('order_items')
-      .select('item_name, variant_name, hsn, quantity, price, menu_item_id, uom_short_code, uom_precision')
-      .eq('order_id', order_id);
-
-      if (!fullItemsErr && fullOrderItems?.length) {
-        const invoiceRows = [];
-        let lineNo = 1;
-
-        for (const oi of fullOrderItems) {
-          const lineCalc = await recalculateOrderTotals(supabase, restaurant_id, [
-            {
-              menu_item_id: oi.menu_item_id,
-              quantity: oi.quantity,
-              price: oi.price,
-            },
-          ]);
-
-          const ex = Number(lineCalc.subtotal_ex_tax || 0);
-          const inc = Number(lineCalc.total_inc_tax || 0);
-          const tax = Number(lineCalc.total_tax || (inc - ex));
-
-          const qty = Number(oi.quantity || 0);
-          const unitEx = qty > 0 ? ex / qty : 0;
-          const taxRate = ex > 0 ? (tax / ex) * 100 : 0;
-
-          invoiceRows.push({
-            invoice_id: invoice.id,
-            line_no: lineNo++,
-            item_name: oi.variant_name ? `${oi.item_name} (${oi.variant_name})` : oi.item_name,
-            hsn: oi.hsn || null,
-            qty,
-            unit_rate_ex_tax: Number(unitEx.toFixed(2)),
-            tax_rate: Number(taxRate.toFixed(2)),
-            tax_amount: Number(tax.toFixed(2)),
-            line_total_ex_tax: Number(ex.toFixed(2)),
-            line_total_inc_tax: Number(inc.toFixed(2)),
-            cess_rate: 0,
-            cess_amount: 0,
-            uom_short_code: oi.uom_short_code || null,
-            uom_precision: oi.uom_precision ?? 0,
-          });
-        }
-
-        const { error: invInsertErr } = await supabase
-          .from('invoice_items')
-          .insert(invoiceRows);
-
-        if (invInsertErr) {
-          console.error('invoice_items insert failed', invInsertErr);
-        }
-      }
-    }
-
-    // 11) Build order_for_print
-    const { data: finalOrderItems } = await supabase
-      .from('order_items')
-      .select('menu_item_id, item_name, quantity, price, hsn, uom_short_code, uom_precision')
-      .eq('order_id', order_id);
-
-    const preparedItems = (finalOrderItems || []).map((oi) => ({
-      ...oi,
-      name: oi.item_name,
-    }));
 
     return res.status(200).json({
       success: true,
@@ -599,23 +507,29 @@ export default async function handler(req, res) {
         table_number: order.table_number || null,
         customer_name: order.customer_name || '',
         customer_phone: order.customer_phone || '',
-        subtotal_ex_tax: Number(newTotals.subtotal_ex_tax.toFixed(2)),
-        total_tax: Number(newTotals.total_tax.toFixed(2)),
-        total_inc_tax: Number(newTotals.total_inc_tax.toFixed(2)),
+        subtotal_ex_tax: Number(newTotals.subtotal_after_line_discounts.toFixed(2)),
+        gross_taxable_amount: Number(newTotals.subtotal_after_line_discounts.toFixed(2)),
+        total_tax: newTotals.total_tax,
+        total_inc_tax: newTotals.total_inc_tax,
+        discount_amount: newTotals.discount_amount,
+        bill_discount_base: Number(newTotals.total_order_discount_base.toFixed(2)),
+        total_amount: newTotals.total_amount,
+        round_off_amount: newTotals.round_off_amount,
         payment_status: order.payment_status || 'pending',
-        status: 'new',
-        removed_items,
+        status: order.status || 'new',
+        removed_items: kot_removed_items,
         created_at: order.updated_at || order.created_at,
-        items: added_items.map((ai) => ({
-          ...ai,
-          name: ai.name || ai.item_name,
-        })),
+        items: added_items,
         changed_items: changedItems,
         is_edited: true,
         edit_reason: reason,
+        invoice_no: orderResult.invoiceNo,
+        bill_no: orderResult.billNo,
       },
     });
+
   } catch (e) {
+
     return res.status(500).json({ error: e?.message || 'Internal server error' });
   }
 }
@@ -753,7 +667,12 @@ async function recalculateOrderTotals(supabase, restaurant_id, items) {
 
   const gstEnabled = !!profile?.gst_enabled;
   const baseRate = Number(profile?.default_tax_rate ?? 5);
-  const pricesIncludeTax = profile?.prices_include_tax ?? true;
+  const serviceInclude =
+      gstEnabled &&
+      (profile?.prices_include_tax === true ||
+        profile?.prices_include_tax === 'true' ||
+        profile?.prices_include_tax === 1 ||
+        profile?.prices_include_tax === '1');
 
   let subtotalEx = 0;
   let totalTax = 0;
@@ -786,7 +705,7 @@ async function recalculateOrderTotals(supabase, restaurant_id, items) {
       lineInc = unit * qty;
       lineEx = effectiveRate > 0 ? lineInc / (1 + effectiveRate / 100) : lineInc;
       tax = lineInc - lineEx;
-    } else if (pricesIncludeTax) {
+    } else if (serviceInclude) {
       lineInc = unit * qty;
       lineEx = effectiveRate > 0 ? lineInc / (1 + effectiveRate / 100) : lineInc;
       tax = lineInc - lineEx;

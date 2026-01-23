@@ -142,7 +142,21 @@ export default function KotPrint({ order, onClose, onPrint, autoPrint = true, ki
             .maybeSingle();
             
            if (alive && freshOrder) {
-             setFullOrder(freshOrder);
+             // CRITICAL FIX: If this is an edited KOT (Delta KOT), we MUST preserve 
+             // the "items" (Added) and "removed_items" (Removed) sent by the API.
+             // We strip "order_items" so toDisplayItems() falls back to "items".
+             if (order.is_edited) {
+                const { order_items, ...orderWithoutFullItems } = freshOrder;
+                setFullOrder({
+                  ...orderWithoutFullItems,
+                  items: order.items || [],
+                  removed_items: order.removed_items || [],
+                  is_edited: true
+                });
+             } else {
+                setFullOrder(freshOrder);
+             }
+
              // Also grab profile/bill from fresh order if not set
              if (!restaurantProfile && freshOrder._profile) setRestaurantProfile(freshOrder._profile);
              if (!bill && freshOrder.bill) setBill(freshOrder.bill);

@@ -11,8 +11,7 @@ const DiscountModal = ({ visible, onClose, onSaveTotal, cart = [], onUpdateCartI
     if (visible) {
       setType(currentTotalDiscount?.type || 'amount');
       setValue(currentTotalDiscount?.value || '');
-      // If we are in item mode but cart is empty/invalid, switch to total?
-      // Default to total is safer.
+      // If we are in item mode but cart is empty/invalid, switch to total
       if (tab === 'items' && (!cart || cart.length === 0)) setTab('total');
     }
   }, [visible, currentTotalDiscount, cart]);
@@ -55,41 +54,65 @@ const DiscountModal = ({ visible, onClose, onSaveTotal, cart = [], onUpdateCartI
          <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0' }}>
             <button 
               onClick={() => setTab('total')}
-              style={{ flex: 1, padding: '16px', background: tab === 'total' ? '#fff' : '#f8fafc', fontWeight: 700, color: tab === 'total' ? theme.main : '#64748b', border: 'none', cursor: 'pointer', borderBottom: tab === 'total' ? `3px solid ${theme.main}` : 'none' }}
+              style={{ 
+                flex: 1, padding: '16px', 
+                background: tab === 'total' ? '#fff' : '#f8fafc', 
+                fontWeight: 700, 
+                color: tab === 'total' ? theme.main : '#64748b', 
+                border: 'none', cursor: 'pointer', 
+                borderBottom: tab === 'total' ? `3px solid ${theme.main}` : 'none' 
+              }}
             >
-              Start Bill Discount
+              Bill Discount
             </button>
             <button 
               onClick={() => setTab('items')}
-              disabled={!cart || cart.length === 0}
-              style={{ flex: 1, padding: '16px', background: tab === 'items' ? '#fff' : '#f8fafc', fontWeight: 700, color: tab === 'items' ? theme.main : '#64748b', border: 'none', cursor: (!cart || cart.length===0) ? 'not-allowed' : 'pointer', borderBottom: tab === 'items' ? `3px solid ${theme.main}` : 'none', opacity: (!cart || cart.length===0) ? 0.5 : 1 }}
+              disabled={!cart || cart.length === 0 || !onUpdateCartItem}
+              style={{ flex: 1, padding: '16px', background: tab === 'items' ? '#fff' : '#f8fafc', fontWeight: 700, color: tab === 'items' ? theme.main : '#64748b', border: 'none', cursor: (!cart || cart.length===0 || !onUpdateCartItem) ? 'not-allowed' : 'pointer', borderBottom: tab === 'items' ? `3px solid ${theme.main}` : 'none', opacity: (!cart || cart.length===0 || !onUpdateCartItem) ? 0.5 : 1 }}
             >
               Item Wise ({cart?.length || 0})
             </button>
          </div>
 
          <div style={{ padding: '24px', overflowY: 'auto' }}>
-           {tab === 'total' ? (
-             <>
-               <h3 style={{ margin: '0 0 16px', fontSize: 16, fontWeight: 700 }}>Order Total Discount</h3>
-               <div style={{ display: 'flex', background: '#f1f5f9', padding: 4, borderRadius: 10, marginBottom: 16 }}>
-                  <button onClick={() => setType('amount')} style={{ flex: 1, padding: '8px', border: 'none', borderRadius: 8, background: type === 'amount' ? '#fff' : 'transparent', fontWeight: 600, color: type === 'amount' ? theme.main : '#64748b', boxShadow: type === 'amount' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', cursor: 'pointer' }}>₹ Amount</button>
-                  <button onClick={() => setType('percent')} style={{ flex: 1, padding: '8px', border: 'none', borderRadius: 8, background: type === 'percent' ? '#fff' : 'transparent', fontWeight: 600, color: type === 'percent' ? theme.main : '#64748b', boxShadow: type === 'percent' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', cursor: 'pointer' }}>% Percent</button>
-               </div>
-               <div style={{ marginBottom: 20 }}>
-                  <input
-                    type="number" min="0" step={type === 'amount' ? "1" : "0.1"}
-                    value={value} onChange={e => setValue(e.target.value)}
-                    placeholder="0" autoFocus
-                    style={{ width: '100%', padding: '12px', fontSize: 18, fontWeight: 700, border: '2px solid #e2e8f0', borderRadius: 10, outline: 'none' }}
-                    onFocus={e => e.target.style.borderColor = theme.main}
-                    onBlur={e => e.target.style.borderColor = '#e2e8f0'}
-                  />
-               </div>
-               <button onClick={handleSaveTotal} style={{ width: '100%', padding: '14px', background: theme.main, border: 'none', color: '#fff', borderRadius: 12, fontWeight: 700, cursor: 'pointer', fontSize: 16 }}>Apply Bill Discount</button>
-               {currentTotalDiscount.value > 0 && <button onClick={() => { onSaveTotal({ type: 'amount', value: 0 }); onClose(); }} style={{ width: '100%', marginTop: 12, padding: '12px', background: '#fee2e2', border: 'none', color: '#ef4444', borderRadius: 12, fontWeight: 600, cursor: 'pointer' }}>Remove Discount</button>}
-             </>
-           ) : (
+            {tab === 'total' ? (
+              <>
+                <h3 style={{ margin: '0 0 16px', fontSize: 16, fontWeight: 700 }}>Order Total Discount</h3>
+                <div style={{ display: 'flex', background: '#f1f5f9', padding: 4, borderRadius: 10, marginBottom: 16 }}>
+                   <button onClick={() => setType('amount')} style={{ flex: 1, padding: '8px', border: 'none', borderRadius: 8, background: type === 'amount' ? '#fff' : 'transparent', fontWeight: 600, color: type === 'amount' ? theme.main : '#64748b', boxShadow: type === 'amount' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', cursor: 'pointer' }}>₹ Amount</button>
+                   <button onClick={() => setType('percent')} style={{ flex: 1, padding: '8px', border: 'none', borderRadius: 8, background: type === 'percent' ? '#fff' : 'transparent', fontWeight: 600, color: type === 'percent' ? theme.main : '#64748b', boxShadow: type === 'percent' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none', cursor: 'pointer' }}>% Percent</button>
+                </div>
+                <div style={{ marginBottom: 20 }}>
+                   <input
+                     type="number" min="0" step={type === 'amount' ? "1" : "0.1"}
+                     value={value} onChange={e => setValue(e.target.value)}
+                     placeholder="0" autoFocus
+                     style={{ 
+                       width: '100%', padding: '12px', fontSize: 18, fontWeight: 700, 
+                       border: '2px solid #e2e8f0', 
+                       borderRadius: 10, outline: 'none',
+                       background: '#fff',
+                       color: '#1e293b'
+                     }}
+                     onFocus={e => e.target.style.borderColor = theme.main}
+                     onBlur={e => e.target.style.borderColor = '#e2e8f0'}
+                   />
+                </div>
+                <button 
+                  onClick={handleSaveTotal} 
+                  style={{ 
+                    width: '100%', padding: '14px', 
+                    background: theme.main, 
+                    border: 'none', color: '#fff', borderRadius: 12, 
+                    fontWeight: 700, cursor: 'pointer', 
+                    fontSize: 16, transition: 'all 0.2s'
+                  }}
+                >
+                  Apply Bill Discount
+                </button>
+                {currentTotalDiscount.value > 0 && <button onClick={() => { onSaveTotal({ type: 'amount', value: 0 }); onClose(); }} style={{ width: '100%', marginTop: 12, padding: '12px', background: '#fee2e2', border: 'none', color: '#ef4444', borderRadius: 12, fontWeight: 600, cursor: 'pointer' }}>Remove Discount</button>}
+              </>
+            ) : (
              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {cart.map((item) => {
                   const d = item.discount || { type: 'amount', value: 0 };
@@ -106,8 +129,8 @@ const DiscountModal = ({ visible, onClose, onSaveTotal, cart = [], onUpdateCartI
                       
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
                         <div style={{ display: 'flex', gap: 4, background: '#f8fafc', padding: 2, borderRadius: 6 }}>
-                           <button onClick={() => onUpdateCartItem(id, { ...item, discount: { ...d, type: 'amount', value: d.type === 'amount' ? d.value : 0 } })} style={{ padding: '4px 8px', fontSize: 11, border: 'none', borderRadius: 4, background: d.type === 'amount' ? '#fff' : 'transparent', color: d.type === 'amount' ? theme.main : '#64748b', boxShadow: d.type === 'amount' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none', cursor: 'pointer' }}>₹</button>
-                           <button onClick={() => onUpdateCartItem(id, { ...item, discount: { ...d, type: 'percent', value: d.type === 'percent' ? d.value : 0 } })} style={{ padding: '4px 8px', fontSize: 11, border: 'none', borderRadius: 4, background: d.type === 'percent' ? '#fff' : 'transparent', color: d.type === 'percent' ? theme.main : '#64748b', boxShadow: d.type === 'percent' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none', cursor: 'pointer' }}>%</button>
+                           <button onClick={() => onUpdateCartItem && onUpdateCartItem(id, { ...item, discount: { ...d, type: 'amount', value: d.type === 'amount' ? d.value : 0 } })} style={{ padding: '4px 8px', fontSize: 11, border: 'none', borderRadius: 4, background: d.type === 'amount' ? '#fff' : 'transparent', color: d.type === 'amount' ? theme.main : '#64748b', boxShadow: d.type === 'amount' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none', cursor: 'pointer' }}>₹</button>
+                           <button onClick={() => onUpdateCartItem && onUpdateCartItem(id, { ...item, discount: { ...d, type: 'percent', value: d.type === 'percent' ? d.value : 0 } })} style={{ padding: '4px 8px', fontSize: 11, border: 'none', borderRadius: 4, background: d.type === 'percent' ? '#fff' : 'transparent', color: d.type === 'percent' ? theme.main : '#64748b', boxShadow: d.type === 'percent' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none', cursor: 'pointer' }}>%</button>
                         </div>
                         <input
                           type="number" 
@@ -115,6 +138,7 @@ const DiscountModal = ({ visible, onClose, onSaveTotal, cart = [], onUpdateCartI
                           placeholder="0"
                           value={d.value === 0 ? '' : d.value}
                           onChange={(e) => {
+                             if (!onUpdateCartItem) return;
                              const v = parseFloat(e.target.value);
                              if (isNaN(v)) {
                                onUpdateCartItem(id, { ...item, discount: { ...d, value: 0 } });
@@ -126,7 +150,8 @@ const DiscountModal = ({ visible, onClose, onSaveTotal, cart = [], onUpdateCartI
                              
                              onUpdateCartItem(id, { ...item, discount: { ...d, value: v } });
                           }}
-                          style={{ width: 80, padding: '6px', borderRadius: 6, border: `1px solid ${d.value > 0 ? theme.main : '#e2e8f0'}`, textAlign: 'right', fontWeight: 600, fontSize: 14, outline: 'none' }}
+                          readOnly={!onUpdateCartItem}
+                          style={{ width: 80, padding: '6px', borderRadius: 6, border: `1px solid ${d.value > 0 ? theme.main : '#e2e8f0'}`, textAlign: 'right', fontWeight: 600, fontSize: 14, outline: 'none', background: !onUpdateCartItem ? '#f1f5f9' : '#fff', cursor: !onUpdateCartItem ? 'not-allowed' : 'text' }}
                         />
                         {effective > 0 && <div style={{ fontSize: 11, color: '#ef4444' }}>-₹{(effective || 0).toFixed(2)}</div>}
                       </div>

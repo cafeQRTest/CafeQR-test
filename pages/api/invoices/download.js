@@ -70,17 +70,26 @@ export default async function handler(req, res) {
     // A. Invoice Header
     const invoiceHeader = {
       invoice_no: invoice?.invoice_no || `ORD-${order_id.slice(0, 8)}`,
-      invoice_date: new Date(invoice?.created_at || order.created_at).toLocaleString('en-IN', {
+      // Use created_at timestamp for accurate time. invoice_date might be Date-only (00:00 UTC -> 05:30 IST)
+      invoice_date: new Date(invoice?.created_at || order.created_at || new Date()).toLocaleString('en-IN', {
         day: 'numeric',
         month: 'numeric',
         year: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
-        hour12: true
+        hour12: true,
+        timeZone: 'Asia/Kolkata'
       }),
       customer_name: invoice?.customer_name || order.customer_name || 'Guest',
       customer_phone: invoice?.customer_phone || order.customer_phone || ''
     };
+
+    // C. Totals - Unified Derivation (Declare before map)
+    let sumTaxable = 0;
+    let sumTax = 0;
+    let sumTotal = 0;
+    let sumGrossBase = 0;
+    let sumOrderDiscBase = 0;
 
     // B. Items
     const pdfItems = (invoiceItems || []).map((row, idx) => {
@@ -89,61 +98,79 @@ export default async function handler(req, res) {
           const match = order.order_items?.[idx]; 
           if (match) finalName = match.menu_items?.name || match.item_name || 'Item';
       }
+      // Use stored variant name if available (Audit Fidelity)
+      if (row.variant_name && !finalName.includes(row.variant_name)) {
+          finalName += ` (${row.variant_name})`;
+      }
 
       const qty = Number(row.qty || 0);
       const rateEx = Number(row.unit_rate_ex_tax || 0);
       const taxRate = Number(row.tax_rate || 0);
-      const discAmt = Number(row.discount_amount || 0);
+      const lineDiscAmt = Number(row.line_discount_amount || row.discount_amount || 0);
+      const orderDiscBaseShare = Number(row.order_discount_base_share || 0);
       
-      // Determine if we should show inclusive or exclusive based on profile
-      const showInclusive = !!profile?.prices_include_tax;
-      
-      let displayRate = rateEx;
-      let displayLineTotal = row.line_total_inc_tax ? Number(row.line_total_inc_tax) : Number(row.line_total_ex_tax || 0) + Number(row.tax_amount || 0);
-
-      if (showInclusive && taxRate > 0) {
-          // If we want to show inclusive, we add tax to the ex-tax rate
-          displayRate = rateEx * (1 + taxRate / 100);
-          // Amount col should be (Rate * Qty) - Discount
-          // But wait, the discAmt is usually ex-tax if it was applied to ex-tax base.
-          // In counter.js/create.js, line discount is applied to FACE VALUE (Inclusive).
-          // So (Base Inclusive * Qty) - (Line Discount) is the finished inclusive line total.
-          displayLineTotal = (displayRate * qty) - discAmt;
-      } else {
-          // Exclusive view: Rate is ex-tax, Amount is line_net (ex-tax)
-          displayRate = rateEx;
-          displayLineTotal = row.line_net ? Number(row.line_net) : (rateEx * qty - discAmt);
+      const isInclusive = taxRate > 0 && !!profile?.prices_include_tax;
+      let displayRate = Number(row.unit_price_display || 0);
+      if (!displayRate) {
+          displayRate = isInclusive ? rateEx * (1 + taxRate / 100) : rateEx;
       }
+      
+      const taxableValue = Number(row.line_net || row.taxable_amount || (qty * rateEx) - orderDiscBaseShare);
+      // Fallback: Calculate tax amount if missing in DB but rate exists
+      let taxAmount = Number(row.tax_amount || 0);
+      if (taxAmount === 0 && taxRate > 0) {
+          taxAmount = taxableValue * (taxRate / 100);
+      }
+      
+      // Line Total: Should be Inclusive of Tax
+      // If DB has valid inclusive total, use it. Else derive.
+      const lineTotal = Number(row.line_total_inc_tax || row.amount_inc_gst || (taxableValue + taxAmount));
+
+      // Accumulate Totals
+      sumTaxable += taxableValue;
+      sumTax += taxAmount;
+      sumTotal += lineTotal;
+      sumOrderDiscBase += orderDiscBaseShare;
+      
+      // Derive gross base for the walk (Taxable + Base Discount share)
+      sumGrossBase += (taxableValue + orderDiscBaseShare);
 
       return {
         item_name: finalName,
         quantity: qty,
         unit_price: displayRate, 
-        discount_amount: discAmt,
-        line_net: displayLineTotal
+        discount_amount: lineDiscAmt,
+        order_discount_base_share: orderDiscBaseShare,
+        taxable_value: taxableValue,
+        tax_amount: taxAmount,
+        line_total: lineTotal
       };
     });
 
-    // C. Totals
-    const totalTax = Number(invoice?.total_tax || order.total_tax || 0);
-    const roundOff = Number(invoice?.round_off_amount || order.round_off_amount || 0);
-    const grandTotal = Number(invoice?.total_amount || invoice?.total_inc_gst || order.total_amount || 0);
-    
-    // Calculate line subtotal (Sum of Ex-Tax Line Nets) for the summary breakdown
-    const lineSubtotalEx = (invoiceItems || []).reduce((sum, row) => sum + Number(row.line_net || 0), 0);
-    const lineDiscTotal = (invoiceItems || []).reduce((sum, row) => sum + Number(row.discount_amount || 0), 0);
+    // C. Totals - Unified Derivation from PDF Items
+    // If we recalculated tax above, we must ensure totals.total_tax uses the sum
+    // rather than the stale invoice header value.
 
-    const orderDiscAmt = Number(invoice?.order_discount_total || order.discount_amount || 0);
-    const taxableAmount = Math.max(0, lineSubtotalEx - orderDiscAmt);
+
+    const roundOff = Number(invoice?.round_off_amount || order.round_off_amount || 0);
+    const grandTotal = Number(invoice?.total_amount || order.total_amount || (sumTotal + roundOff));
+    
+    const gstRate = Number(invoice?.gst_rate || profile?.default_tax_rate || 5);
+    const halfRate = Number((gstRate / 2).toFixed(2));
+    const halfTax = sumTax / 2;
 
     const totals = {
-      line_subtotal: lineSubtotalEx,
-      line_discount_total: lineDiscTotal,
-      order_discount_total: orderDiscAmt,
-      order_discount_percent: Number(invoice?.order_discount_percent || order.total_discount_percent || 0),
-      taxable_amount: taxableAmount,
-      total_tax: totalTax,
-      gst_rate: Number(invoice?.gst_rate || profile?.default_tax_rate || 5),
+      line_subtotal: sumGrossBase, // Gross Ex-Tax before Bill Discount
+      order_discount_base: sumOrderDiscBase, // Correct GST Base Deduction
+      taxable_amount: sumTaxable,
+      total_tax: sumTax,
+      total_tax_added: Number(invoice?.total_tax_added || order.total_tax_added || 0),
+      total_tax_included: Number(invoice?.total_tax_included || order.total_tax_included || 0),
+      cgst_amount: halfTax,
+      sgst_amount: halfTax,
+      cgst_rate: halfRate,
+      sgst_rate: halfRate,
+      gst_rate: gstRate,
       round_off_amount: roundOff,
       total_amount: grandTotal
     };

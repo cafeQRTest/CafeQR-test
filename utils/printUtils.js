@@ -31,23 +31,12 @@ const SIZE_2H = GS + "!" + b(0x01); // 1x width, 2x height (your current â€œDHâ€
 
 function toDisplayItems(order) {
   
-  // DB/API shape (HAS discount data) - CHECK THIS FIRST!
+  // DB/API shape (HAS discount data)
   if (Array.isArray(order?.order_items) && order.order_items.length) {
     return order.order_items.map((oi) => {
-         let dAmt = Number(oi.discount_amount || 0);
-
-         // Fallback if discount_amount is 0 but raw discount info exists (rare but safer)
-         if (dAmt === 0 && (oi.discount_value || oi.discount_percent)) {
-             const price = Number(oi.price || oi.unit_price || 0);
-             const qty = Number(oi.quantity || 0);
-             const base = price * qty;
-             if (oi.discount_type === 'percent' || oi.discount_percent > 0) {
-                 const pct = Number(oi.discount_percent || oi.discount_value || 0);
-                 dAmt = base * (pct / 100);
-             } else {
-                 dAmt = Number(oi.discount_value || 0);
-             }
-         }
+         const lineDisc = Number(oi.line_discount_amount || 0);
+         const orderShare = Number(oi.order_discount_share || 0);
+         const totalDisc = Number(oi.discount_amount || (lineDisc + orderShare));
 
          return {
           name: oi.variant_name 
@@ -55,13 +44,16 @@ function toDisplayItems(order) {
             : (oi.menu_items?.name || oi.item_name || "Item"),
           quantity: Number(oi.quantity || 0),
           price: Number(oi.price || oi.unit_price || 0),
-          discount_amount: dAmt,
+          line_discount_amount: lineDisc,
+          order_discount_share: orderShare,
+          discount_amount: totalDisc,
           uom: oi.uom_short_code || "",
           uom_short_code: oi.uom_short_code || "",
           uom_precision: oi.uom_precision ?? 0,
         };
     });
   }
+
   
   // Counter/cart shape (simple, may not have discount) - FALLBACK ONLY
   if (Array.isArray(order?.items) && order.items.length) {
@@ -78,9 +70,8 @@ function toDisplayItems(order) {
          }
       }
 
-
       return {
-        name: i.name,
+        name: i.variant_name ? `${i.name} (${i.variant_name})` : i.name,
         quantity: i.quantity,
         price: i.price,
         discount_amount: discountAmount,
@@ -267,7 +258,7 @@ function buildLogoEscPos(restaurantProfile) {
 function getBillCols(innerW, hasDiscount) {
   // If narrow (e.g. 32 cols), showDiscCol is forced false to save space for name
   // 38 is a safe threshold for 80mm-like width
-  const showDiscCol = hasDiscount && innerW >= 38;
+  const showDiscCol = false; // DISABLED as per request: hasDiscount && innerW >= 38;
   const gaps = showDiscCol ? 4 : 3;
 
   let qty = innerW >= 44 ? 6 : innerW >= 38 ? 6 : 4;
@@ -428,7 +419,8 @@ lines.push(ALIGN_LEFT);
       );
 
       removedItems.forEach((ri) => {
-        const nameLines = wrapText(ri?.name || "Item", nameW);
+        const displayName = ri.variant_name ? `${ri.name} (${ri.variant_name})` : ri.name;
+        const nameLines = wrapText(displayName || "Item", nameW);
         const qtyNum = Number(ri?.quantity || 1);
         const p = Number.isInteger(ri?.uom_precision)
           ? ri.uom_precision
@@ -539,6 +531,10 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     const roundOff = Number(order?.round_off_amount || bill?.round_off_amount || 0);
     const oTotalTax = Number(order?.total_tax || bill?.total_tax || 0);
     const oGrandTotal = Number(order?.total_amount ?? bill?.total_amount ?? 0);
+    const isInclusiveOrder = (order?.prices_include_tax === true || bill?.prices_include_tax === true);
+    const isAllPackaged = items.length > 0 && items.every(it => it.is_packaged_good);
+    // Determine if we should show a simplified "Bake-in" bill (for all inclusive-tax scenarios)
+    const isInclusiveMode = isAllPackaged || isInclusiveOrder;
 
     const getDisc = (it) => Number(it?.discount_amount || 0);
     const hasLineDiscount = items.some((it) => getDisc(it) > 0.001);
@@ -598,23 +594,31 @@ export function buildReceiptText(order, bill, restaurantProfile) {
       const itemDiscount = getDisc(it);
       const qtyNum = Number(it.quantity || 1);
       const rateNum = Number(it.price || 0);
+      // netLineTotal is the value after all discounts for this line item
       const netLineTotal = rateNum * qtyNum - itemDiscount;
 
       let nameStr = it?.name || "Item";
-      // If narrow receipt and discount exists, append to name
-      if (!showDiscCol && itemDiscount > 0.001) {
-        nameStr += ` (Disc -${itemDiscount.toFixed(2)})`;
 
-      }
+      // If narrow receipt and discount exists, append to name
+      // This is the LINE discount only
+      const lineDiscRow = Number(it.line_discount_amount || 0);
+      // REMOVED: Name appendage for discount as per request
+      // if (!showDiscCol && lineDiscRow > 0.001) {
+      //   nameStr += ` (Disc -${lineDiscRow.toFixed(2)})`;
+      // }
 
       const nameLines = wrapText(nameStr, name);
       
       const qtyStr = Number.isInteger(qtyNum) ? qtyNum.toString() : qtyNum.toFixed(2);
       const rateStr = rateNum.toFixed(2);
-      const totalStr = netLineTotal.toFixed(2);
+      
+      // CHANGED: For inclusive modes (packaged or settings-based), bake full discount into line total. 
+      // This matches the user's "Ground Truth" where Item 1 = 12 - 1 = 11.
+      const printLineTotal = isInclusiveMode ? netLineTotal : (rateNum * qtyNum); 
+      const totalStr = printLineTotal.toFixed(2);
 
       const discStr =
-        showDiscCol && itemDiscount > 0.001 ? "-" + itemDiscount.toFixed(2) : "";
+        showDiscCol && lineDiscRow > 0.001 ? "-" + lineDiscRow.toFixed(2) : "";
 
       let row =
         leftAlign(nameLines[0], name) +
@@ -635,22 +639,42 @@ export function buildReceiptText(order, bill, restaurantProfile) {
 
     lines.push(withMargins(dashes(), layout));
 
-    // ===== TOTALS =====
+    // ===== TOTALS (Restaurant-Standard Customer Bill Format) =====
     const isInclusive = order?.prices_include_tax === true;
-
-    if (orderDiscount > 0) {
-      lines.push(withMargins(kvLine("Discount:", "-" + orderDiscount.toFixed(2), W), layout));
+    
+    // Items Total (Reflecting what's shown above)
+    const shownItemsTotal = items.reduce((s, it) => {
+        const itemDiscount = isInclusiveMode ? getDisc(it) : 0;
+        return s + (Number(it.price || 0) * Number(it.quantity || 1) - itemDiscount);
+    }, 0);
+    const itemsTotalLabel = isInclusiveMode ? "Items Total:" : "Gross Total:";
+    lines.push(withMargins(kvLine(itemsTotalLabel, shownItemsTotal.toFixed(2), W), layout));
+    
+    // Total Discount (Only show if not already baked into item lines)
+    if (!isInclusiveMode) {
+      const totalLineDisc = items.reduce((s, it) => s + Number(it.line_discount_amount || 0), 0);
+      const totalDiscount = totalLineDisc + orderDiscount;
+      
+      if (totalDiscount > 0.01) {
+        lines.push(withMargins(kvLine("Discount:", "-" + totalDiscount.toFixed(2), W), layout));
+      }
+    }
+    
+    lines.push(withMargins(dashes(), layout));
+    
+    // Subtotal (Ex-Tax) - Hide if redundant for inclusive modes
+    if (!isInclusiveMode) {
+      const subtotalExTax = (oGrandTotal - roundOff) - oTotalTax;
+      lines.push(withMargins(kvLine("Subtotal:", subtotalExTax.toFixed(2), W), layout));
     }
 
+    // GST Display (Simple, clear)
     if (oTotalTax > 0) {
-      lines.push(
-        withMargins(
-          kvLine(isInclusive ? "GST (Included):" : "GST:", oTotalTax.toFixed(2), W),
-          layout
-        )
-      );
+      const gstLabel = isInclusive ? "GST (incl):" : "GST:";
+      lines.push(withMargins(kvLine(gstLabel, oTotalTax.toFixed(2), W), layout));
     }
 
+    // Round Off
     if (roundOff !== 0) {
       lines.push(
         withMargins(
@@ -666,12 +690,18 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     lines.push(
       MODE_BOLD +
         (is80 ? SIZE_2X : SIZE_2H) +
-        withMargins(kvLine("Grand Total:", oGrandTotal.toFixed(2), W), layout) +
+        withMargins(kvLine("TOTAL:", oGrandTotal.toFixed(2), W), layout) +
         SIZE_1X +
         MODE_NO_BOLD
     );
 
     lines.push(withMargins(dashes(), layout));
+    
+    // Helper text for customer clarity
+    if (isInclusive && oTotalTax > 0) {
+      lines.push(withMargins(center("Prices are inclusive of GST", W), layout));
+    }
+    
     lines.push(withMargins(center("** THANK YOU! VISIT AGAIN !! **", W), layout));
     lines.push(withMargins(center("Powered by Cafe QR", W), layout));
     lines.push("");

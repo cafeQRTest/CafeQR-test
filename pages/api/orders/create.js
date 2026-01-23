@@ -1,6 +1,7 @@
 // pages/api/orders/create.js
 import { createClient } from '@supabase/supabase-js';
 import { InvoiceService } from '../../../services/invoiceService';
+import { OrderService } from '../../../services/orderService';
 
 export default async function handler(req, res) {
   console.log('[/api/orders/create] handler called, method =', req.method);
@@ -66,7 +67,7 @@ export default async function handler(req, res) {
     const { data: profile, error: profileErr } = await supabase
       .from('restaurant_profiles')
       .select(
-        'gst_enabled, default_tax_rate, prices_include_tax, features_inventory_enabled'
+        'gst_enabled, default_tax_rate, prices_include_tax, features_inventory_enabled, round_off_enabled, round_off_mode, round_off_auto_factor, round_off_manual_limit'
       )
       .eq('restaurant_id', restaurant_id)
       .maybeSingle();
@@ -104,307 +105,183 @@ export default async function handler(req, res) {
         profile?.prices_include_tax === '1');
 
     // 4) Compute totals
-    // 4) Compute totals
-    let taxableSubtotalBase = 0;   // Sum of (Base - LineDisc) for Normal GST items
-    let nonTaxableTotal = 0;       // Sum of Final Line Totals for Packaged/Non-GST items
-    let packagedTaxFixedSum = 0;   // FIXED tax sum from Packaged/MRP items
-
-    const preparedItems = items.map((it) => {
-      const qty = Number(it.quantity ?? 1);
-      const faceUnit = Number(it.price ?? 0); // Face Value (might include tax)
-      const menuItem = menuItems?.find((mi) => mi.id === it.id);
-      
-      // Determine Rates & Flags
-      const itemTaxRate = Number(menuItem?.tax_rate ?? it.tax_rate ?? 0);
-      const isPackaged = !!(menuItem?.is_packaged_good || it.is_packaged_good);
-      
-      let rate = 0;
-      if (gstEnabled) {
-          // For packaged goods: use item rate if > 0, else fallback to default
-          // For normal items: always use default rate
-          if (isPackaged) {
-              rate = itemTaxRate > 0 ? itemTaxRate : baseRate;
-          } else {
-              rate = baseRate;
-          }
-      }
-      if (rate < 0) rate = 0;
-      
-      // "Prices Include Tax" check
-      // Packaged goods are always inclusive (MRP). Normal items depend on profile.
-      const isInclusive = gstEnabled && (isPackaged || serviceInclude);
-
-      // 1. Base
-      const baseUnit = isInclusive && rate > 0 ? (faceUnit / (1 + rate/100)) : faceUnit;
-      const totalBase = baseUnit * qty;
-      const taxOnMRP = isInclusive && rate > 0 ? (faceUnit - baseUnit) * qty : 0;
-
-      // 2. Line Discount
-      let lineDiscountAmt = 0;
-      let lineDiscountPct = 0;
-      const d = it.discount;
-      if (d && Number(d.value) > 0) {
-          if (d.type === 'amount') {
-              lineDiscountAmt = Number(d.value);
-          } else {
-              // Line discount on Face Value
-              lineDiscountAmt = (faceUnit * qty) * (Number(d.value)/100);
-          }
-      } else if (Number(it.discount_amount) > 0) {
-          lineDiscountAmt = Number(it.discount_amount);
-      }
-      
-      // Cap discount
-      if (lineDiscountAmt > (faceUnit * qty)) lineDiscountAmt = faceUnit * qty;
-
-      let finalTaxableLine = 0;
-      let taxLine = 0;
-      let finalLineTotal = 0;
-
-      if (!isPackaged) {
-          // Normal Items: GST follows the discount
-          finalTaxableLine = totalBase - (isInclusive ? (lineDiscountAmt / (1 + rate/100)) : lineDiscountAmt);
-          taxLine = finalTaxableLine * (rate / 100);
-          finalLineTotal = finalTaxableLine + taxLine;
-          
-          taxableSubtotalBase += Math.max(0, finalTaxableLine);
-      } else {
-          // Packaged Goods: GST stays FIXED from MRP (User Rule)
-          // Round per item to ensure 21.875 -> 21.88
-          const roundedTaxLine = Number(taxOnMRP.toFixed(2));
-          taxLine = roundedTaxLine;
-          finalLineTotal = Math.max(0, (faceUnit * qty) - lineDiscountAmt);
-          finalTaxableLine = finalLineTotal - taxLine;
-          
-          nonTaxableTotal += finalLineTotal;
-          packagedTaxFixedSum += taxLine;
-      }
-
-      return {
-        order_id: null,
-        menu_item_id: it.id,
-        quantity: qty,
-        price: faceUnit, // Store Face Value
-        item_name: it.name,
-        variant_option_id: it.variant_id || it.variant_option_id || null,
-        variant_name: it.variant_name || null,
+    // 4) Compute totals using Centralized Logic
+    // First, merge DB attributes into items so the utility has the correct flags
+    const mergedItems = items.map(it => {
+        const menuItem = menuItems?.find((mi) => mi.id === it.id);
+        const uomObj = menuItem?.uom;
         
-        // Storing Base & Tax details
-        unit_price_ex_tax: Number(baseUnit.toFixed(2)),
-        unit_price_inc_tax: Number((baseUnit + (taxOnMRP/qty)).toFixed(2)),
-        unit_tax_amount: Number((taxLine / qty).toFixed(2)),
-        
-        tax_rate: rate,
-        hsn: it.hsn || null,
-        is_packaged_good: isPackaged,
-        uom_short_code: it.uom_short_code || menuItem?.uom?.short_code || null,
-        uom_precision: it.uom_precision ?? menuItem?.uom?.precision ?? 0,
-        
-        discount_amount: Number(lineDiscountAmt.toFixed(2)),
-        discount_percent: Number(lineDiscountPct.toFixed(2)),
-      };
+        return {
+           ...it,
+           // Priority: Item (Request) > DB
+           is_packaged_good: !!(menuItem?.is_packaged_good || it.is_packaged_good),
+           tax_rate: (it.tax_rate !== undefined) ? it.tax_rate : menuItem?.tax_rate,
+           uom_short_code: it.uom_short_code || uomObj?.short_code || null,
+           uom_precision: it.uom_precision ?? uomObj?.precision ?? 0,
+           
+           // Ensure price is number
+           price: Number(it.price || 0),
+           quantity: Number(it.quantity || 1)
+        };
     });
 
-    // STEP 6: ORDER LEVEL DISCOUNT
-    // Applies ONLY to the Sum of Taxable Bases of Normal Items
-    let orderDiscountAmt = Number(discount_amount || 0);
-    let orderDiscountPct = Number(total_discount_percent || 0);
-
-    if (orderDiscountPct > 0) {
-        orderDiscountAmt = taxableSubtotalBase * (orderDiscountPct / 100);
-    } else if (orderDiscountAmt > 0 && taxableSubtotalBase > 0) {
-        // SCALE the rupee discount for inclusive shops so "10 off total" works
-        const scaledDisc = serviceInclude ? (orderDiscountAmt / (1 + baseRate / 100)) : orderDiscountAmt;
-        orderDiscountPct = (scaledDisc / taxableSubtotalBase) * 100;
-        orderDiscountAmt = scaledDisc;
-    } else {
-        orderDiscountAmt = 0;
-        orderDiscountPct = 0;
-    }
+    // Check if manual round-off was provided from frontend (counter.js)
+    const hasManualRoundOff = round_off_amount !== undefined && round_off_amount !== null && round_off_amount !== 0;
     
-    // Cap order discount at normal base
-    if (orderDiscountAmt > taxableSubtotalBase) orderDiscountAmt = taxableSubtotalBase;
-
-    // STEP 7: FINAL CALCULATIONS (Golden Rule)
-    const finalNormalTaxable = Math.max(0, taxableSubtotalBase - orderDiscountAmt);
-    const finalNormalTax = gstEnabled ? finalNormalTaxable * (baseRate / 100) : 0;
-    
-    // Final Totals for DB - Allow OVERRIDE from Trusted Frontend if provided
-    const overrides = req.body.override_totals || {};
-
-    const packagedBaseTotal = nonTaxableTotal - packagedTaxFixedSum;
-    const grossSubtotalEx = Number((taxableSubtotalBase + packagedBaseTotal).toFixed(2));
-    const finalSubtotalEx = overrides.subtotal_ex ?? grossSubtotalEx; 
-    
-    const finalTotalTax = overrides.total_tax ?? Number((finalNormalTax + packagedTaxFixedSum).toFixed(2));
-    const finalTotalInc = overrides.total_inc_tax ?? Number((finalNormalTaxable + finalNormalTax + nonTaxableTotal).toFixed(2)); 
-    const finalRoundOff = Number(round_off_amount || 0);
-    const finalGrandTotal = overrides.total_amount ?? Number((finalTotalInc + finalRoundOff).toFixed(2)); 
-    
-
-
-
-    // 5) Mixed payment validation
-    let processedPaymentMethod = payment_method;
-    let processedMixedDetails = null;
-
-    if (payment_method === 'mixed' && mixed_payment_details) {
-      const { cash_amount, online_amount, online_method } = mixed_payment_details;
-      const mixedTotal = Number(cash_amount || 0) + Number(online_amount || 0);
-      const orderTotal = finalGrandTotal;
-      if (Math.abs(mixedTotal - orderTotal) > 0.01) {
-        return res.status(400).json({
-          error: `Mixed payment amounts do not match order total (Expected: ${orderTotal}, Got: ${mixedTotal})`,
-        });
-      }
-      processedMixedDetails = {
-        cash_amount: Number(cash_amount),
-        online_amount: Number(online_amount),
-        online_method: online_method || 'upi',
-        is_mixed: true,
-      };
-    }
-
-    // 6) Final status
-    let finalStatus = incomingStatus;
-    if (!finalStatus) {
-      finalStatus = 'new';
-    }
-
-    // 7) Insert order
-    const { data: orderData, error: orderError } = await supabase
-      .from('orders')
-      .insert([
-        {
-          restaurant_id,
-          table_number: table_number || null,
-          order_type,
-          status: finalStatus,
-          payment_method: processedPaymentMethod,
-          payment_status,
-          special_instructions,
-          restaurant_name: finalRestaurantName,
-          customer_name: customer_name || null,
-          customer_phone: customer_phone || null,
-          subtotal_ex_tax: finalSubtotalEx,
-          total_tax: finalTotalTax,
-          total_inc_tax: finalTotalInc,
-          discount_amount: Number(orderDiscountAmt.toFixed(2)), 
-          total_discount_percent: Number(orderDiscountPct.toFixed(2)), 
-          round_off_amount: finalRoundOff,
-          total_amount: finalGrandTotal,
-          prices_include_tax: serviceInclude,
-          gst_enabled: gstEnabled,
-          mixed_payment_details: processedMixedDetails,
-          is_credit: is_credit ?? false,
-          credit_customer_id: credit_customer_id ?? null,
-          original_payment_method: original_payment_method || null,
-          number_of_customers: number_of_customers || null,
-          created_at: custom_created_at || undefined,
-          date_ordered: custom_created_at || new Date().toISOString(),
+    const { 
+        processed_items, 
+        line_subtotal,
+        line_discount_total,
+        taxable_amount: finalTaxableAmount,
+        total_tax: finalTotalTax, 
+        total_inc_tax: finalTotalInc, 
+        total_amount: finalGrandTotal, 
+        round_off_amount: finalRoundOff, 
+        bill_discount_amount,
+        order_discount_percent: orderDiscountPct,
+        subtotal_after_line_discounts,
+        total_order_discount_base,
+    } = await import('../../../utils/orderCalculations').then(m => m.calculateOrderTotals(
+        mergedItems,
+        { 
+          type: total_discount_percent > 0 ? 'percent' : 'amount',
+          value: total_discount_percent > 0 ? total_discount_percent : (discount_amount || 0)
         },
-      ])
-      .select('id, created_at');
+        { 
+           gst_enabled: gstEnabled, 
+           default_tax_rate: baseRate,
+           prices_include_tax: serviceInclude,
+           round_off_config: profile?.round_off_enabled ? {
+               round_off_enabled: true,
+               round_off_mode: hasManualRoundOff ? 'manual' : (profile?.round_off_mode || 'automatic'),
+               round_off_manual_value: hasManualRoundOff ? Number(round_off_amount) : 0,
+               round_off_auto_factor: profile?.round_off_auto_factor
+           } : { round_off_enabled: false }
+        }
+    ));
 
-    if (orderError) {
-      console.error('Order creation error:', orderError);
-      return res
-        .status(500)
-        .json({ error: 'Failed to create order: ' + orderError.message });
+    // Map back to the specific DB structure expected by 'order_items' table
+    const preparedItems = processed_items.map(pi => ({
+        order_id: null,
+        menu_item_id: pi.id,
+        quantity: pi.quantity,
+        price: pi.unit_price, // MRP (Face)
+        item_name: pi.item_name,
+        variant_option_id: pi.variant_id || pi.variant_option_id || null,
+        variant_name: pi.variant_name || null,
+        
+        unit_price_ex_tax: pi.unit_price_ex_tax,
+        unit_price_inc_tax: pi.unit_price_inc_tax,
+        unit_tax_amount: pi.unit_tax_amount,
+        
+        tax_rate: pi.tax_rate,
+        hsn: pi.hsn || null,
+        is_packaged_good: pi.is_packaged_good,
+        uom_short_code: pi.uom_short_code,
+        uom_precision: pi.uom_precision,
+        
+        // Audit Fields
+        discount_amount: pi.discount_amount, // Total reduction (Line + Bill Share)
+        line_discount_amount: pi.line_discount_amount, 
+        order_discount_share: pi.order_discount_share,
+        taxable_amount: pi.taxable_amount,
+        tax_amount: pi.tax_amount,
+        line_total: pi.line_total
+    }));
+    
+    // 6. Final Status & Payment logic
+    const finalStatus = incomingStatus || 'new';
+
+    // Payment Logic (Mirroring frontend counter.js)
+    let processedPaymentMethod = payment_method || 'cash';
+    let processedMixedDetails = mixed_payment_details || null;
+    let finalPaymentStatus = payment_status || 'pending';
+
+    if (processedPaymentMethod === 'mixed' && processedMixedDetails) {
+        // Validation/Sanitization could happen here if needed
     }
 
-    if (!orderData || orderData.length === 0) {
-      return res
-        .status(500)
-        .json({ error: 'Order created but could not retrieve ID' });
+    if (finalStatus === 'completed') {
+        finalPaymentStatus = 'paid';
     }
 
-    const order = orderData[0];
-
-    // 8) Insert order items
-    const orderItems = preparedItems.map((oi) => ({ ...oi, order_id: order.id }));
-    const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
-    if (itemsError) {
-      console.error('Order items error:', itemsError);
-      await supabase.from('orders').delete().eq('id', order.id);
-      return res.status(500).json({ error: 'Failed to create order items' });
-    }
-
-    // 9) Create invoice synchronously (so invoice_no is ready for printing)
-    let invoice = null;
-    try {
-      await InvoiceService.createInvoiceFromOrder(order.id, null);
-      const { data: invoiceData } = await supabase
-        .from('invoices')
-        .select('id, invoice_no, bill_no')
-        .eq('order_id', order.id)
-        .single();
-
-      invoice = invoiceData;
-      
-      // Fallback: If bill_no is missing (old invoices), generate it now
-      if (!invoice.bill_no) {
-        const newBillNo = await InvoiceService.generateBillNumber(restaurant_id);
-        await supabase
-          .from('invoices')
-          .update({ bill_no: newBillNo })
-          .eq('id', invoice.id);
-        invoice.bill_no = newBillNo;
+    // 7. Persist via Unified Service
+    const orderResult = await OrderService.persistCalculatedOrder(supabase, {
+      orderId: null, // New Order
+      restaurantId: restaurant_id,
+      calculationResult: { 
+          processed_items, 
+          line_subtotal,
+          line_discount_total,
+          taxable_amount: finalTaxableAmount,
+          total_tax: finalTotalTax, 
+          total_inc_tax: finalTotalInc, 
+          total_amount: finalGrandTotal, 
+          round_off_amount: finalRoundOff, 
+          discount_amount: bill_discount_amount,
+          order_discount_percent: orderDiscountPct
+      },
+      metadata: {
+        status: finalStatus,
+        payment_status: finalPaymentStatus,
+        payment_method: processedPaymentMethod,
+        customer_name,
+        customer_phone,
+        number_of_customers,
+        order_type,
+        table_number,
+        is_credit,
+        credit_customer_id,
+        special_instructions,
+        mixed_payment_details: processedMixedDetails,
+        created_at: custom_created_at || new Date().toISOString()
       }
-    } catch (invoiceErr) {
-      await supabase.from('order_items').delete().eq('order_id', order.id);
-      await supabase.from('orders').delete().eq('id', order.id);
-      console.error('InvoiceService failed:', invoiceErr);
-      return res
-        .status(500)
-        .json({ error: 'Failed to create invoice via service: ' + (invoiceErr.message || JSON.stringify(invoiceErr)) });
-    }
+    });
 
-    // 10) Build response payload for fast client-side print
+    // 8. Build response payload for fast client-side print
     const responsePayload = {
       success: true,
-      order_id: order.id,
-      invoice_id: invoice.id,
-      invoice_no: invoice.invoice_no,
-      bill_no: invoice.bill_no,
-      order_number: order.id.slice(0, 8).toUpperCase(),
+      order_id: orderResult.orderId,
+      invoice_id: orderResult.invoiceId,
+      invoice_no: orderResult.invoiceNo,
+      bill_no: orderResult.billNo,
+      order_number: orderResult.orderId.slice(0, 8).toUpperCase(),
       order_for_print: {
-        id: order.id,
+        id: orderResult.orderId,
         restaurant_id,
         order_type,
         table_number: table_number || null,
         customer_name,
         customer_phone,
-        subtotal_ex_tax: Number(finalSubtotalEx.toFixed(2)),
+        subtotal_ex_tax: Number(subtotal_after_line_discounts.toFixed(2)),
+        gross_taxable_amount: Number(subtotal_after_line_discounts.toFixed(2)),
         total_tax: Number(finalTotalTax.toFixed(2)),
         total_inc_tax: Number(finalTotalInc.toFixed(2)),
-        discount_amount: Number(orderDiscountAmt.toFixed(2)),
+        discount_amount: Number(bill_discount_amount.toFixed(2)),
+        bill_discount_base: Number(total_order_discount_base.toFixed(2)),
         total_discount_percent: Number(orderDiscountPct.toFixed(2)),
-        round_off_amount: Number(round_off_amount ?? 0),
+        round_off_amount: Number(finalRoundOff ?? 0),
         number_of_customers: number_of_customers || null,
         prices_include_tax: serviceInclude,
         total_amount: Number(finalGrandTotal.toFixed(2)),
-        items: preparedItems.map((pi) => ({
+        items: processed_items.map((pi) => ({
           name: pi.variant_name ? `${pi.item_name} (${pi.variant_name})` : pi.item_name,
           quantity: pi.quantity,
-          price: pi.price, // Unit Price (Face Value)
-          discount_amount: pi.discount_amount, // Total Line Discount
-          discount: (pi.discount_percent > 0 || pi.discount_amount > 0) ? {
-              type: pi.discount_percent > 0 ? 'percent' : 'amount',
-              value: pi.discount_percent > 0 ? pi.discount_percent : pi.discount_amount
-          } : null,
+          price: pi.unit_price, // Unit Price (Face Value)
+          discount_amount: pi.discount_amount, // Total reduction
           uom: pi.uom_short_code,
           uom_short_code: pi.uom_short_code,
           uom_precision: pi.uom_precision,
-          line_total: Number((pi.price * pi.quantity - pi.discount_amount).toFixed(2)),
+          line_total: pi.line_total,
         })),
         payment_status,
         status: finalStatus,
-        invoice_no: invoice.invoice_no,
-        bill_no: invoice.bill_no,
-        created_at: order.created_at,
+        invoice_no: orderResult.invoiceNo,
+        bill_no: orderResult.billNo,
+        created_at: orderResult.created_at,
       },
     };
+
 
 
     // 11) Fire-and-forget background tasks (inventory + low-stock alerts + notify-owner)
@@ -554,10 +431,10 @@ export default async function handler(req, res) {
         }
 
         console.log('[API CREATE ORDER] Order created successfully:', {
-          orderId: order.id,
+          orderId: orderResult.orderId,
           restaurantId: restaurant_id,
           status: finalStatus,
-          invoiceNo: invoice.invoice_no,
+          invoiceNo: orderResult.invoiceNo,
           timestamp: new Date().toISOString(),
         });
 
@@ -569,7 +446,7 @@ export default async function handler(req, res) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               restaurantId: restaurant_id,
-              orderId: order.id,
+              orderId: orderResult.orderId,
               orderItems: items,
             }),
           }).catch((e) =>
