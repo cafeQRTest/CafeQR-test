@@ -158,6 +158,13 @@ function getLocalNum(key, fallback = 0) {
   }
 }
 
+function fmtRate(n) {
+  const x = Number(n || 0);
+  if (!Number.isFinite(x)) return "0";
+  return Number.isInteger(x) ? String(x) : x.toFixed(2);
+}
+
+
 function getReceiptWidthCols(restaurantProfile) {
   const fromLocal = getLocalNum("PRINT_WIDTH_COLS", 0);
   const fromProfile = Number(restaurantProfile?.receipt_cols || 0) || 0;
@@ -262,7 +269,7 @@ function getBillCols(innerW, hasDiscount) {
   const gaps = showDiscCol ? 4 : 3;
 
   let qty = innerW >= 44 ? 6 : innerW >= 38 ? 6 : 4;
-  let rate = innerW >= 44 ? 7 : innerW >= 38 ? 7 : 5;
+  let rate = innerW >= 44 ? 7 : innerW >= 38 ? 7 : 6;
   let disc = showDiscCol ? (innerW >= 44 ? 7 : 6) : 0;
   let total = innerW >= 44 ? 8 : innerW >= 38 ? 7 : 6;
 
@@ -610,7 +617,7 @@ export function buildReceiptText(order, bill, restaurantProfile) {
       const nameLines = wrapText(nameStr, name);
       
       const qtyStr = Number.isInteger(qtyNum) ? qtyNum.toString() : qtyNum.toFixed(2);
-      const rateStr = rateNum.toFixed(2);
+      const rateStr = fmtRate(rateNum);
       
       // CHANGED: For inclusive modes (packaged or settings-based), bake full discount into line total. 
       // This matches the user's "Ground Truth" where Item 1 = 12 - 1 = 11.
@@ -648,7 +655,7 @@ export function buildReceiptText(order, bill, restaurantProfile) {
         return s + (Number(it.price || 0) * Number(it.quantity || 1) - itemDiscount);
     }, 0);
     const itemsTotalLabel = isInclusiveMode ? "Items Total:" : "Gross Total:";
-    lines.push(withMargins(kvLine(itemsTotalLabel, shownItemsTotal.toFixed(2), W), layout));
+    lines.push(withMargins(kvLine(itemsTotalLabel, fmtRate(shownItemsTotal), W), layout));
     
     // Total Discount (Only show if not already baked into item lines)
     if (!isInclusiveMode) {
@@ -656,7 +663,7 @@ export function buildReceiptText(order, bill, restaurantProfile) {
       const totalDiscount = totalLineDisc + orderDiscount;
       
       if (totalDiscount > 0.01) {
-        lines.push(withMargins(kvLine("Discount:", "-" + totalDiscount.toFixed(2), W), layout));
+        lines.push(withMargins(kvLine("Discount:", "-" + fmtRate(totalDiscount), W), layout));
       }
     }
     
@@ -665,20 +672,20 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     // Subtotal (Ex-Tax) - Hide if redundant for inclusive modes
     if (!isInclusiveMode) {
       const subtotalExTax = (oGrandTotal - roundOff) - oTotalTax;
-      lines.push(withMargins(kvLine("Subtotal:", subtotalExTax.toFixed(2), W), layout));
+      lines.push(withMargins(kvLine("Subtotal:", fmtRate(subtotalExTax), W), layout));
     }
 
     // GST Display (Simple, clear)
     if (oTotalTax > 0) {
       const gstLabel = isInclusive ? "GST (incl):" : "GST:";
-      lines.push(withMargins(kvLine(gstLabel, oTotalTax.toFixed(2), W), layout));
+      lines.push(withMargins(kvLine(gstLabel, fmtRate(oTotalTax), W), layout));
     }
 
     // Round Off
     if (roundOff !== 0) {
       lines.push(
         withMargins(
-          kvLine("Round Off:", (roundOff > 0 ? "+" : "") + roundOff.toFixed(2), W),
+          kvLine("Round Off:", (roundOff > 0 ? "+" : "") + fmtRate(roundOff), W),
           layout
         )
       );
@@ -690,7 +697,7 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     lines.push(
       MODE_BOLD +
         (is80 ? SIZE_2X : SIZE_2H) +
-        withMargins(kvLine("TOTAL:", oGrandTotal.toFixed(2), W), layout) +
+        withMargins(kvLine("TOTAL:", fmtRate(oGrandTotal), W), layout) +
         SIZE_1X +
         MODE_NO_BOLD
     );
