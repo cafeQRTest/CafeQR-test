@@ -163,6 +163,7 @@ export default function OwnerOverview() {
           .from('orders')
           .select('id, created_at, date_ordered, status, total_inc_tax, gst_enabled, prices_include_tax, total_tax, subtotal_ex_tax, discount_amount, round_off_amount') // Simplified select
           .eq('restaurant_id', restaurantId)
+          .neq('status','cancelled')
           .order('date_ordered', { ascending: false })
           .limit(10);
         if (error) throw error;
