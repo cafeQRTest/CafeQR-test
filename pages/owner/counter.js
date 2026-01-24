@@ -2452,53 +2452,89 @@ const isVariantItem = !!item.has_variants && (item.variants?.length || 0) > 0;
     display: 'flex', 
     flexDirection: 'column', 
     alignItems: 'center', 
-    gap: '16px', 
-    padding: '32px 0 16px',
+    gap: '20px', 
+    padding: '40px 20px 24px',
     borderTop: '1px solid #f1f5f9',
-    marginTop: '20px'
+    marginTop: '30px',
+    background: 'linear-gradient(to bottom, #ffffff 0%, #f8fafc 100%)',
+    borderRadius: '0 0 24px 24px'
   }}>
-    <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 600 }}>
-      Showing <span style={{ color: THEME.main }}>{Math.min(totalCount, (page - 1) * PAGE_SIZE + 1)}</span> - <span style={{ color: THEME.main }}>{Math.min(totalCount, page * PAGE_SIZE)}</span> of <span style={{ color: THEME.main }}>{totalCount}</span> items
+    {/* Showing Status Badge */}
+    <div style={{ 
+      fontSize: '12px', 
+      color: '#64748b', 
+      fontWeight: 700,
+      background: '#fff',
+      padding: '6px 16px',
+      borderRadius: '99px',
+      border: '1px solid #e2e8f0',
+      boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
+      textTransform: 'uppercase',
+      letterSpacing: '0.5px'
+    }}>
+      Showing <span style={{ color: THEME.main }}>{Math.min(totalCount, (page - 1) * PAGE_SIZE + 1)}</span> 
+      <span style={{ margin: '0 4px', color: '#cbd5e1' }}>—</span> 
+      <span style={{ color: THEME.main }}>{Math.min(totalCount, page * PAGE_SIZE)}</span> 
+      <span style={{ margin: '0 8px', color: '#cbd5e1' }}>|</span>
+      Total <span style={{ color: THEME.main }}>{totalCount}</span> Items
     </div>
     
     {totalPages > 1 && (
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
-        <button
-          type="button"
-          onClick={() => setPage(1)}
-          disabled={page === 1}
-          style={{
-            padding: '8px 12px',
-            borderRadius: '8px',
-            border: '1px solid #e2e8f0',
-            background: '#fff',
-            color: page === 1 ? '#cbd5e1' : '#64748b',
-            cursor: page === 1 ? 'not-allowed' : 'pointer',
-            fontSize: '14px',
-            fontWeight: 600,
-            transition: 'all 0.2s'
-          }}
-          title="First Page"
-        >«</button>
-        
-        <button
-          type="button"
-          onClick={() => setPage(p => Math.max(1, p - 1))}
-          disabled={page === 1}
-          style={{
-            padding: '8px 16px',
-            borderRadius: '8px',
-            border: '1px solid #e2e8f0',
-            background: '#fff',
-            color: page === 1 ? '#cbd5e1' : '#64748b',
-            cursor: page === 1 ? 'not-allowed' : 'pointer',
-            fontSize: '14px',
-            fontWeight: 600,
-            transition: 'all 0.2s'
-          }}
-        >Prev</button>
+      <div style={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        gap: '6px', 
+        flexWrap: 'wrap', 
+        justifyContent: 'center',
+        background: '#fff',
+        padding: '6px',
+        borderRadius: '16px',
+        border: '1px solid #e2e8f0',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.03)'
+      }}>
+        {/* Navigation Buttons Row */}
+        <div style={{ display: 'flex', gap: '4px' }}>
+          <button
+            type="button"
+            onClick={() => setPage(1)}
+            disabled={page === 1}
+            style={{
+              width: '36px', height: '36px',
+              borderRadius: '10px',
+              border: 'none',
+              background: page === 1 ? '#f8fafc' : '#fff',
+              color: page === 1 ? '#cbd5e1' : '#64748b',
+              cursor: page === 1 ? 'not-allowed' : 'pointer',
+              fontSize: '16px',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+              boxShadow: page === 1 ? 'none' : '0 1px 2px rgba(0,0,0,0.05)'
+            }}
+            title="First Page"
+          >«</button>
+          
+          <button
+            type="button"
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={page === 1}
+            style={{
+              padding: '0 14px', height: '36px',
+              borderRadius: '10px',
+              border: 'none',
+              background: page === 1 ? '#f8fafc' : '#fff',
+              color: page === 1 ? '#cbd5e1' : '#64748b',
+              cursor: page === 1 ? 'not-allowed' : 'pointer',
+              fontSize: '13px',
+              fontWeight: 700,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+              boxShadow: page === 1 ? 'none' : '0 1px 2px rgba(0,0,0,0.05)'
+            }}
+          >Prev</button>
+        </div>
 
-        <div style={{ display: 'flex', gap: '6px' }}>
+        {/* Page Numbers */}
+        <div style={{ display: 'flex', gap: '4px', padding: '0 4px', borderLeft: '1px solid #f1f5f9', borderRight: '1px solid #f1f5f9' }}>
            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
               let pNum;
               if (totalPages <= 5) pNum = i + 1;
@@ -2518,55 +2554,61 @@ const isVariantItem = !!item.has_variants && (item.variants?.length || 0) > 0;
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    borderRadius: '50%',
+                    borderRadius: '10px',
                     border: 'none',
-                    background: isActive ? THEME.main : '#f1f5f9',
-                    color: isActive ? '#fff' : '#475569',
-                    fontWeight: 700,
-                    fontSize: '13px',
+                    background: isActive ? THEME.main : 'transparent',
+                    color: isActive ? '#fff' : '#64748b',
+                    fontWeight: 800,
+                    fontSize: '14px',
                     cursor: 'pointer',
-                    transition: 'all 0.2s',
-                    boxShadow: isActive ? `0 4px 10px ${THEME.main}40` : 'none'
+                    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                    boxShadow: isActive ? `0 4px 12px ${THEME.main}40` : 'none',
+                    transform: isActive ? 'scale(1.05)' : 'scale(1)'
                   }}
                 >{pNum}</button>
               );
            })}
         </div>
 
-        <button
-          type="button"
-          onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-          disabled={page === totalPages}
-          style={{
-            padding: '8px 16px',
-            borderRadius: '8px',
-            border: '1px solid #e2e8f0',
-            background: '#fff',
-            color: page === totalPages ? '#cbd5e1' : '#64748b',
-            cursor: page === totalPages ? 'not-allowed' : 'pointer',
-            fontSize: '14px',
-            fontWeight: 600,
-            transition: 'all 0.2s'
-          }}
-        >Next</button>
-        
-        <button
-          type="button"
-          onClick={() => setPage(totalPages)}
-          disabled={page === totalPages}
-          style={{
-            padding: '8px 12px',
-            borderRadius: '8px',
-            border: '1px solid #e2e8f0',
-            background: '#fff',
-            color: page === totalPages ? '#cbd5e1' : '#64748b',
-            cursor: page === totalPages ? 'not-allowed' : 'pointer',
-            fontSize: '14px',
-            fontWeight: 600,
-            transition: 'all 0.2s'
-          }}
-          title="Last Page"
-        >»</button>
+        <div style={{ display: 'flex', gap: '4px' }}>
+          <button
+            type="button"
+            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages}
+            style={{
+              padding: '0 14px', height: '36px',
+              borderRadius: '10px',
+              border: 'none',
+              background: page === totalPages ? '#f8fafc' : '#fff',
+              color: page === totalPages ? '#cbd5e1' : '#64748b',
+              cursor: page === totalPages ? 'not-allowed' : 'pointer',
+              fontSize: '13px',
+              fontWeight: 700,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+              boxShadow: page === totalPages ? 'none' : '0 1px 2px rgba(0,0,0,0.05)'
+            }}
+          >Next</button>
+          
+          <button
+            type="button"
+            onClick={() => setPage(totalPages)}
+            disabled={page === totalPages}
+            style={{
+              width: '36px', height: '36px',
+              borderRadius: '10px',
+              border: 'none',
+              background: page === totalPages ? '#f8fafc' : '#fff',
+              color: page === totalPages ? '#cbd5e1' : '#64748b',
+              cursor: page === totalPages ? 'not-allowed' : 'pointer',
+              fontSize: '16px',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+              boxShadow: page === totalPages ? 'none' : '0 1px 2px rgba(0,0,0,0.05)'
+            }}
+            title="Last Page"
+          >»</button>
+        </div>
       </div>
     )}
   </div>
