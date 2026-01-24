@@ -194,7 +194,8 @@ export default function SalesPage() {
           table_number,
           date_ordered,
           discount_amount,
-          round_off_amount
+          round_off_amount,
+          prices_include_tax
         `)
         .eq('restaurant_id', restaurantId)
         .gte('date_ordered', startUtc)

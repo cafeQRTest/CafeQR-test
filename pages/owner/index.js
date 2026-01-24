@@ -161,7 +161,7 @@ export default function OwnerOverview() {
       try {
         const { data, error } = await supabase
           .from('orders')
-          .select('id, created_at, date_ordered, status, total_inc_tax, gst_enabled, total_tax, subtotal_ex_tax, discount_amount, round_off_amount') // Simplified select
+          .select('id, created_at, date_ordered, status, total_inc_tax, gst_enabled, prices_include_tax, total_tax, subtotal_ex_tax, discount_amount, round_off_amount') // Simplified select
           .eq('restaurant_id', restaurantId)
           .order('date_ordered', { ascending: false })
           .limit(10);
@@ -292,7 +292,7 @@ export default function OwnerOverview() {
                    {Number(selectedOrder.total_tax || 0) > 0.01 && (
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                          <span style={{ fontSize: 13, color: '#6b7280', fontWeight: 600 }}>
-                           GST {selectedOrder.gst_enabled && selectedOrder.prices_include_tax ? '(incl)' : ''}
+                           GST {selectedOrder.prices_include_tax ? '(incl)' : ''}
                          </span>
                          <span style={{ fontSize: 14, fontWeight: 700, color: '#374151' }}>{formatCurrency(Number(selectedOrder.total_tax || 0))}</span>
                       </div>

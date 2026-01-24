@@ -102,7 +102,7 @@ const loadCustomerOrders = async (customerId) => {
   try {
     const { data: orders, error } = await supabase
       .from('orders')
-      .select('id, created_at, date_ordered, status, total_amount, total_tax, total_inc_tax, discount_amount, round_off_amount, customer_name') // Added fields
+      .select('id, created_at, date_ordered, status, total_amount, total_tax, total_inc_tax, prices_include_tax, discount_amount, round_off_amount, customer_name') // Added fields
       .eq('restaurant_id', restaurantId)
       .eq('credit_customer_id', customerId)
       .eq('is_credit', true)

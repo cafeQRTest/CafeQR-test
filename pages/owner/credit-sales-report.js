@@ -141,7 +141,7 @@ const customerTiles = useMemo(() => {
     const { startUtc, endUtc } = istSpanUtcISO(startDate, endDate);
     const { data: orders, error: ordersErr } = await supabase
       .from('orders')
-      .select('id, credit_customer_id, customer_name, customer_phone, total_amount, total_tax, total_inc_tax, created_at, date_ordered, status, discount_amount, round_off_amount')
+      .select('id, credit_customer_id, customer_name, customer_phone, total_amount, total_tax, total_inc_tax, prices_include_tax, created_at, date_ordered, status, discount_amount, round_off_amount')
       .eq('restaurant_id', restaurantId)
       .eq('is_credit', true)
       .neq('status', 'cancelled')
