@@ -619,9 +619,8 @@ export function buildReceiptText(order, bill, restaurantProfile) {
       const qtyStr = Number.isInteger(qtyNum) ? qtyNum.toString() : qtyNum.toFixed(2);
       const rateStr = fmtRate(rateNum);
       
-      // CHANGED: For inclusive modes (packaged or settings-based), bake full discount into line total. 
-      // This matches the user's "Ground Truth" where Item 1 = 12 - 1 = 11.
-      const printLineTotal = isInclusiveMode ? netLineTotal : (rateNum * qtyNum); 
+      // Show original Gross total in the item column to keep summary math clear
+      const printLineTotal = rateNum * qtyNum;
       const totalStr = printLineTotal.toFixed(2);
 
       const discStr =
@@ -649,36 +648,31 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     // ===== TOTALS (Restaurant-Standard Customer Bill Format) =====
     const isInclusive = order?.prices_include_tax === true;
     
-    // Items Total (Reflecting what's shown above)
-    const shownItemsTotal = items.reduce((s, it) => {
-        const itemDiscount = isInclusiveMode ? getDisc(it) : 0;
-        return s + (Number(it.price || 0) * Number(it.quantity || 1) - itemDiscount);
-    }, 0);
-    const itemsTotalLabel = isInclusiveMode ? "Items Total:" : "Gross Total:";
-    lines.push(withMargins(kvLine(itemsTotalLabel, fmtRate(shownItemsTotal), W), layout));
+    // 1. Items Total (Sum of Rate * Qty)
+    const itemsGrossTotal = items.reduce((s, it) => s + (Number(it.price || 0) * Number(it.quantity || 1)), 0);
+    const label = isInclusiveMode ? "Items Total:" : "Gross Total:";
+    lines.push(withMargins(kvLine(label, fmtRate(itemsGrossTotal), W), layout));
     
-    // Total Discount (Only show if not already baked into item lines)
-    if (!isInclusiveMode) {
-      const totalLineDisc = items.reduce((s, it) => s + Number(it.line_discount_amount || 0), 0);
-      const totalDiscount = totalLineDisc + orderDiscount;
-      
-      if (totalDiscount > 0.01) {
-        lines.push(withMargins(kvLine("Discount:", "-" + fmtRate(totalDiscount), W), layout));
-      }
-    }
-    
-    lines.push(withMargins(dashes(), layout));
-    
-    // Subtotal (Ex-Tax) - Hide if redundant for inclusive modes
-    if (!isInclusiveMode) {
-      const subtotalExTax = (oGrandTotal - roundOff) - oTotalTax;
-      lines.push(withMargins(kvLine("Subtotal:", fmtRate(subtotalExTax), W), layout));
+    // 2. Total Discount (Unified Line + Bill reductions)
+    // We sum Line Discounts + whole Bill Discount. 
+    // it.discount_amount - it.order_discount_share = actual Line Discount.
+    const totalReduction = items.reduce((s, it) => s + (Number(it.discount_amount || 0) - Number(it.order_discount_share || 0)), 0) + orderDiscount;
+    if (totalReduction > 0.01) {
+      lines.push(withMargins(kvLine("Discount:", "-" + fmtRate(totalReduction), W), layout));
     }
 
-    // GST Display (Simple, clear)
-    if (oTotalTax > 0) {
-      const gstLabel = isInclusive ? "GST (incl):" : "GST:";
-      lines.push(withMargins(kvLine(gstLabel, fmtRate(oTotalTax), W), layout));
+    // 3. Subtotal (Ex-Tax) - Only shown if tax is not baked in
+    if (!isInclusiveMode) {
+      const subEx = (oGrandTotal - roundOff) - oTotalTax;
+      lines.push(withMargins(kvLine("Subtotal:", fmtRate(subEx), W), layout));
+    }
+
+    // GST Display (Detailed CGST/SGST)
+    if (oTotalTax > 0.01) {
+      const halfTax = oTotalTax / 2;
+      const taxTag = isInclusive ? "(incl)" : "";
+      lines.push(withMargins(kvLine(`CGST ${taxTag}:`, fmtRate(halfTax), W), layout));
+      lines.push(withMargins(kvLine(`SGST ${taxTag}:`, fmtRate(halfTax), W), layout));
     }
 
     // Round Off

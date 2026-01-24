@@ -544,6 +544,8 @@ function toDisplayItems(order) {
       uom_short_code: oi.uom_short_code || null,
       uom_precision: oi.uom_precision ?? oi.menu_items?.uom?.precision ?? 0,
       notes: oi.notes,
+      line_discount_amount: oi.line_discount_amount,
+      order_discount_share: oi.order_discount_share,
       discount_amount: oi.discount_amount,
     }));
   }
@@ -3192,14 +3194,20 @@ colOrders =
                       </div>
                       {it.variant_name && <div style={{ fontSize: 9, color: '#94a3b8', marginTop: 1, marginLeft: 20 }}>{it.variant_name}</div>}
                     </div>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: '#1e293b', textAlign: 'right' }}>
-                      ₹{((it.quantity || 1) * (it.price || 0)).toFixed(2)}
-                      {Number(it.discount_amount || 0) > 0 && (
-                          <div style={{ fontSize: 10, color: '#ef4444', fontWeight: 600 }}>
-                            - ₹{Number(it.discount_amount).toFixed(2)}
-                          </div>
-                      )}
-                    </div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: '#1e293b', textAlign: 'right' }}>
+                        ₹{((it.quantity || 1) * (it.price || 0)).toFixed(2)}
+                        {(() => {
+                           const lDisc = Number(it.line_discount_amount || 0);
+                           // Fallback calculation for robust UI
+                           const displayDisc = lDisc > 0 ? lDisc : Math.max(0, Number(it.discount_amount || 0) - Number(it.order_discount_share || 0));
+                           
+                           return displayDisc > 0 ? (
+                             <div style={{ fontSize: 10, color: '#ef4444', fontWeight: 600 }}>
+                               - ₹{displayDisc.toFixed(2)}
+                             </div>
+                           ) : null;
+                        })()}
+                      </div>
                   </div>
                 </div>
               ))}
@@ -3207,10 +3215,12 @@ colOrders =
 
             <div style={{ padding: '12px 0 0', borderTop: '1px solid #f1f5f9' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11 }}>
-                  <span style={{ color: '#94a3b8', fontWeight: 500 }}>GST {itemsModalOrder.prices_include_tax ? '(incl)' : ''}</span>
-                  <span style={{ fontWeight: 600, color: '#64748b' }}>₹{Number(itemsModalOrder.total_tax || itemsModalOrder.tax_amount || itemsModalOrder.tax || 0).toFixed(2)}</span>
-                </div>
+                {Number(itemsModalOrder.total_tax || itemsModalOrder.tax_amount || itemsModalOrder.tax || 0) > 0.01 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11 }}>
+                    <span style={{ color: '#94a3b8', fontWeight: 500 }}>GST {itemsModalOrder.prices_include_tax ? '(incl)' : ''}</span>
+                    <span style={{ fontWeight: 600, color: '#64748b' }}>₹{Number(itemsModalOrder.total_tax || itemsModalOrder.tax_amount || itemsModalOrder.tax || 0).toFixed(2)}</span>
+                  </div>
+                )}
 
                 {Number(itemsModalOrder.discount_amount || 0) > 0 && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, marginTop: 4 }}>

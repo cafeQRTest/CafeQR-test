@@ -559,10 +559,10 @@ const exportHsnSummary = async () => {
                         {invoiceItems.map((item, idx) => {
                           // Very robust fallback for price keys across different versions
                           const price = Number(
-                            item.unit_price_inc_tax ?? 
                             item.price ?? 
                             item.unit_price ?? 
                             item.price_at_order ?? 
+                            item.unit_price_inc_tax ?? 
                             item.unit_price_ex_tax ?? 
                             0
                           );
@@ -577,11 +577,17 @@ const exportHsnSummary = async () => {
                               </div>
                               <div className="item-price" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
                                 <span>{formatMoney(price * item.quantity)}</span>
-                                {Number(item.discount_amount || 0) > 0 && (
-                                   <span style={{ fontSize: '0.75rem', color: '#ef4444' }}>
-                                      -{formatMoney(item.discount_amount)}
-                                   </span>
-                                )}
+                                {(() => {
+                                   const lDisc = Number(item.line_discount_amount || 0);
+                                   // Fallback if line_discount_amount is missing (calc as Total - Order Share)
+                                   const displayDisc = lDisc > 0 ? lDisc : Math.max(0, Number(item.discount_amount || 0) - Number(item.order_discount_share || 0));
+                                   
+                                   return displayDisc > 0 ? (
+                                      <span style={{ fontSize: '0.75rem', color: '#ef4444', fontWeight: 600 }}>
+                                        -{formatMoney(displayDisc)}
+                                      </span>
+                                   ) : null;
+                                })()}
                               </div>
                             </div>
                           );
@@ -591,10 +597,12 @@ const exportHsnSummary = async () => {
                   </div>
 
                   <div className="summary-section">
-                    <div className="sum-row tax">
-                      <span>GST Total</span>
-                      <span>{formatMoney(selectedInvoice.total_tax)}</span>
-                    </div>
+                    {Number(selectedInvoice.total_tax || 0) > 0.01 && (
+                      <div className="sum-row tax">
+                        <span>GST Total {selectedInvoice.prices_include_tax ? '(incl)' : ''}</span>
+                        <span>{formatMoney(selectedInvoice.total_tax)}</span>
+                      </div>
+                    )}
                     {(Number(selectedInvoice.discount_amount || 0) > 0 || Number(selectedInvoice.order_discount_total || 0) > 0) && (
                       <div className="sum-row" style={{ color: '#ef4444' }}>
                         <span>Discount</span>

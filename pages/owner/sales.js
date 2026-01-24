@@ -50,6 +50,9 @@ function toDisplayItems(order) {
       is_packaged_good: oi.is_packaged_good,
       variant_id: oi.variant_option_id || null,
       variant_name: oi.variant_name || null,
+      line_discount_amount: oi.line_discount_amount,
+      order_discount_share: oi.order_discount_share,
+      discount_amount: oi.discount_amount,
     }));
   }
   return [];
@@ -885,8 +888,19 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
                        {it.variant_name && <span style={{ marginLeft: 8, fontStyle: 'italic' }}>({it.variant_name})</span>}
                     </div>
                   </div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: '#1e293b' }}>
-                    ₹{((it.quantity || 1) * (it.price || 0)).toFixed(2)}
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#1e293b' }}>
+                      ₹{((it.quantity || 1) * (it.price || 0)).toFixed(2)}
+                    </div>
+                    {(() => {
+                        const lDisc = Number(it.line_discount_amount || 0);
+                        const displayDisc = lDisc > 0 ? lDisc : Math.max(0, Number(it.discount_amount || 0) - Number(it.order_discount_share || 0));
+                        return displayDisc > 0 ? (
+                          <div style={{ fontSize: 10, color: '#ef4444', fontWeight: 600, marginTop: 2 }}>
+                            - ₹{displayDisc.toFixed(2)}
+                          </div>
+                        ) : null;
+                    })()}
                   </div>
                 </div>
               ))}
@@ -894,10 +908,12 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
 
             {/* Summary Box */}
             <div style={{ background: '#FFF9F2', borderRadius: 8, padding: 16 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 13, fontWeight: 600, color: '#64748b' }}>
-                <span>Tax Amount</span>
-                <span style={{ color: '#334155' }}>₹{Number(itemsModalOrder.total_tax || 0).toFixed(2)}</span>
-              </div>
+              {Number(itemsModalOrder.total_tax || 0) > 0.01 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 13, fontWeight: 600, color: '#64748b' }}>
+                  <span>Tax Amount {itemsModalOrder.prices_include_tax ? '(incl)' : ''}</span>
+                  <span style={{ color: '#334155' }}>₹{Number(itemsModalOrder.total_tax || 0).toFixed(2)}</span>
+                </div>
+              )}
 
               {Number(itemsModalOrder.discount_amount || 0) > 0 && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 13, fontWeight: 600, color: '#ef4444' }}>
