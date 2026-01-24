@@ -144,7 +144,9 @@ const handleViewOrder = async (order) => {
     if (dbItems && dbItems.length > 0) {
       const formatted = dbItems.map(it => ({
         ...it,
-        name: it.item_name || it.variant_name ? `${it.item_name} (${it.variant_name})` : it.item_name || 'Item'
+        name: (it.item_name || 'Item') + (it.variant_name ? ` (${it.variant_name})` : ''),
+        price: it.price || 0,
+        quantity: it.quantity || 1
       }))
       setSelectedOrder(prev => ({ ...prev, items: formatted }))
     }
@@ -691,22 +693,31 @@ const handleViewOrder = async (order) => {
                 <div className="order-items-sec">
                    <div style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', marginBottom: 12, borderBottom: '1px solid #f3f4f6', paddingBottom: 8 }}>Order Items</div>
                    {(selectedOrder.items || []).length > 0 ? (
-                      selectedOrder.items.map((it, i) => (
-                         <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #f8fafc' }}>
-                            <div>
-                               <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>{it.name}</div>
-                               <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>₹{Number(it.price).toFixed(2)} × {it.quantity}</div>
+                      selectedOrder.items.map((it, i) => {
+                         const grossPrice = Number(it.price || it.unit_price_inc_tax || 0);
+                         const grossTotal = grossPrice * (it.quantity || 1);
+                         return (
+                            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #f8fafc' }}>
+                               <div>
+                                  <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>{it.name}</div>
+                                  <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>₹{grossPrice.toFixed(2)} × {it.quantity}</div>
+                               </div>
+                               <div style={{ fontSize: 14, fontWeight: 700, color: '#111827', textAlign: 'right' }}>
+                                 ₹{grossTotal.toFixed(2)}
+                                 {(() => {
+                                    const lDisc = Number(it.line_discount_amount || 0);
+                                    const displayDisc = lDisc > 0 ? lDisc : Math.max(0, Number(it.discount_amount || 0) - Number(it.order_discount_share || 0));
+                                    
+                                    return displayDisc > 0 ? (
+                                       <div style={{ fontSize: 11, color: '#ef4444', fontWeight: 600 }}>
+                                          - ₹{displayDisc.toFixed(2)}
+                                       </div>
+                                    ) : null;
+                                 })()}
+                               </div>
                             </div>
-                            <div style={{ fontSize: 14, fontWeight: 700, color: '#111827', textAlign: 'right' }}>
-                              ₹{(Number(it.price) * Number(it.quantity)).toFixed(2)}
-                              {Number(it.discount_amount || 0) > 0 && (
-                                   <div style={{ fontSize: 11, color: '#ef4444', fontWeight: 600 }}>
-                                      - ₹{Number(it.discount_amount).toFixed(2)}
-                                   </div>
-                                )}
-                            </div>
-                         </div>
-                      ))
+                         );
+                      })
                    ) : (
                       <div style={{ textAlign: 'center', padding: '24px 0', color: '#9ca3af', fontSize: 13, fontStyle: 'italic' }}>
                         {loading ? 'Fetching items...' : 'No items found for this order'}
@@ -715,16 +726,18 @@ const handleViewOrder = async (order) => {
                 </div>
 
                 <div style={{ marginTop: 24, padding: 16, background: BRAND.soft, borderRadius: 12, border: '1px solid #ffedd5' }}>
-                   {Number(selectedOrder.total_tax || 0) > 0 && (
+                   {Number(selectedOrder.total_tax || 0) > 0.01 && (
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                         <span style={{ fontSize: 13, color: '#6b7280', fontWeight: 600 }}>Tax Amount</span>
+                         <span style={{ fontSize: 13, color: '#6b7280', fontWeight: 600 }}>
+                           GST {selectedOrder.prices_include_tax ? '(incl)' : ''}
+                         </span>
                          <span style={{ fontSize: 14, fontWeight: 700, color: '#374151' }}>{fmt.format(Number(selectedOrder.total_tax || 0))}</span>
                       </div>
                    )}
 
                    {Number(selectedOrder.discount_amount || 0) > 0 && (
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                         <span style={{ fontSize: 13, color: '#ef4444', fontWeight: 600 }}>Discount</span>
+                         <span style={{ fontSize: 13, color: '#ef4444', fontWeight: 600 }}>Bill Discount (-)</span>
                          <span style={{ fontSize: 14, fontWeight: 700, color: '#ef4444' }}>- {fmt.format(Number(selectedOrder.discount_amount))}</span>
                       </div>
                    )}

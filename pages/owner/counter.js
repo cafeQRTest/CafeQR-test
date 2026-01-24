@@ -2447,19 +2447,130 @@ const isVariantItem = !!item.has_variants && (item.variants?.length || 0) > 0;
         </section>
       </main>
 
-<div style={{ display: 'flex', justifyContent: 'center', gap: 12, padding: '12px 0' }}>
-  <button type="button" disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>
-    Previous
-  </button>
+{totalCount > 0 && (
+  <div style={{ 
+    display: 'flex', 
+    flexDirection: 'column', 
+    alignItems: 'center', 
+    gap: '16px', 
+    padding: '32px 0 16px',
+    borderTop: '1px solid #f1f5f9',
+    marginTop: '20px'
+  }}>
+    <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 600 }}>
+      Showing <span style={{ color: THEME.main }}>{Math.min(totalCount, (page - 1) * PAGE_SIZE + 1)}</span> - <span style={{ color: THEME.main }}>{Math.min(totalCount, page * PAGE_SIZE)}</span> of <span style={{ color: THEME.main }}>{totalCount}</span> items
+    </div>
+    
+    {totalPages > 1 && (
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
+        <button
+          type="button"
+          onClick={() => setPage(1)}
+          disabled={page === 1}
+          style={{
+            padding: '8px 12px',
+            borderRadius: '8px',
+            border: '1px solid #e2e8f0',
+            background: '#fff',
+            color: page === 1 ? '#cbd5e1' : '#64748b',
+            cursor: page === 1 ? 'not-allowed' : 'pointer',
+            fontSize: '14px',
+            fontWeight: 600,
+            transition: 'all 0.2s'
+          }}
+          title="First Page"
+        >«</button>
+        
+        <button
+          type="button"
+          onClick={() => setPage(p => Math.max(1, p - 1))}
+          disabled={page === 1}
+          style={{
+            padding: '8px 16px',
+            borderRadius: '8px',
+            border: '1px solid #e2e8f0',
+            background: '#fff',
+            color: page === 1 ? '#cbd5e1' : '#64748b',
+            cursor: page === 1 ? 'not-allowed' : 'pointer',
+            fontSize: '14px',
+            fontWeight: 600,
+            transition: 'all 0.2s'
+          }}
+        >Prev</button>
 
-  <div style={{ paddingTop: 6, fontWeight: 700 }}>
-    Page {page} of {totalPages} ({totalCount} items)
+        <div style={{ display: 'flex', gap: '6px' }}>
+           {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+              let pNum;
+              if (totalPages <= 5) pNum = i + 1;
+              else if (page <= 3) pNum = i + 1;
+              else if (page >= totalPages - 2) pNum = totalPages - 4 + i;
+              else pNum = page - 2 + i;
+
+              const isActive = pNum === page;
+              return (
+                <button
+                  key={pNum}
+                  type="button"
+                  onClick={() => setPage(pNum)}
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: '50%',
+                    border: 'none',
+                    background: isActive ? THEME.main : '#f1f5f9',
+                    color: isActive ? '#fff' : '#475569',
+                    fontWeight: 700,
+                    fontSize: '13px',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    boxShadow: isActive ? `0 4px 10px ${THEME.main}40` : 'none'
+                  }}
+                >{pNum}</button>
+              );
+           })}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+          disabled={page === totalPages}
+          style={{
+            padding: '8px 16px',
+            borderRadius: '8px',
+            border: '1px solid #e2e8f0',
+            background: '#fff',
+            color: page === totalPages ? '#cbd5e1' : '#64748b',
+            cursor: page === totalPages ? 'not-allowed' : 'pointer',
+            fontSize: '14px',
+            fontWeight: 600,
+            transition: 'all 0.2s'
+          }}
+        >Next</button>
+        
+        <button
+          type="button"
+          onClick={() => setPage(totalPages)}
+          disabled={page === totalPages}
+          style={{
+            padding: '8px 12px',
+            borderRadius: '8px',
+            border: '1px solid #e2e8f0',
+            background: '#fff',
+            color: page === totalPages ? '#cbd5e1' : '#64748b',
+            cursor: page === totalPages ? 'not-allowed' : 'pointer',
+            fontSize: '14px',
+            fontWeight: 600,
+            transition: 'all 0.2s'
+          }}
+          title="Last Page"
+        >»</button>
+      </div>
+    )}
   </div>
-
-  <button type="button" disabled={page >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))}>
-    Next
-  </button>
-</div>
+)}
 
 
       {cartItemsCount > 0 && (
@@ -2961,16 +3072,16 @@ const isVariantItem = !!item.has_variants && (item.variants?.length || 0) > 0;
                     </div>
 
                     {/* Tax Breakdown - Split Logic */}
-                    {(cartTotals?.total_tax_included || 0) > 0 && (
+                    {(cartTotals?.total_tax_included || 0) > 0.01 && (
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#64748b' }}>
-                        <span>GST (Incl.)</span>
+                        <span>GST (incl)</span>
                         <span style={{ fontWeight: 600, color: '#1e293b' }}>
                           ₹{(cartTotals?.total_tax_included || 0).toFixed(2)}
                         </span>
                       </div>
                     )}
                     
-                    {(cartTotals?.total_tax_added || 0) > 0 && (
+                    {(cartTotals?.total_tax_added || 0) > 0.01 && (
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#64748b' }}>
                         <span>GST (+)</span>
                         <span style={{ fontWeight: 600, color: '#1e293b' }}>
@@ -2980,9 +3091,9 @@ const isVariantItem = !!item.has_variants && (item.variants?.length || 0) > 0;
                     )}
                     
                     {/* Fallback for Total Tax if splits are missing but total > 0 (prevents 'No Details' error) */}
-                    {!(cartTotals?.total_tax_added > 0) && !(cartTotals?.total_tax_included > 0) && (cartTotals?.finalTax || 0) > 0 && (
+                    {!(cartTotals?.total_tax_added > 0) && !(cartTotals?.total_tax_included > 0) && (cartTotals?.finalTax || 0) > 0.01 && (
                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#64748b' }}>
-                         <span>{(profileTax.prices_include_tax || cartTotals?.hasPackaged) ? 'GST (Included)' : 'GST (+)'}</span>
+                         <span>GST {(profileTax.prices_include_tax || cartTotals?.hasPackaged) ? '(incl)' : '(+)'}</span>
                          <span style={{ fontWeight: 600, color: '#1e293b' }}>
                            ₹{(cartTotals?.finalTax || 0).toFixed(2)}
                          </span>

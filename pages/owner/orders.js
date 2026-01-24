@@ -816,23 +816,23 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
             <span style={{ fontWeight: 700 }}>₹{taxableAmount.toFixed(2)}</span>
           </div>
 
-          {(totalTaxIncluded || 0) > 0 && (
+          {(totalTaxIncluded || 0) > 0.01 && (
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 13, color: '#64748b' }}>
-              <span>GST (Incl.)</span>
+              <span>GST (incl)</span>
               <span style={{ fontWeight: 700, color: '#0f172a' }}>₹{totalTaxIncluded.toFixed(2)}</span>
             </div>
           )}
 
-          {(totalTaxAdded || 0) > 0 && (
+          {(totalTaxAdded || 0) > 0.01 && (
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 13, color: '#64748b' }}>
               <span>GST (+)</span>
               <span style={{ fontWeight: 700, color: '#0f172a' }}>₹{totalTaxAdded.toFixed(2)}</span>
             </div>
           )}
 
-          {!(totalTaxAdded > 0) && !(totalTaxIncluded > 0) && finalTax > 0 && (
+          {!(totalTaxAdded > 0) && !(totalTaxIncluded > 0) && finalTax > 0.01 && (
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#334155' }}>
-              <span style={{ fontWeight: 600 }}>GST Total (+)</span>
+              <span style={{ fontWeight: 600 }}>GST {isInclusiveMode ? '(incl)' : '(+)'}</span>
               <span style={{ fontWeight: 700 }}>₹{finalTax.toFixed(2)}</span>
             </div>
           )}

@@ -531,24 +531,30 @@ const customerTiles = useMemo(() => {
                     </div>
                  ) : (selectedOrder.items || []).length > 0 ? (
                     selectedOrder.items.map((it, i) => {
-                       const unitInc = it.unit_price_inc_tax ?? it.price;
-                       const itemTotal = unitInc * it.quantity;
+                       // Correct: Use gross menu price
+                       const grossPrice = Number(it.price || it.unit_price_inc_tax || 0);
+                       const grossTotal = grossPrice * (it.quantity || 1);
 
                        return (
                          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #f8fafc' }}>
                              <div>
                                 <div style={{ fontSize: 14, fontWeight: 700, color: '#111827' }}>{it.name}</div>
                                 <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>
-                                   ₹{Number(unitInc).toFixed(2)} × {it.quantity}
+                                   ₹{grossPrice.toFixed(2)} × {it.quantity}
                                 </div>
                              </div>
                              <div style={{ fontSize: 14, fontWeight: 700, color: '#111827', textAlign: 'right' }}>
-                                ₹{Number(itemTotal).toFixed(2)}
-                                {Number(it.discount_amount || 0) > 0 && (
-                                   <div style={{ fontSize: 11, color: '#ef4444', fontWeight: 600 }}>
-                                      - ₹{Number(it.discount_amount).toFixed(2)}
-                                   </div>
-                                )}
+                                ₹{grossTotal.toFixed(2)}
+                                {(() => {
+                                   const lDisc = Number(it.line_discount_amount || 0);
+                                   const displayDisc = lDisc > 0 ? lDisc : Math.max(0, Number(it.discount_amount || 0) - Number(it.order_discount_share || 0));
+                                   
+                                   return displayDisc > 0 ? (
+                                      <div style={{ fontSize: 11, color: '#ef4444', fontWeight: 600 }}>
+                                         - ₹{displayDisc.toFixed(2)}
+                                      </div>
+                                   ) : null;
+                                })()}
                              </div>
                          </div>
                        );
@@ -561,16 +567,18 @@ const customerTiles = useMemo(() => {
               </div>
 
               <div style={{ marginTop: 24, padding: 16, background: '#fff7ed', borderRadius: 12, border: '1px solid #ffedd5' }}>
-                 {Number(selectedOrder.total_tax || 0) > 0 && (
+                 {Number(selectedOrder.total_tax || 0) > 0.01 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                       <span style={{ fontSize: 13, color: '#6b7280', fontWeight: 600 }}>Tax Amount</span>
+                       <span style={{ fontSize: 13, color: '#6b7280', fontWeight: 600 }}>
+                         GST {selectedOrder.prices_include_tax ? '(incl)' : ''}
+                       </span>
                        <span style={{ fontSize: 14, fontWeight: 700, color: '#374151' }}>₹{Number(selectedOrder.total_tax || 0).toFixed(2)}</span>
                     </div>
                  )}
 
                  {Number(selectedOrder.discount_amount || 0) > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                       <span style={{ fontSize: 13, color: '#ef4444', fontWeight: 600 }}>Discount</span>
+                       <span style={{ fontSize: 13, color: '#ef4444', fontWeight: 600 }}>Bill Discount (-)</span>
                        <span style={{ fontSize: 14, fontWeight: 700, color: '#ef4444' }}>- ₹{Number(selectedOrder.discount_amount).toFixed(2)}</span>
                     </div>
                  )}
