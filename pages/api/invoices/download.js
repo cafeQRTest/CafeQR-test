@@ -143,7 +143,8 @@ export default async function handler(req, res) {
         order_discount_base_share: orderDiscBaseShare,
         taxable_value: taxableValue,
         tax_amount: taxAmount,
-        line_total: lineTotal
+        line_total: lineTotal,
+        tax_rate: taxRate // Pass explicit rate to PDF generator
       };
     });
 
