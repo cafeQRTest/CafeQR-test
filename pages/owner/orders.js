@@ -975,16 +975,21 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
               <div style={{ flex: 1, height: 44, display: 'flex', alignItems: 'center', background: '#fff', borderRadius: 10, border: '2px solid #e2e8f0', padding: '0 12px' }}>
                 <span style={{ fontSize: 16, fontWeight: 700, color: '#94a3b8' }}>₹</span>
                 <input type="number" step="0.01" value={displayValue} onChange={e => {
-                  const raw = e.target.value; setDisplayValue(raw);
+                  const raw = e.target.value; 
+                  setDisplayValue(raw);
                   const val = Number(raw);
                   if (!isNaN(val)) {
-                    const diff = val - finalTotal;
-                    if (Math.abs(diff) <= roundOffConfig.round_off_manual_limit) setSettledAmount(val);
+                    setSettledAmount(val);
                   }
                 }} onBlur={() => setDisplayValue(settledAmount.toFixed(2))} style={{ flex: 1, border: 'none', outline: 'none', fontSize: 16, fontWeight: 700, height: '100%', padding: 0, marginLeft: 6, width: '100%' }} />
               </div>
               <button onClick={() => { setSettledAmount(autoRounded); setDisplayValue(autoRounded.toFixed(2)); }} style={{ height: 44, background: '#fff', border: '2px solid #e2e8f0', color: '#64748b', padding: '0 16px', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Reset</button>
             </div>
+            {Math.abs(settledAmount - finalTotal) > roundOffConfig.round_off_manual_limit + 0.01 && (
+              <div style={{ fontSize: 10, color: '#ef4444', fontWeight: 700, marginTop: 8, textAlign: 'center' }}>
+                Round-off exceeds the limit of ±₹{roundOffConfig.round_off_manual_limit.toFixed(2)}
+              </div>
+            )}
           </div>
         )}
 
@@ -1085,7 +1090,13 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
 
         <div style={{ display: 'flex', gap: 12 }}>
           <Button onClick={onCancel} variant="outline" style={{ flex: 1, height: 52, borderRadius: 14, fontSize: 15, fontWeight: 700, borderColor: '#e2e8f0' }}>Cancel</Button>
-          <Button onClick={handleConfirm} style={{ flex: 1.6, height: 52, borderRadius: 14, background: `linear-gradient(135deg, ${BRAND.orange} 0%, #ea580c 100%)`, color: 'white', fontSize: 15, fontWeight: 800, boxShadow: `0 8px 24px -6px ${BRAND.orange}60`, border: 'none' }}>Settle & Finish</Button>
+          <Button 
+            onClick={handleConfirm} 
+            disabled={submitting || (roundOffConfig.round_off_enabled && roundOffConfig.round_off_mode === 'manual' && Math.abs(settledAmount - finalTotal) > roundOffConfig.round_off_manual_limit + 0.01)}
+            style={{ flex: 1.6, height: 52, borderRadius: 14, background: `linear-gradient(135deg, ${BRAND.orange} 0%, #ea580c 100%)`, color: 'white', fontSize: 15, fontWeight: 800, boxShadow: `0 8px 24px -6px ${BRAND.orange}60`, border: 'none' }}
+          >
+            Settle & Finish
+          </Button>
         </div>
 
         <DiscountModal visible={isDiscountModalOpen} onClose={() => setIsDiscountModalOpen(false)} onSaveTotal={setDiscount} cart={localItems} onUpdateCartItem={handleUpdateLocalItem} currentTotalDiscount={discount} theme={THEME} totalAmount={subtotalEx} />

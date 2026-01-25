@@ -549,30 +549,30 @@ function PaymentConfirmDialog({
           </button>
           <button
             onClick={handleConfirm}
-            disabled={disabled}
+            disabled={disabled || (isRoundOffEnabled && isManual && Math.abs(settledAmount - effectiveAmount) > Number(roundOffConfig.round_off_manual_limit || 0) + 0.01)}
             style={{
               flex: 2,
-              background: disabled ? '#cbd5e1' : `linear-gradient(135deg, ${BRAND.orange} 0%, ${BRAND.orangeDark} 100%)`,
+              background: (disabled || (isRoundOffEnabled && isManual && Math.abs(settledAmount - effectiveAmount) > Number(roundOffConfig.round_off_manual_limit || 0) + 0.01)) ? '#cbd5e1' : `linear-gradient(135deg, ${BRAND.orange} 0%, ${BRAND.orangeDark} 100%)`,
               color: '#fff',
               border: 'none',
               padding: '10px',
               borderRadius: 10,
               fontSize: '14px',
               fontWeight: 700,
-              cursor: disabled ? 'not-allowed' : 'pointer',
-              boxShadow: disabled ? 'none' : `0 6px 12px ${BRAND.orange}40`,
+              cursor: (disabled || (isRoundOffEnabled && isManual && Math.abs(settledAmount - effectiveAmount) > Number(roundOffConfig.round_off_manual_limit || 0) + 0.01)) ? 'not-allowed' : 'pointer',
+              boxShadow: (disabled || (isRoundOffEnabled && isManual && Math.abs(settledAmount - effectiveAmount) > Number(roundOffConfig.round_off_manual_limit || 0) + 0.01)) ? 'none' : `0 6px 12px ${BRAND.orange}40`,
               transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
               textTransform: 'uppercase',
               letterSpacing: '0.3px'
             }}
             onMouseEnter={(e) => {
-              if (!disabled) {
+              if (!(disabled || (isRoundOffEnabled && isManual && Math.abs(settledAmount - effectiveAmount) > Number(roundOffConfig.round_off_manual_limit || 0) + 0.01))) {
                 e.currentTarget.style.transform = 'translateY(-1px)';
                 e.currentTarget.style.boxShadow = `0 8px 16px ${BRAND.orange}50`;
               }
             }}
             onMouseLeave={(e) => {
-              if (!disabled) {
+              if (!(disabled || (isRoundOffEnabled && isManual && Math.abs(settledAmount - effectiveAmount) > Number(roundOffConfig.round_off_manual_limit || 0) + 0.01))) {
                 e.currentTarget.style.transform = 'translateY(0)';
                 e.currentTarget.style.boxShadow = `0 6px 12px ${BRAND.orange}40`;
               }
