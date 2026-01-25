@@ -106,7 +106,28 @@ export default function OwnerLoyaltyPage() {
 
   const executeDelete = async (id) => {
      try {
-       await supabase.from('loyalty_programs').delete().eq('id', id);
+       // 1. Check if assigned to any customers
+       const { count, error: countErr } = await supabase
+         .from('restaurant_customers')
+         .select('*', { count: 'exact', head: true })
+         .eq('restaurant_id', restaurantId)
+         .eq('loyalty_program_id', id);
+
+       if (countErr) throw countErr;
+
+       if (count > 0) {
+         showAlert(
+           `This loyalty program is currently assigned to ${count} customer(s). Please move them to a different program before deleting.`,
+           'Program In Use'
+         );
+         setDeleteId(null);
+         return;
+       }
+
+       // 2. Proceed with deletion
+       const { error: delErr } = await supabase.from('loyalty_programs').delete().eq('id', id);
+       if (delErr) throw delErr;
+
        loadPrograms();
        setDeleteId(null);
      } catch (e) {
