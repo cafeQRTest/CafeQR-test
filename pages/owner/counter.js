@@ -402,10 +402,16 @@ function PaymentConfirmDialog({
                       value={pointsToRedeem || ''}
                       placeholder="Enter points"
                       onChange={(e) => {
-                        const pts = parseInt(e.target.value, 10) || 0;
-                        if (pts > customerPoints) return;
+                        let pts = parseInt(e.target.value, 10) || 0;
+                        if (pts > customerPoints) pts = customerPoints;
+                        
+                        let amt = Number((pts * conversionRate).toFixed(2));
+                        if (maxRedemption > 0 && amt > maxRedemption) {
+                          amt = maxRedemption;
+                          pts = Math.floor(amt / conversionRate);
+                        }
+
                         setPointsToRedeem(pts);
-                        const amt = Number((pts * conversionRate).toFixed(2));
                         setLoyaltyRedeemAmount(amt);
                         calculateRemainingOnline(cashAmount, amt);
                       }}
@@ -430,9 +436,14 @@ function PaymentConfirmDialog({
                       </div>
                     )}
                   </div>
-                   {customerPoints < minPoints && (
-                    <div style={{ fontSize: '10px', color: '#ef4444', marginTop: 4 }}>
+                  {customerPoints < minPoints && customerPoints > 0 && (
+                    <div style={{ fontSize: '10px', color: '#dc2626', marginTop: 4, fontWeight: 600 }}>
                       Min {minPoints} points required for redemption.
+                    </div>
+                  )}
+                  {maxRedemption > 0 && (
+                    <div style={{ fontSize: '10px', color: '#64748b', marginTop: 4, fontWeight: 600 }}>
+                      Max ₹{maxRedemption.toFixed(2)} can be redeemed per order.
                     </div>
                   )}
                 </div>
@@ -2364,6 +2375,7 @@ const orderForPrint = {
                       <input 
                         type="text" placeholder="Search name..." 
                         value={customerName} 
+                        readOnly={!!selectedCustomerId}
                         onChange={(e) => {
                            setCustomerName(e.target.value);
                            setShowNameSuggestions(true);
@@ -2382,7 +2394,8 @@ const orderForPrint = {
                             ? (orderMode === 'kitchen' ? '1.5px solid #fdba74' : '1.5px solid #4ade80') 
                             : '1.5px solid #e2e8f0',
                           fontWeight: selectedCustomerId ? 700 : 400,
-                      color: selectedCustomerId ? (orderMode === 'kitchen' ? '#9a3412' : '#166534') : '#1e293b'
+                      color: selectedCustomerId ? (orderMode === 'kitchen' ? '#9a3412' : '#166534') : '#1e293b',
+                      cursor: selectedCustomerId ? 'not-allowed' : 'text'
                         }} 
                       />
                       {selectedCustomerId && (
@@ -2445,6 +2458,7 @@ const orderForPrint = {
                       <input 
                         type="tel" placeholder="Phone" 
                         value={customerPhone} 
+                        readOnly={!!selectedCustomerId}
                         onChange={(e) => {
                           setCustomerPhone(e.target.value);
                           setShowNameSuggestions(true);
@@ -2461,7 +2475,8 @@ const orderForPrint = {
                           background: selectedCustomerId ? (orderMode === 'kitchen' ? '#fff7ed' : '#f0fdf4') : '#ffffff', 
                           border: selectedCustomerId 
                             ? (orderMode === 'kitchen' ? '1.5px solid #fdba74' : '1.5px solid #4ade80') 
-                            : '1.5px solid #e2e8f0'
+                            : '1.5px solid #e2e8f0',
+                          cursor: selectedCustomerId ? 'not-allowed' : 'text'
                         }} 
                       />
                     </div>
@@ -3746,7 +3761,7 @@ const isVariantItem = !!item.has_variants && (item.variants?.length || 0) > 0;
           busy={processing}
           mode={paymentDialogMode}
           roundOffConfig={roundOffConfig}
-          loyaltyEnabled={!!loyaltyProgram}
+          loyaltyEnabled={!!loyaltyProgram && !!selectedCustomerId}
           customerPoints={customerPoints.points || 0}
           conversionRate={loyaltyProgram?.redemption_conversion_rate || 1.0}
           restaurantId={restaurantId}

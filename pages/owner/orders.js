@@ -596,6 +596,7 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
     availablePoints: 0, 
     conversionRate: 0, 
     minPoints: 0,
+    maxRedemption: 0,
     loading: false 
   });
   const [loyaltyAmountUsed, setLoyaltyAmountUsed] = useState(0);
@@ -641,6 +642,7 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
               availablePoints: cust.loyalty_points || 0,
               conversionRate: Number(prog.redemption_conversion_rate || 1.0),
               minPoints: prog.redemption_min_points || 100,
+              maxRedemption: prog.max_redemption_amount_per_order || 0,
               loading: false
             });
           }
@@ -1000,8 +1002,8 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
         {showMixedForm && (
           <div style={{ background: '#f8fafc', padding: '18px 16px', borderRadius: 18, border: '2px solid #e2e8f0', marginBottom: 24 }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
-              {/* Loyalty Column (Only if Customer is assigned) */}
-               {order.customer_id && (
+               {/* Loyalty Column (Only if Customer is assigned and loyalty program is active) */}
+               {order.customer_id && loyaltyData.conversionRate > 0 && (
                  <div style={{ gridColumn: 'span 2', marginBottom: 4 }}>
                     <label style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: '11px', fontWeight: 800, color: '#047857', textTransform: 'uppercase', letterSpacing: '0.02em' }}>
                       <span>🪙 Loyalty Points</span>
@@ -1015,10 +1017,16 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
                         value={loyaltyPointsUsed || ''}
                         placeholder="Enter points to redeem"
                         onChange={(e) => {
-                          const pts = parseInt(e.target.value, 10) || 0;
-                          if (pts > (loyaltyData.availablePoints || 0)) return;
+                          let pts = parseInt(e.target.value, 10) || 0;
+                          if (pts > (loyaltyData.availablePoints || 0)) pts = loyaltyData.availablePoints || 0;
+
+                          let amt = Number((pts * (loyaltyData.conversionRate || 1.0)).toFixed(2));
+                          if (loyaltyData.maxRedemption > 0 && amt > loyaltyData.maxRedemption) {
+                              amt = loyaltyData.maxRedemption;
+                              pts = Math.floor(amt / (loyaltyData.conversionRate || 1.0));
+                          }
+
                           setLoyaltyPointsUsed(pts);
-                          const amt = Number((pts * (loyaltyData.conversionRate || 1.0)).toFixed(2));
                           setLoyaltyAmountUsed(amt);
                           calculateRemainingOnline(cashAmount, amt);
                         }}
@@ -1032,7 +1040,12 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
                     </div>
                     {(loyaltyData.availablePoints || 0) < (loyaltyData.minPoints || 0) && (loyaltyData.availablePoints || 0) > 0 && (
                         <div style={{ fontSize: '10px', color: '#ef4444', marginTop: 4, fontWeight: 600 }}>
-                            Min {loyaltyData.minPoints} points required.
+                            Min {loyaltyData.minPoints} points required for redemption.
+                        </div>
+                    )}
+                    {loyaltyData.maxRedemption > 0 && (
+                        <div style={{ fontSize: '10px', color: '#64748b', marginTop: 4, fontWeight: 600 }}>
+                            Max ₹{loyaltyData.maxRedemption.toFixed(2)} can be redeemed per order.
                         </div>
                     )}
                  </div>
@@ -2060,6 +2073,29 @@ export default function OrdersPage() {
   const [generatingInvoice, setGeneratingInvoice] = useState(null);
   const [paymentConfirmDialog, setPaymentConfirmDialog] = useState(null);
   const [itemsModalOrder, setItemsModalOrder] = useState(null); // Global state for items modal
+  const [modalLoyalty, setModalLoyalty] = useState(null); // { earned, used, amount_used }
+  
+  useEffect(() => {
+    if (!itemsModalOrder || !supabase) {
+      setModalLoyalty(null);
+      return;
+    }
+    const fetchModalLoyalty = async () => {
+      const { data, error } = await supabase
+        .from('loyalty_transactions')
+        .select('txn_type, points_delta, points_earned, points_redeemed, amount_value')
+        .eq('order_id', itemsModalOrder.id);
+      
+      if (!error && data) {
+         const earned = data.reduce((s, t) => s + (Number(t.points_earned) || (t.txn_type === 'earn' ? Math.abs(t.points_delta) : 0)), 0);
+         const used = data.reduce((s, t) => s + (Number(t.points_redeemed) || (t.txn_type === 'redeem' ? Math.abs(t.points_delta) : 0)), 0);
+         const amt = data.reduce((s, t) => s + (t.txn_type === 'redeem' ? Number(t.amount_value || 0) : 0), 0);
+         setModalLoyalty({ earned, used, amount_used: amt });
+      }
+    };
+    fetchModalLoyalty();
+  }, [itemsModalOrder, supabase]);
+
   const notificationAudioRef = useRef(null);
   
   // Search State
@@ -3063,7 +3099,7 @@ colOrders =
   try {
     const s = getSupabase();
 
-    // Ensure we have items + menu_items(name)
+    // 1. Fetch Order with items
     const { data: fullOrder } = await s
       .from('orders')
       .select('*, order_items(*, menu_items(name))')
@@ -3072,16 +3108,27 @@ colOrders =
 
     const base = fullOrder || order;
 
+    // 2. Fetch Invoice
     const { data: invoice } = await s
       .from('invoices')
       .select('invoice_no')
       .eq('order_id', order.id)
       .order('invoice_date', { ascending: false })
       .maybeSingle();
+    
+    // 3. Fetch Loyalty
+    const { data: loyaltyTx } = await s
+      .from('loyalty_transactions')
+      .select('txn_type, points_redeemed, amount_value')
+      .eq('order_id', order.id)
+      .eq('txn_type', 'redeem')
+      .maybeSingle();
 
     const orderForPrint = {
       ...base,
       invoice_no: invoice?.invoice_no || base.invoice_no || null,
+      loyalty_amount_used: loyaltyTx?.amount_value || base.loyalty_amount_used || 0,
+      loyalty_points_used: loyaltyTx?.points_redeemed || base.loyalty_points_used || 0
     };
 
     window.dispatchEvent(
@@ -3359,6 +3406,13 @@ colOrders =
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, marginTop: 4 }}>
                     <span style={{ color: '#ef4444', fontWeight: 500 }}>Bill Discount (-)</span>
                     <span style={{ fontWeight: 600, color: '#ef4444' }}>- ₹{Number(itemsModalOrder.discount_amount).toFixed(2)}</span>
+                  </div>
+                )}
+                
+                {(modalLoyalty?.amount_used > 0 || Number(itemsModalOrder.loyalty_amount_used || 0) > 0) && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, marginTop: 4 }}>
+                    <span style={{ color: '#10b981', fontWeight: 500 }}>Loyalty Redemption (-)</span>
+                    <span style={{ fontWeight: 600, color: '#10b981' }}>- ₹{(Number(modalLoyalty?.amount_used) || Number(itemsModalOrder.loyalty_amount_used) || 0).toFixed(2)}</span>
                   </div>
                 )}
 

@@ -316,6 +316,8 @@ export default async function handler(req, res) {
         invoice_no: orderResult.invoiceNo,
         bill_no: orderResult.billNo,
         created_at: orderResult.created_at,
+        loyalty_amount_used: loyalty_amount_used || 0,
+        loyalty_points_used: loyalty_points_used || 0,
       },
     };
 

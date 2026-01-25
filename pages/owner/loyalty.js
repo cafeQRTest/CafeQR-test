@@ -19,6 +19,7 @@ export default function OwnerLoyaltyPage() {
   
   // Editor State
   const [edtId, setEdtId] = useState(null)
+  const [deleteId, setDeleteId] = useState(null)
   
   // -- UX Fields --
   const [edtName, setEdtName] = useState('New Loyalty Program')
@@ -101,11 +102,15 @@ export default function OwnerLoyaltyPage() {
     setView('edit')
   }
 
-  const handleDelete = async (id, e) => {
-     e.stopPropagation();
-     if(!confirm('Are you sure? Customers assigned to this program might stop earning points.')) return;
-     await supabase.from('loyalty_programs').delete().eq('id', id);
-     loadPrograms();
+  const executeDelete = async (id) => {
+     try {
+       await supabase.from('loyalty_programs').delete().eq('id', id);
+       loadPrograms();
+       setDeleteId(null);
+     } catch (e) {
+       console.error(e);
+       alert('Error deleting: ' + e.message);
+     }
   }
 
   const onSave = async () => {
@@ -192,8 +197,28 @@ export default function OwnerLoyaltyPage() {
                            {p.is_default && <span className="badge badge-def"><FaStar size={10} /> Default</span>}
                            {!p.is_active && <span className="badge badge-inact">Inactive</span>}
                        </div>
-                       <div className="acts">
-                           {/* <button className="act-btn" onClick={(e) => handleDelete(p.id, e)}><FaTrash /></button> */}
+                       <div className="acts" onClick={e => e.stopPropagation()}>
+                           {deleteId === p.id ? (
+                             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                               <span style={{ fontSize: 12, color: '#ef4444', fontWeight: 600 }}>Sure?</span>
+                               <button 
+                                 className="act-btn" 
+                                 onClick={(e) => { e.stopPropagation(); executeDelete(p.id); }}
+                                 style={{ background: '#fee2e2', color: '#dc2626', fontSize: 12, padding: '4px 8px' }}
+                               >
+                                 Yes
+                               </button>
+                               <button 
+                                 className="act-btn" 
+                                 onClick={(e) => { e.stopPropagation(); setDeleteId(null); }}
+                                 style={{ fontSize: 12, padding: '4px 8px' }}
+                               >
+                                 No
+                               </button>
+                             </div>
+                           ) : (
+                             <button className="act-btn" onClick={(e) => { e.stopPropagation(); setDeleteId(p.id); }}><FaTrash /></button>
+                           )}
                        </div>
                     </div>
                     
