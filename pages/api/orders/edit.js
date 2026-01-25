@@ -454,7 +454,11 @@ export default async function handler(req, res) {
 
     // Capture the existing discount state if any (though usually edits might reset or preserve bill discount)
     // For now, assume table-level discount_amount exists in the main order record.
-    const { data: orderHeader } = await supabase.from('orders').select('discount_amount, total_discount_percent').eq('id', order_id).single();
+    const { data: orderHeader } = await supabase
+      .from('orders')
+      .select('discount_amount, total_discount_percent, customer_id, customer_name, customer_phone, number_of_customers, order_type, table_number, is_credit, credit_customer_id, payment_status, payment_method, status, created_at')
+      .eq('id', order_id)
+      .single();
 
     const { calculateOrderTotals } = await import('../../../utils/orderCalculations');
     const newTotals = calculateOrderTotals(
@@ -497,16 +501,24 @@ export default async function handler(req, res) {
       reason,
     });
 
-    // 9b) LOYALTY RECALCULATION
     if (order.customer_id && newTotals.total_amount > 0 && order.payment_status === 'paid' && !order.is_credit) {
       try {
+        // Fetch actual redemption usage from transactions since column removed from orders
+        const { data: redeemTx } = await supabase.from('loyalty_transactions')
+             .select('amount_value')
+             .eq('order_id', order_id)
+             .eq('txn_type', 'redeem')
+             .maybeSingle();
+        
+        const usedAmt = redeemTx?.amount_value || 0;
+
         const { LoyaltyService } = await import('../../../services/loyaltyService');
         await LoyaltyService.handleOrderEarning(supabase, {
           restaurant_id,
           customer_id: order.customer_id,
           order_id: order_id,
           order_total: newTotals.total_amount,
-          loyalty_amount_used: order.loyalty_amount_used || 0
+          loyalty_amount_used: usedAmt
         });
       } catch (loyErr) {
         console.error('[DEBUG_EDIT_API] Loyalty error:', loyErr);

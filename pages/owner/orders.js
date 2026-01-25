@@ -1501,17 +1501,15 @@ function EditOrderPanel({ order, onClose, onSave, tablesCount = 0 }) {
                 </div>
               </div>
 
-              {/* Qty Control (Cart Style) */}
               <div
                 style={{
-                  display: 'inline-flex',
+                  display: 'flex',
                   alignItems: 'center',
-                  background: `${BRAND.orange}20`, // Soft orange background
-                  borderRadius: 8,
-                  border: `1px solid ${BRAND.orange}`,
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                  gap: 0,
+                  border: `1.5px solid ${BRAND.orange}`,
+                  borderRadius: 6,
                   overflow: 'hidden',
-                  height: 32,
+                  flexShrink: 0,
                 }}
               >
                 <button
@@ -1523,7 +1521,7 @@ function EditOrderPanel({ order, onClose, onSave, tablesCount = 0 }) {
                     width: 32,
                     height: 32,
                     border: 'none',
-                    background: 'transparent',
+                    background: 'white',
                     color: BRAND.orange,
                     fontSize: 18,
                     fontWeight: 700,
@@ -1531,9 +1529,10 @@ function EditOrderPanel({ order, onClose, onSave, tablesCount = 0 }) {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    flexShrink: 0
+                    transition: 'background 0.2s',
                   }}
-                  title="Decrease"
+                  onMouseEnter={(e) => e.target.style.background = '#fff7ed'}
+                  onMouseLeave={(e) => e.target.style.background = 'white'}
                 >
                   −
                 </button>
@@ -1551,18 +1550,19 @@ function EditOrderPanel({ order, onClose, onSave, tablesCount = 0 }) {
                     if (e.key === 'Enter') e.currentTarget.blur();
                   }}
                   style={{
-                    width: 50, // Slightly wider for decimals
+                    width: 48,
                     height: 32,
                     border: 'none',
-                    background: 'transparent',
+                    borderLeft: '1px solid #e2e8f0',
+                    borderRight: '1px solid #e2e8f0',
+                    background: '#fafafa',
                     textAlign: 'center',
                     fontSize: 14,
                     fontWeight: 700,
                     color: '#1e293b',
                     outline: 'none',
-                    padding: 0,
-                    appearance: 'textfield',
-                    flexShrink: 0
+                    padding: '0 2px',
+                    borderRadius: 0
                   }}
                 />
 
@@ -1575,7 +1575,7 @@ function EditOrderPanel({ order, onClose, onSave, tablesCount = 0 }) {
                     width: 32,
                     height: 32,
                     border: 'none',
-                    background: 'transparent',
+                    background: 'white',
                     color: BRAND.orange,
                     fontSize: 18,
                     fontWeight: 700,
@@ -1583,9 +1583,10 @@ function EditOrderPanel({ order, onClose, onSave, tablesCount = 0 }) {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    flexShrink: 0
+                    transition: 'background 0.2s',
                   }}
-                  title="Increase"
+                  onMouseEnter={(e) => e.target.style.background = '#fff7ed'}
+                  onMouseLeave={(e) => e.target.style.background = 'white'}
                 >
                   +
                 </button>

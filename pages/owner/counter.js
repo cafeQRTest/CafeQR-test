@@ -3339,23 +3339,32 @@ const isVariantItem = !!item.has_variants && (item.variants?.length || 0) > 0;
                           >
                             −
                           </button>
-                          <span style={{ 
-                            minWidth: 32, 
-                            textAlign: 'center', 
-                            fontSize: 14, 
-                            fontWeight: 700,
-                            color: '#111827',
-                            background: '#fafafa',
-                            borderLeft: `1px solid ${THEME.light || '#e5e7eb'}`,
-                            borderRight: `1px solid ${THEME.light || '#e5e7eb'}`,
-                            padding: '0 6px',
-                            height: 28,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                          }}>
-                            {formatQtyP(i.quantity, i.uom_precision ?? 2)}
-                          </span>
+                          <input
+                            value={qtyDrafts[i.cartId || i.id] ?? (Number.isFinite(i.quantity) ? i.quantity.toFixed(i.uom_precision ?? 2) : '0.00')}
+                            inputMode="decimal"
+                            type="text"
+                            onChange={(e) => setDraft(i.cartId || i.id, e.target.value)}
+                            onBlur={(e) => commitQtyDraft(i.cartId || i.id, e.target.value, i.uom_precision ?? 2)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') e.currentTarget.blur();
+                              if (e.key === 'Escape') clearDraft(i.cartId || i.id);
+                            }}
+                            style={{ 
+                              width: 48, 
+                              textAlign: 'center', 
+                              fontSize: 14, 
+                              fontWeight: 700,
+                              color: '#111827',
+                              background: '#fafafa',
+                              border: 'none',
+                              borderLeft: `1px solid ${THEME.light || '#e5e7eb'}`,
+                              borderRight: `1px solid ${THEME.light || '#e5e7eb'}`,
+                              padding: '0 2px',
+                              height: 28,
+                              borderRadius: 0,
+                              outline: 'none'
+                            }}
+                          />
                           <button
                             onClick={() => {
                               const id = i.cartId || i.id;
@@ -3579,6 +3588,20 @@ const isVariantItem = !!item.has_variants && (item.variants?.length || 0) > 0;
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#ef4444' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                              <span style={{ fontWeight: 600 }}>Bill Discount (-)</span>
+                             <button
+                                onClick={() => setShowDiscountModal(true)}
+                                style={{
+                                  background: 'none',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  padding: 0,
+                                  fontSize: 12,
+                                  color: '#64748b',
+                                  textDecoration: 'underline'
+                                }}
+                             >
+                               Edit
+                             </button>
                           </div>
                            <span style={{ fontWeight: 600 }}>
                              -₹{(cartTotals?.orderDiscountFace || 0).toFixed(2)}

@@ -166,7 +166,8 @@ export default function OwnerCustomersPage() {
         .select('id, created_at, date_ordered, total_amount, total_inc_tax, status, payment_method, is_credit, payment_status')
         .eq('restaurant_id', restaurantId)
         .eq('status', 'completed')
-        .in('payment_status', ['paid', 'completed']);
+        .in('payment_status', ['paid', 'completed'])
+        .or('is_credit.eq.false,is_credit.is.null');
       
       // Match orders by customer_id only (strict matching)
       // Don't use phone number matching as it can link orders from different customers
