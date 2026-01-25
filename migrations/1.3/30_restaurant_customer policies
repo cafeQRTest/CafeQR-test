@@ -1,0 +1,52 @@
+-- 1. Grant SELECT access to the Restaurant Owner
+CREATE POLICY "restaurant_customers_owner_select"
+ON public.restaurant_customers
+FOR SELECT
+TO authenticated
+USING (
+  EXISTS (
+    SELECT 1 FROM public.restaurants r
+    WHERE r.id = restaurant_customers.restaurant_id
+    AND (r.owner_id = auth.uid() OR r.owner_email = auth.email())
+  )
+);
+
+-- 2. Grant INSERT/UPDATE access to the Restaurant Owner
+CREATE POLICY "restaurant_customers_owner_all"
+ON public.restaurant_customers
+FOR ALL
+TO authenticated
+USING (
+  EXISTS (
+    SELECT 1 FROM public.restaurants r
+    WHERE r.id = restaurant_customers.restaurant_id
+    AND (r.owner_id = auth.uid() OR r.owner_email = auth.email())
+  )
+);
+
+-- 3. Also ensure the Owner can see Orders and Invoices (if not already set)
+DROP POLICY IF EXISTS "orders_select_owner" ON public.orders;
+CREATE POLICY "orders_select_owner"
+ON public.orders
+FOR SELECT
+TO authenticated
+USING (
+  EXISTS (
+    SELECT 1 FROM public.restaurants r
+    WHERE r.id = orders.restaurant_id
+    AND (r.owner_id = auth.uid() OR r.owner_email = auth.email())
+  )
+);
+
+DROP POLICY IF EXISTS "invoices_select_owner" ON public.invoices;
+CREATE POLICY "invoices_select_owner"
+ON public.invoices
+FOR SELECT
+TO authenticated
+USING (
+  EXISTS (
+    SELECT 1 FROM public.restaurants r
+    WHERE r.id = invoices.restaurant_id
+    AND (r.owner_id = auth.uid() OR r.owner_email = auth.email())
+  )
+);

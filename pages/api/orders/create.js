@@ -2,6 +2,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { InvoiceService } from '../../../services/invoiceService';
 import { OrderService } from '../../../services/orderService';
+import { ensureCustomer } from '../../../lib/customer/ensureCustomer';
 
 export default async function handler(req, res) {
   console.log('[/api/orders/create] handler called, method =', req.method);
@@ -32,6 +33,7 @@ export default async function handler(req, res) {
       special_instructions = null,
       mixed_payment_details = null,
       restaurant_name = null,
+      customer_id = null,
       customer_name = null,
       customer_phone = null,
       is_credit = false,
@@ -43,7 +45,41 @@ export default async function handler(req, res) {
       discount_amount = 0,
       total_discount_percent = 0, // NEW: Capture percentage
       round_off_amount = 0,
+      loyalty_amount_used = 0, // Capture loyalty redemption amt
+      loyalty_points_used = null, // Capture explicit point redemption
     } = req.body;
+
+    // --- Customer Resolution Logic ---
+    let finalCustomerId = customer_id || null;
+
+    // If no ID provided but we have a phone or name, try to find/create
+    if (!finalCustomerId && (customer_phone || customer_name || credit_customer_id)) {
+       try {
+         // If credit customer ID is explicit, prefer that as the customer link
+         if (is_credit && credit_customer_id) {
+            // Usually credit_customer_id maps to 'restaurant_customers.id' or 'customers.id'
+            // We'll trust the frontend passed a valid UUID.
+            // But if specific logic is needed, we can check it. 
+            // Often credit_customer_id IS the customer_id.
+            // If they are distinct concepts in your DB, handle accordingly.
+            // Assuming here we want to link the order to that customer.
+            finalCustomerId = credit_customer_id;
+         } else {
+             finalCustomerId = await ensureCustomer(supabase, {
+                restaurant_id, 
+                phone: customer_phone, 
+                name: customer_name,
+                // email, address if available in body
+             });
+         }
+       } catch (custErr) {
+         console.error('[CreateOrder] Failed to ensure customer:', custErr);
+         // Don't swallow for now, let's see why it failed. 
+         // Optional: throw custErr; 
+         // For production, swallowing is safer for Order Completion, but for debugging we need this log.
+       }
+    }
+    // ---------------------------------
 
     if (!restaurant_id || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'Missing required fields' });
@@ -225,6 +261,7 @@ export default async function handler(req, res) {
         status: finalStatus,
         payment_status: finalPaymentStatus,
         payment_method: processedPaymentMethod,
+        customer_id: finalCustomerId,
         customer_name,
         customer_phone,
         number_of_customers,
@@ -465,6 +502,26 @@ export default async function handler(req, res) {
         console.error('Background tasks failed:', bgErr);
       }
     })();
+
+    // 12) Handle LOYALTY EARNING (Backend Side)
+    // Only if status is completed (paid) and not credit.
+    console.log('[Loyalty Check] finalStatus:', finalStatus, 'finalPaymentStatus:', finalPaymentStatus, 'is_credit:', is_credit, 'finalCustomerId:', finalCustomerId);
+    
+    if ((finalStatus === 'completed' || finalPaymentStatus === 'paid') && !is_credit && finalCustomerId) {
+        try {
+            const { LoyaltyService } = await import('../../../services/loyaltyService');
+            await LoyaltyService.handleOrderEarning(supabase, {
+                restaurant_id,
+                customer_id: finalCustomerId,
+                order_id: orderResult.orderId,
+                order_total: finalGrandTotal,
+                loyalty_amount_used: loyalty_amount_used || 0,
+                loyalty_points_used: loyalty_points_used || null
+            });
+        } catch (loyErr) {
+            console.error('[CreateOrder] Loyalty Service Error:', loyErr);
+        }
+    }
 
     // 12) Send response now (client can print immediately)
     return res.status(200).json(responsePayload);

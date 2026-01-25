@@ -15,13 +15,23 @@ function normalizePrivateKey(raw) {
 }
 
 // Initialize Firebase Admin SDK
-if (!admin.apps.length) {
-  const projectId = process.env.FIREBASE_PROJECT_ID;
-  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-  const privateKey = normalizePrivateKey(process.env.FIREBASE_PRIVATE_KEY);
-  admin.initializeApp({
-    credential: admin.credential.cert({ projectId, clientEmail, privateKey }),
-  });
+try {
+  if (!admin.apps.length) {
+    const projectId = process.env.FIREBASE_PROJECT_ID;
+    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+    const privateKey = normalizePrivateKey(process.env.FIREBASE_PRIVATE_KEY);
+    
+    if (projectId && clientEmail && privateKey) {
+      admin.initializeApp({
+        credential: admin.credential.cert({ projectId, clientEmail, privateKey }),
+      });
+      console.log('[Firebase] Admin initialized successfully');
+    } else {
+      console.warn('[Firebase] Missing credentials, push notifications disabled');
+    }
+  }
+} catch (fbErr) {
+  console.error('[Firebase] Initialization error:', fbErr.message);
 }
 
 // Supabase client

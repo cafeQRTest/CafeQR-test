@@ -30,7 +30,23 @@ import { calculateOrderTotals } from '../../utils/orderCalculations';
  * - Existing UI, validation, and styling are untouched.
  * - Only additive guards are introduced for `roundoff-only` mode.
  */
-function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false, mode = 'settle', roundOffConfig }) {
+function PaymentConfirmDialog({ 
+  amount, 
+  onConfirm, 
+  onCancel, 
+  busy = false, 
+  mode = 'settle', 
+  roundOffConfig,
+  // Loyalty props
+  loyaltyEnabled = false,
+  customerPoints = 0,
+  conversionRate = 1.0,
+  restaurantId = null,
+  customerId = null,
+  onLoyaltyRedeem = null,
+  minPoints = 0,
+  maxRedemption = 0
+}) {
   const isRoundOffOnly = mode === 'roundoff-only';
   const isRoundOffEnabled = !!roundOffConfig?.round_off_enabled;
   const isAuto = roundOffConfig?.round_off_mode === 'automatic';
@@ -48,8 +64,6 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false, mode 
   const [settledAmount, setSettledAmount] = useState(initialSettled);
   const [displayValue, setDisplayValue] = useState((initialSettled || 0).toFixed(2));
   
-  const manualRoundOff = (settledAmount || 0) - (amount || 0);
-  const settledTotal = settledAmount || 0;
   const BRAND = mode === 'kitchen'
     ? { orange: '#f97316', orangeDark: '#ea580c', bgSoft: '#fff7ed', border: '#e5e7eb', text: '#111827' }
     : { orange: '#16a34a', orangeDark: '#15803d', bgSoft: '#ecfdf3', border: '#e5e7eb', text: '#111827' };
@@ -63,6 +77,29 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false, mode 
   const [submitting, setSubmitting] = useState(false);
   const total = Number(amount || 0);
   const disabled = busy || submitting;
+
+  // Loyalty redemption state
+  const [loyaltyRedeemAmount, setLoyaltyRedeemAmount] = useState(0);
+  const [pointsToRedeem, setPointsToRedeem] = useState(0);
+  const [showLoyaltyModal, setShowLoyaltyModal] = useState(false);
+  
+  // Calculate effective amount (Full total since loyalty is now a payment method)
+  const effectiveAmount = total;
+  const shouldShowLoyalty = loyaltyEnabled && customerPoints > 0 && customerId && !isRoundOffOnly;
+
+  // Calculate round-off based on full total
+  const manualRoundOff = (settledAmount || 0) - effectiveAmount;
+  const settledTotal = settledAmount || 0;
+
+  // Recalculate settled amount when base amount changes
+  useEffect(() => {
+    const baseAmount = effectiveAmount;
+    const newSettled = (isRoundOffEnabled && isAuto) 
+      ? Math.round(baseAmount / factor) * factor 
+      : baseAmount;
+    setSettledAmount(newSettled);
+    setDisplayValue(newSettled.toFixed(2));
+  }, [effectiveAmount, isRoundOffEnabled, isAuto, factor]);
 
   const choiceBox = (active) => ({
     display: 'flex',
@@ -83,19 +120,55 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false, mode 
     if (disabled) return;
     setPaymentMethod(method);
     setShowMixedForm(method === 'mixed');
-    if (method !== 'mixed') { setCashAmount(''); setOnlineAmount(''); }
+    if (method !== 'mixed') { 
+      setCashAmount(''); 
+      setOnlineAmount(''); 
+      setPointsToRedeem(0);
+      setLoyaltyRedeemAmount(0);
+    }
+  };
+
+  const calculateRemainingOnline = (cash, loyalty) => {
+    const c = Number(cash || 0);
+    const l = Number(loyalty || 0);
+    const rem = Math.max(0, settledTotal - c - l);
+    setOnlineAmount(rem.toFixed(2));
   };
 
   const validateMixed = () => {
     const cash = Number(cashAmount || 0);
     const online = Number(onlineAmount || 0);
-    if (cash <= 0 || online <= 0) { alert('Both cash and online must be > 0'); return false; }
-    if (Math.abs((cash + online) - settledTotal) > 0.01) { alert(`Split must equal ₹${(settledTotal || 0).toFixed(2)}`); return false; }
+    const loyalty = Number(loyaltyRedeemAmount || 0);
+    
+    if (cash < 0 || online < 0 || loyalty < 0) {
+      alert('Amounts cannot be negative');
+      return false;
+    }
+    
+    if (cash === 0 && online === 0 && loyalty === 0) {
+      alert('Enter at least one payment amount');
+      return false;
+    }
+
+    const totalPaid = cash + online + loyalty;
+    if (Math.abs(totalPaid - settledTotal) > 0.01) {
+      alert(`Split must equal ₹${(settledTotal || 0).toFixed(2)}. Current total: ₹${totalPaid.toFixed(2)}`);
+      return false;
+    }
     return true;
   };
 
   const handleConfirm = async () => {
     if (disabled) return;
+    
+    // Validation for single methods (except mixed which has its own validateMixed)
+    if (paymentMethod === 'loyalty') {
+      if (Math.abs((loyaltyRedeemAmount || 0) - settledTotal) > 0.01) {
+        alert(`Loyalty points only cover ₹${(loyaltyRedeemAmount || 0).toFixed(2)}. To combine points with other payments, use 'Mixed (Cash/Online/Points)' mode.`);
+        return;
+      }
+    }
+
     try {
       setSubmitting(true);
       
@@ -108,7 +181,10 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false, mode 
       );
       
       const details = {
-        round_off_amount: shouldApplyRoundOff ? Number(manualRoundOff.toFixed(2)) : 0
+        round_off_amount: shouldApplyRoundOff ? Number(manualRoundOff.toFixed(2)) : 0,
+        // Include loyalty redemption data
+        loyalty_points_used: pointsToRedeem || 0,
+        loyalty_amount_used: loyaltyRedeemAmount || 0
       };
     
     if (isRoundOffOnly) {
@@ -229,7 +305,7 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false, mode 
                        
                        const val = Number(raw);
                        if (!isNaN(val)) {
-                         const diff = val - amount;
+                         const diff = val - effectiveAmount;
                          const limit = Number(roundOffConfig.round_off_manual_limit || 0);
                          if (Math.abs(diff) <= limit) {
                            setSettledAmount(val);
@@ -248,8 +324,8 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false, mode 
                  </div>
                  <button 
                    onClick={() => {
-                     setSettledAmount(amount);
-                     setDisplayValue(amount.toFixed(2));
+                     setSettledAmount(effectiveAmount);
+                     setDisplayValue(effectiveAmount.toFixed(2));
                    }}
                    style={{ 
                      background: '#fff', border: '2px solid #e2e8f0', color: '#64748b',
@@ -262,6 +338,7 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false, mode 
                </div>
             </div>
          )}
+        {/* Note: Loyalty Redemption Section Removed - Moved to Payment Grid */}
 
         <div style={{ display: 'grid', gap: 10, marginBottom: 16 }}>
           {mode === 'kitchen' ? (
@@ -271,75 +348,30 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false, mode 
              }}>
                 Confirm sending this order to the kitchen?
              </div>
-          ) : isRoundOffOnly ? null : (
+           ) : isRoundOffOnly ? null : (
             <>
-              <label style={choiceBox(paymentMethod === 'cash')} onClick={() => handleMethodSelect('cash')}>
-                <div style={{
-                  width: 18,
-                  height: 18,
-                  borderRadius: '50%',
-                  border: `2px solid ${paymentMethod === 'cash' ? BRAND.orange : '#cbd5e1'}`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0
-                }}>
-                  {paymentMethod === 'cash' && (
-                    <div style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: '50%',
-                      background: BRAND.orange
-                    }} />
-                  )}
+              {/* Cash */}
+              <label style={choiceBox(paymentMethod === 'cash')} onClick={() => { handleMethodSelect('cash'); }}>
+                <div style={{ width: 18, height: 18, borderRadius: '50%', border: `2px solid ${paymentMethod === 'cash' ? BRAND.orange : '#cbd5e1'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  {paymentMethod === 'cash' && <div style={{ width: 8, height: 8, borderRadius: '50%', background: BRAND.orange }} />}
                 </div>
                 <span style={{ fontSize: '14px', fontWeight: 600 }}>💵 Cash</span>
               </label>
 
-              <label style={choiceBox(paymentMethod === 'online')} onClick={() => handleMethodSelect('online')}>
-                <div style={{
-                  width: 18,
-                  height: 18,
-                  borderRadius: '50%',
-                  border: `2px solid ${paymentMethod === 'online' ? BRAND.orange : '#cbd5e1'}`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0
-                }}>
-                  {paymentMethod === 'online' && (
-                    <div style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: '50%',
-                      background: BRAND.orange
-                    }} />
-                  )}
+              {/* Online */}
+              <label style={choiceBox(paymentMethod === 'online')} onClick={() => { handleMethodSelect('online'); }}>
+                <div style={{ width: 18, height: 18, borderRadius: '50%', border: `2px solid ${paymentMethod === 'online' ? BRAND.orange : '#cbd5e1'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  {paymentMethod === 'online' && <div style={{ width: 8, height: 8, borderRadius: '50%', background: BRAND.orange }} />}
                 </div>
-                <span style={{ fontSize: '14px', fontWeight: 600 }}>💳 Online (UPI/Card)</span>
+                <span style={{ fontSize: '14px', fontWeight: 600 }}>💳 Online</span>
               </label>
 
-              <label style={choiceBox(paymentMethod === 'mixed')} onClick={() => handleMethodSelect('mixed')}>
-                <div style={{
-                  width: 18,
-                  height: 18,
-                  borderRadius: '50%',
-                  border: `2px solid ${paymentMethod === 'mixed' ? BRAND.orange : '#cbd5e1'}`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0
-                }}>
-                  {paymentMethod === 'mixed' && (
-                    <div style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: '50%',
-                      background: BRAND.orange
-                    }} />
-                  )}
+              {/* Mixed */}
+              <label style={choiceBox(paymentMethod === 'mixed')} onClick={() => { handleMethodSelect('mixed'); }}>
+                <div style={{ width: 18, height: 18, borderRadius: '50%', border: `2px solid ${paymentMethod === 'mixed' ? BRAND.orange : '#cbd5e1'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  {paymentMethod === 'mixed' && <div style={{ width: 8, height: 8, borderRadius: '50%', background: BRAND.orange }} />}
                 </div>
-                <span style={{ fontSize: '14px', fontWeight: 600 }}>🔀 Mixed (Cash + Online)</span>
+                <span style={{ fontSize: '14px', fontWeight: 600 }}>🔀 Mixed (Cash/Online/Points)</span>
               </label>
             </>
           )}
@@ -354,6 +386,58 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false, mode 
             marginBottom: 16
           }}>
             <div style={{ display: 'grid', gap: 10 }}>
+              {/* Loyalty Column (Only in Mixed) */}
+              {loyaltyEnabled && customerId && (
+                <div>
+                   <label style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: '12px', fontWeight: 600, color: '#047857' }}>
+                    <span>🪙 Loyalty Points</span>
+                    <span style={{ opacity: 0.8 }}>Available: {customerPoints}</span>
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type="number"
+                      min="0"
+                      max={customerPoints}
+                      step="1"
+                      value={pointsToRedeem || ''}
+                      placeholder="Enter points"
+                      onChange={(e) => {
+                        const pts = parseInt(e.target.value, 10) || 0;
+                        if (pts > customerPoints) return;
+                        setPointsToRedeem(pts);
+                        const amt = Number((pts * conversionRate).toFixed(2));
+                        setLoyaltyRedeemAmount(amt);
+                        calculateRemainingOnline(cashAmount, amt);
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '8px 10px',
+                        border: '2px solid #10b98140',
+                        borderRadius: 6,
+                        fontSize: '14px',
+                        fontWeight: 600,
+                        background: '#ecfdf5',
+                        outline: 'none'
+                      }}
+                      disabled={disabled}
+                    />
+                    {loyaltyRedeemAmount > 0 && (
+                      <div style={{ 
+                        position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+                        fontSize: 12, fontWeight: 700, color: '#059669' 
+                      }}>
+                        = ₹{loyaltyRedeemAmount.toFixed(2)}
+                      </div>
+                    )}
+                  </div>
+                   {customerPoints < minPoints && (
+                    <div style={{ fontSize: '10px', color: '#ef4444', marginTop: 4 }}>
+                      Min {minPoints} points required for redemption.
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div>
                 <label style={{ display: 'block', marginBottom: 4, fontSize: '12px', fontWeight: 600, color: '#475569' }}>
                   Cash Amount (₹)
@@ -366,11 +450,7 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false, mode 
                   onChange={(e) => {
                     const val = e.target.value;
                     setCashAmount(val);
-                    const c = Number(val);
-                    if (!isNaN(c)) {
-                      const rem = Math.max(0, settledTotal - c);
-                      setOnlineAmount(rem.toFixed(2));
-                    }
+                    calculateRemainingOnline(val, loyaltyRedeemAmount);
                   }}
                   disabled={disabled}
                 />
@@ -418,7 +498,10 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false, mode 
                 fontWeight: 600,
                 color: '#1e293b'
               }}>
-                Total ₹{(settledTotal || 0).toFixed(2)} → ₹{cashAmount || 0} + ₹{onlineAmount || 0} ({onlineMethod?.toUpperCase() || ''})
+                Total ₹{(settledTotal || 0).toFixed(2)} → 
+                {loyaltyRedeemAmount > 0 && ` ₹${Number(loyaltyRedeemAmount).toFixed(2)} (Pts) +`}
+                ₹{cashAmount || 0} (Cash) + 
+                ₹{onlineAmount || 0} ({onlineMethod?.toUpperCase() || ''})
               </div>
             </div>
           </div>
@@ -490,10 +573,10 @@ function PaymentConfirmDialog({ amount, onConfirm, onCancel, busy = false, mode 
           </button>
         </div>
       </div>
+
     </div>
   );
 }
-
 
 
 const NewCreditCustomerModal = ({ visible, onClose, onSave, name, setName, phone, setPhone, processing, theme, error }) => {
@@ -786,6 +869,8 @@ const getDraftOrQtyNumber = (cartId, fallbackQty, precision = 2) => {
 
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [selectedCustomerId, setSelectedCustomerId] = useState(null);
+  const [selectedCustomerNo, setSelectedCustomerNo] = useState(null);
   const [numberOfCustomers, setNumberOfCustomers] = useState('');
   const [orderDate, setOrderDate] = useState(() => {
     const d = new Date();
@@ -808,6 +893,56 @@ const getDraftOrQtyNumber = (cartId, fallbackQty, precision = 2) => {
   const [showNewCreditCustomer, setShowNewCreditCustomer] = useState(false);
   const [creditFeatureEnabled, setCreditFeatureEnabled] = useState(false);
 
+  // Customer Autocomplete States
+  const [showNameSuggestions, setShowNameSuggestions] = useState(false);
+  const [allCustomers, setAllCustomers] = useState([]);
+  const [filteredSuggestions, setFilteredSuggestions] = useState([]);
+  const [customerAddresses, setCustomerAddresses] = useState([]);
+  const [selectedAddressId, setSelectedAddressId] = useState('');
+
+
+
+  // --- LOYALTY STATE ---
+  const [loyaltyProgram, setLoyaltyProgram] = useState(null);
+  const [customerPoints, setCustomerPoints] = useState({ points: 0, pointsValue: 0 }); // Current points balance
+  const [loyaltyRedeemAmount, setLoyaltyRedeemAmount] = useState(0);
+  const [pointsToRedeem, setPointsToRedeem] = useState(0);
+  const [showLoyaltyRedeemModal, setShowLoyaltyRedeemModal] = useState(false);
+
+  // Watch selected customer for Loyalty
+  useEffect(() => {
+    if (!selectedCustomerId || !restaurantId) {
+        setLoyaltyProgram(null);
+        setCustomerPoints({ points: 0, pointsValue: 0 });
+        setLoyaltyRedeemAmount(0);
+        setPointsToRedeem(0);
+        return;
+    }
+    const fetchLoyalty = async () => {
+        const { data: cust } = await supabase.from('v_owner_customers').select('loyalty_points, loyalty_program_id').eq('customer_id', selectedCustomerId).single();
+        if (cust) {
+            let progId = cust.loyalty_program_id;
+            // If no specific program, check default
+            if (!progId) {
+                const { data: def } = await supabase.from('loyalty_programs').select('id').eq('restaurant_id', restaurantId).eq('is_default', true).maybeSingle();
+                progId = def?.id;
+            }
+            if (progId) {
+                 const { data: prog } = await supabase.from('loyalty_programs').select('*').eq('id', progId).single();
+                 if (prog) {
+                      setLoyaltyProgram(prog);
+                      const rate = Number(prog.redemption_conversion_rate || 0);
+                      const pts = Number(cust.loyalty_points || 0);
+                      
+                      // Calculate max redeemable value based on points balance
+                      setCustomerPoints({ points: pts, pointsValue: pts * rate });
+                 }
+            }
+        }
+    };
+    fetchLoyalty();
+  }, [selectedCustomerId, restaurantId, supabase]); // Safe dependency on supabase client
+  // ---------------------
 
   const [orderSelect, setOrderSelect] = useState('');
   const [processing, setProcessing] = useState(false);
@@ -817,6 +952,7 @@ const [paymentDialogMode, setPaymentDialogMode] = useState('settle'); // 'settle
   const [showDiscountModal, setShowDiscountModal] = useState(false);
 
   const [sendToKitchenEnabled, setSendToKitchenEnabled] = useState(true);
+  const [customerFeatureEnabled, setCustomerFeatureEnabled] = useState(false);
   const [enableMenuImages, setEnableMenuImages] = useState(false);
 
   // Variant selector state
@@ -925,7 +1061,8 @@ const cartTotals = useMemo(() => {
         default_tax_rate: profileTax.default_tax_rate,
         prices_include_tax: profileTax.prices_include_tax,
         round_off_config: displayRoundOffConfig // Only auto-round for display in automatic mode
-     }
+     },
+     loyaltyRedeemAmount // 4th arg: Loyalty Redemption (Amount)
   );
 
   // 4. Reverse Adapter: Map back to the UI variables expected by this component
@@ -955,7 +1092,7 @@ const cartTotals = useMemo(() => {
     taxableAmount: result.taxable_amount,
     grossSubtotal: result.line_subtotal 
   };
-}, [cart, profileTax, discount, roundOffConfig]);  
+}, [cart, profileTax, discount, roundOffConfig, loyaltyRedeemAmount]);  
 
   // Startup loads
   useEffect(() => {
@@ -1100,6 +1237,7 @@ const cartTotals = useMemo(() => {
     phone,
     shipping_phone,
     print_logo_rows,
+    featurescustomersenabled,
     features_menu_images_enabled,
     round_off_enabled,
     round_off_mode,
@@ -1138,6 +1276,7 @@ setCreditFeatureEnabled(!!profile?.features_credit_enabled);
 const tCount = profile?.tables_count || 0;
 setTables(Array.from({ length: tCount }, (_, i) => i + 1));
 setSendToKitchenEnabled(profile?.features_counter_send_to_kitchen_enabled !== false);
+setCustomerFeatureEnabled(!!profile?.featurescustomersenabled);
 setEnableMenuImages(!!profile?.features_menu_images_enabled);
 
 // after loading profile
@@ -1159,6 +1298,8 @@ if (profile?.features_credit_enabled) {
   setSelectedCreditCustomerId('');
 }
 
+await loadAllCustomers();
+
 
       } catch (e) {
         setError(e.message || 'Failed to load data');
@@ -1168,12 +1309,40 @@ if (profile?.features_credit_enabled) {
     })();
   }, [checking, loadingRestaurant, restaurantId, supabase]);
 
-  // Persist orderMode choice
   useEffect(() => {
     if (orderMode) {
       localStorage.setItem('counter_orderMode', orderMode);
     }
   }, [orderMode]);
+
+  // Customer suggestions filtering
+  useEffect(() => {
+    const q1 = (customerName || '').trim().toLowerCase();
+    const q2 = (customerPhone || '').trim().toLowerCase();
+    const q3 = (selectedCustomerNo || '').trim().toLowerCase();
+    
+    // Clear if all empty
+    if (!q1 && !q2 && !q3) {
+      setFilteredSuggestions([]);
+      setShowNameSuggestions(false);
+      return;
+    }
+
+    const matches = allCustomers.filter(c => {
+      // Robust null checks for safety
+      const cName = (c.name || '').toLowerCase();
+      const cPhone = String(c.phone || '');
+      const cNo = (c.customer_no || '').toLowerCase();
+      
+      const matchName = q1 ? cName.includes(q1) : true;
+      const matchPhone = q2 ? cPhone.includes(q2) : true;
+      const matchNo = q3 ? cNo.includes(q3) : true;
+      
+      return matchName && matchPhone && matchNo;
+    });
+
+    setFilteredSuggestions(matches.slice(0, 10));
+  }, [customerName, customerPhone, selectedCustomerNo, allCustomers]);
 
   // Fetch upsells on cart change
   useEffect(() => {
@@ -1312,6 +1481,73 @@ const loadCreditCustomers = async () => {
     );
   }
 };
+
+  const loadAllCustomers = async () => {
+    if (!restaurantId) return;
+    
+    // Fetch consolidated customers (active only) from THE VIEW (Dynamic metrics)
+    try {
+      // Fetch from the VIEW (ensure the SQL above is run first)
+      const { data, error } = await supabase
+        .from('v_owner_customers')
+        .select('*') // Get all columns including name/phone from join
+        .eq('restaurant_id', restaurantId)
+        .eq('is_active', true)
+        .order('last_order_at', { ascending: false })
+        .limit(1000);
+
+      if (error) {
+        console.error('loadAllCustomers Error:', error);
+        // Fallback to table if view fails (might not have name/phone join but keeps app running)
+        const { data: fallback } = await supabase.from('restaurant_customers').select('*').eq('restaurant_id', restaurantId).limit(500);
+        if (fallback) setAllCustomers(fallback);
+        return;
+      }
+
+      if (data) {
+        setAllCustomers(data.map(r => ({
+           ...r,
+           name: r.name || 'Guest',
+           phone: r.phone || '',
+           total_spent: Number(r.total_spent || 0),
+           order_count: Number(r.order_count || 0),
+           loyalty_points: Number(r.loyalty_points || 0)
+        })));
+      }
+    } catch (e) {
+       console.warn('Silent customer load failure:', e);
+    }
+  };
+
+  useEffect(() => {
+     if (!selectedCustomerId) {
+        setCustomerAddresses([]);
+        setSelectedAddressId('');
+        return;
+     }
+
+     const fetchAddresses = async () => {
+        try {
+           const { data, error } = await supabase
+              .from('customer_addresses')
+              .select('*')
+              .eq('customer_id', selectedCustomerId)
+              .order('created_at', { ascending: false });
+           
+           if (!error && data) {
+              setCustomerAddresses(data);
+              // Default to first/default address
+              if (data.length > 0) {
+                 const def = data.find(a => a.is_default) || data[0];
+                 setSelectedAddressId(def.id);
+              }
+           }
+        } catch (e) {
+           console.error('Fetch addresses error:', e);
+        }
+     }
+     fetchAddresses();
+  }, [selectedCustomerId, supabase]);
 
 
   const handleSelectCreditCustomer = (customerId) => {
@@ -1551,6 +1787,7 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
     let order_type = 'counter';
     let table_number = null;
     if (orderSelect === 'parcel') order_type = 'parcel';
+    else if (orderSelect === 'delivery') order_type = 'delivery';
     else if (orderSelect && orderSelect.startsWith('table:')) {
       table_number = orderSelect.split(':')[1] || null;
     }
@@ -1581,6 +1818,21 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
     // Calculate Final Logic with Manual Round Off support
     const manualRoundOffAdj = Number(mixedDetails?.round_off_amount || 0);
     const finalRoundOffVal = (cartTotals.roundOffAmount || 0) + manualRoundOffAdj;
+    
+    // Updated: Ensure loyalty is also subtracted from the simplified logic here if not already handled by cartTotals
+    // cartTotals.finalTotal is typically: Gross + Tax - Discount.
+    // If loyaltyRedeemAmount is passed to calculateOrderTotals, it shoud reduce finalTotal.
+    // However, let's explicit check: 
+    // If calculateOrderTotals did NOT reduce it (because maybe it wasn't passed in this scope's cartTotals calculation?), we force it.
+    // But we updated useCartTotals hooks. 
+    // Wait, doCreateAndFinalizeOrder calls `calculateOrderTotals` manually above to get `cartTotals`.
+    // And we passed `loyaltyRedeemAmount` there. So `cartTotals.finalTotal` ALREADY has loyalty deducted!
+    // BUT checking the previous step, `cartTotals.finalTotal` is `result.total_inc_tax`.
+    // Let's verify if `result.total_inc_tax` includes loyalty deduction.
+    // In `orderCalculations.js`: 
+    // const sumTotalInc = totals.reduce(...) - orderDiscountInc - loyaltyVal;
+    // So Yes, it is deducted.
+    
     const finalTotalVal = (cartTotals.finalTotal || 0) + manualRoundOffAdj;
 
     const orderData = {
@@ -1589,6 +1841,8 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
       table_number,
       customer_name: customerName.trim() || null,
       customer_phone: customerPhone.trim() || null,
+      customer_id: selectedCustomerId,
+      delivery_address_id: order_type === 'delivery' ? selectedAddressId : null,
       number_of_customers: numberOfCustomers ? Number(numberOfCustomers) : null,
       payment_method: isCredit ? 'credit' : finalPaymentMethod,
       payment_status: isCredit ? 'pending' : 'completed',
@@ -1597,7 +1851,10 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
       is_credit: isCredit,
       credit_customer_id: isCredit ? selectedCreditCustomerId : null,
       original_payment_method: isCredit ? null : finalPaymentMethod,
+      original_payment_method: isCredit ? null : finalPaymentMethod,
       discount_amount: discountVal,
+      loyalty_amount_used: mixedDetails?.loyalty_amount_used ?? loyaltyRedeemAmount, // Pass Loyalty Redemption
+      loyalty_points_used: mixedDetails?.loyalty_points_used ?? pointsToRedeem,
       base_tax_rate: Number(restaurant?.default_tax_rate || 5), // Pass rate context
       override_totals: {
            total_amount: Number(finalTotalVal.toFixed(2)),
@@ -1665,11 +1922,17 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
         grand_total: settledPrintTotal,
         subtotal: cartTotals.subtotalEx,
         tax_total: cartTotals.finalTax,
-        order_discount_total: cartTotals.orderDiscAmt,
+        order_discount_total: cartTotals.orderDiscAmt, // Base discount
+        discount_amount: discountVal, // Face value discount (important for display)
+        order_discount_base: cartTotals.orderDiscAmt,
+        loyalty_amount_used: mixedDetails?.loyalty_amount_used ?? loyaltyRedeemAmount, // Pass loyalty
+        loyalty_points_used: mixedDetails?.loyalty_points_used ?? pointsToRedeem,
         invoice_no: result.invoice_no || null,
         bill_no: result.bill_no || null,
       },
     };
+
+    // 4. Loyalty logic is now handled by backend /api/orders/create
 
     window.dispatchEvent(
       new CustomEvent('auto-print-order', {
@@ -1685,6 +1948,8 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
     setCart([]); 
     setCustomerName(''); 
     setCustomerPhone(''); 
+    setSelectedCustomerId(null);
+    setSelectedCustomerNo(null);
     setNumberOfCustomers(''); 
     setPaymentMethod('cash');
     setOrderSelect(''); 
@@ -1711,6 +1976,7 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
     let order_type = 'counter';
     let table_number = null;
     if (orderSelect === 'parcel') order_type = 'parcel';
+    else if (orderSelect === 'delivery') order_type = 'delivery';
     else if (orderSelect && orderSelect.startsWith('table:')) table_number = orderSelect.split(':')[1] || null;
 
     const calcItemDiscount = (i) => {
@@ -1749,6 +2015,8 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
       table_number,
       customer_name: customerName.trim() || null,
       customer_phone: customerPhone.trim() || null,
+      customer_id: selectedCustomerId,
+      delivery_address_id: order_type === 'delivery' ? selectedAddressId : null,
       number_of_customers: numberOfCustomers ? Number(numberOfCustomers) : null,
       payment_method: isCredit ? 'credit' : 'none',
       payment_status: 'pending',
@@ -1963,6 +2231,7 @@ const orderForPrint = {
                   placeholder="Select Type..."
                   options={[
                     { value: 'parcel', label: 'Parcel / Takeaway' },
+                    { value: 'delivery', label: 'Home Delivery 🏠' },
                     ...tables.map(n => ({ value: `table:${n}`, label: `Table ${n}` }))
                   ]}
                 />
@@ -2058,38 +2327,251 @@ const orderForPrint = {
                   + New
                 </button>
               </div>
-            ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
-                <div style={{ flex: 1 }}>
-                  <SectionLabel>Customer Name (Optional)</SectionLabel>
-                  <input 
-                    type="text" placeholder="e.g. John Doe" 
-                    value={customerName} onChange={(e) => setCustomerName(e.target.value)} 
-                    style={{ 
-                      width: '100%',
-                      padding: '12px 16px', background: '#ffffff', 
-                      border: '1px solid #e2e8f0', borderRadius: '10px', outline: 'none',
-                      fontSize: '14px'
-                    }} 
-                  />
+            ) : customerFeatureEnabled ? (
+              <>
+                <div style={{ position: 'relative' }}>
+                  <div style={{ 
+                    display: 'flex', 
+                    gap: '12px', 
+                    alignItems: 'flex-start'
+                  }}>
+                    <div style={{ flex: 1, position: 'relative' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <SectionLabel>Customer Name</SectionLabel>
+                          {selectedCustomerId && (() => {
+                             const c = allCustomers.find(cust => cust.customer_id === selectedCustomerId);
+                             if (!c) return null;
+                             const isVip = c.order_count >= 5 || c.total_spent >= 2000;
+                             const thirtyDaysAgo = new Date();
+                             thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+                             const isAtRisk = c.last_order_at && new Date(c.last_order_at) < thirtyDaysAgo;
+                             
+                             return (
+                               <div style={{ display: 'flex', gap: '4px', marginBottom: '6px' }}>
+                                 {isVip && <span style={{ fontSize: '10px', background: '#fef3c7', color: '#b45309', padding: '1px 6px', borderRadius: '4px', fontWeight: 800 }}>VIP</span>}
+                                 {isAtRisk && <span style={{ fontSize: '10px', background: '#fee2e2', color: '#b91c1c', padding: '1px 6px', borderRadius: '4px', fontWeight: 800 }}>AT RISK</span>}
+                               </div>
+                             );
+                          })()}
+                        </div>
+                        {!showNameSuggestions && !selectedCustomerId && customerName.trim() && filteredSuggestions.length === 0 && (
+                          <span style={{ fontSize: '10px', color: THEME.main, fontWeight: 800, background: THEME.soft, padding: '2px 8px', borderRadius: '4px', marginBottom: '4px' }}>
+                            NEW
+                          </span>
+                        )}
+                      </div>
+                      <input 
+                        type="text" placeholder="Search name..." 
+                        value={customerName} 
+                        onChange={(e) => {
+                           setCustomerName(e.target.value);
+                           setShowNameSuggestions(true);
+                           if (selectedCustomerId) {
+                              setSelectedCustomerId(null);
+                              setSelectedCustomerNo(null);
+                              setCustomerPhone('');
+                           }
+                        }}
+                        onFocus={() => setShowNameSuggestions(true)}
+                        onBlur={() => setTimeout(() => setShowNameSuggestions(false), 200)}
+                        style={{  
+                          width: '100%', padding: '12px 16px', borderRadius: '12px', outline: 'none', fontSize: '14px',
+                          background: selectedCustomerId ? (orderMode === 'kitchen' ? '#fff7ed' : '#f0fdf4') : '#ffffff', 
+                          border: selectedCustomerId 
+                            ? (orderMode === 'kitchen' ? '1.5px solid #fdba74' : '1.5px solid #4ade80') 
+                            : '1.5px solid #e2e8f0',
+                          fontWeight: selectedCustomerId ? 700 : 400,
+                      color: selectedCustomerId ? (orderMode === 'kitchen' ? '#9a3412' : '#166534') : '#1e293b'
+                        }} 
+                      />
+                      {selectedCustomerId && (
+                         <button
+                           onClick={(e) => {
+                               e.stopPropagation();
+                               setSelectedCustomerId(null);
+                               setSelectedCustomerNo(null);
+                               setCustomerName('');
+                               setCustomerPhone('');
+                           }}
+                           style={{
+                               position: 'absolute', right: '12px', top: '35px',
+                               background: 'transparent', color: '#000', border: 'none',
+                               width: '18px', height: '18px', cursor: 'pointer', fontSize: '12px',
+                               display: 'flex', alignItems: 'center', justifyContent: 'center',
+                               zIndex: 2, transition: 'all 0.2s'
+                           }}
+                         >
+                           ✕
+                         </button>
+                      )}
+                    </div>
+
+                    {/* Customer No */}
+                    <div style={{ flex: 1 }}>
+                      <SectionLabel>Cust #</SectionLabel>
+                      <input 
+                        type="text"
+                        placeholder="ID"
+                        value={selectedCustomerNo || ''}
+                        readOnly={!!selectedCustomerId}
+                        onChange={(e) => {
+                          const val = e.target.value.toUpperCase();
+                          setSelectedCustomerNo(val);
+                          setShowNameSuggestions(true);
+                          if (selectedCustomerId) {
+                            setSelectedCustomerId(null);
+                            setCustomerName('');
+                            setCustomerPhone('');
+                          }
+                        }}
+                        onFocus={() => setShowNameSuggestions(true)}
+                        onBlur={() => setTimeout(() => setShowNameSuggestions(false), 200)}
+                        style={{
+                          width: '100%', padding: '12px 16px', 
+                          background: selectedCustomerId ? (orderMode === 'kitchen' ? '#fff7ed' : '#f0fdf4') : '#ffffff', 
+                          border: selectedCustomerId 
+                            ? (orderMode === 'kitchen' ? '1.5px solid #fdba74' : '1.5px solid #4ade80') 
+                            : '1.5px solid #e2e8f0',
+                          borderRadius: '12px', fontSize: '14px', fontWeight: 700, outline: 'none',
+                          color: selectedCustomerId ? (orderMode === 'kitchen' ? '#9a3412' : '#166534') : '#1e293b',
+                          cursor: selectedCustomerId ? 'not-allowed' : 'text'
+                        }}
+                      />
+                    </div>
+
+                    <div style={{ flex: 1 }}>
+                      <SectionLabel>Phone</SectionLabel>
+                      <input 
+                        type="tel" placeholder="Phone" 
+                        value={customerPhone} 
+                        onChange={(e) => {
+                          setCustomerPhone(e.target.value);
+                          setShowNameSuggestions(true);
+                          if (selectedCustomerId) {
+                            setSelectedCustomerId(null);
+                            setSelectedCustomerNo(null);
+                            setCustomerName('');
+                          }
+                        }} 
+                        onFocus={() => setShowNameSuggestions(true)}
+                        onBlur={() => setTimeout(() => setShowNameSuggestions(false), 200)}
+                        style={{ 
+                          width: '100%', padding: '12px', borderRadius: '12px', outline: 'none', fontSize: '14px',
+                          background: selectedCustomerId ? (orderMode === 'kitchen' ? '#fff7ed' : '#f0fdf4') : '#ffffff', 
+                          border: selectedCustomerId 
+                            ? (orderMode === 'kitchen' ? '1.5px solid #fdba74' : '1.5px solid #4ade80') 
+                            : '1.5px solid #e2e8f0'
+                        }} 
+                      />
+                    </div>
+                  </div>
+
+                  {/* Delivery Address Selection (Only if Delivery is selected) */}
+                  {orderSelect === 'delivery' && (
+                    <div style={{ marginTop: 20, padding: 16, background: THEME.soft, border: `1.5px solid ${THEME.main}30`, borderRadius: 16 }}>
+                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                          <SectionLabel style={{ color: THEME.main, marginBottom: 0 }}>Select Delivery Address</SectionLabel>
+                          {selectedCustomerId && (
+                             <button 
+                               onClick={() => {
+                                  // Open a simple "Add Address" prompt or modal? 
+                                  // For now let's use a prompt to keep it simple, or just guide them to Edit Profile
+                                  alert('To add a new address, please use the Edit Profile feature in Customers page. Adding quick entry here soon!');
+                               }}
+                               style={{ background: 'transparent', border: 'none', color: THEME.main, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+                             >
+                               + Add New
+                             </button>
+                          )}
+                       </div>
+                       
+                       {selectedCustomerId ? (
+                          customerAddresses.length > 0 ? (
+                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
+                                {customerAddresses.map(addr => (
+                                   <div 
+                                      key={addr.id}
+                                      onClick={() => setSelectedAddressId(addr.id)}
+                                      style={{
+                                         padding: 12, borderRadius: 12, cursor: 'pointer',
+                                         background: selectedAddressId === addr.id ? THEME.main : '#fff',
+                                         color: selectedAddressId === addr.id ? '#fff' : '#1e293b',
+                                         border: selectedAddressId === addr.id ? 'none' : '1.5px solid #e2e8f0',
+                                         boxShadow: selectedAddressId === addr.id ? `0 4px 12px ${THEME.main}30` : 'none',
+                                         transition: 'all 0.2s'
+                                      }}
+                                   >
+                                      <div style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase', opacity: 0.8, marginBottom: 4 }}>
+                                         {addr.label || 'Home'}
+                                      </div>
+                                      <div style={{ fontSize: 12, fontWeight: 600, lineHeight: 1.4 }}>
+                                         {addr.line1}, {addr.city}
+                                      </div>
+                                   </div>
+                                ))}
+                             </div>
+                          ) : (
+                             <div style={{ padding: '12px', textAlign: 'center', background: '#fff', borderRadius: 12, fontSize: 13, color: '#64748b' }}>
+                                No saved addresses. Please add one in Customers page.
+                             </div>
+                          )
+                       ) : (
+                          <div style={{ padding: '12px', textAlign: 'center', background: '#fff', borderRadius: 12, fontSize: 13, color: '#64748b' }}>
+                             Select a customer first to choose an address.
+                          </div>
+                       )}
+                    </div>
+                  )}
+
+                  {/* Unified Suggestions Dropdown */}
+                  {showNameSuggestions && filteredSuggestions.length > 0 && (
+                    <div style={{
+                      position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 1000,
+                      background: '#ffffff', borderRadius: '12px', border: '1px solid #e2e8f0',
+                      boxShadow: '0 10px 25px rgba(0,0,0,0.1)', marginTop: '8px', overflow: 'hidden'
+                    }}>
+                       {filteredSuggestions.map((c, i) => (
+                         <div 
+                           key={i}
+                           onMouseDown={(e) => {
+                             e.preventDefault(); 
+                             setCustomerName(c.name || '');
+                             setCustomerPhone(c.phone || '');
+                             setSelectedCustomerId(c.customer_id || c.id || null);
+                             setSelectedCustomerNo(c.customer_no || null);
+                             setShowNameSuggestions(false);
+                           }}
+                           style={{
+                             padding: '12px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px',
+                             borderBottom: i === filteredSuggestions.length - 1 ? 'none' : '1px solid #f1f5f9'
+                           }}
+                           onMouseEnter={(e) => e.currentTarget.style.background = '#f8fafc'}
+                           onMouseLeave={(e) => e.currentTarget.style.background = '#ffffff'}
+                         >
+                            <div style={{
+                              width: '32px', height: '32px', borderRadius: '50%', background: THEME.soft, color: THEME.main,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700
+                            }}>
+                               {c.name ? c.name.charAt(0).toUpperCase() : '?'}
+                            </div>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontWeight: 700, fontSize: '14px' }}>
+                                {c.name} {c.customer_no && <span style={{ color: '#64748b', fontWeight: 500, marginLeft: 8 }}>#{c.customer_no}</span>}
+                              </div>
+                              <div style={{ fontSize: '12px', color: '#64748b' }}>{c.phone}</div>
+                            </div>
+                            <div style={{ fontSize: '10px', fontWeight: 800, color: THEME.main }}>SELECT</div>
+                         </div>
+                       ))}
+                    </div>
+                  )}
                 </div>
-                <div style={{ flex: 1 }}>
-                  <SectionLabel>Phone Number (Optional)</SectionLabel>
-                  <input 
-                    type="tel" placeholder="e.g. 9876543210" 
-                    value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} 
-                    style={{ 
-                      width: '100%',
-                      padding: '12px 16px', background: '#ffffff', 
-                      border: '1px solid #e2e8f0', borderRadius: '10px', outline: 'none',
-                      fontSize: '14px'
-                    }} 
-                  />
-                </div>
-              </div>
-            )}
+              </>
+            ) : null}
           </div>
         </ControlsCard>
+      </header>
 
         <NewCreditCustomerModal 
           visible={showNewCreditCustomer}
@@ -2219,7 +2701,6 @@ const orderForPrint = {
             })}
           </div>
         </div>
-      </header>
 
       {categoryChips.length > 1 && (
         <div
@@ -3080,6 +3561,7 @@ const isVariantItem = !!item.has_variants && (item.variants?.length || 0) > 0;
                       </div>
                     )}
 
+
                     {/* Discount Row */}
                     {orderMode !== 'kitchen' && (
                       discount.value === 0 ? (
@@ -3241,6 +3723,19 @@ const isVariantItem = !!item.has_variants && (item.variants?.length || 0) > 0;
           busy={processing}
           mode={paymentDialogMode}
           roundOffConfig={roundOffConfig}
+          loyaltyEnabled={!!loyaltyProgram}
+          customerPoints={customerPoints.points || 0}
+          conversionRate={loyaltyProgram?.redemption_conversion_rate || 1.0}
+          restaurantId={restaurantId}
+          customerId={selectedCustomerId}
+          minPoints={loyaltyProgram?.redemption_min_points || 0}
+          maxRedemption={loyaltyProgram?.max_redemption_amount_per_order || 0}
+          onLoyaltyRedeem={async (points, discount) => {
+            // Loyalty redemption callback - points are already set in the modal
+            setPointsToRedeem(points);
+            setLoyaltyRedeemAmount(discount);
+            console.log(`Loyalty redeemed: ${points} points for ₹${discount}`);
+          }}
           onConfirm={async (method, details) => {
             if (processing) return;
             setProcessing(true);

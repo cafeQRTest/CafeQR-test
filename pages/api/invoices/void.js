@@ -1,5 +1,5 @@
-// pages/api/invoices/void.js
 import { createClient } from '@supabase/supabase-js'
+import { LoyaltyService } from '../../../services/loyaltyService'
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
@@ -45,6 +45,18 @@ export default async function handler(req, res) {
         .update({ status: 'cancelled', payment_status: 'cancelled' })
         .eq('id', inv.order_id)
         .eq('restaurant_id', restaurant_id);
+
+      // 2.1) Reverse Loyalty Points
+      try {
+        console.log(`[VOID INVOICE] Attempting loyalty reversal for order: ${inv.order_id}`);
+        const result = await LoyaltyService.handleOrderReversal(supabase, {
+          restaurant_id,
+          order_id: inv.order_id
+        });
+        console.log('[VOID INVOICE] Loyalty reversal result:', result);
+      } catch (loyaltyErr) {
+        console.error('[VOID INVOICE] Loyalty reversal fatal error:', loyaltyErr);
+      }
 
       // Restore stock for the voided invoice
       try {

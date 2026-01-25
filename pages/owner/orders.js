@@ -569,6 +569,14 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
   const [onlineMethod, setOnlineMethod] = useState('upi');
   const { restaurant } = useRestaurant();
   const mode = order.mode || null;
+  const [submitting, setSubmitting] = useState(false);
+
+  const calculateRemainingOnline = (cash, loyalty) => {
+    const c = Number(cash || 0);
+    const l = Number(loyalty || 0);
+    const rem = Math.max(0, settledAmount - c - l);
+    setOnlineAmount(rem.toFixed(2));
+  };
 
   const handleMethodSelect = (method) => {
     setPaymentMethod(method);
@@ -576,10 +584,75 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
     if (method !== 'mixed') {
       setCashAmount('');
       setOnlineAmount('');
+      setLoyaltyAmountUsed(0);
+      setLoyaltyPointsUsed(0);
     }
   };
 
   const THEME = { main: BRAND.orange, soft: '#fff7ed', light: '#fed7aa' };
+
+  // Loyalty Implementation
+  const [loyaltyData, setLoyaltyData] = useState({ 
+    availablePoints: 0, 
+    conversionRate: 0, 
+    minPoints: 0,
+    loading: false 
+  });
+  const [loyaltyAmountUsed, setLoyaltyAmountUsed] = useState(0);
+  const [loyaltyPointsUsed, setLoyaltyPointsUsed] = useState(0);
+
+  useEffect(() => {
+    async function fetchLoyalty() {
+      const rid = order.restaurant_id || restaurant?.id;
+      if (!order.customer_id || !rid) return;
+      setLoyaltyData(prev => ({ ...prev, loading: true }));
+      try {
+        const s = getSupabase();
+        // 1. Fetch Customer using the same view as counter.js for consistency
+        const { data: cust } = await s
+          .from('v_owner_customers')
+          .select('loyalty_points, loyalty_program_id')
+          .eq('customer_id', order.customer_id)
+          .maybeSingle();
+        
+        if (!cust) return;
+
+        // 2. Fetch Program (Program is still restaurant specific)
+        let programId = cust.loyalty_program_id;
+        if (!programId) {
+          const { data: def } = await s
+            .from('loyalty_programs')
+            .select('id')
+            .eq('restaurant_id', rid)
+            .eq('is_default', true)
+            .maybeSingle();
+          programId = def?.id;
+        }
+
+        if (programId) {
+          const { data: prog } = await s
+            .from('loyalty_programs')
+            .select('*')
+            .eq('id', programId)
+            .single();
+          
+          if (prog) {
+            setLoyaltyData({
+              availablePoints: cust.loyalty_points || 0,
+              conversionRate: Number(prog.redemption_conversion_rate || 1.0),
+              minPoints: prog.redemption_min_points || 100,
+              loading: false
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Loyalty Fetch Error:', err);
+      } finally {
+        setLoyaltyData(prev => ({ ...prev, loading: false }));
+      }
+    }
+    fetchLoyalty();
+  }, [order.customer_id, order.restaurant_id, restaurant?.id]);
 
   const [localItems, setLocalItems] = useState(() => {
      const items = order.order_items || order.items || [];
@@ -616,7 +689,6 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
          quantity: Number(i.quantity || 0),
          tax_rate: (i.tax_rate !== undefined && i.tax_rate !== null) ? Number(i.tax_rate) : null,
          is_packaged_good: !!i.is_packaged_good
-         // discount is already in 'i' as object { type, value } or similar, which calculateOrderTotals handles
     }));
 
     // 2. Prepare Profile
@@ -630,7 +702,7 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
     };
 
     // 3. Calculate
-    const result = calculateOrderTotals(calcItems, discount, profile);
+    const result = calculateOrderTotals(calcItems, discount, profile, loyaltyAmountUsed);
 
     // 4. Gross Total (Display only)
     let grossVal = 0;
@@ -639,7 +711,6 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
          const p = Number(i.price || 0);
          let r = 0;
          if (gstEnabled) {
-            // For packaged goods, try item tax rate, else default. For others, default.
             r = i.is_packaged_good ? (Number(i.tax_rate || 0) > 0 ? Number(i.tax_rate || 0) : defaultRate) : defaultRate;
          }
          
@@ -654,8 +725,6 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
     let totalFaceDisc = result.order_discount_face_value || 0;
     calcItems.forEach(i => {
          const d = i.discount || { type: 'amount', value: 0 };
-         // The discount in calcItems might be normalized, check localItems source or previous logic
-         // i.discount from localItems map: i.discount is object.
          if (d.type === 'amount') {
              totalFaceDisc += Number(d.value || 0);
          } else {
@@ -678,7 +747,7 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
         totalDiscountFace: totalFaceDisc, 
         isAllPackaged: !!result.is_all_packaged
     };
-  }, [localItems, discount, restaurant]);
+  }, [localItems, discount, restaurant, loyaltyAmountUsed]);
 
   const { subtotalGross, lineDiscountTotal, subtotalEx, taxableAmount, finalTax, finalTotal, orderDiscountFace, grossTotalInc, totalDiscountFace, totalTaxIncluded, totalTaxAdded, isAllPackaged } = calculationData;
 
@@ -710,7 +779,7 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
   const totalSavings = grossTotalInc - finalTotal;
   
   const effectiveTotal = mode === 'collect'
-      ? Math.max(0, settledAmount - (order.alreadyPaidAmount || 0))
+      ? Math.max(0, settledAmount - (order.alreadyPaidAmount || 0) - loyaltyAmountUsed)
       : (mode === 'refund' ? Number(order.refundAmount ?? 0) : settledAmount);
 
   const handleUpdateLocalItem = (id, validItem) => {
@@ -720,36 +789,75 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
   const validateMixedPayment = () => {
     const c = Number(cashAmount || 0);
     const o = Number(onlineAmount || 0);
-    const sum = c + o;
-    if (c <= 0 || o <= 0) { alert('Amounts must be greater than 0'); return false; }
-    if (Math.abs(sum - effectiveTotal) > 0.01) { alert(`Payment total should be ₹${effectiveTotal.toFixed(2)}`); return false; }
+    const l = Number(loyaltyAmountUsed || 0);
+    const sum = c + o + l;
+    if (c < 0 || o < 0 || l < 0) { alert('Amounts cannot be negative'); return false; }
+    if (c === 0 && o === 0 && l === 0) { alert('Enter at least one payment amount'); return false; }
+    if (Math.abs(sum - settledAmount) > 0.01) { alert(`Split total must equal ₹${(settledAmount || 0).toFixed(2)}. Current: ₹${sum.toFixed(2)}`); return false; }
     return true;
   };
 
-    const handleConfirm = () => {
-    const common = {
-      mode,
-      discount_amount: orderDiscountFace,
-      discount_obj: discount, // Full object {type, value}
-      round_off_amount: manualRoundOffValue,
-      updated_items: localItems,
-      base_tax_rate: Number(restaurant?.default_tax_rate || 5), // Enforce consistent rate
-      override_totals: {
-           total_amount: Number(settledAmount || 0),
-           total_inc_tax: Number(finalTotal || 0),
-           total_tax: Number(finalTax || 0),
-           subtotal_ex: Number(subtotalEx || 0)
+  const handleConfirm = async () => {
+    if (submitting) return;
+    try {
+      setSubmitting(true);
+      const common = {
+        mode,
+        discount_amount: orderDiscountFace,
+        discount_obj: discount, 
+        round_off_amount: manualRoundOffValue,
+        updated_items: localItems,
+        base_tax_rate: Number(restaurant?.default_tax_rate || 5),
+        loyalty_amount_used: loyaltyAmountUsed,
+        loyalty_points_used: loyaltyPointsUsed,
+        override_totals: {
+             total_amount: Number(settledAmount || 0).toFixed(2),
+             total_inc_tax: Number(finalTotal || 0).toFixed(2),
+             total_tax: Number(finalTax || 0).toFixed(2),
+             subtotal_ex: Number(subtotalEx || 0).toFixed(2)
+        }
+      };
+
+      if (paymentMethod === 'mixed') {
+        if (!validateMixedPayment()) return;
+        
+        const mixedDetails = {
+           cash_amount: Number(cashAmount).toFixed(2), 
+           online_amount: Number(onlineAmount).toFixed(2), 
+           online_method: onlineMethod,
+           is_mixed: true
+        };
+
+        await onConfirm('mixed', { 
+          ...common, 
+          mixed_payment_details: mixedDetails
+        });
+      } else {
+        await onConfirm(paymentMethod, common);
       }
-    };
-    if (paymentMethod === 'mixed') {
-      if (!validateMixedPayment()) return;
-      onConfirm('mixed', { ...common, cash_amount: Number(cashAmount).toFixed(2), online_amount: Number(onlineAmount).toFixed(2), online_method: onlineMethod, is_mixed: true });
-    } else {
-      onConfirm(paymentMethod, common);
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const titlePrefix = mode === 'collect' ? 'Payment Collection' : (mode === 'refund' ? 'Process Refund' : 'Complete Payment');
+
+  const choiceBoxStyle = (active) => ({
+    padding: '12px 10px',
+    borderRadius: 14,
+    border: `2px solid ${active ? BRAND.orange : '#f1f5f9'}`,
+    background: active ? `${BRAND.orange}05` : 'white',
+    cursor: 'pointer',
+    textAlign: 'center',
+    transition: 'all 0.2s',
+    boxShadow: active ? `0 4px 12px ${BRAND.orange}20` : 'none',
+    transform: active ? 'translateY(-2px)' : 'none',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4
+  });
 
   return (
     <div
@@ -764,8 +872,8 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
     >
       <div
         style={{
-          background: 'white', width: '100%', maxWidth: 360,
-          borderRadius: 20, padding: 24,
+          background: 'white', width: '100%', maxWidth: 380,
+          borderRadius: 20, padding: '24px 20px',
           boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
           maxHeight: '94vh', overflowY: 'auto',
           position: 'relative',
@@ -773,7 +881,7 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
         onClick={e => e.stopPropagation()}
       >
         <div style={{ marginBottom: 20 }}>
-          <h3 style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', margin: '0 0 2px 0', letterSpacing: '-0.02em' }}>{titlePrefix}</h3>
+          <h3 style={{ fontSize: 20, fontWeight: 900, color: '#0f172a', margin: '0 0 4px 0', letterSpacing: '-0.02em' }}>{titlePrefix}</h3>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             <span>#{order.id.slice(0, 8)}</span>
             <div style={{ width: 4, height: 4, borderRadius: '50%', background: '#e2e8f0' }}></div>
@@ -785,12 +893,12 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
             padding: '12px 16px', borderRadius: 14, marginTop: 16,
             boxShadow: `0 8px 16px -4px ${BRAND.orange}40`
           }}>
-            <span style={{ fontSize: '13px', fontWeight: 700, color: 'white', textTransform: 'uppercase', opacity: 0.9 }}>Settled Total</span>
+            <span style={{ fontSize: '12px', fontWeight: 800, color: 'white', textTransform: 'uppercase', opacity: 0.9 }}>Settled Total</span>
             <span style={{ fontSize: '20px', fontWeight: 900, color: 'white' }}>₹{settledAmount.toFixed(2)}</span>
           </div>
         </div>
 
-        <div style={{ background: '#f8fafc', borderRadius: 16, padding: 16, marginBottom: 16, border: '1px solid #f1f5f9' }}>
+        <div style={{ background: '#f8fafc', borderRadius: 16, padding: '16px', marginBottom: 16, border: '1px solid #f1f5f9' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 13, color: '#64748b' }}>
             <span>Gross Total (Incl. Tax)</span>
             <span style={{ fontWeight: 700, color: '#0f172a' }}>₹{grossTotalInc.toFixed(2)}</span>
@@ -798,12 +906,12 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
           
           {!isAllPackaged && (
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 13, color: '#64748b' }}>
-              <span>Subtotal (Ex-Tax)</span>
-              <span style={{ fontWeight: 700, color: '#0f172a' }}>₹{subtotalEx.toFixed(2)}</span>
+               <span>Subtotal (Ex-Tax)</span>
+               <span style={{ fontWeight: 700, color: '#0f172a' }}>₹{subtotalEx.toFixed(2)}</span>
             </div>
           )}
 
-          {orderDiscountFace > 0.01 && !isAllPackaged && (
+          {orderDiscountFace > 0.01 && (
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 13, color: '#ef4444' }}>
               <span style={{ fontWeight: 600 }}>Bill Discount (-)</span>
               <span style={{ fontWeight: 700 }}>-₹{orderDiscountFace.toFixed(2)}</span>
@@ -829,47 +937,26 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
               <span style={{ fontWeight: 700, color: '#0f172a' }}>₹{totalTaxAdded.toFixed(2)}</span>
             </div>
           )}
-
-          {!(totalTaxAdded > 0) && !(totalTaxIncluded > 0) && finalTax > 0.01 && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#334155' }}>
-              <span style={{ fontWeight: 600 }}>GST {isInclusiveMode ? '(incl)' : '(+)'}</span>
-              <span style={{ fontWeight: 700 }}>₹{finalTax.toFixed(2)}</span>
-            </div>
-          )}
           
-          {/* Round Off Display */}
           {Math.abs(manualRoundOffValue) > 0.001 && (
-            <div style={{ 
-              display: 'flex', 
-              justifyContent: 'space-between', 
-              marginTop: 4,
-              fontSize: 13, 
-              color: manualRoundOffValue > 0 ? '#16a34a' : '#ef4444' 
-            }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, fontSize: 13, color: manualRoundOffValue > 0 ? '#16a34a' : '#ef4444' }}>
               <span style={{ fontWeight: 600 }}>Round Off</span>
-              <span style={{ fontWeight: 700 }}>
-                {manualRoundOffValue > 0 ? '+' : ''}₹{manualRoundOffValue.toFixed(2)}
-              </span>
+              <span style={{ fontWeight: 700 }}>{manualRoundOffValue > 0 ? '+' : ''}₹{manualRoundOffValue.toFixed(2)}</span>
             </div>
           )}
         </div>
 
         {mode === 'collect' && (
-          <div style={{ marginBottom: 16, textAlign: 'center' }}>
+          <div style={{ marginBottom: 20, textAlign: 'center' }}>
             {totalSavings > 0.01 ? (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 13 }}>
                  <span style={{ fontWeight: 600, color: '#0f172a' }}>
                     Discount Applied <span style={{ color: '#ea580c' }}>(-₹{(totalDiscountFace || totalSavings).toFixed(2)})</span>
                  </span>
-                 <span 
-                   onClick={() => setIsDiscountModalOpen(true)}
-                   style={{ fontWeight: 700, color: '#ea580c', cursor: 'pointer', textDecoration: 'underline' }}
-                 >
-                   Edit
-                 </span>
+                 <span onClick={() => setIsDiscountModalOpen(true)} style={{ fontWeight: 700, color: '#ea580c', cursor: 'pointer', textDecoration: 'underline' }}>Edit</span>
               </div>
             ) : (
-              <div onClick={() => setIsDiscountModalOpen(true)} style={{ fontSize: 13, color: BRAND.orange, cursor: 'pointer', fontWeight: 700, textDecoration: 'underline', display: 'inline-block' }}>
+              <div onClick={() => setIsDiscountModalOpen(true)} style={{ fontSize: 14, color: BRAND.orange, cursor: 'pointer', fontWeight: 800, textDecoration: 'underline', display: 'inline-block' }}>
                 + Add Discount
               </div>
             )}
@@ -877,14 +964,14 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
         )}
 
         {roundOffConfig.round_off_enabled && roundOffConfig.round_off_mode === 'manual' && mode === 'collect' && (
-          <div style={{ marginTop: 8, padding: 16, background: '#fff7ed', borderRadius: 16, border: `1.5px solid ${BRAND.orange}20`, marginBottom: 16 }}>
+          <div style={{ padding: '16px', background: '#fff7ed', borderRadius: 16, border: `1.5px solid ${BRAND.orange}20`, marginBottom: 16 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <label style={{ fontSize: 11, fontWeight: 800, color: BRAND.orange, textTransform: 'uppercase' }}>Received Amount</label>
               <span style={{ fontSize: 10, color: '#94a3b8' }}>Limit: ±₹{roundOffConfig.round_off_manual_limit.toFixed(2)}</span>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <div style={{ flex: 1, height: 42, display: 'flex', alignItems: 'center', background: '#fff', borderRadius: 8, border: '1px solid #cbd5e1', padding: '0 10px' }}>
-                <span style={{ fontSize: 14, fontWeight: 700, color: '#94a3b8' }}>₹</span>
+              <div style={{ flex: 1, height: 44, display: 'flex', alignItems: 'center', background: '#fff', borderRadius: 10, border: '2px solid #e2e8f0', padding: '0 12px' }}>
+                <span style={{ fontSize: 16, fontWeight: 700, color: '#94a3b8' }}>₹</span>
                 <input type="number" step="0.01" value={displayValue} onChange={e => {
                   const raw = e.target.value; setDisplayValue(raw);
                   const val = Number(raw);
@@ -892,72 +979,100 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
                     const diff = val - finalTotal;
                     if (Math.abs(diff) <= roundOffConfig.round_off_manual_limit) setSettledAmount(val);
                   }
-                }} onBlur={() => setDisplayValue(settledAmount.toFixed(2))} style={{ flex: 1, border: 'none', outline: 'none', fontSize: 15, fontWeight: 700, height: '100%', padding: 0, marginLeft: 4, width: '100%' }} />
+                }} onBlur={() => setDisplayValue(settledAmount.toFixed(2))} style={{ flex: 1, border: 'none', outline: 'none', fontSize: 16, fontWeight: 700, height: '100%', padding: 0, marginLeft: 6, width: '100%' }} />
               </div>
-              <button onClick={() => { setSettledAmount(autoRounded); setDisplayValue(autoRounded.toFixed(2)); }} style={{ flex: '0 0 auto', height: 42, background: '#fff', border: '1px solid #cbd5e1', color: '#64748b', padding: '0 16px', borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Reset</button>
+              <button onClick={() => { setSettledAmount(autoRounded); setDisplayValue(autoRounded.toFixed(2)); }} style={{ height: 44, background: '#fff', border: '2px solid #e2e8f0', color: '#64748b', padding: '0 16px', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Reset</button>
             </div>
           </div>
         )}
 
-        {Math.abs(manualRoundOffValue) > 0.01 && (
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-            <span style={{ fontSize: 13, color: '#64748b' }}>Round Off</span>
-            <span style={{ fontSize: 13, fontWeight: 700, color: manualRoundOffValue > 0 ? '#10b981' : '#ef4444' }}>{manualRoundOffValue > 0 ? '+' : ''}{manualRoundOffValue.toFixed(2)}</span>
-          </div>
-        )}
 
-        {order.alreadyPaidAmount > 0.01 && (
-          <div style={{ padding: '12px', background: '#ecfdf5', borderRadius: 12, marginBottom: 16, border: '1px solid #d1fae5' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-              <span style={{ fontSize: 12, color: '#065f46' }}>Gross Settled</span>
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#065f46' }}>₹{settledAmount.toFixed(2)}</span>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-              <span style={{ fontSize: 12, color: '#065f46' }}>Already Paid</span>
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#065f46' }}>-₹{Number(order.alreadyPaidAmount).toFixed(2)}</span>
-            </div>
-            <div style={{ height: 1, background: '#a7f3d0', marginBottom: 8 }}></div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 13, fontWeight: 800, color: '#064e3b' }}>Balance Due</span>
-              <span style={{ fontSize: 18, fontWeight: 900, color: '#064e3b' }}>₹{effectiveTotal.toFixed(2)}</span>
-            </div>
-          </div>
-        )}
-
-        <div style={{ fontSize: 12, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 10, letterSpacing: '0.05em' }}>Payment Method</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 20 }}>
+        <div style={{ fontSize: 12, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 12, letterSpacing: '0.05em' }}>Payment Method</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 24 }}>
           {['cash', 'online', mode !== 'refund' ? 'mixed' : null].filter(Boolean).map(m => (
-            <div key={m} onClick={() => handleMethodSelect(m)} style={{
-              padding: '12px 8px', borderRadius: 14, border: `2px solid ${paymentMethod === m ? BRAND.orange : '#f1f5f9'}`,
-              background: paymentMethod === m ? `${BRAND.orange}05` : 'white', cursor: 'pointer', textAlign: 'center', transition: 'all 0.2s',
-              boxShadow: paymentMethod === m ? `0 4px 12px ${BRAND.orange}20` : 'none', transform: paymentMethod === m ? 'translateY(-2px)' : 'none'
-            }}>
-              <div style={{ fontSize: 20, marginBottom: 4 }}>{m === 'cash' ? '💵' : (m === 'online' ? '💳' : '🔀')}</div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: paymentMethod === m ? BRAND.orange : '#64748b', textTransform: 'capitalize' }}>{m}</div>
+            <div key={m} onClick={() => handleMethodSelect(m)} style={choiceBoxStyle(paymentMethod === m)}>
+              <div style={{ fontSize: 24 }}>{m === 'cash' ? '💵' : (m === 'online' ? '💳' : '🔀')}</div>
+              <div style={{ fontSize: 12, fontWeight: 800, color: paymentMethod === m ? BRAND.orange : '#64748b', textTransform: 'capitalize' }}>{m}</div>
             </div>
           ))}
         </div>
 
         {showMixedForm && (
-          <div style={{ background: '#f8fafc', padding: 16, borderRadius: 16, border: '1px solid #f1f5f9', marginBottom: 20 }}>
+          <div style={{ background: '#f8fafc', padding: '18px 16px', borderRadius: 18, border: '2px solid #e2e8f0', marginBottom: 24 }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+              {/* Loyalty Column (Only if Customer is assigned) */}
+               {order.customer_id && (
+                 <div style={{ gridColumn: 'span 2', marginBottom: 4 }}>
+                    <label style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: '11px', fontWeight: 800, color: '#047857', textTransform: 'uppercase', letterSpacing: '0.02em' }}>
+                      <span>🪙 Loyalty Points</span>
+                      <span style={{ opacity: 0.8 }}>Available: {loyaltyData.availablePoints}</span>
+                    </label>
+                    <div style={{ position: 'relative' }}>
+                      <input
+                        type="number"
+                        min="0"
+                        max={loyaltyData.availablePoints}
+                        value={loyaltyPointsUsed || ''}
+                        placeholder="Enter points to redeem"
+                        onChange={(e) => {
+                          const pts = parseInt(e.target.value, 10) || 0;
+                          if (pts > (loyaltyData.availablePoints || 0)) return;
+                          setLoyaltyPointsUsed(pts);
+                          const amt = Number((pts * (loyaltyData.conversionRate || 1.0)).toFixed(2));
+                          setLoyaltyAmountUsed(amt);
+                          calculateRemainingOnline(cashAmount, amt);
+                        }}
+                        style={{ width: '100%', padding: '12px', borderRadius: 10, border: '2px solid #10b98140', fontSize: 15, fontWeight: 700, background: '#ecfdf5', outline: 'none', transition: 'all 0.2s' }}
+                      />
+                      {loyaltyAmountUsed > 0 && (
+                        <div style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 13, fontWeight: 800, color: '#059669' }}>
+                          = ₹{loyaltyAmountUsed.toFixed(2)}
+                        </div>
+                      )}
+                    </div>
+                    {(loyaltyData.availablePoints || 0) < (loyaltyData.minPoints || 0) && (loyaltyData.availablePoints || 0) > 0 && (
+                        <div style={{ fontSize: '10px', color: '#ef4444', marginTop: 4, fontWeight: 600 }}>
+                            Min {loyaltyData.minPoints} points required.
+                        </div>
+                    )}
+                 </div>
+               )}
+
               <div>
-                <label style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Cash</label>
-                <input type="number" value={cashAmount} onChange={e => { const val = e.target.value; setCashAmount(val); const c = Number(val); if (!isNaN(c)) setOnlineAmount(Math.max(0, effectiveTotal - c).toFixed(2)); }} style={{ width: '100%', padding: '10px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 14, fontWeight: 700 }} />
+                <label style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Cash (₹)</label>
+                <input type="number" value={cashAmount} onChange={e => { const val = e.target.value; setCashAmount(val); const c = Number(val); if (!isNaN(c)) calculateRemainingOnline(c, loyaltyAmountUsed); }} style={{ width: '100%', padding: '12px', borderRadius: 10, border: '2px solid #e2e8f0', fontSize: 15, fontWeight: 700, outline: 'none' }} />
               </div>
               <div>
-                <label style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Online</label>
-                <input type="number" value={onlineAmount} onChange={e => setOnlineAmount(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 14, fontWeight: 700 }} />
+                <label style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Online (₹)</label>
+                <input type="number" value={onlineAmount} onChange={e => setOnlineAmount(e.target.value)} style={{ width: '100%', padding: '12px', borderRadius: 10, border: '2px solid #e2e8f0', fontSize: 15, fontWeight: 700, outline: 'none' }} />
               </div>
             </div>
-            <label style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Online Channel</label>
+
+            <div style={{
+                background: `#f0fdf4`,
+                padding: '12px 14px',
+                borderLeft: `4px solid #16a34a`,
+                borderRadius: 8,
+                fontSize: '12px',
+                fontWeight: 700,
+                color: '#1e293b',
+                marginBottom: 16,
+                boxShadow: '0 2px 4px rgba(22, 163, 74, 0.05)'
+            }}>
+                Total ₹{(settledAmount || 0).toFixed(2)} → 
+                {loyaltyAmountUsed > 0 && ` ₹${Number(loyaltyAmountUsed).toFixed(2)} (Pts) + `}
+                ₹{cashAmount || 0} (Cash) + 
+                ₹{onlineAmount || 0} ({onlineMethod?.toUpperCase() || ''})
+            </div>
+
+            <label style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', display: 'block', marginBottom: 6 }}>Online Method</label>
             <NiceSelect value={onlineMethod} onChange={setOnlineMethod} options={[{ value: 'upi', label: 'UPI' }, { value: 'card', label: 'Card' }]} />
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: 10 }}>
-          <Button onClick={onCancel} variant="outline" style={{ flex: 1, padding: '12px', borderRadius: 12, fontSize: 14, fontWeight: 700, height: 48, borderColor: '#e2e8f0' }}>Cancel</Button>
-          <Button onClick={handleConfirm} style={{ flex: 1.5, padding: '12px', borderRadius: 12, background: `linear-gradient(135deg, ${BRAND.orange} 0%, #ea580c 100%)`, color: 'white', fontSize: 14, fontWeight: 800, height: 48, boxShadow: `0 8px 20px -6px ${BRAND.orange}60`, border: 'none' }}>Settle & Finish</Button>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <Button onClick={onCancel} variant="outline" style={{ flex: 1, height: 52, borderRadius: 14, fontSize: 15, fontWeight: 700, borderColor: '#e2e8f0' }}>Cancel</Button>
+          <Button onClick={handleConfirm} style={{ flex: 1.6, height: 52, borderRadius: 14, background: `linear-gradient(135deg, ${BRAND.orange} 0%, #ea580c 100%)`, color: 'white', fontSize: 15, fontWeight: 800, boxShadow: `0 8px 24px -6px ${BRAND.orange}60`, border: 'none' }}>Settle & Finish</Button>
         </div>
 
         <DiscountModal visible={isDiscountModalOpen} onClose={() => setIsDiscountModalOpen(false)} onSaveTotal={setDiscount} cart={localItems} onUpdateCartItem={handleUpdateLocalItem} currentTotalDiscount={discount} theme={THEME} totalAmount={subtotalEx} />
@@ -2570,7 +2685,9 @@ const complete = async (orderId, actualPaymentMethod = null, details = null) => 
         round_off_amount: details?.round_off_amount,
         updated_items: details?.updated_items,
         mixed_payment_details: details?.mixed_payment_details,
-        base_tax_rate: details?.base_tax_rate
+        base_tax_rate: details?.base_tax_rate,
+        loyalty_amount_used: details?.loyalty_amount_used,
+        loyalty_points_used: details?.loyalty_points_used
       })
     });
 
@@ -2582,11 +2699,25 @@ const complete = async (orderId, actualPaymentMethod = null, details = null) => 
     const result = await response.json();
 
     // 3. Optional: Trigger auto-print of the final invoice
+    // 3. Optional: Trigger auto-print of the final invoice
     if (result.order_for_print) {
+       // Merge detail overrides to ensure UI reflects latest input immediately
+       const finalPrintData = {
+           ...result.order_for_print,
+           bill: {
+               ...result.order_for_print.bill,
+               // Ensure Payment/Discount info is explicit
+               discount_amount: details?.discount_obj?.value || result.order_for_print.discount_amount,
+               loyalty_amount_used: details?.loyalty_amount_used || result.order_for_print.loyalty_amount_used,
+               loyalty_points_used: details?.loyalty_points_used || result.order_for_print.loyalty_points_used,
+               order_discount_base: result.order_for_print.bill?.order_discount_base // ensure this flows if present
+           }
+       };
+
        window.dispatchEvent(
          new CustomEvent('auto-print-order', {
            detail: {
-             ...result.order_for_print,
+             ...finalPrintData,
              autoPrint: true,
              kind: 'invoice',
            },
@@ -2594,7 +2725,8 @@ const complete = async (orderId, actualPaymentMethod = null, details = null) => 
        );
     }
 
-    // 4. Refresh & Reset
+    // 4. Loyalty & Print logic is now handled by backend /api/orders/complete
+    // We only need to reload orders.
     await loadOrders();
   } catch (e) {
     console.error('[COMPLETE ORDER] Error:', e);

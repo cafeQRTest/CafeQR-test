@@ -108,8 +108,9 @@ export default async function handler(req, res) {
       calculationResult: calcResult,
       metadata: {
         status: 'completed',
-        payment_status: 'completed',
+        payment_status: 'paid', // Standardize to 'paid'
         payment_method,
+        customer_id: order.customer_id, // Persist customer link!
         customer_name: order.customer_name,
         customer_phone: order.customer_phone,
         number_of_customers: order.number_of_customers,
@@ -121,6 +122,23 @@ export default async function handler(req, res) {
         created_at: order.created_at
       }
     });
+
+    // 4.1 Handle LOYALTY EARNING
+    if (order.customer_id && calcResult.total_amount > 0 && payment_method !== 'credit') {
+      try {
+        const { LoyaltyService } = await import('../../../services/loyaltyService');
+        await LoyaltyService.handleOrderEarning(supabase, {
+          restaurant_id,
+          customer_id: order.customer_id,
+          order_id: order_id,
+          order_total: calcResult.total_amount,
+          loyalty_amount_used: req.body.loyalty_amount_used || 0,
+          loyalty_points_used: req.body.loyalty_points_used || null
+        });
+      } catch (loyErr) {
+        console.error('[/api/orders/complete] Loyalty error:', loyErr);
+      }
+    }
 
     // 5. Build response for printing
     // Re-fetch everything to ensure fidelity (or use OrderService return)

@@ -496,6 +496,22 @@ export default async function handler(req, res) {
       reason,
     });
 
+    // 9b) LOYALTY RECALCULATION
+    if (order.customer_id && newTotals.total_amount > 0 && order.payment_status === 'paid' && !order.is_credit) {
+      try {
+        const { LoyaltyService } = await import('../../../services/loyaltyService');
+        await LoyaltyService.handleOrderEarning(supabase, {
+          restaurant_id,
+          customer_id: order.customer_id,
+          order_id: order_id,
+          order_total: newTotals.total_amount,
+          loyalty_amount_used: order.loyalty_amount_used || 0
+        });
+      } catch (loyErr) {
+        console.error('[DEBUG_EDIT_API] Loyalty error:', loyErr);
+      }
+    }
+
     return res.status(200).json({
       success: true,
       order_id: order.id,

@@ -235,7 +235,6 @@ export default async function handler(req, res) {
         customer_id: cust.id,
         first_order_at: now,
         last_order_at: now,
-        order_count: 1,
         total_spent: total_inc_tax,
         updated_at: now,
       },
