@@ -2074,12 +2074,14 @@ const orderForPrint = {
 };
 
     // Immediate KOT print for this counter order
+    /* Disabled to prevent duplicate prints - handled by global usePrintService
     markPrinted(result.order_id, 'kot', restaurantId);
     window.dispatchEvent(
       new CustomEvent('auto-print-order', {
         detail: { ...orderForPrint, autoPrint: true, kind: 'kot' },
       })
     );
+    */
 
     setCart([]); setCustomerName(''); setCustomerPhone(''); setNumberOfCustomers(''); setPaymentMethod('cash');
     setOrderSelect(''); setIsCreditSale(false); setSelectedCreditCustomerId(''); setCreditCustomerBalance(0);

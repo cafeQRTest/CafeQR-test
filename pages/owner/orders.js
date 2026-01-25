@@ -2747,7 +2747,8 @@ const complete = async (orderId, actualPaymentMethod = null, details = null) => 
     const result = await response.json();
 
     // 3. Optional: Trigger auto-print of the final invoice
-    // 3. Optional: Trigger auto-print of the final invoice
+    // Disabled as per user request to stop automatic bill/kot printing after payment
+    /*
     if (result.order_for_print) {
        // Merge detail overrides to ensure UI reflects latest input immediately
        const finalPrintData = {
@@ -2772,6 +2773,7 @@ const complete = async (orderId, actualPaymentMethod = null, details = null) => 
          })
        );
     }
+    */
 
     // 4. Loyalty & Print logic is now handled by backend /api/orders/complete
     // We only need to reload orders.
