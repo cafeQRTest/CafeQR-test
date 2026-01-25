@@ -360,6 +360,7 @@ lines.push(
     MODE_NO_BOLD
 );
 
+
 // go back to normal flow
 lines.push(ALIGN_LEFT);
 

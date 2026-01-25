@@ -137,7 +137,7 @@ export default function KotPrint({ order, onClose, onPrint, autoPrint = true, ki
         if (order?.id) {
            const { data: freshOrder } = await supabase
             .from('orders')
-            .select('*, order_items(*, menu_items(name, category))')
+            .select('*, order_items(*, menu_items(name, category, tax_rate)), restaurants(name)')
             .eq('id', order.id)
             .maybeSingle();
             
@@ -151,10 +151,14 @@ export default function KotPrint({ order, onClose, onPrint, autoPrint = true, ki
                   ...orderWithoutFullItems,
                   items: order.items || [],
                   removed_items: order.removed_items || [],
-                  is_edited: true
+                  is_edited: true,
+                  restaurant_name: freshOrder.restaurants?.name || freshOrder._profile?.restaurant_name // Pass name
                 });
              } else {
-                setFullOrder(freshOrder);
+                setFullOrder({
+                    ...freshOrder,
+                    restaurant_name: freshOrder.restaurants?.name || freshOrder._profile?.restaurant_name // Pass name
+                });
              }
 
              // Also grab profile/bill from fresh order if not set
