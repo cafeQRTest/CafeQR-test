@@ -128,8 +128,8 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Failed to load settings' });
     }
 
-    // Align baseRate STRICTLY with frontend: check request body, then restaurants table, then default 5.
-    const baseRate = Number(req.body.base_tax_rate ?? (restaurantRow?.default_tax_rate || 5));
+    // Align baseRate STRICTLY with frontend: check request body, then PROFILE (System), then restaurants table, then default 5.
+    const baseRate = Number(req.body.base_tax_rate ?? (profile?.default_tax_rate ?? (restaurantRow?.default_tax_rate || 5)));
     const gstEnabled = !!profile?.gst_enabled;
     const inventoryAlertsEnabled = !!profile?.features_inventory_enabled;
     const serviceRate = gstEnabled ? baseRate : 0;
