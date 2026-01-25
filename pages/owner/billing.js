@@ -12,6 +12,7 @@ import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import { downloadInvoicePdf } from '../../lib/downloadInvoicePdf';
+import { formatQtyP } from '../../lib/qty';
 import { 
   FaFileDownload, 
   FaChartBar, 
@@ -569,7 +570,7 @@ const exportHsnSummary = async () => {
                           return (
                             <div key={idx} className="item-row">
                               <div className="item-main">
-                                <span className="qty">{item.quantity}x</span>
+                                <span className="qty">{formatQtyP(item.quantity, item.uom_precision ?? 2)}x</span>
                                 <span className="name">
                                   {item.menu_items?.name || item.item_name || 'Item'}
                                   {item.variant_name ? ` (${item.variant_name})` : ''}
