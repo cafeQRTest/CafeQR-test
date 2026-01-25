@@ -34,7 +34,7 @@ function calcLineBreakdown({ qty, unit, menuItem, profile }) {
       Number.isFinite(rawItemTax) && rawItemTax > 0 ? rawItemTax : baseRate;
     effectiveRate = itemTaxRate;
   } else {
-    // Non-packaged: respect gst_enabled and baseRate.
+    // Non-packaged: force global baseRate (restaurant default), ignoring item-level tax
     effectiveRate = gstEnabled ? baseRate : 0;
   }
 
@@ -711,6 +711,7 @@ async function recalculateOrderTotals(supabase, restaurant_id, items) {
         Number.isFinite(rawItemTax) && rawItemTax > 0 ? rawItemTax : baseRate;
       effectiveRate = itemTaxRate;
     } else {
+      // Non-packaged: force global baseRate, ignoring item tax
       effectiveRate = gstEnabled ? baseRate : 0;
     }
 

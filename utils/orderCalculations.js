@@ -20,10 +20,16 @@ export function calculateOrderTotals(
   const processedItems = items.map(item => {
     const qty = Number(item.quantity ?? 1);
     const faceUnit = Number(item.price ?? 0);
-    const itemTaxRate = Number(item.tax_rate ?? 0);
-    const rate = gstEnabled ? (itemTaxRate > 0 ? itemTaxRate : baseRate) : 0;
-
     const isPackaged = !!(item.is_packaged_good || item.is_packaged);
+    const itemTaxRate = Number(item.tax_rate ?? 0);
+    
+    // Logic: If Packaged, use Item Rate (fallback to Base). If Not Packaged, ALWAYS use Base Rate.
+    const rate = gstEnabled 
+      ? (isPackaged 
+          ? (itemTaxRate > 0 ? itemTaxRate : baseRate) 
+          : baseRate) 
+      : 0;
+
     const isInclusive = gstEnabled && (isPackaged || pricesIncludeTax);
 
     // Normalize MRP → base
