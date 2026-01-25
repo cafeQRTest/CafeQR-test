@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRequireAuth } from '../../lib/useRequireAuth'
 import { useRestaurant } from '../../context/RestaurantContext'
 import { getSupabase } from '../../services/supabase'
+import { useAlert } from '../../context/AlertContext'
 import { FaGift, FaWallet, FaCalculator, FaPlus, FaEdit, FaTrash, FaCheckCircle, FaStar } from 'react-icons/fa'
 import Button from '../../components/ui/Button'
 
@@ -11,6 +12,7 @@ export default function OwnerLoyaltyPage() {
   const supabase = getSupabase()
   const { checking } = useRequireAuth(supabase)
   const { restaurant, loading: restLoading } = useRestaurant()
+  const { showAlert } = useAlert()
   const restaurantId = restaurant?.id
 
   const [loading, setLoading] = useState(true)
@@ -109,12 +111,21 @@ export default function OwnerLoyaltyPage() {
        setDeleteId(null);
      } catch (e) {
        console.error(e);
-       alert('Error deleting: ' + e.message);
+       showAlert('Error deleting: ' + e.message, 'Error');
      }
   }
 
   const onSave = async () => {
     try {
+      // Check for duplicate name
+      const isDuplicate = programs.some(p => 
+        p.name.toLowerCase().trim() === edtName.toLowerCase().trim() && p.id !== edtId
+      )
+      if (isDuplicate) {
+        showAlert('A loyalty program with this name already exists. Please use a unique name.', 'Duplicate Name')
+        return
+      }
+
       const sb = Number(spendBasis) || 100
       const ep = Number(earnPoints) || 0
       const ratio = sb > 0 ? (ep / sb) : 0
@@ -153,7 +164,7 @@ export default function OwnerLoyaltyPage() {
       await loadPrograms()
       setView('list')
     } catch (e) {
-      alert('Error saving: ' + e.message)
+      showAlert('Error saving: ' + e.message, 'Save Error')
     }
   }
 
