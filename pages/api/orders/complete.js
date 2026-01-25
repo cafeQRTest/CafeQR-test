@@ -153,7 +153,10 @@ export default async function handler(req, res) {
       order_id,
       invoice_no: result.invoiceNo,
       bill_no: result.billNo,
-      order_for_print: finalOrder
+      order_for_print: {
+        ...finalOrder,
+        bill: result.invoice
+      }
     });
 
   } catch (error) {

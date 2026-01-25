@@ -238,6 +238,7 @@ export class OrderService {
         invoiceId: existingInvoice.id,
         invoiceNo: existingInvoice.invoice_no,
         billNo: existingInvoice.bill_no,
+        invoice: existingInvoice,
         created_at: orderPayload.created_at || new Date().toISOString(),
         success: true
       };

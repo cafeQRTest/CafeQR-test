@@ -475,6 +475,7 @@ export default async function handler(req, res) {
         status: orderHeader?.status || 'new',
         payment_status: orderHeader?.payment_status || 'pending',
         payment_method: orderHeader?.payment_method || 'cash',
+        customer_id: req.body.customer_id || orderHeader?.customer_id, // Prevent customer_id loss!
         customer_name: orderHeader?.customer_name,
         customer_phone: orderHeader?.customer_phone,
         number_of_customers: orderHeader?.number_of_customers,

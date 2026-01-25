@@ -151,7 +151,7 @@ export default async function handler(req, res) {
            ...it,
            // Priority: Item (Request) > DB
            is_packaged_good: !!(menuItem?.is_packaged_good || it.is_packaged_good),
-           tax_rate: (it.tax_rate !== undefined) ? it.tax_rate : menuItem?.tax_rate,
+           tax_rate: (it.tax_rate !== undefined && it.tax_rate !== null) ? it.tax_rate : menuItem?.tax_rate,
            uom_short_code: it.uom_short_code || uomObj?.short_code || null,
            uom_precision: it.uom_precision ?? uomObj?.precision ?? 0,
            
