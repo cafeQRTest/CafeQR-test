@@ -38,7 +38,7 @@ export default async function handler(req, res) {
     // 1. Fetch current order and settings
     const { data: order, error: orderErr } = await supabase
       .from('orders')
-      .select('*, order_items(*)')
+      .select('*, order_items(*), bill_no')
       .eq('id', order_id)
       .single();
 

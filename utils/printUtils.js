@@ -378,7 +378,9 @@ lines.push(ALIGN_LEFT);
     lines.push(withMargins(center("*** KITCHEN ORDER TICKET ***", W), layout));
     lines.push(withMargins(`${dateStr} ${timeStr}`, layout));
     lines.push(withMargins(`Order: #${orderId}`, layout));
-    if (order?.bill_no) lines.push(withMargins(`Bill No: ${order.bill_no}`, layout));
+    if (order?.bill_no) {
+       lines.push(withMargins(`Bill No: ${order.bill_no}`, layout));
+    }
     if (tableLabel) lines.push(withMargins(`For: ${tableLabel}`, layout));
     if (order?.number_of_customers)
       lines.push(
@@ -580,7 +582,7 @@ export function buildReceiptText(order, bill, restaurantProfile) {
 
     lines.push(withMargins(`${dateStr} ${timeStr}`, layout));
     if (invoiceNo) lines.push(withMargins(`Invoice: ${invoiceNo}`, layout));
-    if (billNo) lines.push(withMargins(`Bill No: ${billNo}`, layout));
+    if (billNo || order?.bill_no) lines.push(withMargins(`Bill No: ${billNo || order.bill_no}`, layout)); // Use passed billNo or order's
     if (orderType) lines.push(withMargins(`Order Type: ${orderType}`, layout));
     if (order?.number_of_customers)
       lines.push(withMargins(`No. of Customers: ${order.number_of_customers}`, layout));
