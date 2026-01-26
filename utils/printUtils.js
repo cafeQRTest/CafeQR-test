@@ -572,6 +572,10 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     if (restaurantProfile?.fssai_license)
       lines.push(withMargins(center(`FSSAI: ${restaurantProfile.fssai_license}`, W), layout));
 
+    if ((restaurantProfile?.gst_enabled || restaurantProfile?.gst_enabled === 'true') && restaurantProfile?.gstin) {
+      lines.push(withMargins(center(`GSTIN: ${restaurantProfile.gstin}`, W), layout));
+    }
+
     lines.push(withMargins(dashes(), layout));
 
     lines.push(withMargins(`${dateStr} ${timeStr}`, layout));

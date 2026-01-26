@@ -1234,6 +1234,8 @@ const cartTotals = useMemo(() => {
   .from('restaurant_profiles')
   .select(`
     tables_count,
+    gstin,
+    fssai_license,
     gst_enabled,
     default_tax_rate,
     prices_include_tax,

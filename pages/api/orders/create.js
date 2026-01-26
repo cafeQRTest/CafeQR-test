@@ -512,7 +512,7 @@ export default async function handler(req, res) {
     if ((finalStatus === 'completed' || finalPaymentStatus === 'paid') && !is_credit && finalCustomerId) {
         try {
             const { LoyaltyService } = await import('../../../services/loyaltyService');
-            await LoyaltyService.handleOrderEarning(supabase, {
+            const loyaltyResult = await LoyaltyService.handleOrderEarning(supabase, {
                 restaurant_id,
                 customer_id: finalCustomerId,
                 order_id: orderResult.orderId,
@@ -520,6 +520,14 @@ export default async function handler(req, res) {
                 loyalty_amount_used: loyalty_amount_used || 0,
                 loyalty_points_used: loyalty_points_used || null
             });
+
+            // Sync earned points to invoice for display/reporting
+            if (loyaltyResult?.success && loyaltyResult?.points > 0) {
+                 await supabase.from('invoices')
+                   .update({ loyalty_points_earned: loyaltyResult.points })
+                   .eq('order_id', orderResult.orderId);
+            }
+
         } catch (loyErr) {
             console.error('[CreateOrder] Loyalty Service Error:', loyErr);
         }
