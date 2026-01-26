@@ -110,7 +110,8 @@ const DiscountModal = ({ visible, onClose, onSaveTotal, cart = [], onUpdateCartI
                 >
                   Apply Bill Discount
                 </button>
-                {currentTotalDiscount.value > 0 && <button onClick={() => { onSaveTotal({ type: 'amount', value: 0 }); onClose(); }} style={{ width: '100%', marginTop: 12, padding: '12px', background: '#fee2e2', border: 'none', color: '#ef4444', borderRadius: 12, fontWeight: 600, cursor: 'pointer' }}>Remove Discount</button>}
+
+                {/* Remove Discount button removed as per user request */}
               </>
             ) : (
              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRequireAuth } from '../../lib/useRequireAuth'
 import { useRestaurant } from '../../context/RestaurantContext'
 import { getSupabase } from '../../services/supabase'
+import { useAlert } from '../../context/AlertContext'
 import { FaGift, FaWallet, FaCalculator, FaPlus, FaEdit, FaTrash, FaCheckCircle, FaStar } from 'react-icons/fa'
 import Button from '../../components/ui/Button'
 
@@ -11,6 +12,7 @@ export default function OwnerLoyaltyPage() {
   const supabase = getSupabase()
   const { checking } = useRequireAuth(supabase)
   const { restaurant, loading: restLoading } = useRestaurant()
+  const { showAlert } = useAlert()
   const restaurantId = restaurant?.id
 
   const [loading, setLoading] = useState(true)
@@ -19,6 +21,7 @@ export default function OwnerLoyaltyPage() {
   
   // Editor State
   const [edtId, setEdtId] = useState(null)
+  const [deleteId, setDeleteId] = useState(null)
   
   // -- UX Fields --
   const [edtName, setEdtName] = useState('New Loyalty Program')
@@ -101,15 +104,49 @@ export default function OwnerLoyaltyPage() {
     setView('edit')
   }
 
-  const handleDelete = async (id, e) => {
-     e.stopPropagation();
-     if(!confirm('Are you sure? Customers assigned to this program might stop earning points.')) return;
-     await supabase.from('loyalty_programs').delete().eq('id', id);
-     loadPrograms();
+  const executeDelete = async (id) => {
+     try {
+       // 1. Check if assigned to any customers
+       const { count, error: countErr } = await supabase
+         .from('restaurant_customers')
+         .select('*', { count: 'exact', head: true })
+         .eq('restaurant_id', restaurantId)
+         .eq('loyalty_program_id', id);
+
+       if (countErr) throw countErr;
+
+       if (count > 0) {
+         showAlert(
+           `This loyalty program is currently assigned to ${count} customer(s). Please move them to a different program before deleting.`,
+           'Program In Use'
+         );
+         setDeleteId(null);
+         return;
+       }
+
+       // 2. Proceed with deletion
+       const { error: delErr } = await supabase.from('loyalty_programs').delete().eq('id', id);
+       if (delErr) throw delErr;
+
+       loadPrograms();
+       setDeleteId(null);
+     } catch (e) {
+       console.error(e);
+       showAlert('Error deleting: ' + e.message, 'Error');
+     }
   }
 
   const onSave = async () => {
     try {
+      // Check for duplicate name
+      const isDuplicate = programs.some(p => 
+        p.name.toLowerCase().trim() === edtName.toLowerCase().trim() && p.id !== edtId
+      )
+      if (isDuplicate) {
+        showAlert('A loyalty program with this name already exists. Please use a unique name.', 'Duplicate Name')
+        return
+      }
+
       const sb = Number(spendBasis) || 100
       const ep = Number(earnPoints) || 0
       const ratio = sb > 0 ? (ep / sb) : 0
@@ -148,7 +185,7 @@ export default function OwnerLoyaltyPage() {
       await loadPrograms()
       setView('list')
     } catch (e) {
-      alert('Error saving: ' + e.message)
+      showAlert('Error saving: ' + e.message, 'Save Error')
     }
   }
 
@@ -192,8 +229,28 @@ export default function OwnerLoyaltyPage() {
                            {p.is_default && <span className="badge badge-def"><FaStar size={10} /> Default</span>}
                            {!p.is_active && <span className="badge badge-inact">Inactive</span>}
                        </div>
-                       <div className="acts">
-                           {/* <button className="act-btn" onClick={(e) => handleDelete(p.id, e)}><FaTrash /></button> */}
+                       <div className="acts" onClick={e => e.stopPropagation()}>
+                           {deleteId === p.id ? (
+                             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                               <span style={{ fontSize: 12, color: '#ef4444', fontWeight: 600 }}>Sure?</span>
+                               <button 
+                                 className="act-btn" 
+                                 onClick={(e) => { e.stopPropagation(); executeDelete(p.id); }}
+                                 style={{ background: '#fee2e2', color: '#dc2626', fontSize: 12, padding: '4px 8px' }}
+                               >
+                                 Yes
+                               </button>
+                               <button 
+                                 className="act-btn" 
+                                 onClick={(e) => { e.stopPropagation(); setDeleteId(null); }}
+                                 style={{ fontSize: 12, padding: '4px 8px' }}
+                               >
+                                 No
+                               </button>
+                             </div>
+                           ) : (
+                             <button className="act-btn" onClick={(e) => { e.stopPropagation(); setDeleteId(p.id); }}><FaTrash /></button>
+                           )}
                        </div>
                     </div>
                     

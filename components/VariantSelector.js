@@ -348,7 +348,7 @@ const bumpQty = (variantId, dir) => {
               <SelectedSummary>
                 <SummaryLeft>
                   <TotalItemsLabel>
-                    {totalItems} {totalItems === 1 ? 'item' : 'items'} • {selectedVariants.length} {selectedVariants.length === 1 ? 'variant' : 'variants'}
+                    {Number(totalItems.toFixed(decimalPlaces))} {Number(totalItems.toFixed(decimalPlaces)) === 1 ? 'item' : 'items'} • {selectedVariants.length} {selectedVariants.length === 1 ? 'variant' : 'variants'}
                   </TotalItemsLabel>
                   <SelectedList>
                     {selectedVariants.map(([variantId, qty]) => {
@@ -377,7 +377,7 @@ const bumpQty = (variantId, dir) => {
               disabled={totalItems === 0}
             >
               {totalItems > 0 
-                ? `✓ Add to Cart (${totalItems})` 
+                ? `✓ Add to Cart (${Number(totalItems.toFixed(decimalPlaces))})` 
                 : 'Add to Cart'
               }
             </AddToCartButton>

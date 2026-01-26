@@ -402,10 +402,16 @@ function PaymentConfirmDialog({
                       value={pointsToRedeem || ''}
                       placeholder="Enter points"
                       onChange={(e) => {
-                        const pts = parseInt(e.target.value, 10) || 0;
-                        if (pts > customerPoints) return;
+                        let pts = parseInt(e.target.value, 10) || 0;
+                        if (pts > customerPoints) pts = customerPoints;
+                        
+                        let amt = Number((pts * conversionRate).toFixed(2));
+                        if (maxRedemption > 0 && amt > maxRedemption) {
+                          amt = maxRedemption;
+                          pts = Math.floor(amt / conversionRate);
+                        }
+
                         setPointsToRedeem(pts);
-                        const amt = Number((pts * conversionRate).toFixed(2));
                         setLoyaltyRedeemAmount(amt);
                         calculateRemainingOnline(cashAmount, amt);
                       }}
@@ -430,9 +436,14 @@ function PaymentConfirmDialog({
                       </div>
                     )}
                   </div>
-                   {customerPoints < minPoints && (
-                    <div style={{ fontSize: '10px', color: '#ef4444', marginTop: 4 }}>
+                  {customerPoints < minPoints && customerPoints > 0 && (
+                    <div style={{ fontSize: '10px', color: '#dc2626', marginTop: 4, fontWeight: 600 }}>
                       Min {minPoints} points required for redemption.
+                    </div>
+                  )}
+                  {maxRedemption > 0 && (
+                    <div style={{ fontSize: '10px', color: '#64748b', marginTop: 4, fontWeight: 600 }}>
+                      Max ₹{maxRedemption.toFixed(2)} can be redeemed per order.
                     </div>
                   )}
                 </div>
@@ -538,30 +549,30 @@ function PaymentConfirmDialog({
           </button>
           <button
             onClick={handleConfirm}
-            disabled={disabled}
+            disabled={disabled || (isRoundOffEnabled && isManual && Math.abs(settledAmount - effectiveAmount) > Number(roundOffConfig.round_off_manual_limit || 0) + 0.01)}
             style={{
               flex: 2,
-              background: disabled ? '#cbd5e1' : `linear-gradient(135deg, ${BRAND.orange} 0%, ${BRAND.orangeDark} 100%)`,
+              background: (disabled || (isRoundOffEnabled && isManual && Math.abs(settledAmount - effectiveAmount) > Number(roundOffConfig.round_off_manual_limit || 0) + 0.01)) ? '#cbd5e1' : `linear-gradient(135deg, ${BRAND.orange} 0%, ${BRAND.orangeDark} 100%)`,
               color: '#fff',
               border: 'none',
               padding: '10px',
               borderRadius: 10,
               fontSize: '14px',
               fontWeight: 700,
-              cursor: disabled ? 'not-allowed' : 'pointer',
-              boxShadow: disabled ? 'none' : `0 6px 12px ${BRAND.orange}40`,
+              cursor: (disabled || (isRoundOffEnabled && isManual && Math.abs(settledAmount - effectiveAmount) > Number(roundOffConfig.round_off_manual_limit || 0) + 0.01)) ? 'not-allowed' : 'pointer',
+              boxShadow: (disabled || (isRoundOffEnabled && isManual && Math.abs(settledAmount - effectiveAmount) > Number(roundOffConfig.round_off_manual_limit || 0) + 0.01)) ? 'none' : `0 6px 12px ${BRAND.orange}40`,
               transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
               textTransform: 'uppercase',
               letterSpacing: '0.3px'
             }}
             onMouseEnter={(e) => {
-              if (!disabled) {
+              if (!(disabled || (isRoundOffEnabled && isManual && Math.abs(settledAmount - effectiveAmount) > Number(roundOffConfig.round_off_manual_limit || 0) + 0.01))) {
                 e.currentTarget.style.transform = 'translateY(-1px)';
                 e.currentTarget.style.boxShadow = `0 8px 16px ${BRAND.orange}50`;
               }
             }}
             onMouseLeave={(e) => {
-              if (!disabled) {
+              if (!(disabled || (isRoundOffEnabled && isManual && Math.abs(settledAmount - effectiveAmount) > Number(roundOffConfig.round_off_manual_limit || 0) + 0.01))) {
                 e.currentTarget.style.transform = 'translateY(0)';
                 e.currentTarget.style.boxShadow = `0 6px 12px ${BRAND.orange}40`;
               }
@@ -1223,6 +1234,8 @@ const cartTotals = useMemo(() => {
   .from('restaurant_profiles')
   .select(`
     tables_count,
+    gstin,
+    fssai_license,
     gst_enabled,
     default_tax_rate,
     prices_include_tax,
@@ -2063,12 +2076,14 @@ const orderForPrint = {
 };
 
     // Immediate KOT print for this counter order
+    /* Disabled to prevent duplicate prints - handled by global usePrintService
     markPrinted(result.order_id, 'kot', restaurantId);
     window.dispatchEvent(
       new CustomEvent('auto-print-order', {
         detail: { ...orderForPrint, autoPrint: true, kind: 'kot' },
       })
     );
+    */
 
     setCart([]); setCustomerName(''); setCustomerPhone(''); setNumberOfCustomers(''); setPaymentMethod('cash');
     setOrderSelect(''); setIsCreditSale(false); setSelectedCreditCustomerId(''); setCreditCustomerBalance(0);
@@ -2364,6 +2379,7 @@ const orderForPrint = {
                       <input 
                         type="text" placeholder="Search name..." 
                         value={customerName} 
+                        readOnly={!!selectedCustomerId}
                         onChange={(e) => {
                            setCustomerName(e.target.value);
                            setShowNameSuggestions(true);
@@ -2382,7 +2398,8 @@ const orderForPrint = {
                             ? (orderMode === 'kitchen' ? '1.5px solid #fdba74' : '1.5px solid #4ade80') 
                             : '1.5px solid #e2e8f0',
                           fontWeight: selectedCustomerId ? 700 : 400,
-                      color: selectedCustomerId ? (orderMode === 'kitchen' ? '#9a3412' : '#166534') : '#1e293b'
+                      color: selectedCustomerId ? (orderMode === 'kitchen' ? '#9a3412' : '#166534') : '#1e293b',
+                      cursor: selectedCustomerId ? 'not-allowed' : 'text'
                         }} 
                       />
                       {selectedCustomerId && (
@@ -2445,6 +2462,7 @@ const orderForPrint = {
                       <input 
                         type="tel" placeholder="Phone" 
                         value={customerPhone} 
+                        readOnly={!!selectedCustomerId}
                         onChange={(e) => {
                           setCustomerPhone(e.target.value);
                           setShowNameSuggestions(true);
@@ -2461,7 +2479,8 @@ const orderForPrint = {
                           background: selectedCustomerId ? (orderMode === 'kitchen' ? '#fff7ed' : '#f0fdf4') : '#ffffff', 
                           border: selectedCustomerId 
                             ? (orderMode === 'kitchen' ? '1.5px solid #fdba74' : '1.5px solid #4ade80') 
-                            : '1.5px solid #e2e8f0'
+                            : '1.5px solid #e2e8f0',
+                          cursor: selectedCustomerId ? 'not-allowed' : 'text'
                         }} 
                       />
                     </div>
@@ -3339,23 +3358,32 @@ const isVariantItem = !!item.has_variants && (item.variants?.length || 0) > 0;
                           >
                             −
                           </button>
-                          <span style={{ 
-                            minWidth: 32, 
-                            textAlign: 'center', 
-                            fontSize: 14, 
-                            fontWeight: 700,
-                            color: '#111827',
-                            background: '#fafafa',
-                            borderLeft: `1px solid ${THEME.light || '#e5e7eb'}`,
-                            borderRight: `1px solid ${THEME.light || '#e5e7eb'}`,
-                            padding: '0 6px',
-                            height: 28,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                          }}>
-                            {formatQtyP(i.quantity, i.uom_precision ?? 2)}
-                          </span>
+                          <input
+                            value={qtyDrafts[i.cartId || i.id] ?? (Number.isFinite(i.quantity) ? i.quantity.toFixed(i.uom_precision ?? 2) : '0.00')}
+                            inputMode="decimal"
+                            type="text"
+                            onChange={(e) => setDraft(i.cartId || i.id, e.target.value)}
+                            onBlur={(e) => commitQtyDraft(i.cartId || i.id, e.target.value, i.uom_precision ?? 2)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') e.currentTarget.blur();
+                              if (e.key === 'Escape') clearDraft(i.cartId || i.id);
+                            }}
+                            style={{ 
+                              width: 48, 
+                              textAlign: 'center', 
+                              fontSize: 14, 
+                              fontWeight: 700,
+                              color: '#111827',
+                              background: '#fafafa',
+                              border: 'none',
+                              borderLeft: `1px solid ${THEME.light || '#e5e7eb'}`,
+                              borderRight: `1px solid ${THEME.light || '#e5e7eb'}`,
+                              padding: '0 2px',
+                              height: 28,
+                              borderRadius: 0,
+                              outline: 'none'
+                            }}
+                          />
                           <button
                             onClick={() => {
                               const id = i.cartId || i.id;
@@ -3579,6 +3607,20 @@ const isVariantItem = !!item.has_variants && (item.variants?.length || 0) > 0;
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, color: '#ef4444' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                              <span style={{ fontWeight: 600 }}>Bill Discount (-)</span>
+                             <button
+                                onClick={() => setShowDiscountModal(true)}
+                                style={{
+                                  background: 'none',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  padding: 0,
+                                  fontSize: 12,
+                                  color: '#64748b',
+                                  textDecoration: 'underline'
+                                }}
+                             >
+                               Edit
+                             </button>
                           </div>
                            <span style={{ fontWeight: 600 }}>
                              -₹{(cartTotals?.orderDiscountFace || 0).toFixed(2)}
@@ -3723,7 +3765,7 @@ const isVariantItem = !!item.has_variants && (item.variants?.length || 0) > 0;
           busy={processing}
           mode={paymentDialogMode}
           roundOffConfig={roundOffConfig}
-          loyaltyEnabled={!!loyaltyProgram}
+          loyaltyEnabled={!!loyaltyProgram && !!selectedCustomerId}
           customerPoints={customerPoints.points || 0}
           conversionRate={loyaltyProgram?.redemption_conversion_rate || 1.0}
           restaurantId={restaurantId}

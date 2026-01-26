@@ -128,8 +128,8 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Failed to load settings' });
     }
 
-    // Align baseRate STRICTLY with frontend: check request body, then restaurants table, then default 5.
-    const baseRate = Number(req.body.base_tax_rate ?? (restaurantRow?.default_tax_rate || 5));
+    // Align baseRate STRICTLY with frontend: check request body, then PROFILE (System), then restaurants table, then default 5.
+    const baseRate = Number(req.body.base_tax_rate ?? (profile?.default_tax_rate ?? (restaurantRow?.default_tax_rate || 5)));
     const gstEnabled = !!profile?.gst_enabled;
     const inventoryAlertsEnabled = !!profile?.features_inventory_enabled;
     const serviceRate = gstEnabled ? baseRate : 0;
@@ -316,6 +316,8 @@ export default async function handler(req, res) {
         invoice_no: orderResult.invoiceNo,
         bill_no: orderResult.billNo,
         created_at: orderResult.created_at,
+        loyalty_amount_used: loyalty_amount_used || 0,
+        loyalty_points_used: loyalty_points_used || 0,
       },
     };
 
@@ -510,7 +512,7 @@ export default async function handler(req, res) {
     if ((finalStatus === 'completed' || finalPaymentStatus === 'paid') && !is_credit && finalCustomerId) {
         try {
             const { LoyaltyService } = await import('../../../services/loyaltyService');
-            await LoyaltyService.handleOrderEarning(supabase, {
+            const loyaltyResult = await LoyaltyService.handleOrderEarning(supabase, {
                 restaurant_id,
                 customer_id: finalCustomerId,
                 order_id: orderResult.orderId,
@@ -518,6 +520,14 @@ export default async function handler(req, res) {
                 loyalty_amount_used: loyalty_amount_used || 0,
                 loyalty_points_used: loyalty_points_used || null
             });
+
+            // Sync earned points to invoice for display/reporting
+            if (loyaltyResult?.success && loyaltyResult?.points > 0) {
+                 await supabase.from('invoices')
+                   .update({ loyalty_points_earned: loyaltyResult.points })
+                   .eq('order_id', orderResult.orderId);
+            }
+
         } catch (loyErr) {
             console.error('[CreateOrder] Loyalty Service Error:', loyErr);
         }

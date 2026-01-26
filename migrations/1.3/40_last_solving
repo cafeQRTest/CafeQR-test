@@ -1,0 +1,564 @@
+BEGIN;
+
+-- customers
+ALTER TABLE public.customers ADD COLUMN IF NOT EXISTS user_id uuid;
+ALTER TABLE public.customers ALTER COLUMN phone DROP NOT NULL;
+
+DO $$
+BEGIN
+  ALTER TABLE public.customers ADD CONSTRAINT customers_user_id_key UNIQUE (user_id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  ALTER TABLE public.customers
+    ADD CONSTRAINT customers_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+  ALTER TABLE public.customers
+    ADD CONSTRAINT customers_phone_check CHECK (phone IS NULL OR btrim(phone) <> ''::text);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+
+-- menu_items
+ALTER TABLE public.menu_items ADD COLUMN IF NOT EXISTS uom_id uuid;
+
+DO $$
+BEGIN
+  ALTER TABLE public.menu_items
+    ADD CONSTRAINT menu_items_uom_id_fkey FOREIGN KEY (uom_id) REFERENCES public.unit_of_measures(id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+
+-- restaurants
+ALTER TABLE public.restaurants ADD COLUMN IF NOT EXISTS default_uom_id uuid;
+
+DO $$
+BEGIN
+  ALTER TABLE public.restaurants
+    ADD CONSTRAINT restaurants_default_uom_id_fkey
+    FOREIGN KEY (default_uom_id) REFERENCES public.unit_of_measures(id);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+
+-- invoice_items
+ALTER TABLE public.invoice_items ADD COLUMN IF NOT EXISTS uom_precision integer DEFAULT 0;
+ALTER TABLE public.invoice_items ADD COLUMN IF NOT EXISTS uom_short_code text;
+
+
+-- invoices
+ALTER TABLE public.invoices ADD COLUMN IF NOT EXISTS loyalty_points_earned integer DEFAULT 0;
+
+COMMIT;
+
+UPDATE public.customers
+SET phone = NULL
+WHERE phone IS NOT NULL AND btrim(phone) = '';
+
+
+BEGIN;
+
+ALTER TABLE public.order_items
+  ADD COLUMN IF NOT EXISTS uom_short_code character varying;
+
+ALTER TABLE public.order_items
+  ADD COLUMN IF NOT EXISTS uom_precision integer DEFAULT 0;
+
+COMMIT;
+
+
+CREATE OR REPLACE FUNCTION public.adjust_loyalty_points(
+  p_restaurant_id uuid,
+  p_customer_id uuid,
+  p_points_delta integer,
+  p_note text DEFAULT NULL::text
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $function$
+begin
+  insert into public.loyalty_transactions (
+    restaurant_id, customer_id, txn_type, points_delta, note
+  )
+  values (p_restaurant_id, p_customer_id, 'adjust', p_points_delta, p_note);
+
+  update public.restaurant_customers
+    set loyalty_points = loyalty_points + p_points_delta,
+        updated_at = now()
+  where restaurant_id = p_restaurant_id
+    and customer_id = p_customer_id;
+end $function$;
+
+
+CREATE OR REPLACE FUNCTION public.is_restaurant_staff(rid uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+AS $function$
+  select exists (
+    select 1
+    from public.restaurant_staff rs
+    where rs.restaurant_id = rid
+      and rs.staff_email = (auth.jwt() ->> 'email')
+  );
+$function$;
+
+
+ALTER TABLE public.loyalty_programs
+ADD COLUMN IF NOT EXISTS earn_rate_description text;
+
+
+
+-- 1) Add missing columns
+ALTER TABLE public.loyalty_programs
+ADD COLUMN IF NOT EXISTS earning_criteria text,
+ADD COLUMN IF NOT EXISTS amount_spent_conversion_rate numeric DEFAULT 0,
+ADD COLUMN IF NOT EXISTS min_order_amount numeric DEFAULT 0;
+
+-- 2) Backfill earning_criteria for existing rows (set a safe default)
+UPDATE public.loyalty_programs
+SET earning_criteria = 'amount_spent'
+WHERE earning_criteria IS NULL;
+
+-- 3) Make earning_criteria NOT NULL (match test)
+ALTER TABLE public.loyalty_programs
+ALTER COLUMN earning_criteria SET NOT NULL;
+
+
+ALTER TABLE public.loyalty_programs
+ADD COLUMN IF NOT EXISTS earn_rate_ratio numeric DEFAULT 0.01;
+
+
+ALTER TABLE public.loyalty_programs
+ADD COLUMN IF NOT EXISTS expiry_days integer;
+
+ALTER TABLE public.loyalty_programs
+ADD COLUMN IF NOT EXISTS max_redemption_amount_per_order numeric;
+
+ALTER TABLE public.loyalty_programs
+ADD COLUMN IF NOT EXISTS min_order_value_for_earning numeric DEFAULT 0,
+ADD COLUMN IF NOT EXISTS percentage_cap_per_order numeric;
+
+ALTER TABLE public.loyalty_programs
+ALTER COLUMN name SET DEFAULT 'Standard Rewards';
+
+ALTER TABLE public.loyalty_programs
+ALTER COLUMN redemption_min_points SET DEFAULT 100;
+
+
+ALTER TABLE public.loyalty_programs
+DROP COLUMN IF EXISTS earning_criteria,
+DROP COLUMN IF EXISTS amount_spent_conversion_rate,
+DROP COLUMN IF EXISTS min_order_amount;
+
+
+SELECT n.nspname AS schema, p.proname AS function_name
+FROM pg_proc p
+JOIN pg_namespace n ON n.oid = p.pronamespace
+WHERE p.proname = 'moddatetime';
+
+
+CREATE EXTENSION IF NOT EXISTS moddatetime;
+
+DROP TRIGGER IF EXISTS handle_updated_at ON public.loyalty_programs;
+
+CREATE TRIGGER handle_updated_at
+BEFORE UPDATE ON public.loyalty_programs
+FOR EACH ROW
+EXECUTE FUNCTION moddatetime('updated_at');
+
+
+CREATE OR REPLACE FUNCTION public.get_auth_org_id()
+RETURNS uuid
+LANGUAGE plpgsql
+STABLE
+AS $$
+BEGIN
+  RETURN (auth.jwt() -> 'user_metadata' ->> 'organization_id')::UUID;
+END;
+$$;
+
+
+CREATE OR REPLACE FUNCTION public.handle_new_customer_user()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  INSERT INTO public.customers (user_id, phone, email, name)
+  VALUES (
+    NEW.id,
+    COALESCE(NEW.phone, ''),              -- phone OTP recommended so NEW.phone is present
+    NEW.email,
+    COALESCE(NEW.raw_user_meta_data->>'name', NULL)
+  )
+  ON CONFLICT (user_id) DO NOTHING;
+
+  RETURN NEW;
+END;
+$$;
+
+
+
+
+CREATE OR REPLACE FUNCTION private.link_customer_to_restaurant_from_order()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+begin
+  if new.restaurant_id is null or new.customer_id is null then
+    return new;
+  end if;
+
+  insert into public.restaurant_customers (restaurant_id, customer_id, first_order_at, last_order_at, order_count, total_spent)
+  values (new.restaurant_id, new.customer_id, now(), now(), 1, coalesce(new.total, 0))
+  on conflict (restaurant_id, customer_id)
+  do update set
+    last_order_at = excluded.last_order_at,
+    order_count = public.restaurant_customers.order_count + 1,
+    total_spent = public.restaurant_customers.total_spent + excluded.total_spent,
+    updated_at = now();
+
+  return new;
+end;
+$function$;
+
+
+
+CREATE OR REPLACE FUNCTION public.trg_orders_loyalty()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+begin
+  if (tg_op = 'INSERT') then
+    if new.status = 'completed' then
+      perform public.loyalty_award_completed_order(new.id);
+    end if;
+    return new;
+  end if;
+
+  -- UPDATE
+  if (new.status = 'completed' and (old.status is distinct from 'completed')) then
+    perform public.loyalty_award_completed_order(new.id);
+  end if;
+
+  -- If someone edits total_amount after marking completed, award if not already awarded
+  if (new.status = 'completed' and old.status = 'completed'
+      and coalesce(new.total_amount,0) <> coalesce(old.total_amount,0)) then
+    perform public.loyalty_award_completed_order(new.id);
+  end if;
+
+  if (old.status = 'completed' and new.status = 'cancelled') then
+    perform public.loyalty_reverse_if_cancelled(new.id);
+  end if;
+
+  return new;
+end;
+$function$;
+
+
+
+CREATE OR REPLACE FUNCTION public.trg_award_loyalty()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $function$
+begin
+  perform award_loyalty_for_order(new.id);  -- calls your normal function
+  return new;
+end;
+$function$;
+
+
+CREATE OR REPLACE FUNCTION public.loyalty_reverse_if_cancelled(p_order_id uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+declare
+  o record;
+  earned int;
+begin
+  if p_order_id is null then
+    return;
+  end if;
+
+  select id, restaurant_id, status, customer_id
+  into o
+  from public.orders
+  where id = p_order_id;
+
+  if not found then
+    return;
+  end if;
+
+  if o.status <> 'cancelled' then
+    return;
+  end if;
+
+  select coalesce(sum(points_delta),0)::int
+  into earned
+  from public.loyalty_transactions
+  where order_id = o.id and txn_type = 'earn';
+
+  if earned <= 0 then
+    return;
+  end if;
+
+  insert into public.loyalty_transactions (
+    restaurant_id, customer_id, order_id, txn_type, points_delta, note, created_at
+  ) values (
+    o.restaurant_id, o.customer_id, o.id, 'adjust', -earned, 'order_cancelled_reversal', now()
+  )
+  on conflict do nothing;
+end;
+$function$;
+CREATE OR REPLACE FUNCTION public.loyalty_award_completed_order(p_order_id uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+declare
+  o record;
+  s record;
+  cid uuid;
+  pts int;
+begin
+  if p_order_id is null then return; end if;
+
+  select id, restaurant_id, status, payment_status, total_amount
+  into o
+  from public.orders
+  where id = p_order_id;
+
+  if not found then return; end if;
+  if o.status <> 'completed' then return; end if;
+  if o.payment_status not in ('completed','paid') then return; end if;
+
+  select *
+  into s
+  from public.restaurant_loyalty_settings
+  where restaurant_id = o.restaurant_id;
+
+  if not found or coalesce(s.enabled,false) = false then return; end if;
+  if coalesce(o.total_amount,0) < coalesce(s.min_order_value,0) then return; end if;
+
+  cid := public.loyalty_resolve_customer_id_from_order(o.id);
+  if cid is null then return; end if;
+
+  pts := public.loyalty_calc_points(o.total_amount, s.points_per_rupee);
+  if pts <= 0 then return; end if;
+
+  insert into public.loyalty_transactions
+    (restaurant_id, customer_id, order_id, txn_type, points_delta, note, created_at)
+  values
+    (o.restaurant_id, cid, o.id, 'earn', pts, 'earned_on_completed_paid_order', now())
+  on conflict (restaurant_id, order_id, txn_type) do nothing;
+end;
+$function$;
+
+
+CREATE OR REPLACE FUNCTION public.trg_orders_loyalty_points()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+declare
+  cfg record;
+
+  r_id uuid;
+  o_id uuid;
+  c_id uuid;
+
+  bill numeric;
+  expected_pts int;
+
+  earn_pts int;
+  has_earn boolean;
+
+  current_adjust int;
+  desired_adjust int;
+begin
+  r_id := coalesce(new.restaurant_id, old.restaurant_id);
+  o_id := coalesce(new.id, old.id);
+
+  select * into cfg
+  from public.restaurant_loyalty_settings
+  where restaurant_id = r_id;
+
+  if not found or cfg.enabled is not true then
+    return coalesce(new, old);
+  end if;
+
+  -- Resolve customer_id (prefer column; fallback by phone)
+  c_id := coalesce(new.customer_id, old.customer_id);
+
+  if c_id is null then
+    if coalesce(new.customer_phone, old.customer_phone) is not null then
+      select id into c_id
+      from public.customers
+      where phone = trim(coalesce(new.customer_phone, old.customer_phone))
+      limit 1;
+    end if;
+  end if;
+
+  if c_id is null then
+    return coalesce(new, old);
+  end if;
+
+  -- Ensure restaurant_customers exists (no points math here)
+  insert into public.restaurant_customers(restaurant_id, customer_id, first_order_at, last_order_at)
+  values (r_id, c_id, coalesce(new.created_at, old.created_at, now()), coalesce(new.created_at, old.created_at, now()))
+  on conflict (restaurant_id, customer_id) do update
+    set last_order_at = greatest(public.restaurant_customers.last_order_at, excluded.last_order_at),
+        updated_at = now();
+
+  -- -----------------------
+  -- Compute expected points
+  -- -----------------------
+  if tg_op = 'DELETE' then
+    expected_pts := 0;
+
+  elsif coalesce(new.status, '') in ('cancelled','voided') then
+    expected_pts := 0;
+
+  elsif coalesce(new.status,'') <> 'completed'
+        or coalesce(new.payment_status,'') not in ('completed','paid') then
+    -- Not eligible yet
+    expected_pts := 0;
+
+  else
+    -- Option A bill = total + roundoff (use jsonb to tolerate naming variants)
+    bill :=
+      coalesce(nullif((to_jsonb(new)->>'totalamount')::numeric, null), (to_jsonb(new)->>'total_amount')::numeric,
+               (to_jsonb(new)->>'totalinctax')::numeric, (to_jsonb(new)->>'total_inc_tax')::numeric, 0)
+      +
+      coalesce((to_jsonb(new)->>'roundoffamount')::numeric, (to_jsonb(new)->>'roundoff_amount')::numeric, 0);
+
+    if bill < coalesce(cfg.min_order_value, 0) then
+      expected_pts := 0;
+    else
+      expected_pts := public.loyalty_calc_points(bill, cfg.points_per_rupee);
+    end if;
+  end if;
+
+  -- -----------------------
+  -- Ensure there is an EARN row (idempotent)
+  -- -----------------------
+  select lt.points_delta, true
+    into earn_pts, has_earn
+  from public.loyalty_transactions lt
+  where lt.restaurant_id = r_id
+    and lt.order_id = o_id
+    and lt.txn_type = 'earn'
+  limit 1;
+
+  if not has_earn then
+    if expected_pts > 0 then
+      insert into public.loyalty_transactions(restaurant_id, customer_id, order_id, txn_type, points_delta, note)
+      values (r_id, c_id, o_id, 'earn', expected_pts, 'Auto: earned from paid+completed order (total+roundoff)')
+      on conflict (restaurant_id, order_id, txn_type) do nothing
+      returning points_delta into earn_pts;
+    end if;
+
+    earn_pts := coalesce(earn_pts, 0);
+  end if;
+
+  -- -----------------------
+  -- Adjust row keeps net points = expected_pts
+  -- -----------------------
+  select coalesce(lt.points_delta, 0)
+    into current_adjust
+  from public.loyalty_transactions lt
+  where lt.restaurant_id = r_id
+    and lt.order_id = o_id
+    and lt.txn_type = 'adjust'
+  limit 1;
+
+  desired_adjust := expected_pts - coalesce(earn_pts, 0);
+
+  if desired_adjust <> coalesce(current_adjust, 0) then
+    insert into public.loyalty_transactions(restaurant_id, customer_id, order_id, txn_type, points_delta, note)
+    values (
+      r_id, c_id, o_id, 'adjust', desired_adjust,
+      case
+        when expected_pts = 0 then 'Auto: reversed (cancelled/voided/not eligible/min not met)'
+        else 'Auto: adjusted after edit'
+      end
+    )
+    on conflict (restaurant_id, order_id, txn_type)
+    do update set points_delta = excluded.points_delta,
+                  note = excluded.note;
+  end if;
+
+  return coalesce(new, old);
+end;
+$function$;
+
+
+DROP TRIGGER IF EXISTS orders_loyalty_trg ON public.orders;
+
+CREATE TRIGGER orders_loyalty_trg
+AFTER INSERT OR UPDATE
+ON public.orders
+FOR EACH ROW
+EXECUTE FUNCTION public.trg_orders_loyalty();
+
+
+DROP TRIGGER IF EXISTS orders_loyalty_points_trg ON public.orders;
+
+CREATE TRIGGER orders_loyalty_points_trg
+AFTER INSERT OR UPDATE OR DELETE
+ON public.orders
+FOR EACH ROW
+EXECUTE FUNCTION public.trg_orders_loyalty_points();
+
+
+
+DROP TRIGGER IF EXISTS award_loyalty_trg ON public.orders;
+
+CREATE TRIGGER award_loyalty_trg
+AFTER UPDATE
+ON public.orders
+FOR EACH ROW
+WHEN (
+  NEW.status = 'completed'
+  AND (OLD.status IS DISTINCT FROM 'completed')
+)
+EXECUTE FUNCTION public.trg_award_loyalty();
+
+
+DROP TRIGGER IF EXISTS reverse_loyalty_trg ON public.orders;
+
+CREATE TRIGGER reverse_loyalty_trg
+AFTER UPDATE
+ON public.orders
+FOR EACH ROW
+WHEN (
+  NEW.status IN ('cancelled','voided')
+  AND (OLD.status IS DISTINCT FROM NEW.status)
+)
+EXECUTE FUNCTION public.trg_reverse_loyalty();
+
+
+DROP TRIGGER IF EXISTS link_customer_to_restaurant_trg ON public.orders;
+
+CREATE TRIGGER link_customer_to_restaurant_trg
+AFTER INSERT OR UPDATE OF restaurant_id, customer_id
+ON public.orders
+FOR EACH ROW
+EXECUTE FUNCTION private.link_customer_to_restaurant_from_order();

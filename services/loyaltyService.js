@@ -70,14 +70,46 @@ export class LoyaltyService {
                 return { success: false, reason: 'Order total below minimum' };
             }
 
-            // 5. Calculate Effective Spend and Points
+            // 5. Process Redemption (Priority: Deduct points first)
+            if (loyalty_amount_used > 0) {
+                // Calculate points for the amount (using redemption rate) OR use explicit points
+                const redemptionPoints = loyalty_points_used != null 
+                    ? Math.abs(loyalty_points_used)
+                    : Math.ceil(loyalty_amount_used / (prog.redemption_conversion_rate || 1.0));
+                
+                await supabase.from('loyalty_transactions').upsert({
+                    restaurant_id,
+                    customer_id,
+                    order_id,
+                    txn_type: 'redeem',
+                    points_delta: -redemptionPoints,
+                    points_earned: 0,
+                    points_redeemed: redemptionPoints,
+                    amount_value: loyalty_amount_used,
+                    note: `Redeemed on Order #${order_id.slice(0,8)}`,
+                    created_at: new Date().toISOString()
+                }, { onConflict: 'restaurant_id, order_id, txn_type' });
+            }
+
+            // 6. Calculate Effective Spend and Points for Earning
             const effectiveSpend = order_total - (loyalty_amount_used || 0);
-            if (effectiveSpend <= 0) return { success: false, reason: 'Effective spend is zero' };
+            
+            if (effectiveSpend <= 0) {
+                 // Nothing left to earn points on, but success if we redeemed.
+                 return { success: true, redeemed: loyalty_amount_used > 0, earned: false, reason: 'Effective spend zero' };
+            }
 
+            // Calculate Rate & Points
+            // Note: `rate` calculation logic (Lines 57-65) should have happened before this block.
+            // Assuming `rate` variable from earlier scope is available.
+            // Wait, I am replacing lines 73+, so `rate` (calculated lines 58-62) is preserved above.
+            
             const pointsEarned = Math.floor(effectiveSpend / rate);
-            if (pointsEarned <= 0) return { success: false, reason: 'Points earned is zero' };
+            if (pointsEarned <= 0) {
+                return { success: true, redeemed: loyalty_amount_used > 0, earned: false, reason: 'Points earned is zero' };
+            }
 
-            // 6. Check for existing "earn" transaction for this order to avoid duplicates or update them
+            // 7. Check for existing "earn" transaction (Idempotency)
             const { data: existingTx } = await supabase
                 .from('loyalty_transactions')
                 .select('id, points_delta')
@@ -102,27 +134,6 @@ export class LoyaltyService {
                 
                 if (updErr) throw updErr;
                 return { success: true, updated: true, points: pointsEarned };
-            }
-
-            // 7. Insert redemption transaction if points were used
-            if (loyalty_amount_used > 0) {
-                // Calculate points for the amount (using redemption rate) OR use explicit points
-                const redemptionPoints = loyalty_points_used != null 
-                    ? Math.abs(loyalty_points_used)
-                    : Math.ceil(loyalty_amount_used / (prog.redemption_conversion_rate || 1.0));
-                
-                await supabase.from('loyalty_transactions').upsert({
-                    restaurant_id,
-                    customer_id,
-                    order_id,
-                    txn_type: 'redeem',
-                    points_delta: -redemptionPoints,
-                    points_earned: 0,
-                    points_redeemed: redemptionPoints,
-                    amount_value: loyalty_amount_used,
-                    note: `Redeemed on Order #${order_id.slice(0,8)}`,
-                    created_at: new Date().toISOString()
-                }, { onConflict: 'restaurant_id, order_id, txn_type' });
             }
 
             // 8. Insert New Earning Transaction

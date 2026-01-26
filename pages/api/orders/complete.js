@@ -20,7 +20,9 @@ export default async function handler(req, res) {
     round_off_amount = 0,
     updated_items = null, // Array of items with potential line-discounts
     mixed_payment_details = null,
-    base_tax_rate = 5
+    base_tax_rate = 5,
+    loyalty_amount_used = 0,
+    loyalty_points_used = null
   } = req.body;
 
   if (!order_id || !restaurant_id) {
@@ -36,7 +38,7 @@ export default async function handler(req, res) {
     // 1. Fetch current order and settings
     const { data: order, error: orderErr } = await supabase
       .from('orders')
-      .select('*, order_items(*)')
+      .select('*, order_items(*), bill_no')
       .eq('id', order_id)
       .single();
 
@@ -132,8 +134,8 @@ export default async function handler(req, res) {
           customer_id: order.customer_id,
           order_id: order_id,
           order_total: calcResult.total_amount,
-          loyalty_amount_used: req.body.loyalty_amount_used || 0,
-          loyalty_points_used: req.body.loyalty_points_used || null
+          loyalty_amount_used: loyalty_amount_used || 0,
+          loyalty_points_used: loyalty_points_used || null
         });
       } catch (loyErr) {
         console.error('[/api/orders/complete] Loyalty error:', loyErr);
@@ -155,7 +157,11 @@ export default async function handler(req, res) {
       bill_no: result.billNo,
       order_for_print: {
         ...finalOrder,
-        bill: result.invoice
+        bill: result.invoice,
+        // Add loyalty data for immediate print/UI context
+        loyalty_amount_used: loyalty_amount_used || 0,
+        loyalty_points_used: loyalty_points_used || 0,
+        loyalty_points_earned: 0 // Will be updated by service but 0 for now in this return
       }
     });
 

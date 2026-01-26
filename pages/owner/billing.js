@@ -12,6 +12,7 @@ import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import { downloadInvoicePdf } from '../../lib/downloadInvoicePdf';
+import { formatQtyP } from '../../lib/qty';
 import { 
   FaFileDownload, 
   FaChartBar, 
@@ -61,6 +62,12 @@ export default function BillingPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [expandedInvoice, setExpandedInvoice] = useState(null);
+  
+  // Void Modal State
+  const [voidTarget, setVoidTarget] = useState(null);
+  const [voidLoading, setVoidLoading] = useState(false);
+  const [voidError, setVoidError] = useState('');
+  
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [invoiceItems, setInvoiceItems] = useState([]);
   const [detailsLoading, setDetailsLoading] = useState(false);
@@ -311,30 +318,44 @@ const exportHsnSummary = async () => {
     setExpandedInvoice(expandedInvoice === invoiceId ? null : invoiceId);
   };
 
-  const voidInvoice = async (inv) => {
-    if (!inv?.id || !restaurant?.id) return;
-    const ok = confirm(`Void invoice ${inv.invoice_no}? This will mark the invoice as void and cancel the linked order.`);
-    if (!ok) return;
+  // ... (existing handlers) ...
+
+  const openVoidModal = (inv) => {
+    setVoidTarget(inv);
+    setVoidError('');
+  };
+
+  const handleConfirmVoid = async () => {
+    if (!voidTarget?.id || !restaurant?.id) return;
+    setVoidLoading(true);
+    setVoidError('');
     try {
       const res = await fetch('/api/invoices/void', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          invoice_id: inv.id,
+          invoice_id: voidTarget.id,
           restaurant_id: restaurant.id,
-          reason: 'Customer return / quality issue',
+          reason: 'Owner voided from Billing',
         }),
       });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
         throw new Error(j?.error || 'Failed to void');
       }
-      await loadInvoices();
-      alert('Invoice voided successfully');
+      // Success
+      setVoidTarget(null);
+      await loadInvoices(); // Refresh list
     } catch (e) {
-      alert(e.message || 'Failed to void invoice');
+      setVoidError(e.message || 'Failed to void invoice');
+    } finally {
+      setVoidLoading(false);
     }
   };
+
+  // ... (inside render) ...
+
+
 
   if (checking || restLoading) return <div style={{ padding: 16 }}>Loading…</div>;
   if (!restaurant?.id) return <div style={{ padding: 16 }}>No restaurant selected</div>;
@@ -453,7 +474,7 @@ const exportHsnSummary = async () => {
                   { header: 'Customer', accessor: 'customer_name', cell: (r) => r.customer_name || '' },
                   { header: 'Taxable', accessor: 'subtotal_ex_tax', cell: (r) => formatMoney(r.subtotal_ex_tax) },
                   { header: 'Tax', accessor: 'total_tax', cell: (r) => <span style={{ color: '#dc2626', fontWeight: 600 }}>{formatMoney(r.total_tax)}</span> },
-                  { header: 'Total', accessor: 'total_inc_tax', cell: (r) => <span style={{ fontWeight: 800, color: '#0f172a' }}>{formatMoney(r.total_inc_tax)}</span> },
+                  { header: 'Total', accessor: 'total_inc_tax', cell: (r) => <span style={{ fontWeight: 800, color: '#0f172a' }}>{formatMoney(r.total_inc_gst || r.paid_amount || r.total_inc_tax)}</span> },
                   { header: 'Payment', accessor: 'payment_method', cell: (r) => <span className={`status-pill ${r.payment_method}`}>{prettyMethod(r.payment_method)}</span> },
                    { header: 'Status', accessor: 'status', cell: (r) => <span className={`status-pill status-${r.status}`}>{getStatusLabel(r.status)}</span> },
                   {
@@ -466,7 +487,7 @@ const exportHsnSummary = async () => {
                         </button>
                         <button
                           className="action-bubble void"
-                          onClick={() => voidInvoice(r)}
+                          onClick={() => openVoidModal(r)}
                           disabled={String(r.status || '').toLowerCase() === 'void'}
                         >
                           <FaBan size={11} /> Void
@@ -569,7 +590,7 @@ const exportHsnSummary = async () => {
                           return (
                             <div key={idx} className="item-row">
                               <div className="item-main">
-                                <span className="qty">{item.quantity}x</span>
+                                <span className="qty">{formatQtyP(item.quantity, item.uom_precision ?? 2)}x</span>
                                 <span className="name">
                                   {item.menu_items?.name || item.item_name || 'Item'}
                                   {item.variant_name ? ` (${item.variant_name})` : ''}
@@ -609,15 +630,29 @@ const exportHsnSummary = async () => {
                         <span>-{formatMoney(selectedInvoice.discount_amount || selectedInvoice.order_discount_total)}</span>
                       </div>
                     )}
-                    {Number(selectedInvoice.round_off_amount || 0) !== 0 && (
-                      <div className="sum-row" style={{ color: Number(selectedInvoice.round_off_amount) > 0 ? '#10b981' : '#ef4444' }}>
-                        <span>Round-off</span>
-                        <span>{Number(selectedInvoice.round_off_amount) > 0 ? '+' : ''}{formatMoney(selectedInvoice.round_off_amount)}</span>
-                      </div>
-                    )}
+                    {(() => {
+                       // Robust Round-off Calculation
+                       const rAmt = Number(selectedInvoice.round_off_amount || 0);
+                       const finalTotal = Number(selectedInvoice.total_inc_gst || selectedInvoice.paid_amount || selectedInvoice.total_inc_tax || 0);
+                       const preRound = Number(selectedInvoice.total_inc_tax || 0);
+                       
+                       // If explicit round-off is 0, but there's a difference, use derived
+                       const displayRoundOff = rAmt !== 0 ? rAmt : (finalTotal - preRound);
+                       
+                       if (Math.abs(displayRoundOff) > 0.01) {
+                         return (
+                          <div className="sum-row" style={{ color: displayRoundOff > 0 ? '#10b981' : '#ef4444' }}>
+                            <span>Round-off</span>
+                            <span>{displayRoundOff > 0 ? '+' : ''}{formatMoney(displayRoundOff)}</span>
+                          </div>
+                         );
+                       }
+                       return null;
+                    })()}
+
                     <div className="sum-row grand">
                       <span>Grand Total</span>
-                      <span>{formatMoney(selectedInvoice.total_inc_tax)}</span>
+                      <span>{formatMoney(selectedInvoice.total_inc_gst || selectedInvoice.paid_amount || selectedInvoice.total_inc_tax)}</span>
                     </div>
                   </div>
                 </div>
@@ -630,6 +665,46 @@ const exportHsnSummary = async () => {
             </div>
           )}
         </>
+      )}
+
+      {/* Void Confirmation Modal */}
+      {voidTarget && (
+        <div className="modal-overlay" onClick={() => !voidLoading && setVoidTarget(null)}>
+          <div className="modal-content" style={{ maxWidth: 400 }} onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <div>
+                <div className="modal-tag" style={{ background: '#fef2f2', color: '#dc2626' }}>Destructive Action</div>
+                <h2 className="modal-title">Void Invoice {voidTarget.invoice_no}?</h2>
+              </div>
+              <button className="close-btn" disabled={voidLoading} onClick={() => setVoidTarget(null)}>
+                <span className="close-icon">&times;</span>
+              </button>
+            </div>
+
+            <div className="modal-body">
+              <p style={{ color: '#475569', margin: '0 0 16px', lineHeight: 1.5 }}>
+                Are you sure you want to void this invoice? This action cannot be undone and the linked order will be cancelled.
+              </p>
+              
+              {voidError && (
+                <div style={{ background: '#fef2f2', color: '#dc2626', padding: '12px', borderRadius: '8px', fontSize: '13px', marginBottom: '16px' }}>
+                  {voidError}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+                 <Button variant="outline" onClick={() => setVoidTarget(null)} disabled={voidLoading}>Cancel</Button>
+                 <Button 
+                    onClick={handleConfirmVoid} 
+                    disabled={voidLoading}
+                    style={{ background: '#dc2626', borderColor: '#dc2626', color: 'white' }}
+                 >
+                   {voidLoading ? 'Voiding...' : 'Confirm Void'}
+                 </Button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       <style jsx>{`

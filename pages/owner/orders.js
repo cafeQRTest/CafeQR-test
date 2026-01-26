@@ -596,6 +596,7 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
     availablePoints: 0, 
     conversionRate: 0, 
     minPoints: 0,
+    maxRedemption: 0,
     loading: false 
   });
   const [loyaltyAmountUsed, setLoyaltyAmountUsed] = useState(0);
@@ -641,6 +642,7 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
               availablePoints: cust.loyalty_points || 0,
               conversionRate: Number(prog.redemption_conversion_rate || 1.0),
               minPoints: prog.redemption_min_points || 100,
+              maxRedemption: prog.max_redemption_amount_per_order || 0,
               loading: false
             });
           }
@@ -973,16 +975,21 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
               <div style={{ flex: 1, height: 44, display: 'flex', alignItems: 'center', background: '#fff', borderRadius: 10, border: '2px solid #e2e8f0', padding: '0 12px' }}>
                 <span style={{ fontSize: 16, fontWeight: 700, color: '#94a3b8' }}>₹</span>
                 <input type="number" step="0.01" value={displayValue} onChange={e => {
-                  const raw = e.target.value; setDisplayValue(raw);
+                  const raw = e.target.value; 
+                  setDisplayValue(raw);
                   const val = Number(raw);
                   if (!isNaN(val)) {
-                    const diff = val - finalTotal;
-                    if (Math.abs(diff) <= roundOffConfig.round_off_manual_limit) setSettledAmount(val);
+                    setSettledAmount(val);
                   }
                 }} onBlur={() => setDisplayValue(settledAmount.toFixed(2))} style={{ flex: 1, border: 'none', outline: 'none', fontSize: 16, fontWeight: 700, height: '100%', padding: 0, marginLeft: 6, width: '100%' }} />
               </div>
               <button onClick={() => { setSettledAmount(autoRounded); setDisplayValue(autoRounded.toFixed(2)); }} style={{ height: 44, background: '#fff', border: '2px solid #e2e8f0', color: '#64748b', padding: '0 16px', borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Reset</button>
             </div>
+            {Math.abs(settledAmount - finalTotal) > roundOffConfig.round_off_manual_limit + 0.01 && (
+              <div style={{ fontSize: 10, color: '#ef4444', fontWeight: 700, marginTop: 8, textAlign: 'center' }}>
+                Round-off exceeds the limit of ±₹{roundOffConfig.round_off_manual_limit.toFixed(2)}
+              </div>
+            )}
           </div>
         )}
 
@@ -1000,8 +1007,8 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
         {showMixedForm && (
           <div style={{ background: '#f8fafc', padding: '18px 16px', borderRadius: 18, border: '2px solid #e2e8f0', marginBottom: 24 }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
-              {/* Loyalty Column (Only if Customer is assigned) */}
-               {order.customer_id && (
+               {/* Loyalty Column (Only if Customer is assigned and loyalty program is active) */}
+               {order.customer_id && loyaltyData.conversionRate > 0 && (
                  <div style={{ gridColumn: 'span 2', marginBottom: 4 }}>
                     <label style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: '11px', fontWeight: 800, color: '#047857', textTransform: 'uppercase', letterSpacing: '0.02em' }}>
                       <span>🪙 Loyalty Points</span>
@@ -1015,10 +1022,16 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
                         value={loyaltyPointsUsed || ''}
                         placeholder="Enter points to redeem"
                         onChange={(e) => {
-                          const pts = parseInt(e.target.value, 10) || 0;
-                          if (pts > (loyaltyData.availablePoints || 0)) return;
+                          let pts = parseInt(e.target.value, 10) || 0;
+                          if (pts > (loyaltyData.availablePoints || 0)) pts = loyaltyData.availablePoints || 0;
+
+                          let amt = Number((pts * (loyaltyData.conversionRate || 1.0)).toFixed(2));
+                          if (loyaltyData.maxRedemption > 0 && amt > loyaltyData.maxRedemption) {
+                              amt = loyaltyData.maxRedemption;
+                              pts = Math.floor(amt / (loyaltyData.conversionRate || 1.0));
+                          }
+
                           setLoyaltyPointsUsed(pts);
-                          const amt = Number((pts * (loyaltyData.conversionRate || 1.0)).toFixed(2));
                           setLoyaltyAmountUsed(amt);
                           calculateRemainingOnline(cashAmount, amt);
                         }}
@@ -1032,7 +1045,12 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
                     </div>
                     {(loyaltyData.availablePoints || 0) < (loyaltyData.minPoints || 0) && (loyaltyData.availablePoints || 0) > 0 && (
                         <div style={{ fontSize: '10px', color: '#ef4444', marginTop: 4, fontWeight: 600 }}>
-                            Min {loyaltyData.minPoints} points required.
+                            Min {loyaltyData.minPoints} points required for redemption.
+                        </div>
+                    )}
+                    {loyaltyData.maxRedemption > 0 && (
+                        <div style={{ fontSize: '10px', color: '#64748b', marginTop: 4, fontWeight: 600 }}>
+                            Max ₹{loyaltyData.maxRedemption.toFixed(2)} can be redeemed per order.
                         </div>
                     )}
                  </div>
@@ -1072,7 +1090,13 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
 
         <div style={{ display: 'flex', gap: 12 }}>
           <Button onClick={onCancel} variant="outline" style={{ flex: 1, height: 52, borderRadius: 14, fontSize: 15, fontWeight: 700, borderColor: '#e2e8f0' }}>Cancel</Button>
-          <Button onClick={handleConfirm} style={{ flex: 1.6, height: 52, borderRadius: 14, background: `linear-gradient(135deg, ${BRAND.orange} 0%, #ea580c 100%)`, color: 'white', fontSize: 15, fontWeight: 800, boxShadow: `0 8px 24px -6px ${BRAND.orange}60`, border: 'none' }}>Settle & Finish</Button>
+          <Button 
+            onClick={handleConfirm} 
+            disabled={submitting || (roundOffConfig.round_off_enabled && roundOffConfig.round_off_mode === 'manual' && Math.abs(settledAmount - finalTotal) > roundOffConfig.round_off_manual_limit + 0.01)}
+            style={{ flex: 1.6, height: 52, borderRadius: 14, background: `linear-gradient(135deg, ${BRAND.orange} 0%, #ea580c 100%)`, color: 'white', fontSize: 15, fontWeight: 800, boxShadow: `0 8px 24px -6px ${BRAND.orange}60`, border: 'none' }}
+          >
+            Settle & Finish
+          </Button>
         </div>
 
         <DiscountModal visible={isDiscountModalOpen} onClose={() => setIsDiscountModalOpen(false)} onSaveTotal={setDiscount} cart={localItems} onUpdateCartItem={handleUpdateLocalItem} currentTotalDiscount={discount} theme={THEME} totalAmount={subtotalEx} />
@@ -1501,17 +1525,15 @@ function EditOrderPanel({ order, onClose, onSave, tablesCount = 0 }) {
                 </div>
               </div>
 
-              {/* Qty Control (Cart Style) */}
               <div
                 style={{
-                  display: 'inline-flex',
+                  display: 'flex',
                   alignItems: 'center',
-                  background: `${BRAND.orange}20`, // Soft orange background
-                  borderRadius: 8,
-                  border: `1px solid ${BRAND.orange}`,
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                  gap: 0,
+                  border: `1.5px solid ${BRAND.orange}`,
+                  borderRadius: 6,
                   overflow: 'hidden',
-                  height: 32,
+                  flexShrink: 0,
                 }}
               >
                 <button
@@ -1523,7 +1545,7 @@ function EditOrderPanel({ order, onClose, onSave, tablesCount = 0 }) {
                     width: 32,
                     height: 32,
                     border: 'none',
-                    background: 'transparent',
+                    background: 'white',
                     color: BRAND.orange,
                     fontSize: 18,
                     fontWeight: 700,
@@ -1531,9 +1553,10 @@ function EditOrderPanel({ order, onClose, onSave, tablesCount = 0 }) {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    flexShrink: 0
+                    transition: 'background 0.2s',
                   }}
-                  title="Decrease"
+                  onMouseEnter={(e) => e.target.style.background = '#fff7ed'}
+                  onMouseLeave={(e) => e.target.style.background = 'white'}
                 >
                   −
                 </button>
@@ -1551,18 +1574,19 @@ function EditOrderPanel({ order, onClose, onSave, tablesCount = 0 }) {
                     if (e.key === 'Enter') e.currentTarget.blur();
                   }}
                   style={{
-                    width: 50, // Slightly wider for decimals
+                    width: 48,
                     height: 32,
                     border: 'none',
-                    background: 'transparent',
+                    borderLeft: '1px solid #e2e8f0',
+                    borderRight: '1px solid #e2e8f0',
+                    background: '#fafafa',
                     textAlign: 'center',
                     fontSize: 14,
                     fontWeight: 700,
                     color: '#1e293b',
                     outline: 'none',
-                    padding: 0,
-                    appearance: 'textfield',
-                    flexShrink: 0
+                    padding: '0 2px',
+                    borderRadius: 0
                   }}
                 />
 
@@ -1575,7 +1599,7 @@ function EditOrderPanel({ order, onClose, onSave, tablesCount = 0 }) {
                     width: 32,
                     height: 32,
                     border: 'none',
-                    background: 'transparent',
+                    background: 'white',
                     color: BRAND.orange,
                     fontSize: 18,
                     fontWeight: 700,
@@ -1583,9 +1607,10 @@ function EditOrderPanel({ order, onClose, onSave, tablesCount = 0 }) {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    flexShrink: 0
+                    transition: 'background 0.2s',
                   }}
-                  title="Increase"
+                  onMouseEnter={(e) => e.target.style.background = '#fff7ed'}
+                  onMouseLeave={(e) => e.target.style.background = 'white'}
                 >
                   +
                 </button>
@@ -2059,6 +2084,29 @@ export default function OrdersPage() {
   const [generatingInvoice, setGeneratingInvoice] = useState(null);
   const [paymentConfirmDialog, setPaymentConfirmDialog] = useState(null);
   const [itemsModalOrder, setItemsModalOrder] = useState(null); // Global state for items modal
+  const [modalLoyalty, setModalLoyalty] = useState(null); // { earned, used, amount_used }
+  
+  useEffect(() => {
+    if (!itemsModalOrder || !supabase) {
+      setModalLoyalty(null);
+      return;
+    }
+    const fetchModalLoyalty = async () => {
+      const { data, error } = await supabase
+        .from('loyalty_transactions')
+        .select('txn_type, points_delta, points_earned, points_redeemed, amount_value')
+        .eq('order_id', itemsModalOrder.id);
+      
+      if (!error && data) {
+         const earned = data.reduce((s, t) => s + (Number(t.points_earned) || (t.txn_type === 'earn' ? Math.abs(t.points_delta) : 0)), 0);
+         const used = data.reduce((s, t) => s + (Number(t.points_redeemed) || (t.txn_type === 'redeem' ? Math.abs(t.points_delta) : 0)), 0);
+         const amt = data.reduce((s, t) => s + (t.txn_type === 'redeem' ? Number(t.amount_value || 0) : 0), 0);
+         setModalLoyalty({ earned, used, amount_used: amt });
+      }
+    };
+    fetchModalLoyalty();
+  }, [itemsModalOrder, supabase]);
+
   const notificationAudioRef = useRef(null);
   
   // Search State
@@ -2699,7 +2747,8 @@ const complete = async (orderId, actualPaymentMethod = null, details = null) => 
     const result = await response.json();
 
     // 3. Optional: Trigger auto-print of the final invoice
-    // 3. Optional: Trigger auto-print of the final invoice
+    // Disabled as per user request to stop automatic bill/kot printing after payment
+    /*
     if (result.order_for_print) {
        // Merge detail overrides to ensure UI reflects latest input immediately
        const finalPrintData = {
@@ -2724,6 +2773,7 @@ const complete = async (orderId, actualPaymentMethod = null, details = null) => 
          })
        );
     }
+    */
 
     // 4. Loyalty & Print logic is now handled by backend /api/orders/complete
     // We only need to reload orders.
@@ -3062,7 +3112,7 @@ colOrders =
   try {
     const s = getSupabase();
 
-    // Ensure we have items + menu_items(name)
+    // 1. Fetch Order with items
     const { data: fullOrder } = await s
       .from('orders')
       .select('*, order_items(*, menu_items(name))')
@@ -3071,16 +3121,27 @@ colOrders =
 
     const base = fullOrder || order;
 
+    // 2. Fetch Invoice
     const { data: invoice } = await s
       .from('invoices')
       .select('invoice_no')
       .eq('order_id', order.id)
       .order('invoice_date', { ascending: false })
       .maybeSingle();
+    
+    // 3. Fetch Loyalty
+    const { data: loyaltyTx } = await s
+      .from('loyalty_transactions')
+      .select('txn_type, points_redeemed, amount_value')
+      .eq('order_id', order.id)
+      .eq('txn_type', 'redeem')
+      .maybeSingle();
 
     const orderForPrint = {
       ...base,
       invoice_no: invoice?.invoice_no || base.invoice_no || null,
+      loyalty_amount_used: loyaltyTx?.amount_value || base.loyalty_amount_used || 0,
+      loyalty_points_used: loyaltyTx?.points_redeemed || base.loyalty_points_used || 0
     };
 
     window.dispatchEvent(
@@ -3358,6 +3419,13 @@ colOrders =
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, marginTop: 4 }}>
                     <span style={{ color: '#ef4444', fontWeight: 500 }}>Bill Discount (-)</span>
                     <span style={{ fontWeight: 600, color: '#ef4444' }}>- ₹{Number(itemsModalOrder.discount_amount).toFixed(2)}</span>
+                  </div>
+                )}
+                
+                {(modalLoyalty?.amount_used > 0 || Number(itemsModalOrder.loyalty_amount_used || 0) > 0) && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, marginTop: 4 }}>
+                    <span style={{ color: '#10b981', fontWeight: 500 }}>Loyalty Redemption (-)</span>
+                    <span style={{ fontWeight: 600, color: '#10b981' }}>- ₹{(Number(modalLoyalty?.amount_used) || Number(itemsModalOrder.loyalty_amount_used) || 0).toFixed(2)}</span>
                   </div>
                 )}
 

@@ -63,6 +63,7 @@ export default function OwnerCustomersPage() {
   
   // Loyalty Programs
   const [loyaltyPrograms, setLoyaltyPrograms] = useState([]);
+  const [duplicateWarning, setDuplicateWarning] = useState(null); // { message, onConfirm }
 
   useEffect(() => {
     if(!restaurantId) return;
@@ -114,7 +115,7 @@ export default function OwnerCustomersPage() {
         `)
         .eq('restaurant_id', restaurantId)
         .eq('is_active', true)
-        .order('last_order_at', { ascending: false })
+        .order('name', { ascending: true })
 
       if (error) throw error
 
@@ -166,7 +167,8 @@ export default function OwnerCustomersPage() {
         .select('id, created_at, date_ordered, total_amount, total_inc_tax, status, payment_method, is_credit, payment_status')
         .eq('restaurant_id', restaurantId)
         .eq('status', 'completed')
-        .in('payment_status', ['paid', 'completed']);
+        .in('payment_status', ['paid', 'completed'])
+        .or('is_credit.eq.false,is_credit.is.null');
       
       // Match orders by customer_id only (strict matching)
       // Don't use phone number matching as it can link orders from different customers
@@ -277,7 +279,7 @@ export default function OwnerCustomersPage() {
         r.visit_count,
         r.order_count,
         r.total_spent.toFixed(2),
-        new Date(r.last_order_at).toLocaleDateString()
+        r.last_order_at ? new Date(r.last_order_at).toLocaleDateString() : ''
       ].join(','))
     ];
     
@@ -385,6 +387,7 @@ export default function OwnerCustomersPage() {
       originalEmail: c.email,
       order_count: c.order_count || 0,
       loyalty_program_id: c.loyalty_program_id || '', // Load into edit state
+      originalLoyaltyId: c.loyalty_program_id || '',
       addresses: []
     });
     setEditingAddrId(null);
@@ -423,7 +426,7 @@ export default function OwnerCustomersPage() {
     setShowAddAddrForm(false);
   }
 
-  const handleUpdateCustomer = async () => {
+  const handleUpdateCustomer = async (force = false) => {
     if (!editData.name.trim()) return alert('Name is required');
     setProcessing(true);
     try {
@@ -434,12 +437,39 @@ export default function OwnerCustomersPage() {
       const isNewCustomer = !editData.customer_id;
 
       // Validation: Check if another customer already has this phone
+      // BLOCK WITH POPUP
       if (newPhone && newPhone !== editData.originalPhone) {
-         const duplicate = rows.find(r => r.phone === newPhone);
+         const duplicate = rows.find(r => r.phone === newPhone && r.customer_id !== editData.customer_id);
          if (duplicate) {
-           throw new Error(`Another customer already has the phone number ${newPhone}. Select 'Merge' instead or use a different number.`);
+           setDuplicateWarning({
+               message: `Another customer already has the phone number ${newPhone}.\n\nPlease use a different number.`,
+               subMessage: `Blocking creation/update to prevent accurate duplicate data.`,
+               isBlocking: true
+           });
+           setProcessing(false);
+           return;
          }
       }
+
+      // Check for same Name AND Phone (Exact Duplicate) - BLOCK WITH POPUP
+      const exactDuplicate = rows.find(r => 
+        r.name?.toLowerCase() === newName.toLowerCase() && 
+        (r.phone === newPhone) &&
+        r.customer_id !== editData.customer_id
+      );
+      if (exactDuplicate) {
+        setDuplicateWarning({
+            message: `A customer with this Name and Phone Number already exists.`,
+            subMessage: `Please check the existing customer list.`,
+            isBlocking: true
+        });
+        setProcessing(false);
+        return;
+      }
+      
+      // Removed "Same Name Only" warning as per user request.
+
+
 
       if (isNewCustomer) {
         // CREATE NEW CUSTOMER - Only in restaurant_customers table
@@ -780,8 +810,8 @@ export default function OwnerCustomersPage() {
         <div className="summary-card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <span className="kpi-label">Repeat Rate</span>
-              <span className="kpi-value">{totalCustomers ? Math.round((repeatCustomers / totalCustomers) * 100) : 0}%</span>
+              <span className="kpi-label">Repeat Customers</span>
+              <span className="kpi-value">{repeatCustomers}</span>
             </div>
             <div className="kpi-icon"><FaExchangeAlt /></div>
           </div>
@@ -1639,7 +1669,7 @@ export default function OwnerCustomersPage() {
               </div>
               <div className="modal-foot">
                  <Button variant="outline" onClick={() => setEditData(null)} disabled={processing}>Cancel</Button>
-                  <Button onClick={handleUpdateCustomer} disabled={processing || (editData.customer_id && editData.name === editData.originalName && editData.phone === editData.originalPhone && (editData.email || '') === (editData.originalEmail || ''))}>
+                  <Button onClick={handleUpdateCustomer} disabled={processing || (editData.customer_id && editData.name === editData.originalName && editData.phone === editData.originalPhone && (editData.email || '') === (editData.originalEmail || '') && (editData.loyalty_program_id || '') === (editData.originalLoyaltyId || ''))}>
                      {processing ? 'Saving...' : (editData.customer_id ? 'Save Changes' : 'Save Customer')}
                   </Button>
               </div>
@@ -2033,6 +2063,8 @@ export default function OwnerCustomersPage() {
                         name: viewCustomer.name,
                         email: viewCustomer.email,
                         address: viewCustomer.address,
+                        loyalty_program_id: viewCustomer.loyalty_program_id || '',
+                        originalLoyaltyId: viewCustomer.loyalty_program_id || '',
                         addresses: [] // Will likely need to load.
                      });
                      
@@ -2062,6 +2094,43 @@ export default function OwnerCustomersPage() {
               background: toast.type === 'error' ? '#ef4444' : '#22c55e'
            }} />
            {toast.message}
+        </div>
+      )}
+
+      {/* Duplicate Warning Modal (Replaces browser confirm) */}
+      {duplicateWarning && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.5)', zIndex: 9999,
+          display: 'flex', alignItems: 'center', justifyContent: 'center'
+        }}>
+          <div style={{
+            background: 'white', padding: 32, borderRadius: 16,
+            maxWidth: 400, width: '90%', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)'
+          }}>
+            <h3 style={{ marginTop: 0, fontSize: 18, fontWeight: 700, color: '#9a3412', marginBottom: 12 }}>
+               Duplicate Name Warning
+            </h3>
+            <p style={{ color: '#374151', fontSize: 15, marginBottom: 8, whiteSpace: 'pre-line' }}>{duplicateWarning.message}</p>
+            <p style={{ color: '#6b7280', fontSize: 14, marginBottom: 24 }}>{duplicateWarning.subMessage}</p>
+            
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+               {!duplicateWarning.isBlocking && (
+                  <Button onClick={() => setDuplicateWarning(null)} style={{ background: '#f3f4f6', color: '#374151', border: '1px solid #e5e7eb' }}>
+                     Cancel
+                  </Button>
+               )}
+               {duplicateWarning.isBlocking ? (
+                  <Button onClick={() => setDuplicateWarning(null)}>
+                     Okay, I'll Change It
+                  </Button>
+               ) : (
+                  <Button onClick={() => { setDuplicateWarning(null); duplicateWarning.onConfirm(); }}>
+                     Yes, Proceed
+                  </Button>
+               )}
+            </div>
+          </div>
         </div>
       )}
     </div>

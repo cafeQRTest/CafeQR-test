@@ -93,13 +93,18 @@ export class OrderService {
 
       let finalOrderId = orderId;
 
+      let currentBillNo = null;
+
       // 2. Insert or Update Order
       if (finalOrderId) {
-        const { error: updErr } = await supabase
+        const { data: updOrder, error: updErr } = await supabase
           .from('orders')
           .update(orderPayload)
-          .eq('id', finalOrderId);
+          .eq('id', finalOrderId)
+          .select('bill_no')
+          .single();
         if (updErr) throw updErr;
+        currentBillNo = updOrder?.bill_no;
       } else {
         const { data: newOrder, error: insErr } = await supabase
           .from('orders')
@@ -108,6 +113,7 @@ export class OrderService {
           .single();
         if (insErr) throw insErr;
         finalOrderId = newOrder.id;
+        currentBillNo = newOrder.bill_no;
       }
 
       // 3. Update Order Items
@@ -181,8 +187,14 @@ export class OrderService {
       };
 
       if (!existingInvoice) {
+        // Use bill_no from Order (likely set by DB Trigger)
+        if (currentBillNo) {
+           invoiceData.bill_no = currentBillNo;
+        } else {
+           invoiceData.bill_no = await InvoiceService.generateBillNumber(restaurantId);
+        }
+        
         invoiceData.invoice_no = await InvoiceService.generateInvoiceNumber(restaurantId);
-        invoiceData.bill_no = await InvoiceService.generateBillNumber(restaurantId);
         
         const { data: newInv, error: invInsErr } = await supabase
           .from('invoices')
