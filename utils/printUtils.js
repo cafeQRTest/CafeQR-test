@@ -193,17 +193,17 @@ function getLayout(restaurantProfile) {
   // Guard cols: useful mainly on 58mm; keep optional on 80mm.
   const guardColsDefault = paperMm >= 76 ? 0 : 1;
   const guardCols = getLocalNum("PRINT_GUARD_COLS", guardColsDefault);
+  const safeCols = getLocalNum("PRINT_SAFE_COLS", 0);
+
 
   // Font A is 12×24 dots (your escposPageSetup uses ESC M 0 => Font A). [web:134]
   // If margins shrink areaDots, max printable columns shrink too (e.g. 552 dots => 46 cols).
   const charDots = 12;
-  const maxColsFromDots = paperMm >= 76 ? Math.floor(areaDots / charDots) : cols;
+  const maxColsFromDots = Math.floor(areaDots / charDots);
 
   const marginCols = 0;
-  const innerCols = Math.max(
-    16,
-    Math.min(cols - guardCols, maxColsFromDots)
-  );
+  const innerCols = Math.max(16, Math.min(cols - guardCols - safeCols, maxColsFromDots));
+
 
   return {
     cols,
@@ -226,6 +226,7 @@ function withMargins(line, layout) {
 function escposPageSetup(layout) {
   return (
     ESC + "@" + // reset
+    ESC + " " + b(0) +   // ESC SP n: right-side character spacing = 0
     ESC + "a" + b(0) + // left align (default)
     GS + "L" + b2(layout.leftDots) + // left margin
     GS + "W" + b2(layout.areaDots) + // printable area width

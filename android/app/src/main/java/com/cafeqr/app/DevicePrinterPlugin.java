@@ -384,6 +384,11 @@ public void pickPrinter(PluginCall call) {
 
   private boolean connectAndWrite(BluetoothDevice dev, byte[] data) {
     BluetoothSocket sock = null;
+final boolean slow = data != null && data.length > 8 * 1024; // only real bills/KOTs usually exceed this
+
+final int CHUNK = slow ? 128 : 256;
+final int SLEEP_BETWEEN = slow ? 35 : 15;      // ms
+final int SLEEP_BEFORE_CLOSE = slow ? 900 : 350; // ms
     try {
       try { BluetoothAdapter.getDefaultAdapter().cancelDiscovery(); } catch (Exception ignored) {}
 
@@ -407,20 +412,18 @@ public void pickPrinter(PluginCall call) {
       try { Thread.sleep(80); } catch (InterruptedException ignored) {}
 
       // CHUNKED WRITE
-      final int CHUNK = 256;
-      int offset = 0;
-      while (offset < data.length) {
-        int len = Math.min(CHUNK, data.length - offset);
-        os.write(data, offset, len);
-        os.flush();
-        offset += len;
-        try { Thread.sleep(15); } catch (InterruptedException ignored) {}
-      }
+int offset = 0;
+while (offset < data.length) {
+  int len = Math.min(CHUNK, data.length - offset);
+  os.write(data, offset, len);
+  os.flush();
+  offset += len;
+  try { Thread.sleep(SLEEP_BETWEEN); } catch (InterruptedException ignored) {}
+}
 
-      os.write(new byte[]{ 0x0a, 0x0a });  // 2 LF
-      os.flush();
-      try { Thread.sleep(350); } catch (InterruptedException ignored) {}
-
+os.write(new byte[]{ 0x0a, 0x0a });
+os.flush();
+try { Thread.sleep(SLEEP_BEFORE_CLOSE); } catch (InterruptedException ignored) {}
       os.close();
       return true;
 
