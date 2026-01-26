@@ -37,6 +37,10 @@ export default function PrinterSetupCard({ restaurantId }) {
     localStorage.setItem('PRINT_WIDTH_COLS', String(cols));
     localStorage.setItem('PRINT_LEFT_MARGIN_DOTS', String(leftDots));
     localStorage.setItem('PRINT_RIGHT_MARGIN_DOTS', String(rightDots));
+
+    localStorage.setItem('PRINT_GUARD_COLS', String(guardCols));
+    localStorage.setItem('PRINT_SAFE_COLS', String(safeCols));
+
   };
 
   // ---------- Windows helper ----------
@@ -51,6 +55,10 @@ export default function PrinterSetupCard({ restaurantId }) {
   const [kotPrinters, setKotPrinters] = useState(() =>
     uniq(readJson('PRINT_WIN_PRINTER_NAMES_KOT', []))
   );
+
+const [guardCols, setGuardCols] = useState(() => localStorage.getItem('PRINT_GUARD_COLS') || '1');
+const [safeCols, setSafeCols]   = useState(() => localStorage.getItem('PRINT_SAFE_COLS') || '0');
+
 
   // Keep old single values for display fallback (optional)
   const billSingleFallback = localStorage.getItem('PRINT_WIN_PRINTER_NAME') || '';
@@ -372,6 +380,35 @@ export default function PrinterSetupCard({ restaurantId }) {
           </div>
 
           {/* Margins */}
+
+<div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', fontSize: 13 }}>
+  <span>Column safety:</span>
+
+  <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+    Guard cols
+    <input
+      value={guardCols}
+      onChange={(e) => setGuardCols(e.target.value.replace(/[^\d]/g, ''))}
+      style={{ width: 60, padding: 6, fontSize: 13 }}
+      inputMode="numeric"
+    />
+  </label>
+
+  <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+    Safe cols
+    <input
+      value={safeCols}
+      onChange={(e) => setSafeCols(e.target.value.replace(/[^\d]/g, ''))}
+      style={{ width: 60, padding: 6, fontSize: 13 }}
+      inputMode="numeric"
+    />
+  </label>
+
+  <div style={{ fontSize: 12, color: '#6b7280' }}>
+    If rightmost character wraps on this printer, set Safe cols to 1 (or 2).
+  </div>
+</div>
+
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', fontSize: 13 }}>
             <span>Side margins (dots):</span>
             <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
