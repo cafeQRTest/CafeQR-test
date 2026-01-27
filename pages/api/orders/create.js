@@ -135,10 +135,13 @@ export default async function handler(req, res) {
     const serviceRate = gstEnabled ? baseRate : 0;
     const serviceInclude =
       gstEnabled &&
-      (profile?.prices_include_tax === true ||
-        profile?.prices_include_tax === 'true' ||
-        profile?.prices_include_tax === 1 ||
-        profile?.prices_include_tax === '1');
+      ((req.body.prices_include_tax !== undefined 
+          ? (req.body.prices_include_tax === true || req.body.prices_include_tax === 'true') 
+          : (profile?.prices_include_tax === true ||
+             profile?.prices_include_tax === 'true' ||
+             profile?.prices_include_tax === 1 ||
+             profile?.prices_include_tax === '1')
+      ));
 
     // 4) Compute totals
     // 4) Compute totals using Centralized Logic
@@ -255,7 +258,10 @@ export default async function handler(req, res) {
           total_amount: finalGrandTotal, 
           round_off_amount: finalRoundOff, 
           discount_amount: bill_discount_amount,
-          order_discount_percent: orderDiscountPct
+          order_discount_percent: orderDiscountPct,
+          // Mandatory for correct auditing of Ex-Tax values
+          subtotal_after_line_discounts,
+          total_order_discount_base
       },
       metadata: {
         status: finalStatus,

@@ -101,6 +101,12 @@ export default function BillingPage() {
     return m || 'Other';
   };
 
+  const getInvoiceTotal = (inv) => {
+    // Priority: total_inc_gst (Final Bill Amount with Round Off) -> total_inc_tax (Legacy)
+    if (inv.total_inc_gst !== null && inv.total_inc_gst !== undefined) return Number(inv.total_inc_gst);
+    return Number(inv.total_inc_tax || 0);
+  };
+
   const getStatusLabel = (status) => {
     const s = String(status || '').toLowerCase();
     if (s === 'paid') return 'Paid';
@@ -145,24 +151,24 @@ export default function BillingPage() {
       // Compute statistics from the visible list
       const computed = {
         total_invoices: list.length,
-        total_taxable: list.reduce((s, inv) => s + (parseFloat(inv.subtotal_ex_tax) || 0), 0),
+        total_taxable: list.reduce((s, inv) => s + (parseFloat(inv.taxable_amount) || 0), 0),
         total_tax: list.reduce((s, inv) => s + (parseFloat(inv.total_tax) || 0), 0),
         total_cgst: list.reduce((s, inv) => s + (parseFloat(inv.cgst) || 0), 0),
         total_sgst: list.reduce((s, inv) => s + (parseFloat(inv.sgst) || 0), 0),
         total_igst: list.reduce((s, inv) => s + (parseFloat(inv.igst) || 0), 0),
         cash_sales: list.reduce((sum, inv) => {
-          if (inv.payment_method === 'cash') return sum + (parseFloat(inv.total_inc_tax) || 0);
+          if (inv.payment_method === 'cash') return sum + getInvoiceTotal(inv);
           if (isMixed(inv)) return sum + (parseFloat(inv.mixed_payment_details.cash_amount) || 0);
           return sum;
         }, 0),
         online_sales: list.reduce((sum, inv) => {
-          if (['online', 'upi', 'card'].includes(inv.payment_method)) return sum + (parseFloat(inv.total_inc_tax) || 0);
+          if (['online', 'upi', 'card'].includes(inv.payment_method)) return sum + getInvoiceTotal(inv);
           if (isMixed(inv)) return sum + (parseFloat(inv.mixed_payment_details.online_amount) || 0);
           return sum;
         }, 0),
         credit_sales: list
           .filter(inv => inv.payment_method === 'credit')
-          .reduce((s, inv) => s + (parseFloat(inv.total_inc_tax) || 0), 0),
+          .reduce((s, inv) => s + getInvoiceTotal(inv), 0),
       };
 
       setStats(computed);
@@ -472,9 +478,9 @@ const exportHsnSummary = async () => {
                   },
                   { header: 'Date', accessor: 'date_ordered', cell: (r) => new Date(r.date_ordered || r.invoice_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) },
                   { header: 'Customer', accessor: 'customer_name', cell: (r) => r.customer_name || '' },
-                  { header: 'Taxable', accessor: 'subtotal_ex_tax', cell: (r) => formatMoney(r.subtotal_ex_tax) },
+                  { header: 'Taxable', accessor: 'taxable_amount', cell: (r) => formatMoney(r.taxable_amount) },
                   { header: 'Tax', accessor: 'total_tax', cell: (r) => <span style={{ color: '#dc2626', fontWeight: 600 }}>{formatMoney(r.total_tax)}</span> },
-                  { header: 'Total', accessor: 'total_inc_tax', cell: (r) => <span style={{ fontWeight: 800, color: '#0f172a' }}>{formatMoney(r.total_inc_gst || r.paid_amount || r.total_inc_tax)}</span> },
+                  { header: 'Total', accessor: 'total_inc_tax', cell: (r) => <span style={{ fontWeight: 800, color: '#0f172a' }}>{formatMoney(getInvoiceTotal(r))}</span> },
                   { header: 'Payment', accessor: 'payment_method', cell: (r) => <span className={`status-pill ${r.payment_method}`}>{prettyMethod(r.payment_method)}</span> },
                    { header: 'Status', accessor: 'status', cell: (r) => <span className={`status-pill status-${r.status}`}>{getStatusLabel(r.status)}</span> },
                   {
@@ -633,7 +639,7 @@ const exportHsnSummary = async () => {
                     {(() => {
                        // Robust Round-off Calculation
                        const rAmt = Number(selectedInvoice.round_off_amount || 0);
-                       const finalTotal = Number(selectedInvoice.total_inc_gst || selectedInvoice.paid_amount || selectedInvoice.total_inc_tax || 0);
+                       const finalTotal = getInvoiceTotal(selectedInvoice);
                        const preRound = Number(selectedInvoice.total_inc_tax || 0);
                        
                        // If explicit round-off is 0, but there's a difference, use derived
@@ -652,7 +658,7 @@ const exportHsnSummary = async () => {
 
                     <div className="sum-row grand">
                       <span>Grand Total</span>
-                      <span>{formatMoney(selectedInvoice.total_inc_gst || selectedInvoice.paid_amount || selectedInvoice.total_inc_tax)}</span>
+                      <span>{formatMoney(getInvoiceTotal(selectedInvoice))}</span>
                     </div>
                   </div>
                 </div>

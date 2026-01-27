@@ -1869,6 +1869,7 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
       loyalty_amount_used: mixedDetails?.loyalty_amount_used ?? loyaltyRedeemAmount, // Pass Loyalty Redemption
       loyalty_points_used: mixedDetails?.loyalty_points_used ?? pointsToRedeem,
       base_tax_rate: Number(restaurant?.default_tax_rate || 5), // Pass rate context
+      prices_include_tax: profileTax.prices_include_tax, // Pass tax inclusive setting
       override_totals: {
            total_amount: Number(finalTotalVal.toFixed(2)),
            round_off_amount: Number(finalRoundOffVal.toFixed(2)),
@@ -2040,6 +2041,7 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
       discount_amount: discountVal,
       total_discount_percent: discount.type === 'percent' ? discount.value : 0,
       round_off_amount: kitchenRoundOff,
+      prices_include_tax: profileTax.prices_include_tax, // Pass tax inclusive setting
       custom_created_at: new Date(
         Number(orderDate.split('-')[0]),
         Number(orderDate.split('-')[1]) - 1,
