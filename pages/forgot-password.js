@@ -19,7 +19,7 @@ export default function ForgotPassword() {
 
     try {
       // Get the redirect URL
-      const redirectUrl = typeof window !== 'undefined' 
+      const redirectUrl = typeof window !== 'undefined'
         ? `${window.location.origin}/reset-password`
         : 'http://localhost:3000/reset-password'
 
@@ -56,19 +56,19 @@ export default function ForgotPassword() {
       <div className="mobile-card">
         {/* Header Graphic (Orange Base for Alert/Reset) */}
         <div className="header-graphic">
-           <div className="circle-overlay" />
-           <div className="header-content">
-             <button className="back-btn" onClick={() => window.history.back()}>
-               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-             </button>
-             {/* Header text removed as requested */}
-           </div>
+          <div className="circle-overlay" />
+          <div className="header-content">
+            <button className="back-btn" onClick={() => window.history.back()}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+            </button>
+            {/* Header text removed as requested */}
+          </div>
         </div>
 
         {/* Form Body */}
         <div className="form-body">
           <form onSubmit={handleSubmit}>
-            
+
             <h1 className="form-title">Reset Password</h1>
 
             <p className="instruction-text">
@@ -98,9 +98,9 @@ export default function ForgotPassword() {
             <button type="submit" disabled={loading} className="submit-btn">
               {loading ? 'SENDING...' : 'SEND RESET LINK'}
             </button>
-            
+
             <div className="login-link">
-               <p>Remembered it? <Link href="/login">Sign In</Link></p>
+              <p>Remembered it? <Link href="/login">Sign In</Link></p>
             </div>
 
             <div className="copyright-footer">

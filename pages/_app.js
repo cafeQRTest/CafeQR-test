@@ -2,6 +2,7 @@ import Head from 'next/head'
 import '../styles/globals.css'
 import '../styles/theme.css'
 import '../styles/responsive.css'
+import '../styles/tailwind.css'
 import Layout from '../components/Layout'
 import KotPrint from '../components/KotPrint'
 import { RestaurantProvider } from '../context/RestaurantContext'
@@ -37,7 +38,7 @@ async function postSubscribe(token, platform) {
       url.searchParams.get('r') ||
       url.searchParams.get('rid') ||
       localStorage.getItem('active_restaurant_id')
-  } catch {}
+  } catch { }
   if (!rid) return
   try {
     await fetch(`${process.env.NEXT_PUBLIC_API_BASE || ''}/api/push/subscribe-bridge`, {
@@ -45,7 +46,7 @@ async function postSubscribe(token, platform) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ restaurantId: rid, platform, deviceToken: token })
     })
-  } catch {}
+  } catch { }
 }
 
 // return async initializers to support the “()()” call style
@@ -58,8 +59,8 @@ function safeInitNative(router) {
         name: 'Orders',
         description: 'Order alerts',
         importance: 5
-      }).catch(() => {})
-      PushNotifications.removeAllListeners().catch(() => {})
+      }).catch(() => { })
+      PushNotifications.removeAllListeners().catch(() => { })
       PushNotifications.addListener('pushNotificationActionPerformed', action => {
         const url = action.notification?.data?.url || '/owner/orders'
         router.push(url).catch(() => {
@@ -73,7 +74,7 @@ function safeInitNative(router) {
         postSubscribe(value, 'android')
       })
       await PushNotifications.register()
-    } catch {}
+    } catch { }
   }
 }
 
@@ -85,7 +86,7 @@ function safeInitWebOnly() {
         localStorage.setItem('fcm_token', token)
         await postSubscribe(token, 'web')
       }
-    } catch {}
+    } catch { }
   }
 }
 
@@ -108,13 +109,13 @@ function GlobalSubscriptionGate({ children }) {
     let mounted = true
     async function checkAndRedirect() {
       if (!router.isReady || loading) return
-      
+
       const supabase = getSupabase()
       const { data } = await supabase.auth.getSession()
       const session = data?.session
-      
+
       const isOwner = path.startsWith(OWNER_PREFIX)
-      
+
       // If we have a session but NO subscription object yet, wait (context might be catching up)
       if (session && !subscription && !loading) return;
 
@@ -182,7 +183,7 @@ const DELIVERY_AUTH_ROUTES = [
 
 // Adjust these to match your actual “must be logged in” pages
 const DELIVERY_PROTECTED_PREFIXES = [
-  "/app/addresses",
+  "/app/address",
   "/app/profile",
   "/app/payment",
 ];
@@ -240,53 +241,53 @@ function MyApp({ Component, pageProps }) {
   // App foreground/background lifecycle + token refresh
   useEffect(() => {
     if (!router.isReady) return
-    let cleanup = () => {}
-    ;(async () => {
-      let NativeApp
-      try {
-        ;({ App: NativeApp } = await import('@capacitor/app'))
-      } catch {}
-      const supabase = getSupabase()
-      const onForeground = async () => {
-        await bootstrapSupabaseSession()
-        await forceSupabaseSessionRestore()
-        await supabase.auth.startAutoRefresh()
-        await ensureSessionValid()
-      }
-      if (NativeApp?.addListener) {
-        const backSub = await NativeApp.addListener('backButton', async ({ canGoBack }) => {
-          const path = router.pathname
-          try {
-            const { data } = await getSupabase().auth.getSession()
-            if ((path === '/login' || path === '/signup') && data?.session) {
-              router.replace('/owner')
-              return
-            }
-          } catch {}
-          if (canGoBack) window.history.back()
-          else if (path.startsWith(OWNER_PREFIX)) NativeApp.exitApp?.()
-          else router.replace('/owner')
-        })
-        const prev = cleanup
-        cleanup = () => {
-          backSub?.remove()
-          prev?.()
+    let cleanup = () => { }
+      ; (async () => {
+        let NativeApp
+        try {
+          ; ({ App: NativeApp } = await import('@capacitor/app'))
+        } catch { }
+        const supabase = getSupabase()
+        const onForeground = async () => {
+          await bootstrapSupabaseSession()
+          await forceSupabaseSessionRestore()
+          await supabase.auth.startAutoRefresh()
+          await ensureSessionValid()
         }
-      }
-      const onFocus = () => onForeground()
-      const onVis = () => {
-        if (!document.hidden) onForeground()
-      }
-      window.addEventListener('focus', onFocus)
-      document.addEventListener('visibilitychange', onVis)
-      onForeground()
-      const prev2 = cleanup
-      cleanup = () => {
-        prev2?.()
-        window.removeEventListener('focus', onFocus)
-        document.removeEventListener('visibilitychange', onVis)
-      }
-    })()
+        if (NativeApp?.addListener) {
+          const backSub = await NativeApp.addListener('backButton', async ({ canGoBack }) => {
+            const path = router.pathname
+            try {
+              const { data } = await getSupabase().auth.getSession()
+              if ((path === '/login' || path === '/signup') && data?.session) {
+                router.replace('/owner')
+                return
+              }
+            } catch { }
+            if (canGoBack) window.history.back()
+            else if (path.startsWith(OWNER_PREFIX)) NativeApp.exitApp?.()
+            else router.replace('/owner')
+          })
+          const prev = cleanup
+          cleanup = () => {
+            backSub?.remove()
+            prev?.()
+          }
+        }
+        const onFocus = () => onForeground()
+        const onVis = () => {
+          if (!document.hidden) onForeground()
+        }
+        window.addEventListener('focus', onFocus)
+        document.addEventListener('visibilitychange', onVis)
+        onForeground()
+        const prev2 = cleanup
+        cleanup = () => {
+          prev2?.()
+          window.removeEventListener('focus', onFocus)
+          document.removeEventListener('visibilitychange', onVis)
+        }
+      })()
     return () => cleanup()
   }, [router.isReady])
 
@@ -301,12 +302,12 @@ function MyApp({ Component, pageProps }) {
   useEffect(() => {
     if (!router.isReady || !ready) return
     let isMounted = true
-    ;(async () => {
-      if (Capacitor.isNativePlatform()) await safeInitNative(router)()
-      else await safeInitWebOnly()()
-      setTimeout(ensureSubscribed, 1200)
-      if (isMounted) setReady(true)
-    })()
+      ; (async () => {
+        if (Capacitor.isNativePlatform()) await safeInitNative(router)()
+        else await safeInitWebOnly()()
+        setTimeout(ensureSubscribed, 1200)
+        if (isMounted) setReady(true)
+      })()
     return () => {
       isMounted = false
     }
@@ -332,35 +333,35 @@ function MyApp({ Component, pageProps }) {
   const isOwner = path.startsWith(OWNER_PREFIX)
   const isCustomer = path.startsWith(CUSTOMER_PREFIX)
 
-return (
-  <>
-    <Head>
-      <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    </Head>
+  return (
+    <>
+      <Head>
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+      </Head>
 
-    <CustomerAuthProvider>
-      <DeliveryAuthGate>
-        <RestaurantProvider>
-          <AlertProvider>
-            <SubscriptionProvider>
-              <GlobalSubscriptionGate>
-                <Layout
-                  title={pageProps.title}
-                  showSidebar={isOwner}
-                  hideChrome={isCustomer}
-                  showCustomerHeader={isCustomer}
-                >
-                  <Component {...pageProps} />
-                </Layout>
-                <AppPrintOrchestrator />
-              </GlobalSubscriptionGate>
-            </SubscriptionProvider>
-          </AlertProvider>
-        </RestaurantProvider>
-      </DeliveryAuthGate>
-    </CustomerAuthProvider>
-  </>
-);
+      <CustomerAuthProvider>
+        <DeliveryAuthGate>
+          <RestaurantProvider>
+            <AlertProvider>
+              <SubscriptionProvider>
+                <GlobalSubscriptionGate>
+                  <Layout
+                    title={pageProps.title}
+                    showSidebar={isOwner}
+                    hideChrome={isCustomer}
+                    showCustomerHeader={isCustomer}
+                  >
+                    <Component {...pageProps} />
+                  </Layout>
+                  <AppPrintOrchestrator />
+                </GlobalSubscriptionGate>
+              </SubscriptionProvider>
+            </AlertProvider>
+          </RestaurantProvider>
+        </DeliveryAuthGate>
+      </CustomerAuthProvider>
+    </>
+  );
 }
 
 export default MyApp

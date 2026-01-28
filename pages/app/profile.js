@@ -28,7 +28,7 @@ export default function ProfilePage() {
         const local = JSON.parse(localStorage.getItem("delivery_profile") || "{}");
         if (local?.name) setName(String(local.name));
         if (local?.phone) setPhone(String(local.phone));
-      } catch {}
+      } catch { }
 
       // Fill from Supabase user if possible
       if (user?.phone && !phone) setPhone(String(user.phone));
@@ -41,37 +41,37 @@ export default function ProfilePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-const save = async () => {
-  setMsg("");
+  const save = async () => {
+    setMsg("");
 
-  const nextName = name.trim();
-  const nextPhone = phone.trim();
+    const nextName = name.trim();
+    const nextPhone = phone.trim();
 
-  // local cache
-  try {
-    localStorage.setItem("delivery_profile", JSON.stringify({ name: nextName, phone: nextPhone }));
-  } catch {}
+    // local cache
+    try {
+      localStorage.setItem("delivery_profile", JSON.stringify({ name: nextName, phone: nextPhone }));
+    } catch { }
 
-  if (sessionUser) {
-    // ensure customer exists
-    const customer = await getOrCreateCustomer();
+    if (sessionUser) {
+      // ensure customer exists
+      const customer = await getOrCreateCustomer();
 
-    // store in your app table (recommended)
-    await supabase
-      .from("customers")
-      .update({ name: nextName || null, phone: nextPhone || null })
-      .eq("id", customer.id);
+      // store in your app table (recommended)
+      await supabase
+        .from("customers")
+        .update({ name: nextName || null, phone: nextPhone || null })
+        .eq("id", customer.id);
 
-    // optional: also store in auth metadata (NOT auth.users.phone)
-    await supabase.auth.updateUser({ data: { full_name: nextName || null, phone: nextPhone || null } }); // metadata update [web:70]
-  }
+      // optional: also store in auth metadata (NOT auth.users.phone)
+      await supabase.auth.updateUser({ data: { full_name: nextName || null, phone: nextPhone || null } }); // metadata update [web:70]
+    }
 
-  setMsg("Saved.");
-  setTimeout(() => setMsg(""), 1500);
-};
+    setMsg("Saved.");
+    setTimeout(() => setMsg(""), 1500);
+  };
 
   const logout = async () => {
-    await supabase.auth.signOut().catch(() => {});
+    await supabase.auth.signOut().catch(() => { });
     window.location.href = "/app";
   };
 
@@ -165,7 +165,7 @@ const save = async () => {
         </div>
 
         <Link
-          href="/app/addresses"
+          href="/app/address"
           style={{
             background: "#fff",
             border: "1px solid #e5e7eb",
@@ -229,7 +229,7 @@ function BottomNav({ active }) {
       <Link href="/app" style={itemStyle("home")}>
         Home
       </Link>
-      <Link href="/app/addresses" style={itemStyle("addresses")}>
+      <Link href="/app/address" style={itemStyle("addresses")}>
         Addresses
       </Link>
       <Link href="/app/profile" style={itemStyle("profile")}>
