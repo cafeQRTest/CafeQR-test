@@ -277,7 +277,10 @@ export default async function handler(req, res) {
         credit_customer_id,
         special_instructions,
         mixed_payment_details: processedMixedDetails,
-        created_at: custom_created_at || new Date().toISOString()
+        created_at: custom_created_at || new Date().toISOString(),
+        prices_include_tax: serviceInclude,
+    base_tax_rate: baseRate,
+    gst_enabled: gstEnabled
       }
     });
 

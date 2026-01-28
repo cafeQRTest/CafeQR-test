@@ -737,7 +737,7 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
 
     return { 
         subtotalGross: result.subtotal_face_value,
-        lineDiscountTotal: result.line_discount_total_amount,
+        lineDiscountTotal: result.line_discount_total,
         subtotalEx: Number(result.subtotal_after_line_discounts || 0),
         taxableAmount: result.taxable_amount,
         finalTax: result.total_tax,
@@ -779,6 +779,7 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
 
   const manualRoundOffValue = settledAmount - finalTotal;
   const totalSavings = grossTotalInc - finalTotal;
+  const totalAppliedDiscount = (lineDiscountTotal || 0) + (orderDiscountFace || 0);
   
   const effectiveTotal = mode === 'collect'
       ? Math.max(0, settledAmount - (order.alreadyPaidAmount || 0) - loyaltyAmountUsed)
@@ -950,10 +951,10 @@ function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
 
         {mode === 'collect' && (
           <div style={{ marginBottom: 20, textAlign: 'center' }}>
-            {totalSavings > 0.01 ? (
+            {totalAppliedDiscount > 0.01 ? (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 13 }}>
                  <span style={{ fontWeight: 600, color: '#0f172a' }}>
-                    Discount Applied <span style={{ color: '#ea580c' }}>(-₹{(totalDiscountFace || totalSavings).toFixed(2)})</span>
+                    Discount Applied <span style={{ color: '#ea580c' }}>(-₹{totalAppliedDiscount.toFixed(2)})</span>
                  </span>
                  <span onClick={() => setIsDiscountModalOpen(true)} style={{ fontWeight: 700, color: '#ea580c', cursor: 'pointer', textDecoration: 'underline' }}>Edit</span>
               </div>

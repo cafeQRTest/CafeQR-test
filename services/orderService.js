@@ -49,6 +49,9 @@ export class OrderService {
         special_instructions = null,
         mixed_payment_details = null,
         created_at = null,
+        prices_include_tax = false,
+        base_tax_rate = null,
+        gst_enabled = null,
       } = metadata;
 
       // 1. Prepare Order Payload
@@ -163,6 +166,7 @@ export class OrderService {
       const invoiceData = {
         restaurant_id: restaurantId,
         order_id: finalOrderId,
+        prices_include_tax: prices_include_tax ?? false,
         invoice_date: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }),
         payment_method: payment_method,
         paid_amount: status === 'completed' ? total_amount : 0,
