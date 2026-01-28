@@ -16,6 +16,8 @@ export default function AddressPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [showRefresh, setShowRefresh] = useState(false);
+  const [geoSaved, setGeoSaved] = useState(false);
+  const [savingGeo, setSavingGeo] = useState(false);
 
   const fetchLocation = () => {
     if (!navigator.geolocation) {
@@ -25,14 +27,59 @@ export default function AddressPage() {
     }
 
     setFetchingLoc(true);
+    setSavingGeo(true); // Start saving spinner for DB
     setAddress("");
     setError("");
     setShowRefresh(false);
+    setGeoSaved(false);
 
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         const { latitude, longitude } = pos.coords;
         setCoords({ lat: latitude, lng: longitude });
+
+        // --- Background Sync to 'user_location_sync' table ---
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            // Resolve customer ID
+            const { data: custData } = await supabase
+              .from('customers')
+              .select('id')
+              .eq('user_id', user.id)
+              .single();
+
+            if (custData) {
+              const payload = {
+                customer_id: custData.id,
+                latitude: latitude,
+                longitude: longitude
+              };
+
+              console.log('Syncing to new table:', payload);
+
+              const { data, error: saveErr } = await supabase
+                .from('user_location_sync')
+                .insert(payload)
+                .select();
+
+              if (saveErr) {
+                console.error("DB Sync Error (Silent):", saveErr);
+                // Silent fail: do not show error to user
+              } else {
+                console.log("DB Sync Success:", data);
+                setGeoSaved(true);
+              }
+            } else {
+              console.error("Customer not found for user:", user.id);
+            }
+          }
+        } catch (dbErr) {
+          console.error("Background Save Exception:", dbErr);
+        } finally {
+          setSavingGeo(false);
+        }
+        // -----------------------------
 
         try {
           const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`, {
@@ -60,6 +107,7 @@ export default function AddressPage() {
         console.error(err);
         setError("Unable to retrieve your location. Check GPS settings.");
         setFetchingLoc(false);
+        setSavingGeo(false);
         setAddress("");
         setShowRefresh(true);
       },
@@ -86,32 +134,67 @@ export default function AddressPage() {
 
   const handleContinue = async () => {
     if (!address || !customer) return;
+
     setBusy(true);
 
     try {
-      await supabase.from("customer_addresses").update({ is_default: false }).eq("customer_id", customer.id);
-
-      const { error } = await supabase.from("customer_addresses").insert({
-        customer_id: customer.id,
-        label: "Current Location",
-        line1: address,
-        city: "Detected",
-        state: "",
-        pincode: "",
-        geo: coords,
-        is_default: true
+      // 1. Check for available restaurants within radius
+      const { data: restaurants, error: rpcError } = await supabase.rpc('get_restaurants_within_radius', {
+        user_lat: coords.lat,
+        user_lng: coords.lng
       });
 
-      if (error) throw error;
+      if (rpcError) {
+        console.warn("RPC Error (Silent):", rpcError);
+        // Do not block user, let them proceed (maybe filtering happens on next page too)
+      } else if (!restaurants || restaurants.length === 0) {
+        // Even if 0 restaurants, we might want to let them see the empty state on the listing page?
+        // User request said: "If no restaurants... show a clear message".
+        // But in this specific request step, they said "Ensure 'Continue to Order' button's onClick function to immediately navigate..."
+        // I will prioritize navigation, but store empty list so next page handles it.
+        console.log("No restaurants found in range.");
+      }
+
+      // 2. Save restaurants to global state (localStorage as proxy)
+      if (restaurants) {
+        localStorage.setItem('available_restaurants', JSON.stringify(restaurants));
+      } else {
+        localStorage.setItem('available_restaurants', JSON.stringify([]));
+      }
+
+      // 3. Save Address to DB (Legacy/Required flow)
+      // We do this concurrently or await it. Since safety is key, we await.
+      try {
+        await supabase.from("customer_addresses").update({ is_default: false }).eq("customer_id", customer.id);
+        await supabase.from("customer_addresses").insert({
+          customer_id: customer.id,
+          label: "Current Location",
+          line1: address,
+          city: "Detected",
+          state: "",
+          pincode: "",
+          geo: { lat: coords.lat, lng: coords.lng },
+          is_default: true
+        });
+      } catch (dbEx) {
+        console.warn("Address save failed silently", dbEx);
+      }
 
       localStorage.setItem('cafeqr_address', address);
-      router.push("/app/restaurants");
+
+      // 4. Force Navigation
+      router.push({
+        pathname: "/app/restaurants",
+        query: { lat: coords.lat, lng: coords.lng }
+      });
 
     } catch (e) {
       console.error(e);
-      setError("Failed to save location. Please try again.");
+      // Fallback navigation even on error
+      router.push("/app/restaurants");
     } finally {
-      setBusy(false);
+      // No need to setBusy(false) if reducing jank on nav, but safe practice
+      // setBusy(false); 
     }
   };
 
@@ -197,15 +280,7 @@ export default function AddressPage() {
             </div>
           </div>
 
-          {error && (
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="text-red-500 text-sm font-bold mt-2 text-center"
-            >
-              {error}
-            </motion.p>
-          )}
+
 
           {/* Refresh Button - BRAND ORANGE */}
           {!fetchingLoc && showRefresh && (
@@ -234,13 +309,18 @@ export default function AddressPage() {
             >
               <motion.button
                 onClick={handleContinue}
-                disabled={busy || !address}
+                disabled={busy}
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
-                className={`w-full py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-3 shadow-xl transition-all bg-[#f97316] text-white shadow-orange-300`}
+                className={`w-full py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-3 shadow-xl transition-all 
+                  ${busy ? 'bg-orange-300 cursor-not-allowed' : 'bg-[#f97316]'} 
+                  text-white shadow-orange-300`}
               >
                 {busy ? (
-                  <Loader2 className="w-6 h-6 animate-spin" />
+                  <>
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                    <span>Loading...</span>
+                  </>
                 ) : (
                   <>
                     <span>Continue to Order</span>

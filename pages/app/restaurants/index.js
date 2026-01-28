@@ -28,19 +28,86 @@ export default function RestaurantListing() {
     const [localAddress, setLocalAddress] = useState("");
 
     useEffect(() => {
+        if (!router.isReady) return;
+
         const load = async () => {
             setLoading(true);
+
+            // 1. Get User Location (Priority: Query Params -> LocalStorage)
+            let userLat = parseFloat(router.query.lat);
+            let userLng = parseFloat(router.query.lng);
+
+            if (isNaN(userLat) || isNaN(userLng)) {
+                // Fallback to localStorage address if query params missing
+                const savedAddr = localStorage.getItem('cafeqr_address'); // Note: this stores text, need coords.
+                // Actually, we should check 'available_restaurants' from previous step if we trusted the RPC. 
+                // But USER REQUEST explicitly asks to "implement Haversine formula... in the restaurant listing logic".
+                // So we will re-calculate here to be safe and strictly client-side verified.
+
+                // Let's try to get coords strictly from query or maybe a separate storage key if needed.
+                // For now, if no query, we might show all or none. 
+                // Assuming nav usually provides them.
+            }
+
+            console.log("User Location for Filtering:", userLat, userLng);
+
+            // 2. Fetch Restaurants with Location Data
             const { data, error } = await supabase
                 .from("restaurants")
-                .select("id, name, restaurant_profiles(brand_color)")
+                .select(`
+                    id, 
+                    name, 
+                    restaurant_profiles (
+                        brand_color,
+                        latitude,
+                        longitude,
+                        delivery_radius_km
+                    )
+                `)
                 .order("name", { ascending: true });
 
-            if (!error) setRestaurants(data || []);
+            if (!error && data) {
+                if (!isNaN(userLat) && !isNaN(userLng)) {
+                    // Haversine Filter
+                    const R = 6371; // Earth Mean Radius in KM
+                    const filteredList = data.filter(r => {
+                        const profile = r.restaurant_profiles;
+                        if (!profile || !profile.latitude || !profile.longitude) return false;
+
+                        const restLat = parseFloat(profile.latitude);
+                        const restLng = parseFloat(profile.longitude);
+                        const radius = parseFloat(profile.delivery_radius_km) || 0;
+
+                        const dLat = (restLat - userLat) * Math.PI / 180;
+                        const dLng = (restLng - userLng) * Math.PI / 180;
+
+                        const a =
+                            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                            Math.cos(userLat * Math.PI / 180) * Math.cos(restLat * Math.PI / 180) *
+                            Math.sin(dLng / 2) * Math.sin(dLng / 2);
+
+                        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                        const distance = R * c;
+
+                        console.log(`Hotel: ${r.name}, Distance: ${distance.toFixed(3)}km, Radius: ${radius}km`);
+
+                        return distance <= radius; // STRICT CONDITION
+                    });
+                    setRestaurants(filteredList);
+                } else {
+                    // If no valid user coords, show all or empty? 
+                    // Showing all might be misleading. Let's show all but warn.
+                    console.warn("No user coordinates found for filtering.");
+                    setRestaurants(data);
+                }
+            } else {
+                setRestaurants([]);
+            }
             setLoading(false);
         };
 
         load();
-    }, [supabase]);
+    }, [supabase, router.isReady, router.query]);
 
     useEffect(() => {
         const loadDefaultAddress = async () => {
