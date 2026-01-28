@@ -180,79 +180,60 @@ export default function RestaurantListing() {
             initial={{ opacity: 0, scale: 0.98 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.4 }}
-            className="min-h-screen bg-[#F8FAFC] pb-32 font-sans"
+            className="delivery-restaurants-page"
         >
-            <header
-                className="bg-white/90 backdrop-blur-xl border-b border-gray-200/60 sticky top-0 z-20 px-4 py-3 shadow-sm transition-all"
-            >
-                <div className="max-w-3xl mx-auto">
-                    <div className="flex items-center gap-3 mb-3">
-                        <div className="flex-1 overflow-hidden">
-                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
-                                DELIVER TO
-                            </p>
-                            <Link
-                                href="/app/address"
-                                className="inline-flex items-center gap-1 group text-gray-900 overflow-hidden max-w-full"
-                            >
-                                <span className="font-bold text-sm truncate max-w-[240px]">
-                                    {topAddressText}
-                                </span>
-                                <span className="text-brand-orange transform group-hover:translate-x-0.5 transition-transform text-xs">▼</span>
+            <header className="delivery-restaurants-header">
+                <div className="header-inner">
+                    <div className="header-top">
+                        <div className="header-address">
+                            <p className="address-label">DELIVER TO</p>
+                            <Link href="/app/address" className="address-link">
+                                <span className="address-text">{topAddressText}</span>
+                                <span className="address-arrow">▼</span>
                             </Link>
                         </div>
 
-                        {/* Profile Avatar with Breathing Animation */}
                         <motion.button
                             onClick={() => router.push("/app/profile")}
-                            animate={{
-                                scale: [1, 1.05, 1],
-                            }}
-                            transition={{
-                                duration: 2,
-                                repeat: Infinity,
-                                ease: "easeInOut"
-                            }}
+                            animate={{ scale: [1, 1.05, 1] }}
+                            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
                             whileHover={{ scale: 1.1 }}
                             whileTap={{ scale: 0.95 }}
-                            className="w-10 h-10 rounded-full bg-orange-50 border-2 border-[#f97316] flex items-center justify-center shadow-md z-50 overflow-hidden text-2xl"
+                            className="header-avatar"
                         >
                             <span>👨‍💼</span>
                         </motion.button>
                     </div>
 
-                    {/* Search Bar */}
-                    <div className="relative group">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <Search className="h-5 w-5 text-gray-400 group-focus-within:text-brand-orange transition-colors" />
-                        </div>
+                    <div className="header-search">
+                        <Search className="search-icon" />
                         <input
                             value={q}
                             onChange={(e) => setQ(e.target.value)}
                             placeholder="Search restaurants, cuisines..."
-                            className="block w-full pl-10 pr-3 py-3 rounded-2xl bg-gray-100 border-transparent text-gray-900 placeholder-gray-500 focus:outline-none focus:bg-white focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange/30 transition-all text-sm font-medium shadow-inner focus:shadow-xl"
+                            className="search-input"
                         />
                     </div>
                 </div>
             </header>
 
-            <div className="max-w-3xl mx-auto px-4 py-6">
+            <div className="delivery-restaurants-content">
                 {loading ? (
-                    <div className="flex flex-col items-center justify-center py-20 space-y-4">
-                        <div className="w-10 h-10 bg-gray-100 rounded-full animate-pulse" />
-                        <div className="h-4 w-32 bg-gray-100 rounded animate-pulse" />
+                    <div className="loading-state">
+                        <div className="loading-avatar" />
+                        <div className="loading-text" />
                     </div>
                 ) : filtered.length === 0 ? (
-                    <div className="text-center py-20 text-gray-500">
-                        <ShoppingBag className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                        <p className="font-medium">No restaurants found near you.</p>
+                    <div className="empty-state">
+                        <ShoppingBag className="empty-icon" />
+                        <p>No restaurants found near you.</p>
                     </div>
                 ) : (
                     <motion.div
                         variants={containerVariants}
                         initial="hidden"
                         animate="show"
-                        className="grid gap-4"
+                        className="restaurants-grid"
                     >
                         {filtered.map((r, i) => {
                             const brand = r?.restaurant_profiles?.brand_color || "#f97316";
@@ -260,45 +241,30 @@ export default function RestaurantListing() {
 
                             return (
                                 <motion.div variants={itemVariants} key={r.id}>
-                                    <Link
-                                        href={`/app/restaurant/${r.id}`}
-                                        passHref
-                                        legacyBehavior
-                                    >
-                                        <motion.a
-                                            className="group block bg-white rounded-2xl p-3 border border-gray-100 shadow-sm transition-all duration-300 relative overflow-hidden cursor-pointer"
-                                            whileHover={{ y: -5, boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1)" }}
-                                            style={{ transformOrigin: "center" }}
-                                        >
-                                            <div className="flex gap-4">
-                                                <div className="w-24 h-24 flex-shrink-0 bg-gray-100 rounded-xl overflow-hidden relative">
-                                                    <img src={imgUrl} alt={r.name} className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-500" />
+                                    <Link href={`/app/restaurant/${r.id}`} className="restaurant-card">
+                                        <div className="card-inner">
+                                            <div className="card-image">
+                                                <img src={imgUrl} alt={r.name} />
+                                            </div>
+
+                                            <div className="card-content">
+                                                <div className="card-info">
+                                                    <h3>{r.name}</h3>
+                                                    <p>Coffee • Snacks • Beverages</p>
                                                 </div>
 
-                                                <div className="flex-1 flex flex-col justify-between py-1">
-                                                    <div>
-                                                        <h3 className="font-bold text-lg text-gray-900 leading-tight group-hover:text-brand-orange transition-colors">
-                                                            {r.name}
-                                                        </h3>
-                                                        <p className="text-xs text-gray-500 mt-1 font-medium">Coffee • Snacks • Beverages</p>
+                                                <div className="card-footer">
+                                                    <div className="card-rating">
+                                                        <span>4.5 ★</span>
+                                                        <span>20-30 mins</span>
                                                     </div>
 
-                                                    <div className="flex items-center justify-between mt-2">
-                                                        <div className="flex items-center gap-1 text-[10px] font-bold bg-green-50 text-green-700 px-2 py-1 rounded-md">
-                                                            <span>4.5 ★</span>
-                                                            <span>20-30 mins</span>
-                                                        </div>
-
-                                                        <span
-                                                            style={{ backgroundColor: brand }}
-                                                            className="text-white text-xs font-bold px-4 py-2 rounded-full flex items-center gap-1 shadow-md shadow-orange-100 transition-transform"
-                                                        >
-                                                            Order <ArrowRight className="w-3 h-3" />
-                                                        </span>
-                                                    </div>
+                                                    <span className="card-order-btn" style={{ backgroundColor: brand }}>
+                                                        Order <ArrowRight className="w-3 h-3" />
+                                                    </span>
                                                 </div>
                                             </div>
-                                        </motion.a>
+                                        </div>
                                     </Link>
                                 </motion.div>
                             );
@@ -307,6 +273,253 @@ export default function RestaurantListing() {
                 )}
             </div>
 
+            {/* Scoped styles - ONLY affects this delivery restaurants page */}
+            <style jsx>{`
+                .delivery-restaurants-page {
+                    min-height: 100vh;
+                    width: 100%;
+                    max-width: none;
+                    background: #f8fafc;
+                    padding-bottom: 120px;
+                    font-family: system-ui, -apple-system, sans-serif;
+                }
+                .delivery-restaurants-header {
+                    background: rgba(255,255,255,0.95);
+                    backdrop-filter: blur(12px);
+                    border-bottom: 1px solid rgba(229,231,235,0.6);
+                    position: sticky;
+                    top: 0;
+                    z-index: 20;
+                    padding: 12px 16px;
+                    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+                }
+                .header-inner {
+                    max-width: 1280px;
+                    margin: 0 auto;
+                    padding: 0 12px;
+                }
+                .header-top {
+                    display: flex;
+                    align-items: center;
+                    gap: 12px;
+                    margin-bottom: 12px;
+                }
+                .header-address {
+                    flex: 1;
+                    overflow: hidden;
+                }
+                .address-label {
+                    font-size: 10px;
+                    font-weight: 700;
+                    color: #9ca3af;
+                    letter-spacing: 0.05em;
+                    margin: 0 0 2px;
+                }
+                .address-link {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 4px;
+                    text-decoration: none;
+                    color: #111827;
+                }
+                .address-text {
+                    font-weight: 700;
+                    font-size: 14px;
+                    max-width: 240px;
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                }
+                .address-arrow {
+                    color: #f97316;
+                    font-size: 12px;
+                }
+                .header-avatar {
+                    width: 40px;
+                    height: 40px;
+                    border-radius: 50%;
+                    background: #fff7ed;
+                    border: 2px solid #f97316;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+                    font-size: 20px;
+                    cursor: pointer;
+                }
+                .header-search {
+                    position: relative;
+                }
+                .search-icon {
+                    position: absolute;
+                    left: 12px;
+                    top: 50%;
+                    transform: translateY(-50%);
+                    width: 20px;
+                    height: 20px;
+                    color: #9ca3af;
+                    pointer-events: none;
+                }
+                .search-input {
+                    width: 100%;
+                    padding: 12px 12px 12px 40px;
+                    border-radius: 16px;
+                    background: #f3f4f6;
+                    border: 2px solid transparent;
+                    font-size: 14px;
+                    font-weight: 500;
+                    color: #111827;
+                    outline: none;
+                    transition: all 0.2s;
+                }
+                .search-input::placeholder {
+                    color: #9ca3af;
+                }
+                .search-input:focus {
+                    background: #fff;
+                    border-color: rgba(249,115,22,0.3);
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+                }
+                .delivery-restaurants-content {
+                    max-width: 1280px;
+                    margin: 0 auto;
+                    padding: 24px 20px;
+                    width: 100%;
+                }
+                .loading-state {
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 80px 0;
+                    gap: 16px;
+                }
+                .loading-avatar {
+                    width: 40px;
+                    height: 40px;
+                    background: #f3f4f6;
+                    border-radius: 50%;
+                    animation: pulse 2s infinite;
+                }
+                .loading-text {
+                    height: 16px;
+                    width: 128px;
+                    background: #f3f4f6;
+                    border-radius: 4px;
+                    animation: pulse 2s infinite;
+                }
+                @keyframes pulse {
+                    0%, 100% { opacity: 1; }
+                    50% { opacity: 0.5; }
+                }
+                .empty-state {
+                    text-align: center;
+                    padding: 80px 0;
+                    color: #6b7280;
+                }
+                .empty-icon {
+                    width: 48px;
+                    height: 48px;
+                    margin: 0 auto 12px;
+                    color: #d1d5db;
+                }
+                .empty-state p {
+                    font-weight: 500;
+                    margin: 0;
+                }
+                .restaurants-grid {
+                    display: grid;
+                    gap: 16px;
+                }
+                .restaurant-card {
+                    display: block;
+                    background: #fff;
+                    border-radius: 16px;
+                    padding: 12px;
+                    border: 1px solid #f3f4f6;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+                    text-decoration: none;
+                    color: inherit;
+                    transition: all 0.3s ease;
+                }
+                .restaurant-card:hover {
+                    transform: translateY(-4px);
+                    box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+                }
+                .card-inner {
+                    display: flex;
+                    gap: 16px;
+                }
+                .card-image {
+                    width: 96px;
+                    height: 96px;
+                    flex-shrink: 0;
+                    background: #f3f4f6;
+                    border-radius: 12px;
+                    overflow: hidden;
+                }
+                .card-image img {
+                    width: 100%;
+                    height: 100%;
+                    object-fit: cover;
+                    transition: transform 0.5s ease;
+                }
+                .restaurant-card:hover .card-image img {
+                    transform: scale(1.1);
+                }
+                .card-content {
+                    flex: 1;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: space-between;
+                    padding: 4px 0;
+                }
+                .card-info h3 {
+                    font-size: 18px;
+                    font-weight: 700;
+                    color: #111827;
+                    margin: 0 0 4px;
+                    line-height: 1.2;
+                    transition: color 0.2s;
+                }
+                .restaurant-card:hover .card-info h3 {
+                    color: #f97316;
+                }
+                .card-info p {
+                    font-size: 12px;
+                    color: #6b7280;
+                    font-weight: 500;
+                    margin: 0;
+                }
+                .card-footer {
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    margin-top: 8px;
+                }
+                .card-rating {
+                    display: flex;
+                    align-items: center;
+                    gap: 4px;
+                    font-size: 10px;
+                    font-weight: 700;
+                    background: #f0fdf4;
+                    color: #15803d;
+                    padding: 4px 8px;
+                    border-radius: 6px;
+                }
+                .card-order-btn {
+                    color: #fff;
+                    font-size: 12px;
+                    font-weight: 700;
+                    padding: 8px 16px;
+                    border-radius: 9999px;
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 4px;
+                    box-shadow: 0 2px 8px rgba(249,115,22,0.2);
+                }
+            `}</style>
         </motion.div>
     );
 }

@@ -216,37 +216,28 @@ export default function AddressPage() {
 
   return (
     <motion.div
-      className="min-h-screen bg-white flex flex-col items-center justify-center p-6 relative overflow-hidden font-sans"
+      className="delivery-address-page"
       initial="hidden"
       animate="show"
       variants={containerVariants}
     >
-      <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-orange-50/50 to-transparent -z-10" />
+      <div className="delivery-address-bg" />
 
-      <motion.div
-        className="w-full max-w-md flex flex-col items-center"
-        layout
-      >
-        <motion.div variants={itemVariants} className="mb-8">
-          <div className="w-20 h-20 bg-orange-50 rounded-full flex items-center justify-center shadow-sm ring-1 ring-orange-100">
+      <motion.div className="delivery-address-card" layout>
+        <motion.div variants={itemVariants} className="delivery-address-icon">
+          <div className="icon-circle">
             <Navigation className="w-10 h-10 text-[#f97316]" fill="#f97316" fillOpacity={0.2} />
           </div>
         </motion.div>
 
-        <motion.div variants={itemVariants} className="text-center mb-10 space-y-2">
-          <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Locating you</h1>
-          <p className="text-slate-500 font-medium text-base">
-            Detecting your delivery zone for food, groceries, and medicine.
-          </p>
+        <motion.div variants={itemVariants} className="delivery-address-header">
+          <h1>Locating you</h1>
+          <p>Detecting your delivery zone for food, groceries, and medicine.</p>
         </motion.div>
 
-        <motion.div variants={itemVariants} className="w-full relative mb-4">
-          <div className={`
-                flex items-center gap-4 bg-white p-5 rounded-2xl border-2 transition-all shadow-sm
-                ${fetchingLoc ? 'border-orange-100 shadow-orange-50' : 'border-gray-200 shadow-lg'}
-                ${error ? 'border-red-200 bg-red-50' : ''}
-            `}>
-            <div className="flex-shrink-0">
+        <motion.div variants={itemVariants} className="delivery-address-input-wrap">
+          <div className={`delivery-address-input-box ${fetchingLoc ? 'is-loading' : ''} ${error ? 'has-error' : ''}`}>
+            <div className="input-icon">
               {fetchingLoc ? (
                 <motion.div
                   animate={{ y: [0, -8, 0] }}
@@ -259,80 +250,255 @@ export default function AddressPage() {
               )}
             </div>
 
-            <div className="flex-1">
-              <p className="text-xs font-bold text-gray-400 tracking-wider mb-1" style={{ textTransform: 'none' }}>
+            <div className="input-content">
+              <p className="input-label">
                 {fetchingLoc ? 'Locating you...' : 'Delivery location'}
               </p>
 
               {fetchingLoc ? (
-                <div className="h-6 w-3/4 bg-gray-100 rounded-md animate-pulse" />
+                <div className="input-skeleton" />
               ) : (
                 <motion.input
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
-                  className="w-full bg-transparent outline-none text-gray-900 font-semibold text-lg placeholder-gray-300"
+                  className="input-field"
                   placeholder="Enter location manually..."
-                  style={{ textTransform: 'capitalize' }}
                 />
               )}
             </div>
           </div>
 
-
-
-          {/* Refresh Button - BRAND ORANGE */}
-          {!fetchingLoc && showRefresh && (
-            <motion.button
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={fetchLocation}
-              className="w-full py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-3 shadow-xl transition-all bg-[#f97316] text-white shadow-orange-300 mt-4"
-            >
-              <RefreshCw className="w-5 h-5" />
-              <span>Not your location? Click here to refresh</span>
-            </motion.button>
-          )}
-        </motion.div>
-
-        <AnimatePresence>
-          {!fetchingLoc && address && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 20 }}
-              className="w-full"
-              layout
-            >
+          {/* Action Buttons Container with Gap */}
+          <div className="delivery-address-actions">
+            {!fetchingLoc && showRefresh && (
               <motion.button
-                onClick={handleContinue}
-                disabled={busy}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                className={`w-full py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-3 shadow-xl transition-all 
-                  ${busy ? 'bg-orange-300 cursor-not-allowed' : 'bg-[#f97316]'} 
-                  text-white shadow-orange-300`}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={fetchLocation}
+                className="delivery-address-refresh-btn"
               >
-                {busy ? (
-                  <>
-                    <Loader2 className="w-6 h-6 animate-spin" />
-                    <span>Loading...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Continue to Order</span>
-                    <ArrowRight className="w-6 h-6" />
-                  </>
-                )}
+                <RefreshCw className="w-5 h-5" />
+                <span>Not your location? Click here to refresh</span>
               </motion.button>
-            </motion.div>
-          )}
-        </AnimatePresence>
+            )}
 
+            <AnimatePresence>
+              {!fetchingLoc && address && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 20 }}
+                  className="delivery-address-continue"
+                  layout
+                >
+                  <motion.button
+                    onClick={handleContinue}
+                    disabled={busy}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    className={`delivery-address-continue-btn ${busy ? 'is-busy' : ''}`}
+                  >
+                    {busy ? (
+                      <>
+                        <Loader2 className="w-6 h-6 animate-spin" />
+                        <span>Loading...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Continue to Order</span>
+                        <ArrowRight className="w-6 h-6" />
+                      </>
+                    )}
+                  </motion.button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </motion.div>
       </motion.div>
+
+      {/* Scoped styles - ONLY affects this delivery address page */}
+      <style jsx>{`
+        .delivery-address-page {
+          min-height: 100vh;
+          width: 100%;
+          max-width: none;
+          background: #fff;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          padding: 24px;
+          position: relative;
+          overflow: hidden;
+          font-family: system-ui, -apple-system, sans-serif;
+        }
+        .delivery-address-bg {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 50%;
+          background: linear-gradient(to bottom, rgba(255,237,213,0.5), transparent);
+          z-index: -1;
+        }
+        .delivery-address-card {
+          width: 100%;
+          max-width: 420px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+        }
+        .delivery-address-icon {
+          margin-bottom: 32px;
+        }
+        .icon-circle {
+          width: 80px;
+          height: 80px;
+          background: #fff7ed;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+          border: 1px solid #fed7aa;
+        }
+        .delivery-address-header {
+          text-align: center;
+          margin-bottom: 40px;
+        }
+        .delivery-address-header h1 {
+          font-size: 28px;
+          font-weight: 700;
+          color: #111827;
+          margin: 0 0 8px;
+          letter-spacing: -0.02em;
+        }
+        .delivery-address-header p {
+          color: #64748b;
+          font-weight: 500;
+          font-size: 16px;
+          margin: 0;
+        }
+        .delivery-address-input-wrap {
+          width: 100%;
+          margin-bottom: 16px;
+        }
+        .delivery-address-input-box {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+          background: #fff;
+          padding: 20px;
+          border-radius: 16px;
+          border: 2px solid #e5e7eb;
+          transition: all 0.2s;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        }
+        .delivery-address-input-box.is-loading {
+          border-color: #fed7aa;
+          box-shadow: 0 4px 12px rgba(249,115,22,0.1);
+        }
+        .delivery-address-input-box.has-error {
+          border-color: #fecaca;
+          background: #fef2f2;
+        }
+        .input-icon {
+          flex-shrink: 0;
+        }
+        .input-content {
+          flex: 1;
+        }
+        .input-label {
+          font-size: 11px;
+          font-weight: 700;
+          color: #9ca3af;
+          letter-spacing: 0.05em;
+          margin: 0 0 4px;
+        }
+        .input-skeleton {
+          height: 24px;
+          width: 75%;
+          background: #f3f4f6;
+          border-radius: 6px;
+          animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
+        }
+        .input-field {
+          width: 100%;
+          background: transparent;
+          border: none;
+          outline: none;
+          color: #111827;
+          font-weight: 600;
+          font-size: 18px;
+        }
+        .input-field::placeholder {
+          color: #d1d5db;
+        }
+        .delivery-address-refresh-btn {
+          width: 100%;
+          margin-top: 16px;
+          padding: 16px;
+          border-radius: 12px;
+          font-weight: 700;
+          font-size: 16px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 12px;
+          background: #f97316;
+          color: #fff;
+          border: none;
+          cursor: pointer;
+          box-shadow: 0 4px 14px rgba(249,115,22,0.3);
+          transition: all 0.2s;
+        }
+        .delivery-address-refresh-btn:hover {
+          background: #ea580c;
+        }
+        .delivery-address-continue {
+          width: 100%;
+        }
+        .delivery-address-continue-btn {
+          width: 100%;
+          padding: 16px;
+          border-radius: 12px;
+          font-weight: 700;
+          font-size: 18px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 12px;
+          background: #f97316;
+          color: #fff;
+          border: none;
+          cursor: pointer;
+          box-shadow: 0 8px 20px rgba(249,115,22,0.3);
+          transition: all 0.2s;
+        }
+        .delivery-address-continue-btn:hover {
+          background: #ea580c;
+        }
+        .delivery-address-continue-btn.is-busy {
+          background: #fdba74;
+          cursor: not-allowed;
+        }
+        .delivery-address-actions {
+          width: 100%;
+          display: flex;
+          flex-direction: column;
+          gap: 20px;
+          margin-top: 20px;
+        }
+      `}</style>
     </motion.div>
   );
 }

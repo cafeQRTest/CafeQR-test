@@ -15,8 +15,6 @@ const LandingPage = () => {
         "Shop the essentials."
     ];
 
-
-
     useEffect(() => {
         const textTimer = setInterval(() => {
             setActiveTextIndex((prev) => (prev + 1) % heroPhrases.length);
@@ -25,10 +23,10 @@ const LandingPage = () => {
     }, []);
 
     const heroImages = [
-        "https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=800&q=80", // aesthetic cafe
-        "https://images.unsplash.com/photo-1610348725531-843dff563e2c?auto=format&fit=crop&w=800&q=80", // fresh organic vegetables
-        "https://images.unsplash.com/photo-1587854692152-cbe660dbde88?auto=format&fit=crop&w=800&q=80", // modern pharmacy
-        "https://images.unsplash.com/photo-1541167760496-1628856ab772?auto=format&fit=crop&w=800&q=80"  // latte art
+        "https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=800&q=80",
+        "https://images.unsplash.com/photo-1610348725531-843dff563e2c?auto=format&fit=crop&w=800&q=80",
+        "https://images.unsplash.com/photo-1587854692152-cbe660dbde88?auto=format&fit=crop&w=800&q=80",
+        "https://images.unsplash.com/photo-1541167760496-1628856ab772?auto=format&fit=crop&w=800&q=80"
     ];
 
     useEffect(() => {
@@ -38,29 +36,24 @@ const LandingPage = () => {
         return () => clearInterval(timer);
     }, []);
 
-
-
     const handleFind = () => {
         setIsLoading(true);
         router.push('/app/auth');
     };
 
     return (
-        <div className="min-h-screen font-sans flex flex-col overflow-hidden text-gray-900 bg-white">
-
-
-            {/* Sticky Navbar */}
-            {/* Navbar - Transparent & Relative */}
+        <div className="landing-wrapper">
+            {/* Navbar - Logo top-left with text */}
             <motion.nav
                 initial={{ y: -100 }}
                 animate={{ y: 0 }}
                 transition={{ type: "spring", stiffness: 100, damping: 20 }}
-                className="relative top-0 left-0 right-0 z-50 bg-transparent"
+                className="landing-nav"
             >
-                <div className="max-w-7xl mx-auto px-6 h-20 flex items-center gap-4">
-                    <img src="/cafeqr-logo.svg" alt="CafeQR Logo" className="h-14 w-auto object-contain" />
+                <div className="nav-inner">
+                    <img src="/cafeqr-logo.svg" alt="CafeQR Logo" className="nav-logo" />
                     <motion.span
-                        className="text-2xl font-extrabold bg-gradient-to-r from-brand-orange to-gray-800 bg-clip-text text-transparent"
+                        className="nav-brand"
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         transition={{ duration: 1 }}
@@ -70,37 +63,33 @@ const LandingPage = () => {
                 </div>
             </motion.nav>
 
-            {/* Main Content Area */}
-            {/* Main Content Area - Split Layout */}
+            {/* Hero Section - Two Column Layout */}
             <motion.main
-                className="flex-grow w-full max-w-7xl mx-auto px-6 pb-20 z-10 relative"
+                className="hero-main"
                 animate={{ opacity: isLoading ? 0 : 1 }}
                 transition={{ duration: 0.5 }}
             >
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center h-full">
-
-                    {/* Left Column: Text & Search */}
-                    <div className="flex flex-col items-start justify-center text-left gap-4 max-w-xl relative">
-                        <div className="flex flex-col gap-4 relative z-10">
-                            <div className="h-auto relative">
-                                <AnimatePresence mode="wait">
-                                    <motion.h1
-                                        key={activeTextIndex}
-                                        initial={{ opacity: 0, y: 20 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        exit={{ opacity: 0, y: -20 }}
-                                        transition={{ duration: 0.5 }}
-                                        className="text-5xl md:text-5xl font-extrabold text-brand-orange tracking-tight leading-tight py-2 whitespace-nowrap"
-                                    >
-                                        {heroPhrases[activeTextIndex]}
-                                    </motion.h1>
-                                </AnimatePresence>
-                            </div>
+                <div className="hero-container">
+                    {/* Left Column: Text & CTA */}
+                    <div className="hero-left">
+                        <div className="hero-text-block">
+                            <AnimatePresence mode="wait">
+                                <motion.h1
+                                    key={activeTextIndex}
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, y: -20 }}
+                                    transition={{ duration: 0.5 }}
+                                    className="hero-title"
+                                >
+                                    {heroPhrases[activeTextIndex]}
+                                </motion.h1>
+                            </AnimatePresence>
                             <motion.p
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ duration: 0.5, delay: 0.1 }}
-                                className="text-xl md:text-2xl text-slate-700 font-medium py-2 leading-tight"
+                                className="hero-subtitle"
                             >
                                 Your local favorites, delivered.
                             </motion.p>
@@ -111,14 +100,14 @@ const LandingPage = () => {
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ duration: 0.5, delay: 0.2 }}
-                            className="w-full max-w-md"
+                            className="hero-cta-wrapper"
                         >
                             <motion.button
                                 whileHover={{ scale: 1.05 }}
                                 whileTap={{ scale: 0.95 }}
                                 animate={isLoading ? { scale: 0.98 } : {}}
                                 onClick={!isLoading ? handleFind : undefined}
-                                className="bg-brand-orange text-white font-bold rounded-full px-12 py-5 text-lg shadow-xl shadow-orange-200/50 hover:shadow-[0_10px_30px_-10px_rgba(255,82,0,0.5)] hover:bg-orange-600 transition-all flex items-center justify-center relative overflow-hidden"
+                                className="hero-cta-btn"
                             >
                                 <span className={`transition-opacity duration-200 ${isLoading ? 'opacity-30' : 'opacity-100'}`}>
                                     Find Restaurants
@@ -131,37 +120,35 @@ const LandingPage = () => {
                             </motion.button>
                         </motion.div>
 
-                        {/* Helper Text (Popular Cities) - Staggered */}
+                        {/* Popular Cities */}
                         <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             transition={{ duration: 0.8, delay: 0.8 }}
-                            className="pt-4"
+                            className="hero-cities"
                         >
-                            <p className="text-gray-400 font-medium text-sm tracking-wide mb-3">
-                                POPULAR CITIES IN INDIA
-                            </p>
-                            <div className="flex gap-4 text-gray-400 text-sm font-semibold flex-wrap">
+                            <p className="cities-label">POPULAR CITIES IN INDIA</p>
+                            <div className="cities-list">
                                 <span>Ahmedabad</span>
                                 <span>Bangalore</span>
                                 <span>Chennai</span>
                                 <span>Delhi</span>
-                                <span className="text-brand-orange cursor-pointer">More...</span>
+                                <span className="cities-more">More...</span>
                             </div>
                         </motion.div>
                     </div>
 
-                    {/* Right Column: Hero Image Carousel */}
+                    {/* Right Column: Image Carousel */}
                     <motion.div
                         initial={{ opacity: 0, x: 50 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ duration: 0.8, delay: 0.2, ease: "easeOut" }}
-                        className="relative hidden lg:flex items-center justify-center w-full"
+                        className="hero-right"
                     >
                         <motion.div
                             animate={{ y: [0, -15, 0] }}
                             transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-                            className="relative w-full max-w-[500px] h-[500px] rounded-[40px] overflow-hidden shadow-[0_20px_60px_-15px_rgba(255,82,0,0.3)] bg-white"
+                            className="hero-image-container"
                         >
                             <AnimatePresence mode="popLayout">
                                 <motion.div
@@ -173,85 +160,352 @@ const LandingPage = () => {
                                         opacity: { duration: 1.2, ease: "easeInOut" },
                                         scale: { duration: 7, ease: "linear" }
                                     }}
-                                    className="absolute inset-0 w-full h-full rounded-[40px]"
+                                    className="hero-image-inner"
                                 >
                                     <img
                                         src={heroImages[activeImgIndex]}
                                         alt="Essentials"
-                                        className="w-full h-full object-cover rounded-[40px]"
+                                        className="hero-image"
                                     />
                                 </motion.div>
                             </AnimatePresence>
-
-                            {/* Subtle Inner Border/Sheen */}
-                            <div className="absolute inset-0 rounded-[40px] ring-1 ring-black/5 pointer-events-none"></div>
+                            <div className="hero-image-sheen"></div>
                         </motion.div>
                     </motion.div>
-
                 </div>
             </motion.main>
 
-            {/* How It Works Section - Deep Glassmorphism */}
-            <section className="py-48 relative z-10">
-                <div className="max-w-7xl mx-auto px-6">
+            {/* How It Works Section */}
+            <section className="how-it-works">
+                <div className="section-inner">
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         whileInView={{ opacity: 1, y: 0 }}
                         viewport={{ once: true }}
                         transition={{ duration: 0.8 }}
-                        className="text-center mb-20"
+                        className="section-header"
                     >
-                        <h2 className="text-4xl font-extrabold text-gray-900 mb-4">How It Works</h2>
-                        <p className="text-gray-500 max-w-lg mx-auto text-lg font-medium">
-                            Simple steps to get your favorite coffee delivered.
-                        </p>
+                        <h2>How It Works</h2>
+                        <p>Simple steps to get your favorite coffee delivered.</p>
                     </motion.div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-                        {/* Step 1 */}
-                        <motion.div
-                            whileHover={{ y: -10 }}
-                            className="p-8 bg-white border border-gray-100 shadow-xl rounded-2xl transition-all duration-300 group cursor-default"
-                        >
-                            <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-6 shadow-sm">
+                    <div className="steps-grid">
+                        <motion.div whileHover={{ y: -10 }} className="step-card">
+                            <div className="step-icon">
                                 <QrCode className="w-8 h-8 text-brand-orange" />
                             </div>
-                            <h3 className="text-2xl font-bold text-brand-orange mb-3">Scan QR</h3>
-                            <p className="text-gray-600 leading-relaxed font-medium">
-                                Start by scanning the QR code at your cafe table or one of our flyers at home.
-                            </p>
+                            <h3>Scan QR</h3>
+                            <p>Start by scanning the QR code at your cafe table or one of our flyers at home.</p>
                         </motion.div>
 
-                        {/* Step 2 */}
-                        <motion.div
-                            whileHover={{ y: -10 }}
-                            className="p-8 bg-white/10 backdrop-blur-md border border-white/20 shadow-2xl rounded-2xl transition-all duration-300 group cursor-default"
-                        >
-                            <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mb-6 shadow-lg">
+                        <motion.div whileHover={{ y: -10 }} className="step-card step-card-glass">
+                            <div className="step-icon step-icon-white">
                                 <Smartphone className="w-8 h-8 text-brand-orange" />
                             </div>
-                            <h3 className="text-2xl font-bold text-brand-orange mb-3 drop-shadow-sm">Order Online</h3>
-                            <p className="text-gray-100 leading-relaxed font-medium">
-                                Browse the menu, customize your order, and select your favorite items in seconds.
-                            </p>
+                            <h3>Order Online</h3>
+                            <p>Browse the menu, customize your order, and select your favorite items in seconds.</p>
                         </motion.div>
 
-                        {/* Step 3 */}
-                        <motion.div
-                            whileHover={{ y: -10 }}
-                            className="p-8 bg-white/10 backdrop-blur-md border border-white/20 shadow-2xl rounded-2xl transition-all duration-300 group cursor-default"
-                        >
-                            <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mb-6 shadow-lg">
+                        <motion.div whileHover={{ y: -10 }} className="step-card step-card-glass">
+                            <div className="step-icon step-icon-white">
                                 <Zap className="w-8 h-8 text-brand-orange" />
                             </div>
-                            <h3 className="text-2xl font-bold text-brand-orange mb-3 drop-shadow-sm">Fast Delivery</h3>
-                            <p className="text-gray-100 leading-relaxed font-medium">
-                                Sit back and relax. Your delicious coffee will be delivered to you in minutes.
-                            </p>
+                            <h3>Fast Delivery</h3>
+                            <p>Sit back and relax. Your delicious coffee will be delivered to you in minutes.</p>
                         </motion.div>
                     </div>
                 </div>
             </section>
+
+            {/* Scoped Styles */}
+            <style jsx>{`
+                /* ===== ROOT WRAPPER - FULL WIDTH ===== */
+                .landing-wrapper {
+                    min-height: 100vh;
+                    width: 100%;
+                    display: flex;
+                    flex-direction: column;
+                    overflow-x: hidden;
+                    background: #fff;
+                    color: #1f2937;
+                    font-family: system-ui, -apple-system, sans-serif;
+                }
+
+                /* ===== NAVBAR ===== */
+                .landing-nav {
+                    position: relative;
+                    z-index: 50;
+                    background: transparent;
+                    width: 100%;
+                }
+                .nav-inner {
+                    max-width: 1280px;
+                    margin: 0 auto;
+                    padding: 0 24px;
+                    height: 80px;
+                    display: flex;
+                    align-items: center;
+                    gap: 16px;
+                }
+                .nav-logo {
+                    height: 56px;
+                    width: auto;
+                    object-fit: contain;
+                }
+                .nav-brand {
+                    font-size: 24px;
+                    font-weight: 800;
+                    background: linear-gradient(to right, #FF5200, #374151);
+                    -webkit-background-clip: text;
+                    -webkit-text-fill-color: transparent;
+                    background-clip: text;
+                }
+
+                /* ===== HERO MAIN ===== */
+                .hero-main {
+                    flex: 1;
+                    width: 100%;
+                    padding: 0 24px 80px;
+                    position: relative;
+                    z-index: 10;
+                }
+                .hero-container {
+                    max-width: 1280px;
+                    margin: 0 auto;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 48px;
+                    align-items: center;
+                    min-height: 70vh;
+                }
+
+                /* ===== HERO LEFT (Text Column) ===== */
+                .hero-left {
+                    display: flex;
+                    flex-direction: column;
+                    align-items: flex-start;
+                    justify-content: center;
+                    text-align: left;
+                    gap: 16px;
+                    max-width: 600px;
+                    width: 100%;
+                }
+                .hero-text-block {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 16px;
+                }
+                .hero-title {
+                    font-size: 48px;
+                    font-weight: 800;
+                    color: #FF5200;
+                    letter-spacing: -0.02em;
+                    line-height: 1.1;
+                    margin: 0;
+                }
+                .hero-subtitle {
+                    font-size: 20px;
+                    color: #475569;
+                    font-weight: 500;
+                    margin: 0;
+                }
+                .hero-cta-wrapper {
+                    width: 100%;
+                    max-width: 320px;
+                }
+                .hero-cta-btn {
+                    width: 100%;
+                    background: #FF5200;
+                    color: white;
+                    font-weight: 700;
+                    border-radius: 9999px;
+                    padding: 20px 48px;
+                    font-size: 18px;
+                    border: none;
+                    cursor: pointer;
+                    box-shadow: 0 20px 40px -10px rgba(255, 82, 0, 0.4);
+                    transition: all 0.3s ease;
+                    position: relative;
+                    overflow: hidden;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                }
+                .hero-cta-btn:hover {
+                    background: #e64a00;
+                    box-shadow: 0 25px 50px -10px rgba(255, 82, 0, 0.5);
+                }
+                .hero-cities {
+                    padding-top: 16px;
+                }
+                .cities-label {
+                    font-size: 12px;
+                    color: #9ca3af;
+                    font-weight: 600;
+                    letter-spacing: 0.05em;
+                    margin-bottom: 12px;
+                }
+                .cities-list {
+                    display: flex;
+                    gap: 16px;
+                    flex-wrap: wrap;
+                    font-size: 14px;
+                    color: #9ca3af;
+                    font-weight: 600;
+                }
+                .cities-more {
+                    color: #FF5200;
+                    cursor: pointer;
+                }
+
+                /* ===== HERO RIGHT (Image Column) ===== */
+                .hero-right {
+                    display: none; /* Hidden on mobile */
+                    align-items: center;
+                    justify-content: center;
+                    width: 100%;
+                    max-width: 500px;
+                }
+                .hero-image-container {
+                    width: 100%;
+                    max-width: 500px;
+                    height: 500px;
+                    border-radius: 40px;
+                    overflow: hidden;
+                    position: relative;
+                    box-shadow: 0 20px 60px -15px rgba(255, 82, 0, 0.3);
+                    background: #fff;
+                }
+                .hero-image-inner {
+                    position: absolute;
+                    inset: 0;
+                    width: 100%;
+                    height: 100%;
+                    border-radius: 40px;
+                }
+                .hero-image {
+                    width: 100%;
+                    height: 100%;
+                    object-fit: cover;
+                    border-radius: 40px;
+                }
+                .hero-image-sheen {
+                    position: absolute;
+                    inset: 0;
+                    border-radius: 40px;
+                    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.05);
+                    pointer-events: none;
+                }
+
+                /* ===== HOW IT WORKS ===== */
+                .how-it-works {
+                    padding: 120px 24px;
+                    position: relative;
+                    z-index: 10;
+                    background: #f8fafc;
+                }
+                .section-inner {
+                    max-width: 1280px;
+                    margin: 0 auto;
+                }
+                .section-header {
+                    text-align: center;
+                    margin-bottom: 80px;
+                }
+                .section-header h2 {
+                    font-size: 36px;
+                    font-weight: 800;
+                    color: #111827;
+                    margin: 0 0 16px;
+                }
+                .section-header p {
+                    font-size: 18px;
+                    color: #6b7280;
+                    font-weight: 500;
+                    margin: 0;
+                    max-width: 500px;
+                    margin: 0 auto;
+                }
+                .steps-grid {
+                    display: grid;
+                    grid-template-columns: 1fr;
+                    gap: 24px;
+                    max-width: 1000px;
+                    margin: 0 auto;
+                }
+                .step-card {
+                    padding: 32px;
+                    background: #fff;
+                    border: 1px solid #f3f4f6;
+                    border-radius: 16px;
+                    box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05);
+                    transition: all 0.3s ease;
+                    cursor: default;
+                }
+                .step-card-glass {
+                    background: rgba(255,255,255,0.8);
+                    backdrop-filter: blur(12px);
+                }
+                .step-icon {
+                    width: 64px;
+                    height: 64px;
+                    background: #f9fafb;
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    margin-bottom: 24px;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+                }
+                .step-icon-white {
+                    background: #fff;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+                }
+                .step-card h3 {
+                    font-size: 24px;
+                    font-weight: 700;
+                    color: #FF5200;
+                    margin: 0 0 12px;
+                }
+                .step-card p {
+                    font-size: 16px;
+                    color: #6b7280;
+                    line-height: 1.6;
+                    margin: 0;
+                }
+
+                /* ===== RESPONSIVE: TABLET+ (768px) ===== */
+                @media (min-width: 768px) {
+                    .hero-container {
+                        flex-direction: row;
+                        justify-content: space-between;
+                        gap: 64px;
+                    }
+                    .hero-left {
+                        flex: 1;
+                    }
+                    .hero-right {
+                        display: flex;
+                        flex: 1;
+                    }
+                    .hero-title {
+                        font-size: 56px;
+                    }
+                    .hero-subtitle {
+                        font-size: 24px;
+                    }
+                    .steps-grid {
+                        grid-template-columns: repeat(3, 1fr);
+                    }
+                }
+
+                /* ===== RESPONSIVE: DESKTOP (1024px) ===== */
+                @media (min-width: 1024px) {
+                    .hero-title {
+                        font-size: 64px;
+                    }
+                }
+            `}</style>
         </div>
     );
 };
