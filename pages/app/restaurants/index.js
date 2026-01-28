@@ -296,7 +296,7 @@ export default function RestaurantListing() {
                 .header-inner {
                     max-width: 1280px;
                     margin: 0 auto;
-                    padding: 0 12px;
+                    padding: 0 16px;
                 }
                 .header-top {
                     display: flex;
@@ -383,7 +383,7 @@ export default function RestaurantListing() {
                 .delivery-restaurants-content {
                     max-width: 1280px;
                     margin: 0 auto;
-                    padding: 24px 20px;
+                    padding: 24px;
                     width: 100%;
                 }
                 .loading-state {

@@ -185,117 +185,94 @@ export default function DeliveryRestaurantMenu() {
   if (!restaurantId) return <div style={{ padding: 40, textAlign: "center" }}>Missing restaurant.</div>;
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f8f9fa", paddingBottom: cart.length ? 170 : 84 }}>
-      <header
-        style={{
-          background: "#fff",
-          borderBottom: "1px solid #e5e7eb",
-          padding: 14,
-          position: "sticky",
-          top: 0,
-          zIndex: 10,
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <button
-            onClick={() => router.back()}
-            style={{
-              border: "1px solid #e5e7eb",
-              background: "#fff",
-              borderRadius: 12,
-              width: 40,
-              height: 40,
-              cursor: "pointer",
-              fontWeight: 900,
-            }}
-          >
-            {"<"}
-          </button>
-
-          <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 900, color: "#111827" }}>{restaurant?.name || "Restaurant"}</div>
-            <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
-              Add items • Checkout below
-            </div>
-          </div>
-
-          <Link
-            href="/app/profile"
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: 999,
-              border: "1px solid #e5e7eb",
-              background: "#fff",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              textDecoration: "none",
-              color: "#111827",
-              fontWeight: 900,
-            }}
-            aria-label="Profile"
-          >
-            ☺
-          </Link>
-        </div>
-
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search dishes…"
-          style={{
-            marginTop: 12,
-            width: "100%",
-            padding: "12px 12px",
-            borderRadius: 12,
-            border: "1px solid #e5e7eb",
-            outline: "none",
-            background: "#f8f9fa",
-          }}
-        />
-
-        <div style={{ marginTop: 12, display: "flex", gap: 8, overflowX: "auto" }}>
-          {categories.map((c) => (
+    <div className="delivery-menu-page">
+      <header className="delivery-menu-header">
+        <div className="header-content">
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <button
-              key={c}
-              onClick={() => setCat(c)}
+              onClick={() => router.back()}
               style={{
-                whiteSpace: "nowrap",
                 border: "1px solid #e5e7eb",
-                background: cat === c ? brandColor : "#fff",
-                color: cat === c ? "#fff" : "#111827",
-                padding: "8px 12px",
-                borderRadius: 999,
-                fontWeight: 900,
+                background: "#fff",
+                borderRadius: 12,
+                width: 40,
+                height: 40,
                 cursor: "pointer",
+                fontWeight: 900,
               }}
             >
-              {c}
+              {"<"}
             </button>
-          ))}
+
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 900, color: "#111827" }}>{restaurant?.name || "Restaurant"}</div>
+              <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
+                Add items • Checkout below
+              </div>
+            </div>
+
+            <Link
+              href="/app/profile"
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 999,
+                border: "1px solid #e5e7eb",
+                background: "#fff",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                textDecoration: "none",
+                color: "#111827",
+                fontWeight: 900,
+              }}
+              aria-label="Profile"
+            >
+              ☺
+            </Link>
+          </div>
+
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search dishes…"
+            className="search-input"
+          />
+
+          <div style={{ marginTop: 12, display: "flex", gap: 8, overflowX: "auto" }}>
+            {categories.map((c) => (
+              <button
+                key={c}
+                onClick={() => setCat(c)}
+                style={{
+                  whiteSpace: "nowrap",
+                  border: "1px solid #e5e7eb",
+                  background: cat === c ? brandColor : "#fff",
+                  color: cat === c ? "#fff" : "#111827",
+                  padding: "8px 12px",
+                  borderRadius: 999,
+                  fontWeight: 900,
+                  cursor: "pointer",
+                }}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
         </div>
       </header>
 
-      <div style={{ padding: 12 }}>
+      <div className="menu-content">
         {itemsLoading ? (
           <div style={{ padding: 20, textAlign: "center" }}>Loading menu…</div>
         ) : filteredItems.length === 0 ? (
           <div style={{ padding: 20, textAlign: "center", color: "#6b7280" }}>No items found.</div>
         ) : (
-          <div style={{ display: "grid", gap: 10 }}>
+          <div className="menu-grid">
             {filteredItems.map((it) => (
               <div
                 key={it.id}
-                style={{
-                  background: "#fff",
-                  border: "1px solid #e5e7eb",
-                  borderRadius: 14,
-                  padding: 14,
-                  display: "flex",
-                  gap: 12,
-                  alignItems: "center",
-                }}
+                className="menu-item"
               >
                 {it.image_url ? (
                   <img
@@ -343,6 +320,64 @@ export default function DeliveryRestaurantMenu() {
           </div>
         )}
       </div>
+
+      <style jsx>{`
+        .delivery-menu-page {
+          min-height: 100vh;
+          background: #f8f9fa;
+          padding-bottom: ${cart.length ? '170px' : '84px'};
+        }
+        .delivery-menu-header {
+          background: #fff;
+          border-bottom: 1px solid #e5e7eb;
+          position: sticky;
+          top: 0;
+          z-index: 10;
+          padding: 14px;
+        }
+        .header-content {
+          max-width: 1280px;
+          margin: 0 auto;
+          padding: 0 8px;
+        }
+        .search-input {
+          margin-top: 12px;
+          width: 100%;
+          padding: 12px;
+          border-radius: 12px;
+          border: 1px solid #e5e7eb;
+          outline: none;
+          background: #f8f9fa;
+          font-size: 14px;
+        }
+        .search-input:focus {
+          border-color: #f97316;
+          background: #fff;
+        }
+        .menu-content {
+          max-width: 1280px;
+          margin: 0 auto;
+          padding: 16px 20px;
+        }
+        .menu-grid {
+          display: grid;
+          gap: 12px;
+        }
+        .menu-item {
+          background: #fff;
+          border: 1px solid #e5e7eb;
+          border-radius: 14px;
+          padding: 14px;
+          display: flex;
+          gap: 12px;
+          align-items: center;
+          transition: all 0.2s;
+        }
+        .menu-item:hover {
+          box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+          transform: translateY(-2px);
+        }
+      `}</style>
 
       {cart.length ? (
         <div
