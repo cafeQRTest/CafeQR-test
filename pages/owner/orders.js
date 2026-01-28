@@ -5,6 +5,7 @@ import styled, { keyframes, css } from 'styled-components';
 import { useRouter } from 'next/router'; // <-- Import useRouter at the top!
 import { Capacitor } from '@capacitor/core';
 import { getSupabase } from '../../services/supabase';
+import { LoyaltyService } from '../../services/loyaltyService';
 import { useRequireAuth } from '../../lib/useRequireAuth';
 import { useRestaurant } from '../../context/RestaurantContext';
 import Button from '../../components/ui/Button';
@@ -2309,6 +2310,20 @@ const handleCancelConfirm = async (reason) => {
       }
     } else {
       console.log('[CANCEL ORDER] No invoice found - skipping void');
+      
+      // Attempt manual loyalty reversal for non-invoiced orders (e.g. if points were redeemed on a New order)
+      if (restaurant?.loyalty_enabled) {
+          console.log('[CANCEL ORDER] Loyalty enabled, checking/reversing transactions for non-invoiced order');
+          try {
+             await LoyaltyService.handleOrderReversal(supabase, {
+                restaurant_id: restaurantId,
+                order_id: cancelOrderDialog.id
+             });
+             console.log('[CANCEL ORDER] Manual Loyalty Reversal Checked/Completed');
+          } catch (error) {
+             console.error('[CANCEL ORDER] Loyalty reversal failed:', error);
+          }
+      }
     }
        // Restore stock for cancelled order
        let itemsToRestore = fullOrder?.order_items;
@@ -3645,6 +3660,7 @@ function OrderCard({
                    try { await downloadInvoicePdf(order.id) } catch (e) { alert(e.message) }
                 }} disabled={generatingInvoice === order.id}>Invoice</Button>
                 <Button size="sm" style={{background: '#10b981', borderColor: '#10b981', color:'white'}} onClick={() => onPrintBill && onPrintBill(order)}>Print Bill</Button>
+                <Button size="sm" variant="danger" onClick={() => onCancelOrderOpen(order)}>Cancel</Button>
               </>
             )}
 
