@@ -162,7 +162,8 @@ const price = ispackagedgood ? mrp : sellRate;
         veg,
         __rawTaxMissing: taxrateFromFile === null, // track for warnings
         __rawHsnMissing: !hsn,
-__sellAboveMrp: mrp !== null && sellRate !== null && sellRate > mrp,
+        __mrp: mrp,
+        __sellAboveMrp: mrp !== null && sellRate !== null && sellRate > mrp,
 
       };
     });
@@ -203,10 +204,18 @@ newOnes = newOnes.filter((d) => {
       if (d.taxrate < 0 || d.taxrate > 100) errors.push(`${rowTag}: Tax% must be between 0 and 100.`);
       if (d.__rawTaxMissing) warnings.push(`${rowTag}: Tax% not found in file; used default ${Number(d.taxrate).toFixed(2)}.`);
 
-      // hsn: only required when packaged good is true
+      // HSN policy:
+      // - If packaged because MRP exists: allow missing HSN (warning), validate format only if provided
+      // - If non-packaged: missing HSN is also ok (warning)
       if (d.ispackagedgood) {
-        if (!d.hsn) errors.push(`${rowTag}: HSN is required for packaged goods.`);
-        else if (!isValidHsn(d.hsn)) errors.push(`${rowTag}: HSN must be 4–8 digits.`);
+        if (!d.hsn) {
+          warnings.push(
+            `${rowTag}: HSN not provided; treated as Packaged because MRP is present. ` +
+            `You can add HSN_CODE later if needed for GST reports.`
+          );
+        } else if (!isValidHsn(d.hsn)) {
+          errors.push(`${rowTag}: HSN must be 4–8 digits.`);
+        }
       } else {
         if (!d.hsn) warnings.push(`${rowTag}: HSN not provided (ok for non-packaged items).`);
         else if (!isValidHsn(d.hsn)) errors.push(`${rowTag}: HSN must be 4–8 digits.`);
@@ -316,7 +325,7 @@ if (error) throw error;
       <h3 style={{ marginTop: 0 }}>Excel Import (New items only: name + category match)</h3>
 
       <div style={{ fontSize: 13, color: "#374151", marginBottom: 8 }}>
-        Tip: Tax%/HSN are optional; packaged items require HSN.
+           Tip: Tax%/HSN are optional. If MRP is present, the item is treated as Packaged; missing HSN becomes a warning (you                can fill it later).
       </div>
 
       <input type="file" accept=".xlsx,.xls" onChange={onFile} disabled={busy} />

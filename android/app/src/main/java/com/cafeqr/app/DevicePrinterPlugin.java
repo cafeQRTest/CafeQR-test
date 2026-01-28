@@ -439,7 +439,6 @@ try { Thread.sleep(SLEEP_BEFORE_CLOSE); } catch (InterruptedException ignored) {
         os.flush();
         try { Thread.sleep(80); } catch (InterruptedException ignored) {}
 
-        final int CHUNK = 256;
         int offset = 0;
         while (offset < data.length) {
           int len = Math.min(CHUNK, data.length - offset);
