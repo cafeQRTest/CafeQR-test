@@ -344,27 +344,23 @@ export function buildKotText(order, restaurantProfile) {
     if (order?.order_type === 'parcel') {
        lines.push(ALIGN_CENTER);
        lines.push(
-         MODE_INVERSE + 
          MODE_BOLD +
          (is80 ? SIZE_2X : SIZE_1X) +
          " PARCEL " +
          SIZE_1X +
-         MODE_NO_BOLD +
-         MODE_NO_INVERSE
+         MODE_NO_BOLD
        );
        lines.push(ALIGN_LEFT);
        lines.push(withMargins(dashes(), layout));
     } else if (tableLabel) {
-       // Table Label in Inverse + Large
+       // Table Label in Large (No Inverse)
        lines.push(ALIGN_CENTER);
        lines.push(
-         MODE_INVERSE + 
          MODE_BOLD +
          (is80 ? SIZE_2X : SIZE_1X) +
          ` ${tableLabel.toUpperCase()} ` +
          SIZE_1X +
-         MODE_NO_BOLD +
-         MODE_NO_INVERSE
+         MODE_NO_BOLD
        );
        lines.push(ALIGN_LEFT);
        lines.push(withMargins(dashes(), layout));
