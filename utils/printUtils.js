@@ -24,8 +24,9 @@ const ALIGN_RIGHT = ESC + "a" + b(2);
 const MODE_TALL = ESC + "!" + b(0x01); // double-height only
 // GS ! n = character size magnification (width/height). [web:133][web:138]
 const SIZE_1X = GS + "!" + b(0x00); // 1x width, 1x height
-const SIZE_2X = GS + "!" + b(0x11); // 2x width, 2x height
 const SIZE_2H = GS + "!" + b(0x01); // 1x width, 2x height (your current “DH”)
+const MODE_INVERSE = GS + "B" + b(1);
+const MODE_NO_INVERSE = GS + "B" + b(0);
 
 
 
@@ -301,28 +302,7 @@ export function buildKotText(order, restaurantProfile) {
     const W = layout.innerCols;
     const dashes = () => "-".repeat(W);
 
-    const restaurantName = String(
-      restaurantProfile?.restaurant_name ||
-        order?.restaurant_name ||
-        "RESTAURANT"
-    ).toUpperCase();
 
-    const addressParts = [
-      restaurantProfile?.shipping_address_line1,
-      restaurantProfile?.shipping_address_line2,
-      restaurantProfile?.shipping_city,
-      restaurantProfile?.shipping_state,
-      restaurantProfile?.shipping_pincode,
-    ].filter(Boolean);
-    const address = addressParts.length
-      ? addressParts.join(", ")
-      : order?.restaurant_address || "";
-
-    const phone =
-      restaurantProfile?.shipping_phone ||
-      restaurantProfile?.phone ||
-      order?.restaurant_phone ||
-      "";
 
     const orderId = order?.id?.slice(0, 8)?.toUpperCase() || "N/A";
     const tableLabel = getOrderTypeLabel(order);
@@ -345,48 +325,66 @@ export function buildKotText(order, restaurantProfile) {
     const lines = [];
 
     // === HEADER ===
-    // Use PRINTER ALIGNMENT (ALIGN_CENTER) for the double-width header
-    // so it ignores column counting errors.
+    const is80 = layout.paperMm >= 76;
 
-// === RESTAURANT NAME (center + bold; 80mm = 2xW/2xH, 58mm = normal) ===
-const is80 = layout.paperMm >= 76;
-
-lines.push(ALIGN_CENTER);
-
-lines.push(
-  MODE_BOLD +
-    (is80 ? SIZE_2X : SIZE_1X) +
-    restaurantName +
-    SIZE_1X +
-    MODE_NO_BOLD
-);
-
-
-// go back to normal flow
-lines.push(ALIGN_LEFT);
-
-
-
-
-    wrapText(address, W).forEach((l) =>
-      lines.push(withMargins(center(l, W), layout))
-    );
-    if (phone)
-      lines.push(withMargins(center(`Contact No.: ${phone}`, W), layout));
+    lines.push(ALIGN_CENTER);
     
+    // 1. Title
+    lines.push(
+      MODE_BOLD +
+        (is80 ? SIZE_2X : SIZE_1X) +
+        "KITCHEN ORDER TICKET" +
+        SIZE_1X +
+        MODE_NO_BOLD
+    );
+    lines.push(ALIGN_LEFT);
     lines.push(withMargins(dashes(), layout));
 
-    lines.push(withMargins(center("*** KITCHEN ORDER TICKET ***", W), layout));
-    lines.push(withMargins(`${dateStr} ${timeStr}`, layout));
+    // 2. Parcel Highlight or Table Info
+    if (order?.order_type === 'parcel') {
+       lines.push(ALIGN_CENTER);
+       lines.push(
+         MODE_INVERSE + 
+         MODE_BOLD +
+         (is80 ? SIZE_2X : SIZE_1X) +
+         " PARCEL " +
+         SIZE_1X +
+         MODE_NO_BOLD +
+         MODE_NO_INVERSE
+       );
+       lines.push(ALIGN_LEFT);
+       lines.push(withMargins(dashes(), layout));
+    } else if (tableLabel) {
+       // Table Label in Inverse + Large
+       lines.push(ALIGN_CENTER);
+       lines.push(
+         MODE_INVERSE + 
+         MODE_BOLD +
+         (is80 ? SIZE_2X : SIZE_1X) +
+         ` ${tableLabel.toUpperCase()} ` +
+         SIZE_1X +
+         MODE_NO_BOLD +
+         MODE_NO_INVERSE
+       );
+       lines.push(ALIGN_LEFT);
+       lines.push(withMargins(dashes(), layout));
+    } else {
+        // Fallback if no table/parcel but maybe logic requires else
+    }
+
+    // 3. Metadata (Order #, Bill #, Date)
     lines.push(withMargins(`Order: #${orderId}`, layout));
     if (order?.bill_no) {
        lines.push(withMargins(`Bill No: ${order.bill_no}`, layout));
     }
-    if (tableLabel) lines.push(withMargins(`For: ${tableLabel}`, layout));
-    if (order?.number_of_customers)
+    
+    lines.push(withMargins(`${dateStr} ${timeStr}`, layout));
+
+    if (order?.number_of_customers) {
       lines.push(
         withMargins(`No. of Customers: ${order.number_of_customers}`, layout)
       );
+    }
     lines.push(withMargins(dashes(), layout));
 
     if (items.length) {
@@ -411,10 +409,10 @@ lines.push(ALIGN_LEFT);
 
         const qty = rightAlign(qtyNum.toFixed(p), qtyW);
         lines.push(
-          withMargins(leftAlign(nameLines[0], nameW) + " " + qty, layout)
+          withMargins(MODE_BOLD + leftAlign(nameLines[0], nameW) + " " + qty + MODE_NO_BOLD, layout)
         );
         for (let i = 1; i < nameLines.length; i++) {
-          lines.push(withMargins(nameLines[i], layout));
+          lines.push(withMargins(MODE_BOLD + nameLines[i] + MODE_NO_BOLD, layout));
         }
       });
     }
@@ -443,10 +441,10 @@ lines.push(ALIGN_LEFT);
 
         const qty = rightAlign(qtyNum.toFixed(p), qtyW);
         lines.push(
-          withMargins(leftAlign("- " + nameLines[0], nameW) + " " + qty, layout)
+          withMargins(MODE_BOLD + leftAlign("- " + nameLines[0], nameW) + " " + qty + MODE_NO_BOLD, layout)
         );
         for (let i = 1; i < nameLines.length; i++) {
-          lines.push(withMargins("  " + nameLines[i], layout));
+          lines.push(withMargins(MODE_BOLD + "  " + nameLines[i] + MODE_NO_BOLD, layout));
         }
       });
     }
