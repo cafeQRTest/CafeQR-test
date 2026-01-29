@@ -236,20 +236,34 @@ function escposPageSetup(layout) {
   );
 }
 
-function buildLogoEscPos(restaurantProfile) {
+function buildLogoEscPos(restaurantProfile, layout) {
   const bits = restaurantProfile?.print_logo_bitmap;
   const cols = Number(restaurantProfile?.print_logo_cols || 0);
   const rows = Number(restaurantProfile?.print_logo_rows || 0);
   if (!bits || !cols || !rows || bits.length !== cols * rows) return "";
 
-  const bytesPerRow = Math.ceil(cols / 8);
+  const bytesPerRowSrc = Math.ceil(cols / 8);
+
+  // Target = printable area width (GS W), rounded up to full bytes.
+  const targetDots = Math.max(8, Number(layout?.areaDots || 384));
+  const bytesPerRowDst = Math.ceil(targetDots / 8);
+
+  // Center at byte granularity (8 dots). Works reliably across printers.
+  const padTotal = Math.max(0, bytesPerRowDst - bytesPerRowSrc);
+  const padLeft = Math.floor(padTotal / 2);
+  const padRight = padTotal - padLeft;
 
   let out = "";
-  out += ALIGN_CENTER;
-  out += GS + "v" + "0" + b(0) + b2(bytesPerRow) + b2(rows);
+  // Don't rely on printer centering; we embed centering in the bitmap.
+  out += ALIGN_LEFT;
+  out += GS + "v" + "0" + b(0) + b2(bytesPerRowDst) + b2(rows);
 
   for (let y = 0; y < rows; y++) {
-    for (let bx = 0; bx < bytesPerRow; bx++) {
+    // left pad
+    for (let i = 0; i < padLeft; i++) out += b(0x00);
+
+    // original row bytes
+    for (let bx = 0; bx < bytesPerRowSrc; bx++) {
       let byte = 0;
       for (let bit = 0; bit < 8; bit++) {
         const x = bx * 8 + bit;
@@ -257,6 +271,9 @@ function buildLogoEscPos(restaurantProfile) {
       }
       out += b(byte);
     }
+
+    // right pad
+    for (let i = 0; i < padRight; i++) out += b(0x00);
   }
 
   out += "\r\n";
@@ -709,7 +726,7 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     lines.push(withMargins(center("Powered by Cafe QR", W), layout));
     lines.push("");
 
-    return escposPageSetup(layout) + buildLogoEscPos(restaurantProfile) + lines.join("\n");
+    return escposPageSetup(layout) + buildLogoEscPos(restaurantProfile, layout) + lines.join("\\n");
   } catch (e) {
     console.error(e);
     return "PRINT ERROR";
