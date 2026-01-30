@@ -726,8 +726,10 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     lines.push(withMargins(center("Powered by Cafe QR", W), layout));
     lines.push("");
 
-    return escposPageSetup(layout) + buildLogoEscPos(restaurantProfile, layout) + lines.join("\\n");
-  } catch (e) {
+    return escposPageSetup(layout)
+    + buildLogoEscPos(restaurantProfile, layout) 
+    + lines.join("\n");  
+    } catch (e) {
     console.error(e);
     return "PRINT ERROR";
   }
