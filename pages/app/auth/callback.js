@@ -6,12 +6,32 @@ import { AlertCircle, ArrowRight, Link as LinkIcon, RefreshCcw } from "lucide-re
 
 const DELIVERY_NEXT_KEY = "delivery.next_after_magiclink";
 
+// Strictly use NEXT_PUBLIC_BASE_URL - must be set in .env.local or Vercel
+function getBaseUrl() {
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
+  if (!baseUrl) {
+    console.error("NEXT_PUBLIC_BASE_URL environment variable is not set!");
+  }
+  return baseUrl || '';
+}
+
+// Get the redirect destination, defaulting to /app/address
 function getNextFromStorage() {
   try {
-    return localStorage.getItem(DELIVERY_NEXT_KEY) || "/app";
+    return localStorage.getItem(DELIVERY_NEXT_KEY) || "/app/address";
   } catch {
-    return "/app";
+    return "/app/address";
   }
+}
+
+// Build full redirect URL using environment variable
+function buildRedirectUrl(path) {
+  const baseUrl = getBaseUrl();
+  // If path is already a full URL, return it; otherwise prepend base URL
+  if (path.startsWith('http')) {
+    return path;
+  }
+  return `${baseUrl}${path}`;
 }
 
 export default function AuthCallback() {
@@ -25,8 +45,9 @@ export default function AuthCallback() {
       try {
         const url = new URL(window.location.href);
 
-        // Where to go after successful login
-        const next = url.searchParams.get("next") || getNextFromStorage();
+        // Where to go after successful login - default to /app/address
+        const nextPath = url.searchParams.get("next") || getNextFromStorage();
+        const next = buildRedirectUrl(nextPath);
 
         // 1) Handle PKCE code flow (?code=...)
         const code = url.searchParams.get("code");

@@ -29,8 +29,14 @@ export default function CustomerAuthPage() {
       localStorage.setItem(DELIVERY_NEXT_KEY, next);
     }
 
-    // Explicitly hardcoded redirect to Address page (Bypassing env/dynamic logic for debugging)
-    const emailRedirectTo = 'http://localhost:3000/app/address';
+    // Strictly use NEXT_PUBLIC_BASE_URL - must be set in .env.local or Vercel
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
+    if (!baseUrl) {
+      setErr("Configuration error: NEXT_PUBLIC_BASE_URL environment variable is not set");
+      setLoading(false);
+      return;
+    }
+    const emailRedirectTo = `${baseUrl}/app/auth/callback`;
 
     const { error } = await supabase.auth.signInWithOtp({
       email,
