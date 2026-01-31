@@ -332,6 +332,7 @@ function MyApp({ Component, pageProps }) {
   const path = router.pathname || ''
   const isOwner = path.startsWith(OWNER_PREFIX)
   const isCustomer = path.startsWith(CUSTOMER_PREFIX)
+  const isDeliveryApp = path.startsWith(DELIVERY_PREFIX)
 
   return (
     <>
@@ -353,7 +354,8 @@ function MyApp({ Component, pageProps }) {
                   >
                     <Component {...pageProps} />
                   </Layout>
-                  <AppPrintOrchestrator />
+                  {/* Only render print orchestrator for POS/owner routes, not delivery app */}
+                  {!isDeliveryApp && <AppPrintOrchestrator />}
                 </GlobalSubscriptionGate>
               </SubscriptionProvider>
             </AlertProvider>
