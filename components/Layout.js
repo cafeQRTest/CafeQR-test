@@ -78,9 +78,10 @@ export default function Layout({
 }) {
   const router = useRouter();
 
-  // If landing/login/signup page, render raw children (allows full screen control)
-  const fullScreenRoutes = ['/', '/login', '/signup', '/forgot-password', '/app', '/app/auth', '/app/auth/callback'];
-  if (fullScreenRoutes.includes(router.pathname)) {
+  // If landing/login/signup page or delivery app routes, render raw children (allows full screen control)
+  const fullScreenRoutes = ['/', '/login', '/signup', '/forgot-password'];
+  const isDeliveryApp = router.pathname.startsWith('/app');
+  if (fullScreenRoutes.includes(router.pathname) || isDeliveryApp) {
     return <>{children}</>;
   }
 

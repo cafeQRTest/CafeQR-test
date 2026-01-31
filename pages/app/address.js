@@ -198,36 +198,49 @@ export default function AddressPage() {
     }
   };
 
-  const containerVariants = {
-    hidden: { opacity: 0 },
+  // Card entrance animation - fade in and slide up
+  const cardVariants = {
+    hidden: { opacity: 0, y: 30 },
     show: {
       opacity: 1,
+      y: 0,
       transition: {
-        staggerChildren: 0.15,
-        delayChildren: 0.1
+        type: "spring",
+        stiffness: 100,
+        damping: 15,
+        staggerChildren: 0.1,
+        delayChildren: 0.2
       }
     }
   };
 
   const itemVariants = {
-    hidden: { opacity: 0, y: 20 },
-    show: { opacity: 1, y: 0 }
+    hidden: { opacity: 0, y: 15 },
+    show: {
+      opacity: 1,
+      y: 0,
+      transition: { type: "spring", stiffness: 120, damping: 14 }
+    }
   };
 
   return (
-    <motion.div
-      className="delivery-address-page"
-      initial="hidden"
-      animate="show"
-      variants={containerVariants}
-    >
+    <div className="delivery-address-page">
       <div className="delivery-address-bg" />
 
-      <motion.div className="delivery-address-card" layout>
+      <motion.div
+        className="delivery-address-card"
+        initial="hidden"
+        animate="show"
+        variants={cardVariants}
+      >
         <motion.div variants={itemVariants} className="delivery-address-icon">
-          <div className="icon-circle">
-            <Navigation className="w-10 h-10 text-[#f97316]" fill="#f97316" fillOpacity={0.2} />
-          </div>
+          <motion.div
+            className={`icon-circle ${fetchingLoc ? 'is-detecting' : ''}`}
+            animate={fetchingLoc ? { scale: [1, 1.05, 1] } : {}}
+            transition={fetchingLoc ? { repeat: Infinity, duration: 1.5, ease: "easeInOut" } : {}}
+          >
+            <Navigation className="w-8 h-8 text-[#f97316]" fill="#f97316" fillOpacity={0.2} />
+          </motion.div>
         </motion.div>
 
         <motion.div variants={itemVariants} className="delivery-address-header">
@@ -276,13 +289,13 @@ export default function AddressPage() {
               <motion.button
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
                 onClick={fetchLocation}
-                className="delivery-address-refresh-btn"
+                className="delivery-address-refresh-link"
               >
-                <RefreshCw className="w-5 h-5" />
-                <span>Not your location? Click here to refresh</span>
+                <RefreshCw className="w-4 h-4" />
+                <span>Not your location? Refresh</span>
               </motion.button>
             )}
 
@@ -298,8 +311,8 @@ export default function AddressPage() {
                   <motion.button
                     onClick={handleContinue}
                     disabled={busy}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.97 }}
                     className={`delivery-address-continue-btn ${busy ? 'is-busy' : ''}`}
                   >
                     {busy ? (
@@ -322,183 +335,304 @@ export default function AddressPage() {
       </motion.div>
 
       {/* Scoped styles - ONLY affects this delivery address page */}
+      {/* Fixed bottom CTA for mobile */}
+      <div className="delivery-address-fixed-cta">
+        {!fetchingLoc && address && (
+          <motion.button
+            onClick={handleContinue}
+            disabled={busy}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.97 }}
+            className={`delivery-address-fixed-btn ${busy ? 'is-busy' : ''}`}
+          >
+            {busy ? (
+              <>
+                <Loader2 className="w-6 h-6 animate-spin" />
+                <span>Loading...</span>
+              </>
+            ) : (
+              <>
+                <span>Continue to Order</span>
+                <ArrowRight className="w-6 h-6" />
+              </>
+            )}
+          </motion.button>
+        )}
+      </div>
+
+      {/* Scoped styles - ONLY affects this delivery address page */}
       <style jsx>{`
         .delivery-address-page {
           min-height: 100vh;
+          min-height: 100dvh;
           width: 100%;
-          max-width: none;
-          background: #fff;
+          background: #f9fafb;
           display: flex;
           flex-direction: column;
           align-items: center;
-          justify-content: center;
-          padding: 24px;
+          justify-content: flex-start;
+          padding: 80px 20px 120px;
           position: relative;
-          overflow: hidden;
+          overflow-x: hidden;
           font-family: system-ui, -apple-system, sans-serif;
+        }
+        @media (min-height: 700px) {
+          .delivery-address-page {
+            justify-content: center;
+            padding-top: 40px;
+          }
         }
         .delivery-address-bg {
           position: absolute;
           top: 0;
           left: 0;
           width: 100%;
-          height: 50%;
-          background: linear-gradient(to bottom, rgba(255,237,213,0.5), transparent);
-          z-index: -1;
+          height: 40%;
+          background: linear-gradient(180deg, rgba(255,237,213,0.2) 0%, transparent 100%);
+          z-index: 0;
+          pointer-events: none;
         }
         .delivery-address-card {
           width: 100%;
-          max-width: 420px;
+          max-width: 400px;
           display: flex;
           flex-direction: column;
           align-items: center;
+          background: #ffffff;
+          border-radius: 24px;
+          padding: 40px 28px 36px;
+          box-shadow: 
+            0 4px 6px -1px rgba(0,0,0,0.1),
+            0 10px 15px -3px rgba(0,0,0,0.1),
+            0 20px 25px -5px rgba(0,0,0,0.05);
+          border: 1px solid rgba(0,0,0,0.04);
+          position: relative;
+          z-index: 1;
         }
         .delivery-address-icon {
-          margin-bottom: 32px;
+          margin-bottom: 24px;
         }
         .icon-circle {
           width: 80px;
           height: 80px;
-          background: #fff7ed;
+          background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%);
           border-radius: 50%;
           display: flex;
           align-items: center;
           justify-content: center;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-          border: 1px solid #fed7aa;
+          box-shadow: 0 4px 12px rgba(249,115,22,0.15);
+          border: 2px solid #fed7aa;
+          transition: all 0.3s ease;
+        }
+        .icon-circle.is-detecting {
+          box-shadow: 0 4px 20px rgba(249,115,22,0.25);
+          border-color: #fdba74;
         }
         .delivery-address-header {
           text-align: center;
-          margin-bottom: 40px;
+          margin-bottom: 28px;
+          padding-top: 8px;
         }
         .delivery-address-header h1 {
-          font-size: 28px;
+          font-size: 22px;
           font-weight: 700;
           color: #111827;
           margin: 0 0 8px;
-          letter-spacing: -0.02em;
+          letter-spacing: -0.01em;
         }
         .delivery-address-header p {
-          color: #64748b;
-          font-weight: 500;
-          font-size: 16px;
+          color: #6b7280;
+          font-weight: 400;
+          font-size: 14px;
           margin: 0;
+          line-height: 1.5;
         }
         .delivery-address-input-wrap {
           width: 100%;
-          margin-bottom: 16px;
         }
         .delivery-address-input-box {
           display: flex;
           align-items: center;
-          gap: 16px;
+          gap: 12px;
           background: #fff;
-          padding: 20px;
-          border-radius: 16px;
-          border: 2px solid #e5e7eb;
-          transition: all 0.2s;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+          padding: 14px 16px;
+          border-radius: 12px;
+          border: 1px solid #e5e7eb;
+          transition: all 0.2s ease;
+        }
+        .delivery-address-input-box:focus-within {
+          border-color: #f97316;
+          box-shadow: 0 0 0 3px rgba(249,115,22,0.1);
         }
         .delivery-address-input-box.is-loading {
-          border-color: #fed7aa;
-          box-shadow: 0 4px 12px rgba(249,115,22,0.1);
+          border-color: #fdba74;
+          background: #fffbf5;
         }
         .delivery-address-input-box.has-error {
-          border-color: #fecaca;
+          border-color: #fca5a5;
           background: #fef2f2;
         }
         .input-icon {
           flex-shrink: 0;
+          width: 40px;
+          height: 40px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: #fff7ed;
+          border-radius: 10px;
         }
         .input-content {
           flex: 1;
+          min-width: 0;
         }
         .input-label {
           font-size: 11px;
           font-weight: 700;
-          color: #9ca3af;
-          letter-spacing: 0.05em;
+          color: #94a3b8;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
           margin: 0 0 4px;
         }
         .input-skeleton {
           height: 24px;
-          width: 75%;
-          background: #f3f4f6;
+          width: 80%;
+          background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
+          background-size: 200% 100%;
           border-radius: 6px;
-          animation: pulse 2s infinite;
+          animation: shimmer 1.5s infinite;
         }
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.5; }
+        @keyframes shimmer {
+          0% { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
         }
         .input-field {
           width: 100%;
           background: transparent;
           border: none;
           outline: none;
-          color: #111827;
+          color: #0f172a;
           font-weight: 600;
-          font-size: 18px;
+          font-size: 16px;
+          text-overflow: ellipsis;
         }
         .input-field::placeholder {
-          color: #d1d5db;
+          color: #cbd5e1;
         }
-        .delivery-address-refresh-btn {
+        .delivery-address-refresh-link {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          padding: 8px 0;
+          background: transparent;
+          color: #6b7280;
+          border: none;
+          cursor: pointer;
+          font-size: 13px;
+          font-weight: 500;
+          transition: color 0.2s ease;
+        }
+        .delivery-address-refresh-link:hover {
+          color: #f97316;
+        }
+        .delivery-address-continue {
           width: 100%;
-          margin-top: 16px;
-          padding: 16px;
-          border-radius: 12px;
-          font-weight: 700;
+          display: none;
+        }
+        .delivery-address-continue-btn {
+          width: 100%;
+          padding: 16px 24px;
+          border-radius: 14px;
+          font-weight: 600;
           font-size: 16px;
           display: flex;
           align-items: center;
           justify-content: center;
-          gap: 12px;
+          gap: 10px;
           background: #f97316;
           color: #fff;
           border: none;
           cursor: pointer;
           box-shadow: 0 4px 14px rgba(249,115,22,0.3);
-          transition: all 0.2s;
-        }
-        .delivery-address-refresh-btn:hover {
-          background: #ea580c;
-        }
-        .delivery-address-continue {
-          width: 100%;
-        }
-        .delivery-address-continue-btn {
-          width: 100%;
-          padding: 16px;
-          border-radius: 12px;
-          font-weight: 700;
-          font-size: 18px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 12px;
-          background: #f97316;
-          color: #fff;
-          border: none;
-          cursor: pointer;
-          box-shadow: 0 8px 20px rgba(249,115,22,0.3);
-          transition: all 0.2s;
+          transition: all 0.2s ease;
         }
         .delivery-address-continue-btn:hover {
           background: #ea580c;
+          box-shadow: 0 6px 20px rgba(249,115,22,0.35);
         }
         .delivery-address-continue-btn.is-busy {
           background: #fdba74;
           cursor: not-allowed;
+          box-shadow: none;
         }
         .delivery-address-actions {
           width: 100%;
           display: flex;
           flex-direction: column;
-          gap: 20px;
+          align-items: center;
+          gap: 12px;
           margin-top: 20px;
         }
+
+        /* Fixed bottom CTA for mobile */
+        .delivery-address-fixed-cta {
+          position: fixed;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          display: flex;
+          justify-content: center;
+          padding: 16px;
+          padding-bottom: calc(16px + env(safe-area-inset-bottom));
+          background: linear-gradient(180deg, rgba(249,250,251,0) 0%, #f9fafb 30%);
+          z-index: 50;
+        }
+        .delivery-address-fixed-btn {
+          width: 100%;
+          max-width: 340px;
+          padding: 16px 24px;
+          border-radius: 14px;
+          font-weight: 600;
+          font-size: 16px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+          background: #f97316;
+          color: #fff;
+          border: none;
+          cursor: pointer;
+          box-shadow: 0 4px 14px rgba(249,115,22,0.3);
+          transition: all 0.2s ease;
+        }
+        .delivery-address-fixed-btn:hover {
+          background: #ea580c;
+          box-shadow: 0 6px 20px rgba(249,115,22,0.35);
+        }
+        .delivery-address-fixed-btn.is-busy {
+          background: #fdba74;
+          cursor: not-allowed;
+          box-shadow: none;
+        }
+
+        /* Desktop: show inline button, hide fixed */
+        @media (min-width: 640px) {
+          .delivery-address-page {
+            padding-bottom: 40px;
+          }
+          .delivery-address-card {
+            max-width: 400px;
+            padding: 44px 32px 36px;
+          }
+          .delivery-address-continue {
+            display: block;
+          }
+          .delivery-address-fixed-cta {
+            display: none;
+          }
+        }
       `}</style>
-    </motion.div>
+    </div>
   );
 }
