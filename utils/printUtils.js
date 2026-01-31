@@ -711,6 +711,7 @@ export function buildReceiptText(order, bill, restaurantProfile) {
       lines.push(withMargins(center("Prices are inclusive of GST", W), layout));
     }
     
+    lines.push(withMargins(center("Please consume the food within 2 hours",W), layout));
     lines.push(withMargins(center("** THANK YOU! VISIT AGAIN !! **", W), layout));
     lines.push(withMargins(center("Powered by Cafe QR", W), layout));
     lines.push("");
