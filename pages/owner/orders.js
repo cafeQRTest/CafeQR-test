@@ -2061,6 +2061,8 @@ export default function OrdersPage() {
   const [paxEditOrder, setPaxEditOrder] = useState(null);
   const [tableEditOrder, setTableEditOrder] = useState(null);
 
+  // Ref to store realtime channel for broadcasting
+  const channelRef = useRef(null);
 
   const [ordersByStatus, setOrdersByStatus] = useState({
     new: [], in_progress: [], ready: [], completed: [], mobileFilter: 'new'
@@ -2415,6 +2417,16 @@ const handleEditSave = async (edited) => {
       return;
     }
  
+    // Broadcast to other devices (e.g., Main Counter) for global KOT printing
+    if (channelRef.current && data.order_for_print) {
+      channelRef.current.send({
+        type: 'broadcast',
+        event: 'order-edited',
+        payload: data.order_for_print
+      }).catch(err => console.error('[BROADCAST] Failed to send edit notification:', err));
+    }
+
+    // Also dispatch locally for this device to print if needed
     window.dispatchEvent(
       new CustomEvent('auto-print-order', {
         detail: {
@@ -2500,7 +2512,7 @@ useEffect(() => {
 }, [restaurantId, loadOrders]);
 
   // Realtime subscription & reconnection logic
-  // Realtime subscription & order state sync
+// Realtime subscription & order state sync
 useEffect(() => {
   if (!supabase || !restaurantId) return;
 
@@ -2543,6 +2555,9 @@ useEffect(() => {
     )
     .subscribe();
 
+  // Store channel in ref for broadcasting
+  channelRef.current = channel;
+
   function onVisible() {
     if (document.visibilityState === 'visible') {
       setTimeout(async () => {
@@ -2572,6 +2587,7 @@ useEffect(() => {
   return () => {
     window.removeEventListener('visibilitychange', onVisible);
     if (supabase) supabase.removeChannel(channel);
+    channelRef.current = null; // Clean up ref
   };
 }, [supabase, restaurantId, playNotificationSound]);
 
