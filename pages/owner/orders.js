@@ -2563,9 +2563,10 @@ useEffect(() => {
 
   // SEPARATE CHANNEL FOR PRINT BROADCASTS (to match usePrintService)
   const printChannel = supabase
-    .channel(`auto-print:${restaurantId}`)
-    .on('presence', { event: 'sync' }, () => {
-      // Dummy listener to keep channel alive
+    .channel(`auto-print:${restaurantId}`, {
+      config: {
+        broadcast: { self: true }
+      }
     })
     .subscribe((status) => {
       console.log('[ORDERS] Print channel status:', status);
