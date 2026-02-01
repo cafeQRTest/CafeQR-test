@@ -525,6 +525,45 @@ export default async function handler(req, res) {
       }
     }
 
+    // ✨ BROADCAST FOR KOT PRINT ON EDIT
+    console.log('📡 [EDIT_API] Sending broadcast for order-edited:', order.id);
+    try {
+      const printChannel = supabase.channel(`auto-print:${restaurant_id}`);
+      await printChannel.send({
+        type: 'broadcast',
+        event: 'order-edited',
+        payload: {
+          id: order.id,
+          restaurant_id,
+          order_type: order.order_type,
+          table_number: order.table_number || null,
+          customer_name: order.customer_name || '',
+          customer_phone: order.customer_phone || '',
+          subtotal_ex_tax: Number(newTotals.subtotal_after_line_discounts.toFixed(2)),
+          gross_taxable_amount: Number(newTotals.subtotal_after_line_discounts.toFixed(2)),
+          total_tax: newTotals.total_tax,
+          total_inc_tax: newTotals.total_inc_tax,
+          discount_amount: newTotals.discount_amount,
+          bill_discount_base: Number(newTotals.total_order_discount_base.toFixed(2)),
+          total_amount: newTotals.total_amount,
+          round_off_amount: newTotals.round_off_amount,
+          payment_status: order.payment_status || 'pending',
+          status: order.status || 'new',
+          removed_items: kot_removed_items,
+          created_at: order.updated_at || order.created_at,
+          items: added_items,
+          changed_items: changedItems,
+          is_edited: true,
+          edit_reason: reason,
+          invoice_no: orderResult.invoiceNo,
+          bill_no: orderResult.billNo,
+        }
+      });
+      console.log('✅ [EDIT_API] Broadcast sent successfully');
+    } catch (broadcastErr) {
+      console.error('❌ [EDIT_API] Broadcast failed:', broadcastErr);
+    }
+
     return res.status(200).json({
       success: true,
       order_id: order.id,
