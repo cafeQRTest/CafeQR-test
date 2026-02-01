@@ -4,12 +4,14 @@ import { useRouter } from "next/router";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { getSupabase } from "../../services/supabase";
+import { useCustomerAuth } from "../../context/CustomerAuthContext";
 
 const cartKey = (restaurantId) => `cart_delivery_${restaurantId}`;
 
 export default function DeliveryPayment() {
   const router = useRouter();
   const supabase = getSupabase();
+  const { user } = useCustomerAuth();
   const { r: restaurantId } = router.query;
 
   const [restaurant, setRestaurant] = useState(null);
@@ -196,7 +198,7 @@ export default function DeliveryPayment() {
       customer_phone: custPhone.trim(),
       table_number: "DELIVERY",
       items: cart.map((i) => ({
-        id: i.id,
+        id: i.menu_item_id || i.id, // Use real UUID if available (handle reorder case)
         name: i.name,
         price: Number(i.price) || 0,
         quantity: Number(i.quantity) || 1,
@@ -208,10 +210,19 @@ export default function DeliveryPayment() {
       tax: totals.taxAmount,
       total_amount: totals.totalInc,
       special_instructions: deliveryBlock,
+      user_id: user?.id || null,
     };
   };
 
   const placeCOD = async () => {
+    // Fresh auth check as per requirement
+    const { data: { user: currentUser } } = await supabase.auth.getUser();
+
+    if (!currentUser) {
+      alert("Please log in to place an order.");
+      router.push("/app/auth");
+      return;
+    }
     const err = validateDelivery();
     if (err) return alert(err);
 
@@ -232,11 +243,11 @@ export default function DeliveryPayment() {
       });
 
       const result = await res.json();
-      if (!res.ok) throw new Error(result?.error || "Failed to create order");
+      if (!res.ok) throw new Error(result.error || "Order creation failed");
 
       await notifyOwner({
         restaurantId,
-        orderId: result.order_id || result.id,
+        orderId: result.order_id,
         orderItems: orderData.items,
       });
 
@@ -272,6 +283,15 @@ export default function DeliveryPayment() {
   };
 
   const payOnlineRazorpay = async () => {
+    // Fresh auth check
+    const { data: { user: currentUser } } = await supabase.auth.getUser();
+
+    if (!currentUser) {
+      alert("Please log in to place an order.");
+      router.push("/app/auth");
+      return;
+    }
+    if (!restaurant) return alert("Restaurant info missing");
     const err = validateDelivery();
     if (err) return alert(err);
 

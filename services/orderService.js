@@ -38,6 +38,7 @@ export class OrderService {
         status = 'new',
         payment_status = 'pending',
         payment_method = 'cash',
+        user_id = null,
         customer_id = null,
         customer_name = null,
         customer_phone = null,
@@ -61,6 +62,7 @@ export class OrderService {
         payment_status,
         payment_method,
         actual_payment_method: payment_method,
+        user_id,
         customer_id,
         customer_name,
         customer_phone,
@@ -71,7 +73,7 @@ export class OrderService {
         credit_customer_id,
         special_instructions,
         mixed_payment_details,
-        
+
         // Totals from Calculation Engine (Compliance focus)
         line_subtotal: calculationResult.subtotal_after_line_discounts || line_subtotal,
         line_discount_total,
@@ -82,13 +84,13 @@ export class OrderService {
         total_inc_tax,
         round_off_amount,
         total_amount, // Final Payable
-        
+
         updated_at: new Date().toISOString()
       };
 
       // Storing the base version of order discount for precise reporting if column exists
       if (calculationResult.total_order_discount_base !== undefined) {
-         orderPayload.order_discount_base = calculationResult.total_order_discount_base;
+        orderPayload.order_discount_base = calculationResult.total_order_discount_base;
       }
 
       if (created_at) orderPayload.created_at = created_at;
@@ -131,17 +133,17 @@ export class OrderService {
         price: pi.unit_price, // MRP/Face
         variant_option_id: pi.variant_id || pi.variant_option_id || null,
         variant_name: pi.variant_name || null,
-        
+
         unit_price_ex_tax: pi.unit_price_ex_tax,
         unit_price_inc_tax: pi.unit_price_inc_tax,
         unit_tax_amount: pi.unit_tax_amount,
-        
+
         tax_rate: pi.tax_rate,
         hsn: pi.hsn || null,
         is_packaged_good: !!pi.is_packaged_good,
         uom_short_code: pi.uom_short_code,
         uom_precision: pi.uom_precision,
-        
+
         // Granular Audit Fields
         discount_amount: pi.discount_amount, // Face Total (Line + Bill Share)
         line_discount_amount: pi.line_discount_face, // Face Line Discount
@@ -172,7 +174,7 @@ export class OrderService {
         paid_amount: status === 'completed' ? total_amount : 0,
         status: status === 'completed' ? 'paid' : 'pending',
         customer_name,
-      
+
         // Sync with Order Totals (Compliance Walk)
         line_subtotal: calculationResult.subtotal_after_line_discounts || line_subtotal,
         line_discount_total,
@@ -193,13 +195,13 @@ export class OrderService {
       if (!existingInvoice) {
         // Use bill_no from Order (likely set by DB Trigger)
         if (currentBillNo) {
-           invoiceData.bill_no = currentBillNo;
+          invoiceData.bill_no = currentBillNo;
         } else {
-           invoiceData.bill_no = await InvoiceService.generateBillNumber(restaurantId);
+          invoiceData.bill_no = await InvoiceService.generateBillNumber(restaurantId);
         }
-        
+
         invoiceData.invoice_no = await InvoiceService.generateInvoiceNumber(restaurantId);
-        
+
         const { data: newInv, error: invInsErr } = await supabase
           .from('invoices')
           .insert([invoiceData])
@@ -227,22 +229,22 @@ export class OrderService {
         item_name: pi.item_name,
         variant_name: pi.variant_name,
         qty: pi.quantity,
-        
+
         unit_rate_ex_tax: pi.unit_price_ex_tax,
         unit_price_display: pi.unit_price, // MRP
-        
+
         discount_amount: pi.discount_amount, // Face Total
         line_discount_amount: pi.line_discount_face, // Face Line
         order_discount_share: pi.order_discount_face_share, // Face Bill Share
         order_discount_base_share: pi.order_discount_share, // Base Bill Share (Audit)
-        
+
         line_net: pi.taxable_amount,
         line_total_ex_tax: pi.taxable_amount,
         line_total_inc_tax: pi.line_total,
         tax_rate: pi.tax_rate,
         tax_amount: pi.tax_amount,
         amount_inc_gst: pi.line_total,
-        
+
         is_packaged_good: !!pi.is_packaged_good
       }));
 

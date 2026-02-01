@@ -86,6 +86,9 @@ let supabaseInstance
 export function getSupabase() {
   if (!supabaseInstance) {
     supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
+      global: {
+        headers: { 'Cache-Control': 'no-cache' }
+      },
       auth: {
         storage: typeof window === 'undefined' ? ServerStorageAdapter : storageAdapter,
         autoRefreshToken: true,    // keep access token fresh [web:609]

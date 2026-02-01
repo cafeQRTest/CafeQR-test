@@ -146,7 +146,7 @@ export default function DeliverySuccess() {
         >
           <motion.button
             onClick={handleOrderAgain}
-            className={`success-btn ${showShimmer ? "shimmer" : ""}`}
+            className={`success-btn ${showShimmer ? "shimmer" : ""} mt-12`}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
           >
