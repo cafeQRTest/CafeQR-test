@@ -2568,6 +2568,9 @@ useEffect(() => {
         broadcast: { self: true }
       }
     })
+    .on('broadcast', { event: 'keepalive' }, () => {
+      // Dummy listener to enable broadcast on this channel
+    })
     .subscribe((status) => {
       console.log('[ORDERS] Print channel status:', status);
     });
