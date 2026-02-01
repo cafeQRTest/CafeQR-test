@@ -2417,25 +2417,35 @@ const handleEditSave = async (edited) => {
       return;
     }
  
-    // Broadcast to other devices (e.g., Main Counter) for global KOT printing
-    if (channelRef.current && data.order_for_print) {
-      channelRef.current.send({
-        type: 'broadcast',
-        event: 'order-edited',
-        payload: data.order_for_print
-      }).catch(err => console.error('[BROADCAST] Failed to send edit notification:', err));
+    // Insert into print queue for cross-device KOT printing
+    if (data.order_for_print && (editingOrder.status === 'new' || editingOrder.status === 'in_progress')) {
+      try {
+        await supabase
+          .from('kot_print_queue')
+          .insert({
+            restaurant_id: restaurantId,
+            order_id: editingOrder.id,
+            print_data: data.order_for_print,
+            processed: false
+          });
+        console.log('[EDIT] Inserted into print queue for order:', editingOrder.id);
+      } catch (err) {
+        console.error('[EDIT] Failed to insert into print queue:', err);
+      }
     }
 
-    // Also dispatch locally for this device to print if needed
-    window.dispatchEvent(
-      new CustomEvent('auto-print-order', {
-        detail: {
-          ...data.order_for_print,
-          autoPrint: true,
-          kind: 'kot',
-        },
-      })
-    );
+    // Dispatch locally for this device to print if needed
+    if (data.order_for_print) {
+      window.dispatchEvent(
+        new CustomEvent('auto-print-order', {
+          detail: {
+            ...data.order_for_print,
+            autoPrint: true,
+            kind: 'kot',
+          },
+        })
+      );
+    }
 
     // Refresh & close
     await loadOrders();
@@ -2552,13 +2562,6 @@ useEffect(() => {
     )
     .subscribe();
 
-  // SEPARATE CHANNEL FOR PRINT BROADCASTS (to match usePrintService)
-  const printChannel = supabase
-    .channel(`auto-print:${restaurantId}`)
-    .subscribe();
-  
-  channelRef.current = printChannel;
-
   function onVisible() {
     if (document.visibilityState === 'visible') {
       setTimeout(async () => {
@@ -2587,11 +2590,7 @@ useEffect(() => {
   window.addEventListener('visibilitychange', onVisible);
   return () => {
     window.removeEventListener('visibilitychange', onVisible);
-    if (supabase) {
-        supabase.removeChannel(channel);
-        supabase.removeChannel(printChannel);
-    }
-    channelRef.current = null; // Clean up ref
+    if (supabase) supabase.removeChannel(channel);
   };
 }, [supabase, restaurantId, playNotificationSound]);
 

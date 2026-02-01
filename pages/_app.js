@@ -156,10 +156,19 @@ function AppPrintOrchestrator() {
   usePrintService(true);
 
   useEffect(() => {
-    const onAutoPrint = e => setOrderToPrint(e.detail);
+    const onAutoPrint = e => {
+      console.log('[APP PRINT ORCHESTRATOR] Received auto-print-order event:', e.detail);
+      setOrderToPrint(e.detail);
+    };
     window.addEventListener('auto-print-order', onAutoPrint);
-    return () => window.removeEventListener('auto-print-order', onAutoPrint);
+    console.log('[APP PRINT ORCHESTRATOR] Event listener attached');
+    return () => {
+      window.removeEventListener('auto-print-order', onAutoPrint);
+      console.log('[APP PRINT ORCHESTRATOR] Event listener removed');
+    };
   }, []);
+
+  console.log('[APP PRINT ORCHESTRATOR] Rendering, orderToPrint:', orderToPrint?.id);
 
   if (!orderToPrint) return null;
   return (
