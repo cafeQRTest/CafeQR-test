@@ -36,6 +36,7 @@ export default async function handler(req, res) {
       customer_id = null,
       customer_name = null,
       customer_phone = null,
+      user_id = null,
       is_credit = false,
       credit_customer_id = null,
       original_payment_method = null,
@@ -54,30 +55,30 @@ export default async function handler(req, res) {
 
     // If no ID provided but we have a phone or name, try to find/create
     if (!finalCustomerId && (customer_phone || customer_name || credit_customer_id)) {
-       try {
-         // If credit customer ID is explicit, prefer that as the customer link
-         if (is_credit && credit_customer_id) {
-            // Usually credit_customer_id maps to 'restaurant_customers.id' or 'customers.id'
-            // We'll trust the frontend passed a valid UUID.
-            // But if specific logic is needed, we can check it. 
-            // Often credit_customer_id IS the customer_id.
-            // If they are distinct concepts in your DB, handle accordingly.
-            // Assuming here we want to link the order to that customer.
-            finalCustomerId = credit_customer_id;
-         } else {
-             finalCustomerId = await ensureCustomer(supabase, {
-                restaurant_id, 
-                phone: customer_phone, 
-                name: customer_name,
-                // email, address if available in body
-             });
-         }
-       } catch (custErr) {
-         console.error('[CreateOrder] Failed to ensure customer:', custErr);
-         // Don't swallow for now, let's see why it failed. 
-         // Optional: throw custErr; 
-         // For production, swallowing is safer for Order Completion, but for debugging we need this log.
-       }
+      try {
+        // If credit customer ID is explicit, prefer that as the customer link
+        if (is_credit && credit_customer_id) {
+          // Usually credit_customer_id maps to 'restaurant_customers.id' or 'customers.id'
+          // We'll trust the frontend passed a valid UUID.
+          // But if specific logic is needed, we can check it. 
+          // Often credit_customer_id IS the customer_id.
+          // If they are distinct concepts in your DB, handle accordingly.
+          // Assuming here we want to link the order to that customer.
+          finalCustomerId = credit_customer_id;
+        } else {
+          finalCustomerId = await ensureCustomer(supabase, {
+            restaurant_id,
+            phone: customer_phone,
+            name: customer_name,
+            // email, address if available in body
+          });
+        }
+      } catch (custErr) {
+        console.error('[CreateOrder] Failed to ensure customer:', custErr);
+        // Don't swallow for now, let's see why it failed. 
+        // Optional: throw custErr; 
+        // For production, swallowing is safer for Order Completion, but for debugging we need this log.
+      }
     }
     // ---------------------------------
 
@@ -86,11 +87,29 @@ export default async function handler(req, res) {
     }
 
     // 1) Load menu item attributes
-    const itemIds = items.map((it) => it.id).filter(Boolean);
-    const { data: menuItems, error: menuError } = await supabase
-      .from('menu_items')
-      .select('id, is_packaged_good, tax_rate, uom:unit_of_measures(precision, short_code)')
-      .in('id', itemIds);
+    // Use strict UUID check to prevent 22P02 errors from temporary IDs
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const itemIds = items.map((it) => it.id).filter(id => id && uuidRegex.test(id));
+
+    let menuItems = [];
+    let menuError = null;
+
+    if (itemIds.length > 0) {
+      try {
+        const { data, error } = await supabase
+          .from('menu_items')
+          .select('id, is_packaged_good, tax_rate, uom:unit_of_measures(precision, short_code)')
+          .in('id', itemIds);
+
+        if (error) throw error;
+        menuItems = data;
+      } catch (err) {
+        menuError = err;
+        if (err.code === '22P02') {
+          return res.status(400).json({ error: 'Invalid Order ID format' });
+        }
+      }
+    }
 
     if (menuError) {
       if (process.env.NODE_ENV !== 'production') {
@@ -135,99 +154,99 @@ export default async function handler(req, res) {
     const serviceRate = gstEnabled ? baseRate : 0;
     const serviceInclude =
       gstEnabled &&
-      ((req.body.prices_include_tax !== undefined 
-          ? (req.body.prices_include_tax === true || req.body.prices_include_tax === 'true') 
-          : (profile?.prices_include_tax === true ||
-             profile?.prices_include_tax === 'true' ||
-             profile?.prices_include_tax === 1 ||
-             profile?.prices_include_tax === '1')
+      ((req.body.prices_include_tax !== undefined
+        ? (req.body.prices_include_tax === true || req.body.prices_include_tax === 'true')
+        : (profile?.prices_include_tax === true ||
+          profile?.prices_include_tax === 'true' ||
+          profile?.prices_include_tax === 1 ||
+          profile?.prices_include_tax === '1')
       ));
 
     // 4) Compute totals
     // 4) Compute totals using Centralized Logic
     // First, merge DB attributes into items so the utility has the correct flags
     const mergedItems = items.map(it => {
-        const menuItem = menuItems?.find((mi) => mi.id === it.id);
-        const uomObj = menuItem?.uom;
-        
-        return {
-           ...it,
-           // Priority: Item (Request) > DB
-           is_packaged_good: !!(menuItem?.is_packaged_good || it.is_packaged_good),
-           tax_rate: (it.tax_rate !== undefined && it.tax_rate !== null) ? it.tax_rate : menuItem?.tax_rate,
-           uom_short_code: it.uom_short_code || uomObj?.short_code || null,
-           uom_precision: it.uom_precision ?? uomObj?.precision ?? 0,
-           
-           // Ensure price is number
-           price: Number(it.price || 0),
-           quantity: Number(it.quantity || 1)
-        };
+      const menuItem = menuItems?.find((mi) => mi.id === it.id);
+      const uomObj = menuItem?.uom;
+
+      return {
+        ...it,
+        // Priority: Item (Request) > DB
+        is_packaged_good: !!(menuItem?.is_packaged_good || it.is_packaged_good),
+        tax_rate: (it.tax_rate !== undefined && it.tax_rate !== null) ? it.tax_rate : menuItem?.tax_rate,
+        uom_short_code: it.uom_short_code || uomObj?.short_code || null,
+        uom_precision: it.uom_precision ?? uomObj?.precision ?? 0,
+
+        // Ensure price is number
+        price: Number(it.price || 0),
+        quantity: Number(it.quantity || 1)
+      };
     });
 
     // Check if manual round-off was provided from frontend (counter.js)
     const hasManualRoundOff = round_off_amount !== undefined && round_off_amount !== null && round_off_amount !== 0;
-    
-    const { 
-        processed_items, 
-        line_subtotal,
-        line_discount_total,
-        taxable_amount: finalTaxableAmount,
-        total_tax: finalTotalTax, 
-        total_inc_tax: finalTotalInc, 
-        total_amount: finalGrandTotal, 
-        round_off_amount: finalRoundOff, 
-        bill_discount_amount,
-        order_discount_percent: orderDiscountPct,
-        subtotal_after_line_discounts,
-        total_order_discount_base,
+
+    const {
+      processed_items,
+      line_subtotal,
+      line_discount_total,
+      taxable_amount: finalTaxableAmount,
+      total_tax: finalTotalTax,
+      total_inc_tax: finalTotalInc,
+      total_amount: finalGrandTotal,
+      round_off_amount: finalRoundOff,
+      bill_discount_amount,
+      order_discount_percent: orderDiscountPct,
+      subtotal_after_line_discounts,
+      total_order_discount_base,
     } = await import('../../../utils/orderCalculations').then(m => m.calculateOrderTotals(
-        mergedItems,
-        { 
-          type: total_discount_percent > 0 ? 'percent' : 'amount',
-          value: total_discount_percent > 0 ? total_discount_percent : (discount_amount || 0)
-        },
-        { 
-           gst_enabled: gstEnabled, 
-           default_tax_rate: baseRate,
-           prices_include_tax: serviceInclude,
-           round_off_config: profile?.round_off_enabled ? {
-               round_off_enabled: true,
-               round_off_mode: hasManualRoundOff ? 'manual' : (profile?.round_off_mode || 'automatic'),
-               round_off_manual_value: hasManualRoundOff ? Number(round_off_amount) : 0,
-               round_off_auto_factor: profile?.round_off_auto_factor
-           } : { round_off_enabled: false }
-        }
+      mergedItems,
+      {
+        type: total_discount_percent > 0 ? 'percent' : 'amount',
+        value: total_discount_percent > 0 ? total_discount_percent : (discount_amount || 0)
+      },
+      {
+        gst_enabled: gstEnabled,
+        default_tax_rate: baseRate,
+        prices_include_tax: serviceInclude,
+        round_off_config: profile?.round_off_enabled ? {
+          round_off_enabled: true,
+          round_off_mode: hasManualRoundOff ? 'manual' : (profile?.round_off_mode || 'automatic'),
+          round_off_manual_value: hasManualRoundOff ? Number(round_off_amount) : 0,
+          round_off_auto_factor: profile?.round_off_auto_factor
+        } : { round_off_enabled: false }
+      }
     ));
 
     // Map back to the specific DB structure expected by 'order_items' table
     const preparedItems = processed_items.map(pi => ({
-        order_id: null,
-        menu_item_id: pi.id,
-        quantity: pi.quantity,
-        price: pi.unit_price, // MRP (Face)
-        item_name: pi.item_name,
-        variant_option_id: pi.variant_id || pi.variant_option_id || null,
-        variant_name: pi.variant_name || null,
-        
-        unit_price_ex_tax: pi.unit_price_ex_tax,
-        unit_price_inc_tax: pi.unit_price_inc_tax,
-        unit_tax_amount: pi.unit_tax_amount,
-        
-        tax_rate: pi.tax_rate,
-        hsn: pi.hsn || null,
-        is_packaged_good: pi.is_packaged_good,
-        uom_short_code: pi.uom_short_code,
-        uom_precision: pi.uom_precision,
-        
-        // Audit Fields
-        discount_amount: pi.discount_amount, // Total reduction (Line + Bill Share)
-        line_discount_amount: pi.line_discount_amount, 
-        order_discount_share: pi.order_discount_share,
-        taxable_amount: pi.taxable_amount,
-        tax_amount: pi.tax_amount,
-        line_total: pi.line_total
+      order_id: null,
+      menu_item_id: pi.id,
+      quantity: pi.quantity,
+      price: pi.unit_price, // MRP (Face)
+      item_name: pi.item_name,
+      variant_option_id: pi.variant_id || pi.variant_option_id || null,
+      variant_name: pi.variant_name || null,
+
+      unit_price_ex_tax: pi.unit_price_ex_tax,
+      unit_price_inc_tax: pi.unit_price_inc_tax,
+      unit_tax_amount: pi.unit_tax_amount,
+
+      tax_rate: pi.tax_rate,
+      hsn: pi.hsn || null,
+      is_packaged_good: pi.is_packaged_good,
+      uom_short_code: pi.uom_short_code,
+      uom_precision: pi.uom_precision,
+
+      // Audit Fields
+      discount_amount: pi.discount_amount, // Total reduction (Line + Bill Share)
+      line_discount_amount: pi.line_discount_amount,
+      order_discount_share: pi.order_discount_share,
+      taxable_amount: pi.taxable_amount,
+      tax_amount: pi.tax_amount,
+      line_total: pi.line_total
     }));
-    
+
     // 6. Final Status & Payment logic
     const finalStatus = incomingStatus || 'new';
 
@@ -237,36 +256,37 @@ export default async function handler(req, res) {
     let finalPaymentStatus = payment_status || 'pending';
 
     if (processedPaymentMethod === 'mixed' && processedMixedDetails) {
-        // Validation/Sanitization could happen here if needed
+      // Validation/Sanitization could happen here if needed
     }
 
     if (finalStatus === 'completed') {
-        finalPaymentStatus = 'paid';
+      finalPaymentStatus = 'paid';
     }
 
     // 7. Persist via Unified Service
     const orderResult = await OrderService.persistCalculatedOrder(supabase, {
       orderId: null, // New Order
       restaurantId: restaurant_id,
-      calculationResult: { 
-          processed_items, 
-          line_subtotal,
-          line_discount_total,
-          taxable_amount: finalTaxableAmount,
-          total_tax: finalTotalTax, 
-          total_inc_tax: finalTotalInc, 
-          total_amount: finalGrandTotal, 
-          round_off_amount: finalRoundOff, 
-          discount_amount: bill_discount_amount,
-          order_discount_percent: orderDiscountPct,
-          // Mandatory for correct auditing of Ex-Tax values
-          subtotal_after_line_discounts,
-          total_order_discount_base
+      calculationResult: {
+        processed_items,
+        line_subtotal,
+        line_discount_total,
+        taxable_amount: finalTaxableAmount,
+        total_tax: finalTotalTax,
+        total_inc_tax: finalTotalInc,
+        total_amount: finalGrandTotal,
+        round_off_amount: finalRoundOff,
+        discount_amount: bill_discount_amount,
+        order_discount_percent: orderDiscountPct,
+        // Mandatory for correct auditing of Ex-Tax values
+        subtotal_after_line_discounts,
+        total_order_discount_base
       },
       metadata: {
         status: finalStatus,
         payment_status: finalPaymentStatus,
         payment_method: processedPaymentMethod,
+        user_id,
         customer_id: finalCustomerId,
         customer_name,
         customer_phone,
@@ -279,8 +299,8 @@ export default async function handler(req, res) {
         mixed_payment_details: processedMixedDetails,
         created_at: custom_created_at || new Date().toISOString(),
         prices_include_tax: serviceInclude,
-    base_tax_rate: baseRate,
-    gst_enabled: gstEnabled
+        base_tax_rate: baseRate,
+        gst_enabled: gstEnabled
       }
     });
 
@@ -346,35 +366,35 @@ export default async function handler(req, res) {
               .select('id, variant_option_id, recipe_items(ingredient_id, quantity)')
               .eq('menu_item_id', item.id)
               .eq('restaurant_id', restaurant_id)
-            
+
             // Note: We can't easily do "try variant, else base" in one query without a robust helper or stored proc.
             // But we can fetch potentially both and pick the best one in JS.
             // Since we only expect max 2 rows (one for variant, one for base), this is cheap.
-            
+
             const { data: potentialRecipes, error: recipeErr } = await recipeQuery;
-            
+
             if (recipeErr) throw recipeErr;
-            
+
             // Logic: 
             // 1. If item has variant_id, look for recipe with that variant_option_id
             // 2. If not found (or item has no variant), try finding one with variant_option_id IS NULL (base)
-            
+
             const targetVariantId = item.variant_id || item.variant_option_id || null;
             let recipe = potentialRecipes?.find(r => {
-                const rId = r.variant_option_id;
-                if (!rId && !targetVariantId) return true;
-                if (!rId || !targetVariantId) return false;
-                return String(rId) === String(targetVariantId);
+              const rId = r.variant_option_id;
+              if (!rId && !targetVariantId) return true;
+              if (!rId || !targetVariantId) return false;
+              return String(rId) === String(targetVariantId);
             });
-            
+
             if (!recipe && targetVariantId) {
-               // Fallback to base if specific variant recipe missing
-               recipe = potentialRecipes?.find(r => r.variant_option_id === null);
+              // Fallback to base if specific variant recipe missing
+              recipe = potentialRecipes?.find(r => r.variant_option_id === null);
             }
             // If still no recipe (and didn't have variant, or no base found), try just the first one if flexible? 
             // No, strictly follow base. If no base, then no recipe.
             if (!recipe && !targetVariantId && potentialRecipes?.length > 0) {
-               recipe = potentialRecipes.find(r => r.variant_option_id === null);
+              recipe = potentialRecipes.find(r => r.variant_option_id === null);
             }
 
             if (
@@ -517,29 +537,29 @@ export default async function handler(req, res) {
     // 12) Handle LOYALTY EARNING (Backend Side)
     // Only if status is completed (paid) and not credit.
     console.log('[Loyalty Check] finalStatus:', finalStatus, 'finalPaymentStatus:', finalPaymentStatus, 'is_credit:', is_credit, 'finalCustomerId:', finalCustomerId);
-    
+
     if ((finalStatus === 'completed' || finalPaymentStatus === 'paid') && !is_credit && finalCustomerId) {
-        try {
-            const { LoyaltyService } = await import('../../../services/loyaltyService');
-            const loyaltyResult = await LoyaltyService.handleOrderEarning(supabase, {
-                restaurant_id,
-                customer_id: finalCustomerId,
-                order_id: orderResult.orderId,
-                order_total: finalGrandTotal,
-                loyalty_amount_used: loyalty_amount_used || 0,
-                loyalty_points_used: loyalty_points_used || null
-            });
+      try {
+        const { LoyaltyService } = await import('../../../services/loyaltyService');
+        const loyaltyResult = await LoyaltyService.handleOrderEarning(supabase, {
+          restaurant_id,
+          customer_id: finalCustomerId,
+          order_id: orderResult.orderId,
+          order_total: finalGrandTotal,
+          loyalty_amount_used: loyalty_amount_used || 0,
+          loyalty_points_used: loyalty_points_used || null
+        });
 
-            // Sync earned points to invoice for display/reporting
-            if (loyaltyResult?.success && loyaltyResult?.points > 0) {
-                 await supabase.from('invoices')
-                   .update({ loyalty_points_earned: loyaltyResult.points })
-                   .eq('order_id', orderResult.orderId);
-            }
-
-        } catch (loyErr) {
-            console.error('[CreateOrder] Loyalty Service Error:', loyErr);
+        // Sync earned points to invoice for display/reporting
+        if (loyaltyResult?.success && loyaltyResult?.points > 0) {
+          await supabase.from('invoices')
+            .update({ loyalty_points_earned: loyaltyResult.points })
+            .eq('order_id', orderResult.orderId);
         }
+
+      } catch (loyErr) {
+        console.error('[CreateOrder] Loyalty Service Error:', loyErr);
+      }
     }
 
     // 12) Send response now (client can print immediately)

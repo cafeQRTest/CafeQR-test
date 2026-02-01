@@ -26,6 +26,7 @@ export default function RestaurantListing() {
     const [addrLoading, setAddrLoading] = useState(true);
     const [defaultAddress, setDefaultAddress] = useState(null);
     const [localAddress, setLocalAddress] = useState("");
+    const [showMenu, setShowMenu] = useState(false);
 
     useEffect(() => {
         if (!router.isReady) return;
@@ -193,16 +194,94 @@ export default function RestaurantListing() {
                             </Link>
                         </div>
 
-                        <motion.button
-                            onClick={() => router.push("/app/profile")}
-                            animate={{ scale: [1, 1.05, 1] }}
-                            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                            whileHover={{ scale: 1.1 }}
-                            whileTap={{ scale: 0.95 }}
-                            className="header-avatar"
-                        >
-                            <span>👨‍💼</span>
-                        </motion.button>
+                        <div style={{ position: 'relative' }}>
+                            <motion.button
+                                onClick={() => setShowMenu(!showMenu)}
+                                animate={{ scale: [1, 1.05, 1] }}
+                                transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                                whileHover={{ scale: 1.1 }}
+                                whileTap={{ scale: 0.95 }}
+                                className="header-avatar"
+                            >
+                                <span>👨‍💼</span>
+                            </motion.button>
+
+                            <AnimatePresence>
+                                {showMenu && (
+                                    <>
+                                        <div
+                                            style={{ position: 'fixed', inset: 0, zIndex: 40 }}
+                                            onClick={() => setShowMenu(false)}
+                                        />
+                                        <motion.div
+                                            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                                            exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                            style={{
+                                                position: 'absolute',
+                                                top: '120%',
+                                                right: 0,
+                                                background: 'white',
+                                                borderRadius: '16px',
+                                                boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+                                                padding: '8px',
+                                                minWidth: '180px',
+                                                zIndex: 50,
+                                                border: '1px solid #f3f4f6'
+                                            }}
+                                        >
+                                            <button
+                                                onClick={() => router.push('/app/orders/history')}
+                                                style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '12px',
+                                                    width: '100%',
+                                                    padding: '12px 16px',
+                                                    border: 'none',
+                                                    background: 'transparent',
+                                                    borderRadius: '12px',
+                                                    cursor: 'pointer',
+                                                    textAlign: 'left',
+                                                    color: '#374151',
+                                                    fontSize: '14px',
+                                                    fontWeight: 500
+                                                }}
+                                                onMouseEnter={(e) => e.target.style.background = '#f9fafb'}
+                                                onMouseLeave={(e) => e.target.style.background = 'transparent'}
+                                            >
+                                                <ShoppingBag size={18} />
+                                                My Orders
+                                            </button>
+
+                                            <button
+                                                onClick={() => router.push('/app/profile')}
+                                                style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '12px',
+                                                    width: '100%',
+                                                    padding: '12px 16px',
+                                                    border: 'none',
+                                                    background: 'transparent',
+                                                    borderRadius: '12px',
+                                                    cursor: 'pointer',
+                                                    textAlign: 'left',
+                                                    color: '#374151',
+                                                    fontSize: '14px',
+                                                    fontWeight: 500
+                                                }}
+                                                onMouseEnter={(e) => e.target.style.background = '#f9fafb'}
+                                                onMouseLeave={(e) => e.target.style.background = 'transparent'}
+                                            >
+                                                <User size={18} />
+                                                Profile
+                                            </button>
+                                        </motion.div>
+                                    </>
+                                )}
+                            </AnimatePresence>
+                        </div>
                     </div>
 
                     <div className="header-search">
