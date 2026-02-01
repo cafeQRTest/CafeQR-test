@@ -2561,21 +2561,8 @@ useEffect(() => {
     )
     .subscribe();
 
-  // SEPARATE CHANNEL FOR PRINT BROADCASTS (to match usePrintService)
-  const printChannel = supabase
-    .channel(`auto-print:${restaurantId}`, {
-      config: {
-        broadcast: { self: true }
-      }
-    })
-    .on('broadcast', { event: 'keepalive' }, () => {
-      // Dummy listener to enable broadcast on this channel
-    })
-    .subscribe((status) => {
-      console.log('[ORDERS] Print channel status:', status);
-    });
-  
-  channelRef.current = printChannel;
+  // Store the orders channel for broadcasting edits
+  channelRef.current = channel;
 
   function onVisible() {
     if (document.visibilityState === 'visible') {
@@ -2607,7 +2594,6 @@ useEffect(() => {
     window.removeEventListener('visibilitychange', onVisible);
     if (supabase) {
         supabase.removeChannel(channel);
-        supabase.removeChannel(printChannel);
     }
     channelRef.current = null; // Clean up ref
   };
