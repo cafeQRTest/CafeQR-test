@@ -70,8 +70,8 @@ export default async function handler(req, res) {
     // A. Invoice Header
     const invoiceHeader = {
       invoice_no: invoice?.invoice_no || `ORD-${order_id.slice(0, 8)}`,
-      // Use created_at timestamp for accurate time. invoice_date might be Date-only (00:00 UTC -> 05:30 IST)
-      invoice_date: new Date(invoice?.created_at || order.created_at || new Date()).toLocaleString('en-IN', {
+      // Use date_ordered if available, else fall back to created_at
+      invoice_date: new Date(invoice?.date_ordered || order.date_ordered || invoice?.created_at || order.created_at || new Date()).toLocaleString('en-IN', {
         day: 'numeric',
         month: 'numeric',
         year: 'numeric',
