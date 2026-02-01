@@ -2419,11 +2419,20 @@ const handleEditSave = async (edited) => {
  
     // Broadcast to other devices (e.g., Main Counter) for global KOT printing
     if (channelRef.current && data.order_for_print) {
+      console.log('[EDIT] Broadcasting order edit:', data.order_for_print.id);
+      console.log('[EDIT] Channel state:', channelRef.current.state);
+      
       channelRef.current.send({
         type: 'broadcast',
         event: 'order-edited',
         payload: data.order_for_print
-      }).catch(err => console.error('[BROADCAST] Failed to send edit notification:', err));
+      }).then(() => {
+        console.log('[EDIT] Broadcast sent successfully');
+      }).catch(err => {
+        console.error('[BROADCAST] Failed to send edit notification:', err);
+      });
+    } else {
+      console.warn('[EDIT] Cannot broadcast - channel:', !!channelRef.current, 'data:', !!data.order_for_print);
     }
 
     // Also dispatch locally for this device to print if needed
