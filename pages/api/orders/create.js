@@ -86,10 +86,12 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
+    console.log('[DEBUG] Incoming Items:', JSON.stringify(items.map(i => ({ id: i.id, menu_item_id: i.menu_item_id })), null, 2));
+
     // 1) Load menu item attributes
     // Use strict UUID check to prevent 22P02 errors from temporary IDs
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    const itemIds = items.map((it) => it.id).filter(id => id && uuidRegex.test(id));
+    const itemIds = items.map((it) => it.menu_item_id || it.id).filter(id => id && uuidRegex.test(id));
 
     let menuItems = [];
     let menuError = null;
@@ -164,13 +166,25 @@ export default async function handler(req, res) {
 
     // 4) Compute totals
     // 4) Compute totals using Centralized Logic
+    // Pre-filter to ensure strict UUID compliance
+    const validRequestItems = items.filter(it => {
+      const checkId = it.menu_item_id || it.id;
+      return checkId && uuidRegex.test(checkId);
+    });
+
+    if (validRequestItems.length === 0) {
+      return res.status(400).json({ error: 'No valid items provided (Invalid IDs)' });
+    }
+
     // First, merge DB attributes into items so the utility has the correct flags
-    const mergedItems = items.map(it => {
-      const menuItem = menuItems?.find((mi) => mi.id === it.id);
+    const mergedItems = validRequestItems.map(it => {
+      const realId = it.menu_item_id || it.id;
+      const menuItem = menuItems?.find((mi) => mi.id === realId);
       const uomObj = menuItem?.uom;
 
       return {
         ...it,
+        id: realId, // Ensure we work with the real UUID internally
         // Priority: Item (Request) > DB
         is_packaged_good: !!(menuItem?.is_packaged_good || it.is_packaged_good),
         tax_rate: (it.tax_rate !== undefined && it.tax_rate !== null) ? it.tax_rate : menuItem?.tax_rate,
@@ -356,7 +370,7 @@ export default async function handler(req, res) {
     (async () => {
       try {
         // ✅ Deduct stock for each menu item based on recipes
-        for (const item of items) {
+        for (const item of mergedItems) {
           if (!item.id || !item.quantity) continue;
 
           try {
