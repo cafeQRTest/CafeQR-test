@@ -5,6 +5,7 @@ import styled, { keyframes, css } from 'styled-components';
 import { useRouter } from 'next/router'; // <-- Import useRouter at the top!
 import { Capacitor } from '@capacitor/core';
 import { getSupabase } from '../../services/supabase';
+import { LoyaltyService } from '../../services/loyaltyService';
 import { useRequireAuth } from '../../lib/useRequireAuth';
 import { useRestaurant } from '../../context/RestaurantContext';
 import Button from '../../components/ui/Button';
@@ -2060,6 +2061,8 @@ export default function OrdersPage() {
   const [paxEditOrder, setPaxEditOrder] = useState(null);
   const [tableEditOrder, setTableEditOrder] = useState(null);
 
+  // Ref to store realtime channel for broadcasting
+  const channelRef = useRef(null);
 
   const [ordersByStatus, setOrdersByStatus] = useState({
     new: [], in_progress: [], ready: [], completed: [], mobileFilter: 'new'
@@ -2309,6 +2312,20 @@ const handleCancelConfirm = async (reason) => {
       }
     } else {
       console.log('[CANCEL ORDER] No invoice found - skipping void');
+      
+      // Attempt manual loyalty reversal for non-invoiced orders (e.g. if points were redeemed on a New order)
+      if (restaurant?.loyalty_enabled) {
+          console.log('[CANCEL ORDER] Loyalty enabled, checking/reversing transactions for non-invoiced order');
+          try {
+             await LoyaltyService.handleOrderReversal(supabase, {
+                restaurant_id: restaurantId,
+                order_id: cancelOrderDialog.id
+             });
+             console.log('[CANCEL ORDER] Manual Loyalty Reversal Checked/Completed');
+          } catch (error) {
+             console.error('[CANCEL ORDER] Loyalty reversal failed:', error);
+          }
+      }
     }
        // Restore stock for cancelled order
        let itemsToRestore = fullOrder?.order_items;
@@ -2400,15 +2417,35 @@ const handleEditSave = async (edited) => {
       return;
     }
  
-    window.dispatchEvent(
-      new CustomEvent('auto-print-order', {
-        detail: {
-          ...data.order_for_print,
-          autoPrint: true,
-          kind: 'kot',
-        },
-      })
-    );
+    // Insert into print queue for cross-device KOT printing
+    if (data.order_for_print && (editingOrder.status === 'new' || editingOrder.status === 'in_progress')) {
+      try {
+        await supabase
+          .from('kot_print_queue')
+          .insert({
+            restaurant_id: restaurantId,
+            order_id: editingOrder.id,
+            print_data: data.order_for_print,
+            processed: false
+          });
+        console.log('[EDIT] Inserted into print queue for order:', editingOrder.id);
+      } catch (err) {
+        console.error('[EDIT] Failed to insert into print queue:', err);
+      }
+    }
+
+    // Dispatch locally for this device to print if needed
+    if (data.order_for_print) {
+      window.dispatchEvent(
+        new CustomEvent('auto-print-order', {
+          detail: {
+            ...data.order_for_print,
+            autoPrint: true,
+            kind: 'kot',
+          },
+        })
+      );
+    }
 
     // Refresh & close
     await loadOrders();
@@ -2497,7 +2534,6 @@ useEffect(() => {
       (payload) => {
         const payloadOrder = payload.new;
         if (!payloadOrder) return;
-
         // Fetch full order with items and precision to ensure UI is correct
         supabase
           .from('orders')
@@ -2506,7 +2542,6 @@ useEffect(() => {
           .single()
           .then(({ data: fullOrder }) => {
              if (!fullOrder) return;
-             
              // Update order in kanban/mobile list
              setOrdersByStatus((prev) => {
                const updated = { ...prev };
@@ -2518,7 +2553,6 @@ useEffect(() => {
                }
                return updated;
              });
-
              // Only play sound for new orders
              if (payload.eventType === 'INSERT' && fullOrder.status === 'new') {
                playNotificationSound();
@@ -3645,6 +3679,7 @@ function OrderCard({
                    try { await downloadInvoicePdf(order.id) } catch (e) { alert(e.message) }
                 }} disabled={generatingInvoice === order.id}>Invoice</Button>
                 <Button size="sm" style={{background: '#10b981', borderColor: '#10b981', color:'white'}} onClick={() => onPrintBill && onPrintBill(order)}>Print Bill</Button>
+                <Button size="sm" variant="danger" onClick={() => onCancelOrderOpen(order)}>Cancel</Button>
               </>
             )}
 

@@ -24,8 +24,9 @@ const ALIGN_RIGHT = ESC + "a" + b(2);
 const MODE_TALL = ESC + "!" + b(0x01); // double-height only
 // GS ! n = character size magnification (width/height). [web:133][web:138]
 const SIZE_1X = GS + "!" + b(0x00); // 1x width, 1x height
-const SIZE_2X = GS + "!" + b(0x11); // 2x width, 2x height
 const SIZE_2H = GS + "!" + b(0x01); // 1x width, 2x height (your current “DH”)
+const MODE_INVERSE = GS + "B" + b(1);
+const MODE_NO_INVERSE = GS + "B" + b(0);
 
 
 
@@ -235,20 +236,34 @@ function escposPageSetup(layout) {
   );
 }
 
-function buildLogoEscPos(restaurantProfile) {
+function buildLogoEscPos(restaurantProfile, layout) {
   const bits = restaurantProfile?.print_logo_bitmap;
   const cols = Number(restaurantProfile?.print_logo_cols || 0);
   const rows = Number(restaurantProfile?.print_logo_rows || 0);
   if (!bits || !cols || !rows || bits.length !== cols * rows) return "";
 
-  const bytesPerRow = Math.ceil(cols / 8);
+  const bytesPerRowSrc = Math.ceil(cols / 8);
+
+  // Target = printable area width (GS W), rounded up to full bytes.
+  const targetDots = Math.max(8, Number(layout?.areaDots || 384));
+  const bytesPerRowDst = Math.ceil(targetDots / 8);
+
+  // Center at byte granularity (8 dots). Works reliably across printers.
+  const padTotal = Math.max(0, bytesPerRowDst - bytesPerRowSrc);
+  const padLeft = Math.floor(padTotal / 2);
+  const padRight = padTotal - padLeft;
 
   let out = "";
-  out += ALIGN_CENTER;
-  out += GS + "v" + "0" + b(0) + b2(bytesPerRow) + b2(rows);
+  // Don't rely on printer centering; we embed centering in the bitmap.
+  out += ALIGN_LEFT;
+  out += GS + "v" + "0" + b(0) + b2(bytesPerRowDst) + b2(rows);
 
   for (let y = 0; y < rows; y++) {
-    for (let bx = 0; bx < bytesPerRow; bx++) {
+    // left pad
+    for (let i = 0; i < padLeft; i++) out += b(0x00);
+
+    // original row bytes
+    for (let bx = 0; bx < bytesPerRowSrc; bx++) {
       let byte = 0;
       for (let bit = 0; bit < 8; bit++) {
         const x = bx * 8 + bit;
@@ -256,6 +271,9 @@ function buildLogoEscPos(restaurantProfile) {
       }
       out += b(byte);
     }
+
+    // right pad
+    for (let i = 0; i < padRight; i++) out += b(0x00);
   }
 
   out += "\r\n";
@@ -301,28 +319,7 @@ export function buildKotText(order, restaurantProfile) {
     const W = layout.innerCols;
     const dashes = () => "-".repeat(W);
 
-    const restaurantName = String(
-      restaurantProfile?.restaurant_name ||
-        order?.restaurant_name ||
-        "RESTAURANT"
-    ).toUpperCase();
 
-    const addressParts = [
-      restaurantProfile?.shipping_address_line1,
-      restaurantProfile?.shipping_address_line2,
-      restaurantProfile?.shipping_city,
-      restaurantProfile?.shipping_state,
-      restaurantProfile?.shipping_pincode,
-    ].filter(Boolean);
-    const address = addressParts.length
-      ? addressParts.join(", ")
-      : order?.restaurant_address || "";
-
-    const phone =
-      restaurantProfile?.shipping_phone ||
-      restaurantProfile?.phone ||
-      order?.restaurant_phone ||
-      "";
 
     const orderId = order?.id?.slice(0, 8)?.toUpperCase() || "N/A";
     const tableLabel = getOrderTypeLabel(order);
@@ -345,48 +342,62 @@ export function buildKotText(order, restaurantProfile) {
     const lines = [];
 
     // === HEADER ===
-    // Use PRINTER ALIGNMENT (ALIGN_CENTER) for the double-width header
-    // so it ignores column counting errors.
+    const is80 = layout.paperMm >= 76;
 
-// === RESTAURANT NAME (center + bold; 80mm = 2xW/2xH, 58mm = normal) ===
-const is80 = layout.paperMm >= 76;
-
-lines.push(ALIGN_CENTER);
-
-lines.push(
-  MODE_BOLD +
-    (is80 ? SIZE_2X : SIZE_1X) +
-    restaurantName +
-    SIZE_1X +
-    MODE_NO_BOLD
-);
-
-
-// go back to normal flow
-lines.push(ALIGN_LEFT);
-
-
-
-
-    wrapText(address, W).forEach((l) =>
-      lines.push(withMargins(center(l, W), layout))
-    );
-    if (phone)
-      lines.push(withMargins(center(`Contact No.: ${phone}`, W), layout));
+    lines.push(ALIGN_CENTER);
     
+    // 1. Title
+    lines.push(
+      MODE_BOLD +
+        (is80 ? SIZE_2X : SIZE_1X) +
+        "KITCHEN ORDER TICKET" +
+        SIZE_1X +
+        MODE_NO_BOLD
+    );
+    lines.push(ALIGN_LEFT);
     lines.push(withMargins(dashes(), layout));
 
-    lines.push(withMargins(center("*** KITCHEN ORDER TICKET ***", W), layout));
-    lines.push(withMargins(`${dateStr} ${timeStr}`, layout));
+    // 2. Parcel Highlight or Table Info
+    if (order?.order_type === 'parcel') {
+       lines.push(ALIGN_CENTER);
+       lines.push(
+         MODE_BOLD +
+         (is80 ? SIZE_2X : SIZE_1X) +
+         " PARCEL " +
+         SIZE_1X +
+         MODE_NO_BOLD
+       );
+       lines.push(ALIGN_LEFT);
+       lines.push(withMargins(dashes(), layout));
+    } else if (tableLabel) {
+       // Table Label in Large (No Inverse)
+       lines.push(ALIGN_CENTER);
+       lines.push(
+         MODE_BOLD +
+         (is80 ? SIZE_2X : SIZE_1X) +
+         ` ${tableLabel.toUpperCase()} ` +
+         SIZE_1X +
+         MODE_NO_BOLD
+       );
+       lines.push(ALIGN_LEFT);
+       lines.push(withMargins(dashes(), layout));
+    } else {
+        // Fallback if no table/parcel but maybe logic requires else
+    }
+
+    // 3. Metadata (Order #, Bill #, Date)
     lines.push(withMargins(`Order: #${orderId}`, layout));
     if (order?.bill_no) {
        lines.push(withMargins(`Bill No: ${order.bill_no}`, layout));
     }
-    if (tableLabel) lines.push(withMargins(`For: ${tableLabel}`, layout));
-    if (order?.number_of_customers)
+    
+    lines.push(withMargins(`${dateStr} ${timeStr}`, layout));
+
+    if (order?.number_of_customers) {
       lines.push(
         withMargins(`No. of Customers: ${order.number_of_customers}`, layout)
       );
+    }
     lines.push(withMargins(dashes(), layout));
 
     if (items.length) {
@@ -411,10 +422,10 @@ lines.push(ALIGN_LEFT);
 
         const qty = rightAlign(qtyNum.toFixed(p), qtyW);
         lines.push(
-          withMargins(leftAlign(nameLines[0], nameW) + " " + qty, layout)
+          withMargins(MODE_BOLD + leftAlign(nameLines[0], nameW) + " " + qty + MODE_NO_BOLD, layout)
         );
         for (let i = 1; i < nameLines.length; i++) {
-          lines.push(withMargins(nameLines[i], layout));
+          lines.push(withMargins(MODE_BOLD + nameLines[i] + MODE_NO_BOLD, layout));
         }
       });
     }
@@ -443,10 +454,10 @@ lines.push(ALIGN_LEFT);
 
         const qty = rightAlign(qtyNum.toFixed(p), qtyW);
         lines.push(
-          withMargins(leftAlign("- " + nameLines[0], nameW) + " " + qty, layout)
+          withMargins(MODE_BOLD + leftAlign("- " + nameLines[0], nameW) + " " + qty + MODE_NO_BOLD, layout)
         );
         for (let i = 1; i < nameLines.length; i++) {
-          lines.push(withMargins("  " + nameLines[i], layout));
+          lines.push(withMargins(MODE_BOLD + "  " + nameLines[i] + MODE_NO_BOLD, layout));
         }
       });
     }
@@ -716,8 +727,10 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     lines.push(withMargins(center("Powered by Cafe QR", W), layout));
     lines.push("");
 
-    return escposPageSetup(layout) + buildLogoEscPos(restaurantProfile) + lines.join("\n");
-  } catch (e) {
+    return escposPageSetup(layout)
+    + buildLogoEscPos(restaurantProfile, layout) 
+    + lines.join("\n");  
+    } catch (e) {
     console.error(e);
     return "PRINT ERROR";
   }

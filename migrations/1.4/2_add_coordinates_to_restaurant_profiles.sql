@@ -1,0 +1,1 @@
+﻿ALTER TABLE restaurant_profiles ADD COLUMN IF NOT EXISTS latitude float8 NOT NULL DEFAULT 0, ADD COLUMN IF NOT EXISTS longitude float8 NOT NULL DEFAULT 0;

@@ -603,8 +603,8 @@ function PrintLogoField({ restaurantId, supabase }) {
     try {
       const { bitmap, cols, rows } = await fileToBitmapGrid(file);
       const { error } = await supabase.from('restaurant_profiles').upsert(
-          { restaurant_id: restaurantId, print_logo_bitmap: bitmap, print_logo_cols: cols, print_logo_rows: rows },
-          { onConflict: 'restaurant_id', ignoreDuplicates: false }
+        { restaurant_id: restaurantId, print_logo_bitmap: bitmap, print_logo_cols: cols, print_logo_rows: rows },
+        { onConflict: 'restaurant_id', ignoreDuplicates: false }
       );
       if (error) throw error;
       setMsg('✓ Logo saved');
@@ -627,7 +627,7 @@ function PrintLogoField({ restaurantId, supabase }) {
       const { error } = await supabase.from('restaurant_profiles').update({ print_logo_bitmap: null }).eq('restaurant_id', restaurantId);
       if (error) throw error;
       setMsg('✓ Logo removed');
-    } catch (err) { setMsg('✗ Error'); } 
+    } catch (err) { setMsg('✗ Error'); }
     finally { setSaving(false); }
   };
 
@@ -635,23 +635,23 @@ function PrintLogoField({ restaurantId, supabase }) {
     <div style={{ marginTop: 24, paddingTop: 24, borderTop: '1px solid #fff7ed' }}>
       <Label style={{ marginBottom: 16 }}>Receipt Logo</Label>
       <DynamicFileUpload>
-         <input type="file" accept="image/*" onChange={handleFile} disabled={saving} style={{ display: 'none' }} />
-         <div style={{ width: 56, height: 56, borderRadius: 12, background: 'white', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
-            🖼️
-         </div>
-         <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 600, fontSize: 16, color: '#0f172a', marginBottom: 4 }}>Upload Business Logo</div>
-            <div style={{ fontSize: 13, color: '#64748b' }}>Supports JPG/PNG • Max 380px width</div>
-         </div>
-         {saving ? (
-             <span style={{fontSize: 14, color: '#f97316', fontWeight: 600}}>Processing...</span>
-         ) : (
-            <button onClick={clearLogo} style={{ background: '#fef2f2', border: '1px solid #fee2e2', color: '#ef4444', fontSize: 13, cursor: 'pointer', fontWeight: 600, padding: '8px 16px', borderRadius: 8 }}>
-                Clear
-            </button>
-         )}
+        <input type="file" accept="image/*" onChange={handleFile} disabled={saving} style={{ display: 'none' }} />
+        <div style={{ width: 56, height: 56, borderRadius: 12, background: 'white', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+          🖼️
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 600, fontSize: 16, color: '#0f172a', marginBottom: 4 }}>Upload Business Logo</div>
+          <div style={{ fontSize: 13, color: '#64748b' }}>Supports JPG/PNG • Max 380px width</div>
+        </div>
+        {saving ? (
+          <span style={{ fontSize: 14, color: '#f97316', fontWeight: 600 }}>Processing...</span>
+        ) : (
+          <button onClick={clearLogo} style={{ background: '#fef2f2', border: '1px solid #fee2e2', color: '#ef4444', fontSize: 13, cursor: 'pointer', fontWeight: 600, padding: '8px 16px', borderRadius: 8 }}>
+            Clear
+          </button>
+        )}
       </DynamicFileUpload>
-      {msg && <div style={{ marginTop: 12, fontSize: 14, fontWeight: 600, color: msg.startsWith('✗') ? '#dc2626' : '#10b981'}}>{msg}</div>}
+      {msg && <div style={{ marginTop: 12, fontSize: 14, fontWeight: 600, color: msg.startsWith('✗') ? '#dc2626' : '#10b981' }}>{msg}</div>}
     </div>
   );
 }
@@ -679,7 +679,7 @@ export default function SettingsPage() {
     features_table_ordering_enabled: false, features_inventory_enabled: false,
     features_production_enabled: false, features_counter_send_to_kitchen_enabled: false,
     swiggy_enabled: false, zomato_enabled: false,
-    featurescustomersenabled: false,featuresloyaltyenabled: false,
+    featurescustomersenabled: false, featuresloyaltyenabled: false,
     brand_color: '#f97316', description: '', instagram_handle: '', website_url: '',
     gst_enabled: false, gstin: '', fssai_license: '', default_tax_rate: 5, prices_include_tax: false,
     swiggy_api_key: '', swiggy_api_secret: '', swiggy_webhook_secret: '',
@@ -699,12 +699,12 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (showToast) {
-        const timer = setTimeout(() => { setShowToast(false); }, 3000);
-        return () => clearTimeout(timer);
+      const timer = setTimeout(() => { setShowToast(false); }, 3000);
+      return () => clearTimeout(timer);
     }
   }, [showToast]);
 
-  
+
 
   useEffect(() => {
     if (!checking) fetchRestaurant();
@@ -714,22 +714,22 @@ export default function SettingsPage() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      
+
       const { data, error } = await supabase
         .from('restaurants')
         .select('*, default_uom:unit_of_measures!default_uom_id(name)')
         .eq('owner_email', user.email)
         .single();
-        
+
       if (error) throw error;
       if (data) {
         setLocalRestaurantId(data.id);
         if (data.default_uom) {
-             // Handle both object (single relation) and array (if misconfigured)
-             const uomName = Array.isArray(data.default_uom) ? data.default_uom[0]?.name : data.default_uom.name;
-             setDefaultUomName(uomName);
+          // Handle both object (single relation) and array (if misconfigured)
+          const uomName = Array.isArray(data.default_uom) ? data.default_uom[0]?.name : data.default_uom.name;
+          setDefaultUomName(uomName);
         } else {
-             setDefaultUomName(null);
+          setDefaultUomName(null);
         }
       }
     } catch (err) {
@@ -742,7 +742,7 @@ export default function SettingsPage() {
       // Only show full page loader if it's the absolute first load
       const isInitial = !form.legal_name && !form.restaurant_name;
       if (isInitial) setLoading(true);
-      
+
       try {
         const { data: profile } = await supabase.from('restaurant_profiles').select('*').eq('restaurant_id', restaurant.id).maybeSingle();
         if (profile) {
@@ -764,12 +764,12 @@ export default function SettingsPage() {
             features_table_ordering_enabled: !!profile.features_table_ordering_enabled,
             features_inventory_enabled: !!profile.features_inventory_enabled,
             features_counter_send_to_kitchen_enabled: profile.features_counter_send_to_kitchen_enabled !== false,
-            featurescustomersenabled: !!profile.featurescustomersenabled,featuresloyaltyenabled: !!                       profile.featuresloyaltyenabled,
+            featurescustomersenabled: !!profile.featurescustomersenabled, featuresloyaltyenabled: !!profile.featuresloyaltyenabled,
             swiggy_enabled: !!(profile.swiggy_api_key), zomato_enabled: !!(profile.zomato_api_key),
             delivery_radius_km: profile.delivery_radius_km ?? 10,
             online_payment_enabled: !!profile.online_payment_enabled,
-            owner_lat: profile.location ? profile.location.coordinates?.[1] ?? '' : '',
-            owner_lng: profile.location ? profile.location.coordinates?.[0] ?? '' : '',
+            owner_lat: profile.latitude ?? (profile.location ? profile.location.coordinates?.[1] ?? '' : ''),
+            owner_lng: profile.longitude ?? (profile.location ? profile.location.coordinates?.[0] ?? '' : ''),
             round_off_enabled: !!profile.round_off_enabled,
             round_off_mode: profile.round_off_mode || 'automatic',
             round_off_auto_factor: profile.round_off_auto_factor ?? 1.0,
@@ -781,11 +781,11 @@ export default function SettingsPage() {
 
         const { data: restData } = await supabase.from('restaurants').select('name').eq('id', restaurant.id).single();
         if (restData?.name) setForm(prev => ({ ...prev, restaurant_name: restData.name }));
-      } catch (e) { 
+      } catch (e) {
         console.error("Error loading settings:", e);
-        setError(e.message); 
-      } finally { 
-        setLoading(false); 
+        setError(e.message);
+      } finally {
+        setLoading(false);
       }
     }
     load();
@@ -800,71 +800,93 @@ export default function SettingsPage() {
     try {
       if (!form.legal_name) throw new Error("Legal Name required");
       if (!form.fssai_license) throw new Error("FSSAI License Number is required");
-      
+
+      // Validation for Location & Delivery Radius
+      if (!form.delivery_radius_km || Number(form.delivery_radius_km) <= 0) {
+        throw new Error("Delivery Radius must be greater than 0");
+      }
+      // Strict Types: Ensure coordinates are strictly treated as Numbers
+      const finalLat = Number(form.owner_lat);
+      const finalLng = Number(form.owner_lng);
+
+      // The Guard: Validation function
+      const isValidCoord = (lat, lng) => lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180 && !isNaN(lat) && !isNaN(lng);
+
+      if (!isValidCoord(finalLat, finalLng)) {
+        throw new Error('System Error: GPS coordinates are out of valid range.');
+      }
+
+      if (Math.abs(finalLat) < 0.0001 && Math.abs(finalLng) < 0.0001) {
+        throw new Error("Valid coordinates are required. Please use 'Use Current Location'.");
+      }
+
+      console.log('CLEANED DATA BEING SENT:', { finalLat, finalLng });
+
       const payload = {
-          restaurant_id: restaurant.id,
-          legal_name: form.legal_name,
-          phone: form.phone,
-          support_email: form.support_email,
-          shipping_address_line1: form.shipping_address_line1,
-          shipping_address_line2: form.shipping_address_line2,
-          shipping_city: form.shipping_city,
-          shipping_state: form.shipping_state,
-          shipping_pincode: form.shipping_pincode,
-          tables_count: Number(form.tables_count),
-          table_prefix: form.table_prefix,
-          upi_id: form.upi_id,
-          gst_enabled: form.gst_enabled,
-          gstin: form.gstin,
-          fssai_license: form.fssai_license,
-          prices_include_tax: form.prices_include_tax,
-          default_tax_rate: Number(form.default_tax_rate),
-          brand_color: form.brand_color,
-          description: form.description,
-          instagram_handle: form.instagram_handle,
-          website_url: form.website_url,
-          delivery_radius_km: Number(form.delivery_radius_km || 10),
-          location: (form.owner_lat && form.owner_lng)
-          ? `SRID=4326;POINT(${Number(form.owner_lng)} ${Number(form.owner_lat)})`
-          : null,
+        restaurant_id: restaurant.id,
+        legal_name: form.legal_name,
+        phone: form.phone,
+        support_email: form.support_email,
+        shipping_address_line1: form.shipping_address_line1,
+        shipping_address_line2: form.shipping_address_line2,
+        shipping_city: form.shipping_city,
+        shipping_state: form.shipping_state,
+        shipping_pincode: form.shipping_pincode,
+        tables_count: Number(form.tables_count),
+        table_prefix: form.table_prefix,
+        upi_id: form.upi_id,
+        gst_enabled: form.gst_enabled,
+        gstin: form.gstin,
+        fssai_license: form.fssai_license,
+        prices_include_tax: form.prices_include_tax,
+        default_tax_rate: Number(form.default_tax_rate),
+        brand_color: form.brand_color,
+        description: form.description,
+        instagram_handle: form.instagram_handle,
+        website_url: form.website_url,
 
-          
-          features_credit_enabled: form.features_credit_enabled,
-          features_menu_images_enabled: form.features_menu_images_enabled,
-          features_table_ordering_enabled: form.features_table_ordering_enabled,
-          features_inventory_enabled: form.features_inventory_enabled,
-          features_production_enabled: form.features_production_enabled,
-          features_counter_send_to_kitchen_enabled: form.features_counter_send_to_kitchen_enabled,
-          online_payment_enabled: form.online_payment_enabled,
-          featurescustomersenabled: form.featurescustomersenabled,
-          featuresloyaltyenabled: form.featuresloyaltyenabled,
+        delivery_radius_km: Number(form.delivery_radius_km || 10),
+        latitude: finalLat,
+        longitude: finalLng,
+        location: `SRID=4326;POINT(${finalLng} ${finalLat})`, // Keep PostGIS for spatial queries
 
-          
-          swiggy_enabled: form.swiggy_enabled,
-          swiggy_api_key: form.swiggy_api_key,
-          swiggy_api_secret: form.swiggy_api_secret,
-          swiggy_webhook_secret: form.swiggy_webhook_secret,
-          
-          zomato_enabled: form.zomato_enabled,
-          zomato_api_key: form.zomato_api_key,
-          zomato_api_secret: form.zomato_api_secret,
-          zomato_webhook_secret: form.zomato_webhook_secret,
-          round_off_enabled: form.round_off_enabled,
-          round_off_mode: form.round_off_mode,
-          round_off_auto_factor: Number(form.round_off_auto_factor),
-          round_off_manual_limit: Number(form.round_off_manual_limit),
+
+        features_credit_enabled: form.features_credit_enabled,
+        features_menu_images_enabled: form.features_menu_images_enabled,
+        features_table_ordering_enabled: form.features_table_ordering_enabled,
+        features_inventory_enabled: form.features_inventory_enabled,
+        features_production_enabled: form.features_production_enabled,
+        features_counter_send_to_kitchen_enabled: form.features_counter_send_to_kitchen_enabled,
+        online_payment_enabled: form.online_payment_enabled,
+        featurescustomersenabled: form.featurescustomersenabled,
+        featuresloyaltyenabled: form.featuresloyaltyenabled,
+
+
+        swiggy_enabled: form.swiggy_enabled,
+        swiggy_api_key: form.swiggy_api_key,
+        swiggy_api_secret: form.swiggy_api_secret,
+        swiggy_webhook_secret: form.swiggy_webhook_secret,
+
+        zomato_enabled: form.zomato_enabled,
+        zomato_api_key: form.zomato_api_key,
+        zomato_api_secret: form.zomato_api_secret,
+        zomato_webhook_secret: form.zomato_webhook_secret,
+        round_off_enabled: form.round_off_enabled,
+        round_off_mode: form.round_off_mode,
+        round_off_auto_factor: Number(form.round_off_auto_factor),
+        round_off_manual_limit: Number(form.round_off_manual_limit),
       };
 
       await supabase.from('restaurant_profiles').upsert(payload, { onConflict: 'restaurant_id' });
       await supabase.from('restaurants').update({ name: form.restaurant_name }).eq('id', restaurant.id);
-      
+
       // Refresh the context to update sidebar features immediately
       refresh();
-      
+
       // AUTO-SEND QR EMAIL IF TABLES INCREASED
       const prevCount = originalTables;
       const newCount = payload.tables_count;
-      
+
       if (newCount > prevCount) {
         try {
           // Generate new QR codes
@@ -876,23 +898,23 @@ export default function SettingsPage() {
               qrUrl: `${origin}/order?r=${restaurant.id}&t=${i}`
             });
           }
-          
+
           if (newQrCodes.length > 0) {
             // Prepare recipient data
             // Use support email if available, else try restaurant owner email if available in context
-            const recipientEmail = form.support_email || restaurant.owner_email; 
-            
+            const recipientEmail = form.support_email || restaurant.owner_email;
+
             const restaurantData = {
               restaurantName: form.restaurant_name,
               recipientName: form.legal_name,
               recipientPhone: form.phone,
               email: recipientEmail,
               address: [
-                 form.shipping_address_line1, 
-                 form.shipping_address_line2, 
-                 form.shipping_city, 
-                 form.shipping_state, 
-                 form.shipping_pincode
+                form.shipping_address_line1,
+                form.shipping_address_line2,
+                form.shipping_city,
+                form.shipping_state,
+                form.shipping_pincode
               ].filter(Boolean).join(', ')
             };
 
@@ -906,12 +928,12 @@ export default function SettingsPage() {
                 isIncremental: true
               })
             })
-            .then(res => res.json())
-            .then(d => {
-              if (d.success) console.log('QR Email sent successfully');
-              else console.warn('QR Email failed', d.error);
-            })
-            .catch(e => console.error('QR Email exception', e));
+              .then(res => res.json())
+              .then(d => {
+                if (d.success) console.log('QR Email sent successfully');
+                else console.warn('QR Email failed', d.error);
+              })
+              .catch(e => console.error('QR Email exception', e));
           }
         } catch (qrErr) {
           console.error('Error triggering QR email', qrErr);
@@ -927,7 +949,7 @@ export default function SettingsPage() {
     finally { setSaving(false); }
   }
 
-  if (loading || checking || loadingRestaurant) return <div style={{padding:80, textAlign:'center'}}>Loading settings...</div>;
+  if (loading || checking || loadingRestaurant) return <div style={{ padding: 80, textAlign: 'center' }}>Loading settings...</div>;
 
 
   return (
@@ -938,685 +960,685 @@ export default function SettingsPage() {
           <Subtitle>Customize how your restaurant operates, manages orders, and connects with customers.</Subtitle>
         </Header>
 
-      {/* Toast */}
-      {showToast && (
+        {/* Toast */}
+        {showToast && (
           <Toast type={error ? 'error' : 'success'}>
-              <span style={{ fontSize: 24 }}>{error ? '⚠️' : '🎉'}</span>
-              <div style={{display:'flex', flexDirection:'column'}}>
-                 <span style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>{error ? 'Update Failed' : 'Update Successful'}</span>
-                 <span style={{ fontSize: 13, color: '#64748b' }}>{error || success}</span>
-              </div>
+            <span style={{ fontSize: 24 }}>{error ? '⚠️' : '🎉'}</span>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ fontWeight: 700, fontSize: 15, color: '#0f172a' }}>{error ? 'Update Failed' : 'Update Successful'}</span>
+              <span style={{ fontSize: 13, color: '#64748b' }}>{error || success}</span>
+            </div>
           </Toast>
-      )}
+        )}
 
 
-      <form onSubmit={save}>
-        <ContentGrid>
-          
-          {/* BUSINESS INFO CARD */}
-          <SectionCard>
-            <SectionHeader>
-              <SectionIcon>🏢</SectionIcon>
-              <div>
-                 <SectionTitle>Business Profile</SectionTitle>
-                 <div style={{fontSize: 13, color:'gray', fontWeight:400}}>Core identity & contact details</div>
-              </div>
-            </SectionHeader>
-            <SectionBody>
-              <FormField>
-                <Label>Display Name <Required>*</Required></Label>
-                <Input value={form.restaurant_name} onChange={onChange('restaurant_name')} placeholder="e.g. The Coffee House" />
-              </FormField>
-              <FormField>
-                <Label>Legal Business Name <Required>*</Required></Label>
-                <Input value={form.legal_name} onChange={onChange('legal_name')} placeholder="Legal Registered Name" />
-              </FormField>
-              <FormField>
-                <Label>Phone Number <Required>*</Required></Label>
-                <Input value={form.phone} onChange={onChange('phone')} type="tel" placeholder="+91 999 999 9999" />
-              </FormField>
-              <FormField>
-                <Label>Support Email <Required>*</Required></Label>
-                <Input value={form.support_email} onChange={onChange('support_email')} type="email" />
-              </FormField>
-              <FormField span={2}>
-                <Label>FSSAI License Number <Required>*</Required></Label>
-                <Input 
-                  value={form.fssai_license} 
-                  onChange={onChange('fssai_license')} 
-                  placeholder="e.g. 12345678901234"
-                  maxLength={14}
-                  required
-                />
-                <HelperText>14-digit FSSAI License Number (mandatory for food businesses)</HelperText>
-              </FormField>
-              <FormField span={2}>
-                <Label>Address Line 1</Label>
-                <Input value={form.shipping_address_line1} onChange={onChange('shipping_address_line1')} placeholder="Street address, building name..." />
-              </FormField>
-              <FormField span={2}>
-                <Label>Address Line 2</Label>
-                <Input value={form.shipping_address_line2} onChange={onChange('shipping_address_line2')} placeholder="Apartment, suite, unit..." />
-              </FormField>
-              <FormField>
-                <Label>City</Label>
-                <Input value={form.shipping_city} onChange={onChange('shipping_city')} placeholder="City" />
-              </FormField>
-              <FormField>
-                <Label>State</Label>
-                <Input value={form.shipping_state} onChange={onChange('shipping_state')} placeholder="State" />
-              </FormField>
-              <FormField>
-                <Label>Pincode</Label>
-                <Input value={form.shipping_pincode} onChange={onChange('shipping_pincode')} placeholder="Pincode" maxLength={6} />
-              </FormField>
-            </SectionBody>
+        <form onSubmit={save}>
+          <ContentGrid>
 
-  <SectionHeader>
-    <SectionIcon>📍</SectionIcon>
-    <div>
-      <SectionTitle>Delivery Location</SectionTitle>
-      <div style={{ fontSize: 13, color: 'gray', fontWeight: 400 }}>
-        Used to show your restaurant to customers nearby
-      </div>
-    </div>
-  </SectionHeader>
+            {/* BUSINESS INFO CARD */}
+            <SectionCard>
+              <SectionHeader>
+                <SectionIcon>🏢</SectionIcon>
+                <div>
+                  <SectionTitle>Business Profile</SectionTitle>
+                  <div style={{ fontSize: 13, color: 'gray', fontWeight: 400 }}>Core identity & contact details</div>
+                </div>
+              </SectionHeader>
+              <SectionBody>
+                <FormField>
+                  <Label>Display Name <Required>*</Required></Label>
+                  <Input value={form.restaurant_name} onChange={onChange('restaurant_name')} placeholder="e.g. The Coffee House" />
+                </FormField>
+                <FormField>
+                  <Label>Legal Business Name <Required>*</Required></Label>
+                  <Input value={form.legal_name} onChange={onChange('legal_name')} placeholder="Legal Registered Name" />
+                </FormField>
+                <FormField>
+                  <Label>Phone Number <Required>*</Required></Label>
+                  <Input value={form.phone} onChange={onChange('phone')} type="tel" placeholder="+91 999 999 9999" />
+                </FormField>
+                <FormField>
+                  <Label>Support Email <Required>*</Required></Label>
+                  <Input value={form.support_email} onChange={onChange('support_email')} type="email" />
+                </FormField>
+                <FormField span={2}>
+                  <Label>FSSAI License Number <Required>*</Required></Label>
+                  <Input
+                    value={form.fssai_license}
+                    onChange={onChange('fssai_license')}
+                    placeholder="e.g. 12345678901234"
+                    maxLength={14}
+                    required
+                  />
+                  <HelperText>14-digit FSSAI License Number (mandatory for food businesses)</HelperText>
+                </FormField>
+                <FormField span={2}>
+                  <Label>Address Line 1</Label>
+                  <Input value={form.shipping_address_line1} onChange={onChange('shipping_address_line1')} placeholder="Street address, building name..." />
+                </FormField>
+                <FormField span={2}>
+                  <Label>Address Line 2</Label>
+                  <Input value={form.shipping_address_line2} onChange={onChange('shipping_address_line2')} placeholder="Apartment, suite, unit..." />
+                </FormField>
+                <FormField>
+                  <Label>City</Label>
+                  <Input value={form.shipping_city} onChange={onChange('shipping_city')} placeholder="City" />
+                </FormField>
+                <FormField>
+                  <Label>State</Label>
+                  <Input value={form.shipping_state} onChange={onChange('shipping_state')} placeholder="State" />
+                </FormField>
+                <FormField>
+                  <Label>Pincode</Label>
+                  <Input value={form.shipping_pincode} onChange={onChange('shipping_pincode')} placeholder="Pincode" maxLength={6} />
+                </FormField>
+              </SectionBody>
 
-  <SectionBody>
-    <FormField>
-      <Label>Delivery radius (km)</Label>
-      <Input
-        type="number"
-        min="1"
-        max="50"
-        value={form.delivery_radius_km}
-        onChange={onChange('delivery_radius_km')}
-      />
-      <HelperText>Customers will see you within this radius.</HelperText>
-    </FormField>
-
-    <FormField>
-      <Label>Latitude</Label>
-      <Input value={form.owner_lat} onChange={onChange('owner_lat')} placeholder="e.g. 12.9716" />
-    </FormField>
-
-    <FormField>
-      <Label>Longitude</Label>
-      <Input value={form.owner_lng} onChange={onChange('owner_lng')} placeholder="e.g. 77.5946" />
-    </FormField>
-
-    <FormField span={2}>
-      <ActionButton
-        type="button"
-        primary
-        onClick={() => {
-          if (!navigator.geolocation) return alert('Geolocation not supported')
-          navigator.geolocation.getCurrentPosition(
-            (pos) => {
-              setForm(f => ({
-                ...f,
-                owner_lat: String(pos.coords.latitude),
-                owner_lng: String(pos.coords.longitude)
-              }))
-            },
-            (err) => alert(err.message),
-            { enableHighAccuracy: true, timeout: 10000 }
-          )
-        }}
-      >
-        Use current location
-      </ActionButton>
-    </FormField>
-  </SectionBody>
-
-
-          </SectionCard>
-
-          {/* UNITS CARD */}
-          <SectionCard>
-            <SectionHeader>
-              <SectionIcon>📏</SectionIcon>
-              <div>
-                 <SectionTitle>UOM Management</SectionTitle>
-                 <div style={{fontSize: 13, color:'gray', fontWeight:400}}>Manage measurement units and product quantity defaults</div>
-              </div>
-            </SectionHeader>
-            <SectionBody>
-               <FormField span={2}>
-                  <div style={{
-                     display:'flex', alignItems:'center', justifyContent:'space-between',
-                     padding: '24px 28px', 
-                     background: '#ffffff', 
-                     border: '1px solid #e2e8f0', 
-                     borderRadius: '16px',
-                     boxShadow: '0 2px 4px rgba(15, 23, 42, 0.03)'
-                  }}>
-                     <div style={{flex:1, display:'flex', alignItems:'center', gap:16}}>
-                        <div style={{fontWeight:600, color:'#0f172a', fontSize:16}}>
-                          Units & Defaults
-                        </div>
-                        
-                        <div style={{height: 24, width: 1, background: '#e2e8f0'}}></div>
-
-                        {defaultUomName ? (
-                            <div style={{
-                                display:'flex', alignItems:'center', gap:6,
-                                background: '#f8fafc',
-                                padding: '6px 14px',
-                                borderRadius: '8px',
-                                border: '1px solid #e2e8f0'
-                            }}>
-                                <span style={{fontSize:13, fontWeight:500, color:'#64748b'}}>Default:</span>
-                                <span style={{fontSize:14, fontWeight:600, color:'#0f172a'}}>
-                                  {defaultUomName}
-                                </span>
-                            </div>
-                        ) : (
-                            <div style={{
-                                background:'#fff7ed', color:'#c2410c', 
-                                padding:'6px 14px', borderRadius:'8px', 
-                                border:'1px solid #ffedd5', fontSize:13, fontWeight:600
-                            }}>
-                                Setup Required
-                            </div>
-                        )}
-                     </div>
-                     <button 
-                        type="button" 
-                        onClick={(e) => { 
-                          e.preventDefault(); 
-                          e.stopPropagation();
-                          setShowUomManager(true); 
-                        }} 
-                        style={{
-                           padding:'8px 20px', 
-                           fontSize:14, 
-                           fontWeight:600, 
-                           height:'40px', 
-                           background:'white', 
-                           color:'#0f172a', 
-                           border:'1px solid #cbd5e1', 
-                           boxShadow:'0 1px 2px rgba(0,0,0,0.05)',
-                           borderRadius: '8px',
-                           cursor: 'pointer'
-                        }}
-                     >
-                        Manage
-                     </button>
+              <SectionHeader>
+                <SectionIcon>📍</SectionIcon>
+                <div>
+                  <SectionTitle>Delivery Location</SectionTitle>
+                  <div style={{ fontSize: 13, color: 'gray', fontWeight: 400 }}>
+                    Used to show your restaurant to customers nearby
                   </div>
-               </FormField>
-            </SectionBody>
-          </SectionCard>
+                </div>
+              </SectionHeader>
 
-          {/* OPERATIONS CARD */}
-          <SectionCard>
-            <SectionHeader>
-              <SectionIcon>⚙️</SectionIcon>
-              <div>
-                 <SectionTitle>Operations & Setup</SectionTitle>
-                 <div style={{fontSize: 13, color:'gray', fontWeight:400}}>Table management & payment config</div>
-              </div>
-            </SectionHeader>
-            <SectionBody>
-               <FormField>
+              <SectionBody>
+                <FormField>
+                  <Label>Delivery radius (km)</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    max="50"
+                    value={form.delivery_radius_km}
+                    onChange={onChange('delivery_radius_km')}
+                  />
+                  <HelperText>Customers will see you within this radius.</HelperText>
+                </FormField>
+
+                <FormField>
+                  <Label>Latitude</Label>
+                  <Input value={form.owner_lat} onChange={onChange('owner_lat')} placeholder="e.g. 12.9716" />
+                </FormField>
+
+                <FormField>
+                  <Label>Longitude</Label>
+                  <Input value={form.owner_lng} onChange={onChange('owner_lng')} placeholder="e.g. 77.5946" />
+                </FormField>
+
+                <FormField span={2}>
+                  <ActionButton
+                    type="button"
+                    primary
+                    onClick={() => {
+                      if (!navigator.geolocation) return alert('Geolocation not supported')
+                      navigator.geolocation.getCurrentPosition(
+                        (pos) => {
+                          setForm(f => ({
+                            ...f,
+                            owner_lat: Number(Number(pos.coords.latitude).toFixed(8)),
+                            owner_lng: Number(Number(pos.coords.longitude).toFixed(8))
+                          }))
+                        },
+                        (err) => alert(err.message),
+                        { enableHighAccuracy: true, timeout: 10000 }
+                      )
+                    }}
+                  >
+                    Use current location
+                  </ActionButton>
+                </FormField>
+              </SectionBody>
+
+
+            </SectionCard>
+
+            {/* UNITS CARD */}
+            <SectionCard>
+              <SectionHeader>
+                <SectionIcon>📏</SectionIcon>
+                <div>
+                  <SectionTitle>UOM Management</SectionTitle>
+                  <div style={{ fontSize: 13, color: 'gray', fontWeight: 400 }}>Manage measurement units and product quantity defaults</div>
+                </div>
+              </SectionHeader>
+              <SectionBody>
+                <FormField span={2}>
+                  <div style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '24px 28px',
+                    background: '#ffffff',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '16px',
+                    boxShadow: '0 2px 4px rgba(15, 23, 42, 0.03)'
+                  }}>
+                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 16 }}>
+                      <div style={{ fontWeight: 600, color: '#0f172a', fontSize: 16 }}>
+                        Units & Defaults
+                      </div>
+
+                      <div style={{ height: 24, width: 1, background: '#e2e8f0' }}></div>
+
+                      {defaultUomName ? (
+                        <div style={{
+                          display: 'flex', alignItems: 'center', gap: 6,
+                          background: '#f8fafc',
+                          padding: '6px 14px',
+                          borderRadius: '8px',
+                          border: '1px solid #e2e8f0'
+                        }}>
+                          <span style={{ fontSize: 13, fontWeight: 500, color: '#64748b' }}>Default:</span>
+                          <span style={{ fontSize: 14, fontWeight: 600, color: '#0f172a' }}>
+                            {defaultUomName}
+                          </span>
+                        </div>
+                      ) : (
+                        <div style={{
+                          background: '#fff7ed', color: '#c2410c',
+                          padding: '6px 14px', borderRadius: '8px',
+                          border: '1px solid #ffedd5', fontSize: 13, fontWeight: 600
+                        }}>
+                          Setup Required
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setShowUomManager(true);
+                      }}
+                      style={{
+                        padding: '8px 20px',
+                        fontSize: 14,
+                        fontWeight: 600,
+                        height: '40px',
+                        background: 'white',
+                        color: '#0f172a',
+                        border: '1px solid #cbd5e1',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                        borderRadius: '8px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Manage
+                    </button>
+                  </div>
+                </FormField>
+              </SectionBody>
+            </SectionCard>
+
+            {/* OPERATIONS CARD */}
+            <SectionCard>
+              <SectionHeader>
+                <SectionIcon>⚙️</SectionIcon>
+                <div>
+                  <SectionTitle>Operations & Setup</SectionTitle>
+                  <div style={{ fontSize: 13, color: 'gray', fontWeight: 400 }}>Table management & payment config</div>
+                </div>
+              </SectionHeader>
+              <SectionBody>
+                <FormField>
                   <Label>Total Tables <Required>*</Required></Label>
                   <Input type="number" min={originalTables || 0} max="100" value={form.tables_count} onChange={onChange('tables_count')} />
                   <HelperText>Increasing this will generate new QR codes.</HelperText>
-               </FormField>
-               <FormField>
+                </FormField>
+                <FormField>
                   <Label>Table Prefix</Label>
                   <Input value={form.table_prefix} onChange={onChange('table_prefix')} placeholder="e.g. T" maxLength={3} />
-               </FormField>
-               {/* OPERATIONS CARD */}
-               <FormField span={2}>
+                </FormField>
+                {/* OPERATIONS CARD */}
+                <FormField span={2}>
                   <Label>UPI ID (VPA) <Required>*</Required></Label>
                   <Input value={form.upi_id} onChange={onChange('upi_id')} placeholder="merchant@upi" />
                   <HelperText>Direct UPI payments will be sent to this VPA.</HelperText>
-               </FormField>
-            </SectionBody>
-          </SectionCard>
+                </FormField>
+              </SectionBody>
+            </SectionCard>
 
-          {/* TAX & COMPLIANCE CARD */}
-          <SectionCard>
-            <SectionHeader>
-              <SectionIcon>📋</SectionIcon>
-              <div>
-                <SectionTitle>Tax & Compliance</SectionTitle>
-                <div style={{fontSize: 13, color:'gray', fontWeight:400}}>Configure tax settings and GST information</div>
-              </div>
-            </SectionHeader>
-            <SectionBody>
-              <FormField span={2}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px 0' }}>
-                  <input 
-                    type="checkbox" 
-                    id="gst-enabled" 
-                    checked={form.gst_enabled} 
-                    onChange={onChange('gst_enabled')}
-                    style={{ width: 20, height: 20, cursor: 'pointer', accentColor: '#f97316' }}
-                  />
-                  <label htmlFor="gst-enabled" style={{ fontSize: 16, fontWeight: 600, color: '#0f172a', cursor: 'pointer' }}>
-                    Enable GST
-                  </label>
+            {/* TAX & COMPLIANCE CARD */}
+            <SectionCard>
+              <SectionHeader>
+                <SectionIcon>📋</SectionIcon>
+                <div>
+                  <SectionTitle>Tax & Compliance</SectionTitle>
+                  <div style={{ fontSize: 13, color: 'gray', fontWeight: 400 }}>Configure tax settings and GST information</div>
                 </div>
-                <HelperText>Check this if your business is registered under GST</HelperText>
-              </FormField>
-
-              {form.gst_enabled && (
+              </SectionHeader>
+              <SectionBody>
                 <FormField span={2}>
-                  <Label>GSTIN (GST Identification Number)</Label>
-                  <Input 
-                    value={form.gstin} 
-                    onChange={onChange('gstin')} 
-                    placeholder="e.g. 22AAAAA0000A1Z5"
-                    maxLength={15}
-                  />
-                  <HelperText>15-character GST Identification Number</HelperText>
-                </FormField>
-              )}
-
-              {form.gst_enabled && (
-                <FormField>
-                  <Label>Default Tax Rate (%)</Label>
-                  <NiceSelect
-                    value={form.default_tax_rate}
-                    onChange={(val) => setForm({ ...form, default_tax_rate: val })}
-                    options={[
-                      { value: 5, label: '5%' },
-                      { value: 18, label: '18%' },
-                    ]}
-                    placeholder="Select tax rate"
-                  />
-                  <HelperText>Applied to items without specific tax rates</HelperText>
-                </FormField>
-              )}
-
-              {form.gst_enabled && (
-                <FormField>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px 0' }}>
-                    <input 
-                      type="checkbox" 
-                      id="prices-include-tax" 
-                      checked={form.prices_include_tax} 
-                      onChange={onChange('prices_include_tax')}
+                    <input
+                      type="checkbox"
+                      id="gst-enabled"
+                      checked={form.gst_enabled}
+                      onChange={onChange('gst_enabled')}
                       style={{ width: 20, height: 20, cursor: 'pointer', accentColor: '#f97316' }}
                     />
-                    <label htmlFor="prices-include-tax" style={{ fontSize: 16, fontWeight: 600, color: '#0f172a', cursor: 'pointer' }}>
-                      Prices Include Tax
+                    <label htmlFor="gst-enabled" style={{ fontSize: 16, fontWeight: 600, color: '#0f172a', cursor: 'pointer' }}>
+                      Enable GST
                     </label>
                   </div>
-                  <HelperText>Check if menu prices already include tax</HelperText>
+                  <HelperText>Check this if your business is registered under GST</HelperText>
                 </FormField>
-              )}
-            </SectionBody>
-          </SectionCard>
 
-          {/* MODULES CARD (Dynamic Grid) */}
-          <SectionCard>
-            <SectionHeader>
-               <SectionIcon>⚡</SectionIcon>
-               <div>
-                 <SectionTitle>Power Modules</SectionTitle>
-                 <div style={{fontSize: 13, color:'gray', fontWeight:400}}>Enable specific features for your workflow</div>
-              </div>
-            </SectionHeader>
-            <SectionBody>
-              
-              <FeatureCard 
-                 checked={form.online_payment_enabled} 
-                 onClick={() => setForm(f => ({ ...f, online_payment_enabled: !f.online_payment_enabled }))}
-              >
-                 <FeatureIcon active={form.online_payment_enabled}>💳</FeatureIcon>
-                 <FeatureText>
+                {form.gst_enabled && (
+                  <FormField span={2}>
+                    <Label>GSTIN (GST Identification Number)</Label>
+                    <Input
+                      value={form.gstin}
+                      onChange={onChange('gstin')}
+                      placeholder="e.g. 22AAAAA0000A1Z5"
+                      maxLength={15}
+                    />
+                    <HelperText>15-character GST Identification Number</HelperText>
+                  </FormField>
+                )}
+
+                {form.gst_enabled && (
+                  <FormField>
+                    <Label>Default Tax Rate (%)</Label>
+                    <NiceSelect
+                      value={form.default_tax_rate}
+                      onChange={(val) => setForm({ ...form, default_tax_rate: val })}
+                      options={[
+                        { value: 5, label: '5%' },
+                        { value: 18, label: '18%' },
+                      ]}
+                      placeholder="Select tax rate"
+                    />
+                    <HelperText>Applied to items without specific tax rates</HelperText>
+                  </FormField>
+                )}
+
+                {form.gst_enabled && (
+                  <FormField>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px 0' }}>
+                      <input
+                        type="checkbox"
+                        id="prices-include-tax"
+                        checked={form.prices_include_tax}
+                        onChange={onChange('prices_include_tax')}
+                        style={{ width: 20, height: 20, cursor: 'pointer', accentColor: '#f97316' }}
+                      />
+                      <label htmlFor="prices-include-tax" style={{ fontSize: 16, fontWeight: 600, color: '#0f172a', cursor: 'pointer' }}>
+                        Prices Include Tax
+                      </label>
+                    </div>
+                    <HelperText>Check if menu prices already include tax</HelperText>
+                  </FormField>
+                )}
+              </SectionBody>
+            </SectionCard>
+
+            {/* MODULES CARD (Dynamic Grid) */}
+            <SectionCard>
+              <SectionHeader>
+                <SectionIcon>⚡</SectionIcon>
+                <div>
+                  <SectionTitle>Power Modules</SectionTitle>
+                  <div style={{ fontSize: 13, color: 'gray', fontWeight: 400 }}>Enable specific features for your workflow</div>
+                </div>
+              </SectionHeader>
+              <SectionBody>
+
+                <FeatureCard
+                  checked={form.online_payment_enabled}
+                  onClick={() => setForm(f => ({ ...f, online_payment_enabled: !f.online_payment_enabled }))}
+                >
+                  <FeatureIcon active={form.online_payment_enabled}>💳</FeatureIcon>
+                  <FeatureText>
                     <FeatureTitle>Online Payment</FeatureTitle>
                     <FeatureDesc>Allow Razorpay on customer app</FeatureDesc>
-                 </FeatureText>
-                 <Switch checked={form.online_payment_enabled} />
-              </FeatureCard>
+                  </FeatureText>
+                  <Switch checked={form.online_payment_enabled} />
+                </FeatureCard>
 
-              {form.online_payment_enabled && (
-                <FeatureCard 
-                   onClick={() => {
-                      setForm(f => ({...f, use_own_gateway: true}));
+                {form.online_payment_enabled && (
+                  <FeatureCard
+                    onClick={() => {
+                      setForm(f => ({ ...f, use_own_gateway: true }));
                       setShowPaymentModal(true);
-                   }}
-                   checked={form.use_own_gateway}
-                >
+                    }}
+                    checked={form.use_own_gateway}
+                  >
                     <FeatureIcon active={form.use_own_gateway}>⚙️</FeatureIcon>
                     <FeatureText>
-                        <FeatureTitle>Use Custom Gateway</FeatureTitle>
-                        <FeatureDesc>Manage Razorpay API Keys</FeatureDesc>
+                      <FeatureTitle>Use Custom Gateway</FeatureTitle>
+                      <FeatureDesc>Manage Razorpay API Keys</FeatureDesc>
                     </FeatureText>
                     <Switch checked={form.use_own_gateway} />
-                </FeatureCard>
-              )}
+                  </FeatureCard>
+                )}
 
-              <FeatureCard 
-                 checked={form.features_menu_images_enabled} 
-                 onClick={() => setForm(f => ({ ...f, features_menu_images_enabled: !f.features_menu_images_enabled }))}
-              >
-                 <FeatureIcon active={form.features_menu_images_enabled}>📸</FeatureIcon>
-                 <FeatureText>
+                <FeatureCard
+                  checked={form.features_menu_images_enabled}
+                  onClick={() => setForm(f => ({ ...f, features_menu_images_enabled: !f.features_menu_images_enabled }))}
+                >
+                  <FeatureIcon active={form.features_menu_images_enabled}>📸</FeatureIcon>
+                  <FeatureText>
                     <FeatureTitle>Menu Images</FeatureTitle>
                     <FeatureDesc>Show product photos</FeatureDesc>
-                 </FeatureText>
-                 <Switch checked={form.features_menu_images_enabled} />
-              </FeatureCard>
+                  </FeatureText>
+                  <Switch checked={form.features_menu_images_enabled} />
+                </FeatureCard>
 
-              <FeatureCard 
-                 checked={form.features_credit_enabled}
-                 onClick={() => setForm(f => ({ ...f, features_credit_enabled: !f.features_credit_enabled }))}
-              >
-                 <FeatureIcon active={form.features_credit_enabled}>📒</FeatureIcon>
-                 <FeatureText>
+                <FeatureCard
+                  checked={form.features_credit_enabled}
+                  onClick={() => setForm(f => ({ ...f, features_credit_enabled: !f.features_credit_enabled }))}
+                >
+                  <FeatureIcon active={form.features_credit_enabled}>📒</FeatureIcon>
+                  <FeatureText>
                     <FeatureTitle>Credit Ledger</FeatureTitle>
                     <FeatureDesc>Manage customer tabs</FeatureDesc>
-                 </FeatureText>
-                 <Switch checked={form.features_credit_enabled} />
-              </FeatureCard>
+                  </FeatureText>
+                  <Switch checked={form.features_credit_enabled} />
+                </FeatureCard>
 
-              <FeatureCard 
-                 checked={form.features_table_ordering_enabled}
-                 onClick={() => setForm(f => ({ ...f, features_table_ordering_enabled: !f.features_table_ordering_enabled }))}
-              >
-                 <FeatureIcon active={form.features_table_ordering_enabled}>🤳</FeatureIcon>
-                 <FeatureText>
+                <FeatureCard
+                  checked={form.features_table_ordering_enabled}
+                  onClick={() => setForm(f => ({ ...f, features_table_ordering_enabled: !f.features_table_ordering_enabled }))}
+                >
+                  <FeatureIcon active={form.features_table_ordering_enabled}>🤳</FeatureIcon>
+                  <FeatureText>
                     <FeatureTitle>QR Ordering</FeatureTitle>
                     <FeatureDesc>Customers order at table</FeatureDesc>
-                 </FeatureText>
-                 <Switch checked={form.features_table_ordering_enabled} />
-              </FeatureCard>
+                  </FeatureText>
+                  <Switch checked={form.features_table_ordering_enabled} />
+                </FeatureCard>
 
-              <FeatureCard 
-                 checked={form.features_inventory_enabled}
-                 onClick={() => setForm(f => ({ ...f, features_inventory_enabled: !f.features_inventory_enabled }))}
-              >
-                 <FeatureIcon active={form.features_inventory_enabled}>📦</FeatureIcon>
-                 <FeatureText>
+                <FeatureCard
+                  checked={form.features_inventory_enabled}
+                  onClick={() => setForm(f => ({ ...f, features_inventory_enabled: !f.features_inventory_enabled }))}
+                >
+                  <FeatureIcon active={form.features_inventory_enabled}>📦</FeatureIcon>
+                  <FeatureText>
                     <FeatureTitle>Inventory</FeatureTitle>
                     <FeatureDesc>Simple stock tracking</FeatureDesc>
-                 </FeatureText>
-                 <Switch checked={form.features_inventory_enabled} />
-              </FeatureCard>
+                  </FeatureText>
+                  <Switch checked={form.features_inventory_enabled} />
+                </FeatureCard>
 
-               <FeatureCard 
-                 checked={form.features_production_enabled}
-                 onClick={() => setForm(f => ({ ...f, features_production_enabled: !f.features_production_enabled }))}
-              >
-                 <FeatureIcon active={form.features_production_enabled}>🏭</FeatureIcon>
-                 <FeatureText>
+                <FeatureCard
+                  checked={form.features_production_enabled}
+                  onClick={() => setForm(f => ({ ...f, features_production_enabled: !f.features_production_enabled }))}
+                >
+                  <FeatureIcon active={form.features_production_enabled}>🏭</FeatureIcon>
+                  <FeatureText>
                     <FeatureTitle>Production</FeatureTitle>
                     <FeatureDesc>Manufacturing pipeline</FeatureDesc>
-                 </FeatureText>
-                 <Switch checked={form.features_production_enabled} />
-              </FeatureCard>
-<FeatureCard
-  checked={form.featurescustomersenabled}
-  onClick={() =>
-    setForm((f) => ({ ...f, featurescustomersenabled: !f.featurescustomersenabled }))
-  }
->
-  <FeatureIcon active={form.featurescustomersenabled}>👤</FeatureIcon>
-  <FeatureText>
-    <FeatureTitle>Customers</FeatureTitle>
-    <FeatureDesc>Enable customer directory / profiles</FeatureDesc>
-  </FeatureText>
-  <Switch checked={form.featurescustomersenabled} />
-</FeatureCard>
+                  </FeatureText>
+                  <Switch checked={form.features_production_enabled} />
+                </FeatureCard>
+                <FeatureCard
+                  checked={form.featurescustomersenabled}
+                  onClick={() =>
+                    setForm((f) => ({ ...f, featurescustomersenabled: !f.featurescustomersenabled }))
+                  }
+                >
+                  <FeatureIcon active={form.featurescustomersenabled}>👤</FeatureIcon>
+                  <FeatureText>
+                    <FeatureTitle>Customers</FeatureTitle>
+                    <FeatureDesc>Enable customer directory / profiles</FeatureDesc>
+                  </FeatureText>
+                  <Switch checked={form.featurescustomersenabled} />
+                </FeatureCard>
 
-<FeatureCard
-  checked={form.featuresloyaltyenabled}
-  onClick={() =>
-    setForm((f) => ({ ...f, featuresloyaltyenabled: !f.featuresloyaltyenabled }))
-  }
->
-  <FeatureIcon active={form.featuresloyaltyenabled}>🏷️</FeatureIcon>
-  <FeatureText>
-    <FeatureTitle>Loyalty</FeatureTitle>
-    <FeatureDesc>Enable loyalty points / rewards</FeatureDesc>
-  </FeatureText>
-  <Switch checked={form.featuresloyaltyenabled} />
-</FeatureCard>
+                <FeatureCard
+                  checked={form.featuresloyaltyenabled}
+                  onClick={() =>
+                    setForm((f) => ({ ...f, featuresloyaltyenabled: !f.featuresloyaltyenabled }))
+                  }
+                >
+                  <FeatureIcon active={form.featuresloyaltyenabled}>🏷️</FeatureIcon>
+                  <FeatureText>
+                    <FeatureTitle>Loyalty</FeatureTitle>
+                    <FeatureDesc>Enable loyalty points / rewards</FeatureDesc>
+                  </FeatureText>
+                  <Switch checked={form.featuresloyaltyenabled} />
+                </FeatureCard>
 
-              <FeatureCard 
-                 checked={form.features_counter_send_to_kitchen_enabled}
-                 onClick={() => setForm(f => ({ ...f, features_counter_send_to_kitchen_enabled: !f.features_counter_send_to_kitchen_enabled }))}
-              >
-                 <FeatureIcon active={form.features_counter_send_to_kitchen_enabled}>🍳</FeatureIcon>
-                 <FeatureText>
+                <FeatureCard
+                  checked={form.features_counter_send_to_kitchen_enabled}
+                  onClick={() => setForm(f => ({ ...f, features_counter_send_to_kitchen_enabled: !f.features_counter_send_to_kitchen_enabled }))}
+                >
+                  <FeatureIcon active={form.features_counter_send_to_kitchen_enabled}>🍳</FeatureIcon>
+                  <FeatureText>
                     <FeatureTitle>Send to Kitchen</FeatureTitle>
                     <FeatureDesc>Forward orders to kitchen</FeatureDesc>
-                 </FeatureText>
-                 <Switch checked={form.features_counter_send_to_kitchen_enabled} />
-              </FeatureCard>
+                  </FeatureText>
+                  <Switch checked={form.features_counter_send_to_kitchen_enabled} />
+                </FeatureCard>
 
-            </SectionBody>
-          </SectionCard>
+              </SectionBody>
+            </SectionCard>
 
-          {/* ROUND-OFF SETTINGS CARD */}
-          <SectionCard>
-            <SectionHeader>
-              <SectionIcon>🔢</SectionIcon>
-              <div>
-                <SectionTitle>Round-off Settings</SectionTitle>
-                <div style={{ fontSize: 13, color: 'gray', fontWeight: 400 }}>Configure how order totals are rounded</div>
-              </div>
-            </SectionHeader>
-            <SectionBody>
-              <FormField span={2}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '8px 0' }}>
-                  <input 
-                    type="checkbox" 
-                    id="round-off-enabled" 
-                    checked={form.round_off_enabled} 
-                    onChange={onChange('round_off_enabled')}
-                    style={{ width: 20, height: 20, cursor: 'pointer', accentColor: '#f97316' }}
-                  />
-                  <label htmlFor="round-off-enabled" style={{ fontSize: 16, fontWeight: 600, color: '#0f172a', cursor: 'pointer' }}>
-                    Enable Round-off
-                  </label>
+            {/* ROUND-OFF SETTINGS CARD */}
+            <SectionCard>
+              <SectionHeader>
+                <SectionIcon>🔢</SectionIcon>
+                <div>
+                  <SectionTitle>Round-off Settings</SectionTitle>
+                  <div style={{ fontSize: 13, color: 'gray', fontWeight: 400 }}>Configure how order totals are rounded</div>
                 </div>
-                <HelperText>Apply rounding to final payment amounts</HelperText>
-              </FormField>
-
-              {form.round_off_enabled && (
-                <>
-                  <FormField>
-                    <Label>Round-off Mode</Label>
-                    <NiceSelect
-                      value={form.round_off_mode}
-                      onChange={(val) => setForm({ ...form, round_off_mode: val })}
-                      options={[
-                        { value: 'automatic', label: 'Automatic' },
-                        { value: 'manual', label: 'Manual' },
-                      ]}
+              </SectionHeader>
+              <SectionBody>
+                <FormField span={2}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '8px 0' }}>
+                    <input
+                      type="checkbox"
+                      id="round-off-enabled"
+                      checked={form.round_off_enabled}
+                      onChange={onChange('round_off_enabled')}
+                      style={{ width: 20, height: 20, cursor: 'pointer', accentColor: '#f97316' }}
                     />
-                    <HelperText>Choose between automatic rules or manual limits</HelperText>
-                  </FormField>
+                    <label htmlFor="round-off-enabled" style={{ fontSize: 16, fontWeight: 600, color: '#0f172a', cursor: 'pointer' }}>
+                      Enable Round-off
+                    </label>
+                  </div>
+                  <HelperText>Apply rounding to final payment amounts</HelperText>
+                </FormField>
 
-                  {form.round_off_mode === 'automatic' ? (
+                {form.round_off_enabled && (
+                  <>
                     <FormField>
-                      <Label>Auto Round-off Factor</Label>
-                      <Input 
-                        type="number" 
-                        step="0.01"
-                        value={form.round_off_auto_factor} 
-                        onChange={onChange('round_off_auto_factor')} 
-                        placeholder="e.g. 1.00 or 5.00"
+                      <Label>Round-off Mode</Label>
+                      <NiceSelect
+                        value={form.round_off_mode}
+                        onChange={(val) => setForm({ ...form, round_off_mode: val })}
+                        options={[
+                          { value: 'automatic', label: 'Automatic' },
+                          { value: 'manual', label: 'Manual' },
+                        ]}
                       />
-                      <HelperText>The factor to which the amount will be rounded (e.g. 1.00 for nearest ₹1)</HelperText>
+                      <HelperText>Choose between automatic rules or manual limits</HelperText>
                     </FormField>
-                  ) : (
-                    <FormField>
-                      <Label>Max Manual Round-off (Limit)</Label>
-                      <Input 
-                        type="number" 
-                        step="0.01"
-                        value={form.round_off_manual_limit} 
-                        onChange={onChange('round_off_manual_limit')} 
-                        placeholder="e.g. 10.00"
-                      />
-                      <HelperText>The maximum amount that can be manually rounded off</HelperText>
-                    </FormField>
-                  )}
-                </>
-              )}
-            </SectionBody>
-          </SectionCard>
 
-          {/* BRANDING CARD */}
-          <SectionCard>
-             <SectionHeader>
+                    {form.round_off_mode === 'automatic' ? (
+                      <FormField>
+                        <Label>Auto Round-off Factor</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={form.round_off_auto_factor}
+                          onChange={onChange('round_off_auto_factor')}
+                          placeholder="e.g. 1.00 or 5.00"
+                        />
+                        <HelperText>The factor to which the amount will be rounded (e.g. 1.00 for nearest ₹1)</HelperText>
+                      </FormField>
+                    ) : (
+                      <FormField>
+                        <Label>Max Manual Round-off (Limit)</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={form.round_off_manual_limit}
+                          onChange={onChange('round_off_manual_limit')}
+                          placeholder="e.g. 10.00"
+                        />
+                        <HelperText>The maximum amount that can be manually rounded off</HelperText>
+                      </FormField>
+                    )}
+                  </>
+                )}
+              </SectionBody>
+            </SectionCard>
+
+            {/* BRANDING CARD */}
+            <SectionCard>
+              <SectionHeader>
                 <SectionIcon>🎨</SectionIcon>
                 <div>
                   <SectionTitle>Branding & Assets</SectionTitle>
-                  <div style={{fontSize: 13, color:'gray', fontWeight:400}}>Customize your receipts and online presence</div>
+                  <div style={{ fontSize: 13, color: 'gray', fontWeight: 400 }}>Customize your receipts and online presence</div>
                 </div>
-             </SectionHeader>
-             <SectionBody>
-               <FormField>
-  <Label>Primary Brand Color</Label>
-  <Row>
-    <ColorSwatch type="color" value={form.brand_color} onChange={onChange('brand_color')} />
-    <FlexInput value={form.brand_color} onChange={onChange('brand_color')} />
-  </Row>
-</FormField>
+              </SectionHeader>
+              <SectionBody>
+                <FormField>
+                  <Label>Primary Brand Color</Label>
+                  <Row>
+                    <ColorSwatch type="color" value={form.brand_color} onChange={onChange('brand_color')} />
+                    <FlexInput value={form.brand_color} onChange={onChange('brand_color')} />
+                  </Row>
+                </FormField>
 
-               <FormField>
-                 <Label>Short Description</Label>
-                 <Textarea value={form.description} onChange={onChange('description')} rows={2} placeholder="A short bio about your restaurant..." />
-               </FormField>
-               
-               <PrintLogoField restaurantId={restaurant?.id} supabase={supabase} />
-             </SectionBody>
-          </SectionCard>
-          
+                <FormField>
+                  <Label>Short Description</Label>
+                  <Textarea value={form.description} onChange={onChange('description')} rows={2} placeholder="A short bio about your restaurant..." />
+                </FormField>
+
+                <PrintLogoField restaurantId={restaurant?.id} supabase={supabase} />
+              </SectionBody>
+            </SectionCard>
 
 
-          {/* KITCHEN LINK CARD */}
-          <SectionCard>
-            <SectionHeader>
-              <SectionIcon>🖥️</SectionIcon>
-               <div>
-                   <SectionTitle>Kitchen Display Screen</SectionTitle>
-                   <div style={{fontSize: 13, color:'gray', fontWeight:400}}>Use this link on a tablet or screen</div>
+
+            {/* KITCHEN LINK CARD */}
+            <SectionCard>
+              <SectionHeader>
+                <SectionIcon>🖥️</SectionIcon>
+                <div>
+                  <SectionTitle>Kitchen Display Screen</SectionTitle>
+                  <div style={{ fontSize: 13, color: 'gray', fontWeight: 400 }}>Use this link on a tablet or screen</div>
                 </div>
-            </SectionHeader>
-            <div style={{ padding: 36 }}>
-               <Label style={{marginBottom: 10}}>Kitchen Dashboard URL</Label>
-               <UrlRow>
-  <UrlInput readOnly value={`${window.location.origin}/kitchen?rid=${restaurant?.id || ''}`} />
-  <CopyBtn onClick={(e) => { e.preventDefault(); navigator.clipboard.writeText(`${window.location.origin}/kitchen?rid=${restaurant?.id}`); alert('Copied!'); }}>
-    Copy
-  </CopyBtn>
-</UrlRow>
+              </SectionHeader>
+              <div style={{ padding: 36 }}>
+                <Label style={{ marginBottom: 10 }}>Kitchen Dashboard URL</Label>
+                <UrlRow>
+                  <UrlInput readOnly value={`${window.location.origin}/kitchen?rid=${restaurant?.id || ''}`} />
+                  <CopyBtn onClick={(e) => { e.preventDefault(); navigator.clipboard.writeText(`${window.location.origin}/kitchen?rid=${restaurant?.id}`); alert('Copied!'); }}>
+                    Copy
+                  </CopyBtn>
+                </UrlRow>
 
+              </div>
+            </SectionCard>
+
+          </ContentGrid>
+
+          <SaveBar>
+            <SaveBtn
+              primary
+              disabled={saving}
+              onClick={save}
+              style={{
+                padding: '16px 32px',
+                fontSize: 16,
+                borderRadius: 100,
+                boxShadow: '0 10px 20px -5px rgba(249, 115, 22, 0.4)',
+              }}
+            >
+              {saving ? 'Saving...' : '✨ Save Changes'}
+            </SaveBtn>
+          </SaveBar>
+
+
+        </form>
+
+        <SectionCard>
+          <SectionHeader>
+            <SectionIcon>🖨️</SectionIcon>
+            <div>
+              <SectionTitle>Printers & Hardware</SectionTitle>
+              <div style={{ fontSize: 13, color: 'gray', fontWeight: 400 }}>
+                Connect thermal printers for receipts
+              </div>
             </div>
-          </SectionCard>
+          </SectionHeader>
+          <div style={{ padding: 36 }}>
+            <PrinterSetupCard restaurantId={restaurant?.id || localRestaurantId} />
+          </div>
+        </SectionCard>
 
-        </ContentGrid>
+      </PageContainer>
 
-        <SaveBar>
-          <SaveBtn
-            primary
-            disabled={saving}
-            onClick={save}
-            style={{
-              padding: '16px 32px',
-              fontSize: 16,
-              borderRadius: 100,
-              boxShadow: '0 10px 20px -5px rgba(249, 115, 22, 0.4)',
-            }}
-          >
-            {saving ? 'Saving...' : '✨ Save Changes'}
-          </SaveBtn>
-        </SaveBar>
+      {/* PAYMENT CONFIG MODAL */}
+      {showPaymentModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
+          zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 16
+        }} onClick={() => setShowPaymentModal(false)}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: 'white', width: '100%', maxWidth: 500,
+            borderRadius: 24, padding: 32,
+            boxShadow: '0 20px 50px -10px rgba(0,0,0,0.15)',
+            animation: 'fadeInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)'
+          }}>
+            <h2 style={{ margin: '0 0 8px', fontSize: 20, fontWeight: 700, color: '#0f172a' }}>Razorpay Configuration</h2>
+            <p style={{ margin: '0 0 24px', color: '#64748b', fontSize: 14, lineHeight: 1.5 }}>
+              Enter your Razorpay merchant credentials to enable online payments.
+            </p>
 
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-      </form>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <FormField>
+                  <Label>Razorpay Key ID</Label>
+                  <Input value={form.razorpay_key_id} onChange={onChange('razorpay_key_id')} placeholder="rzp_live_..." />
+                </FormField>
+                <FormField>
+                  <Label>Razorpay Key Secret</Label>
+                  <Input type="password" value={form.razorpay_key_secret} onChange={onChange('razorpay_key_secret')} placeholder="Your secret key" />
+                </FormField>
+              </div>
 
-<SectionCard>
-  <SectionHeader>
-    <SectionIcon>🖨️</SectionIcon>
-    <div>
-      <SectionTitle>Printers & Hardware</SectionTitle>
-      <div style={{ fontSize: 13, color: 'gray', fontWeight: 400 }}>
-        Connect thermal printers for receipts
-      </div>
-    </div>
-  </SectionHeader>
-  <div style={{ padding: 36 }}>
-<PrinterSetupCard restaurantId={restaurant?.id || localRestaurantId} />
-  </div>
-</SectionCard>
+              <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+                <button
+                  onClick={() => {
+                    setForm(f => ({ ...f, use_own_gateway: false }));
+                    setShowPaymentModal(false);
+                  }}
+                  style={{
+                    flex: 1, background: '#fef2f2', color: '#ef4444',
+                    border: 'none', borderRadius: 12, fontWeight: 600, fontSize: 15, cursor: 'pointer', padding: '12px'
+                  }}
+                >
+                  Disable
+                </button>
+                <ActionButton primary onClick={() => setShowPaymentModal(false)} style={{ flex: 1 }}>
+                  Save & Done
+                </ActionButton>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
-    </PageContainer>
-
-    {/* PAYMENT CONFIG MODAL */}
-    {showPaymentModal && (
-      <div style={{
-         position:'fixed', top:0, left:0, right:0, bottom:0,
-         background:'rgba(0,0,0,0.5)', backdropFilter:'blur(4px)',
-         zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center',
-         padding:16
-      }} onClick={() => setShowPaymentModal(false)}>
-         <div onClick={e => e.stopPropagation()} style={{
-             background:'white', width:'100%', maxWidth:500,
-             borderRadius:24, padding:32,
-             boxShadow:'0 20px 50px -10px rgba(0,0,0,0.15)',
-             animation: 'fadeInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)'
-         }}>
-             <h2 style={{margin:'0 0 8px', fontSize:20, fontWeight:700, color:'#0f172a'}}>Razorpay Configuration</h2>
-             <p style={{margin:'0 0 24px', color:'#64748b', fontSize:14, lineHeight:1.5}}>
-                Enter your Razorpay merchant credentials to enable online payments.
-             </p>
-             
-             <div style={{display:'flex', flexDirection:'column', gap:20}}>
-                
-                <div style={{display:'flex', flexDirection:'column', gap:16}}>
-                    <FormField>
-                        <Label>Razorpay Key ID</Label>
-                        <Input value={form.razorpay_key_id} onChange={onChange('razorpay_key_id')} placeholder="rzp_live_..." />
-                    </FormField>
-                    <FormField>
-                        <Label>Razorpay Key Secret</Label>
-                        <Input type="password" value={form.razorpay_key_secret} onChange={onChange('razorpay_key_secret')} placeholder="Your secret key" />
-                    </FormField>
-                </div>
-
-                <div style={{display:'flex', gap:12, marginTop:8}}>
-                    <button 
-                       onClick={() => {
-                          setForm(f => ({...f, use_own_gateway: false}));
-                          setShowPaymentModal(false);
-                       }}
-                       style={{
-                          flex:1, background:'#fef2f2', color:'#ef4444', 
-                          border:'none', borderRadius:12, fontWeight:600, fontSize:15, cursor:'pointer', padding:'12px'
-                       }}
-                    >
-                       Disable
-                    </button>
-                    <ActionButton primary onClick={() => setShowPaymentModal(false)} style={{flex:1}}>
-                       Save & Done
-                    </ActionButton>
-                </div>
-             </div>
-         </div>
-      </div>
-    )}
-
-    {showUomManager && (
-      <UomManager 
-        restaurantId={localRestaurantId || restaurant?.id}
-        onClose={() => {
+      {showUomManager && (
+        <UomManager
+          restaurantId={localRestaurantId || restaurant?.id}
+          onClose={() => {
             setShowUomManager(false);
-        }}
-        onSaved={() => {
-            fetchRestaurant(); 
-        }}
-      />
-    )}
+          }}
+          onSaved={() => {
+            fetchRestaurant();
+          }}
+        />
+      )}
     </>
   );
 }

@@ -78,9 +78,10 @@ export default function Layout({
 }) {
   const router = useRouter();
 
-  // If landing/login/signup page, render raw children (allows full screen control)
+  // If landing/login/signup page or delivery app routes, render raw children (allows full screen control)
   const fullScreenRoutes = ['/', '/login', '/signup', '/forgot-password'];
-  if (fullScreenRoutes.includes(router.pathname)) {
+  const isDeliveryApp = router.pathname.startsWith('/app');
+  if (fullScreenRoutes.includes(router.pathname) || isDeliveryApp) {
     return <>{children}</>;
   }
 
@@ -142,7 +143,7 @@ export default function Layout({
 
   // Swipe detection
   const touchStartRef = React.useRef(null);
-  
+
   const handleTouchStart = (e) => {
     touchStartRef.current = e.touches[0].clientX;
   };
@@ -156,7 +157,7 @@ export default function Layout({
     // Swipe Left to Right (Open) - only from edge
     if (diff < -50 && isEdgeSwipe) {
       setMobileOpen(true);
-    } 
+    }
     // Swipe Right to Left (Close)
     else if (diff > 50 && mobileOpen) {
       setMobileOpen(false);
@@ -165,7 +166,7 @@ export default function Layout({
   };
 
   return (
-    <div 
+    <div
       style={{ display: 'grid', gridTemplateRows: 'auto 1fr auto', minHeight: '100svh' }}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
@@ -179,10 +180,10 @@ export default function Layout({
       <div className="main-wrapper">
         {showSidebar && (
           <div className="desktop-sidebar">
-            <Sidebar 
-                collapsed={collapsed} 
-                onSignOut={() => setShowLogoutConfirm(true)}
-                isSigningOut={signingOut}
+            <Sidebar
+              collapsed={collapsed}
+              onSignOut={() => setShowLogoutConfirm(true)}
+              isSigningOut={signingOut}
             />
           </div>
         )}
@@ -205,10 +206,10 @@ export default function Layout({
             onClick={() => setMobileOpen(false)}
           />
           <aside className={`drawer ${mobileOpen ? 'drawer--open' : ''}`}>
-            <MobileSidebar 
-                onNavigate={() => setMobileOpen(false)} 
-                onSignOut={() => setShowLogoutConfirm(true)}
-                isSigningOut={signingOut}
+            <MobileSidebar
+              onNavigate={() => setMobileOpen(false)}
+              onSignOut={() => setShowLogoutConfirm(true)}
+              isSigningOut={signingOut}
             />
           </aside>
         </>
@@ -304,10 +305,10 @@ export default function Layout({
         .main-wrapper {
           display: grid;
           grid-template-columns: ${showSidebar
-            ? collapsed
-              ? '64px 1fr'
-              : '240px 1fr'
-            : '1fr'};
+          ? collapsed
+            ? '64px 1fr'
+            : '240px 1fr'
+          : '1fr'};
           transition: grid-template-columns 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
           background: var(--bg, #f7f8fa);
         }
@@ -380,7 +381,7 @@ function Header({ showSidebar, onHamburger, isCustomer }) {
       try {
         const { data } = await supabase.auth.getSession();
         setHasSession(!!data?.session);
-      } catch {}
+      } catch { }
       const { data: listener } = supabase.auth.onAuthStateChange((_e, session) => {
         setHasSession(!!session);
       });
@@ -390,7 +391,7 @@ function Header({ showSidebar, onHamburger, isCustomer }) {
     return () => {
       try {
         unsub?.();
-      } catch {}
+      } catch { }
     };
   }, [supabase]);
 
@@ -436,35 +437,35 @@ function Header({ showSidebar, onHamburger, isCustomer }) {
               cursor: 'pointer',
               transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
             }}
-            onMouseEnter={(e) => { 
-                e.currentTarget.style.background = '#fff7ed'; // Brand orange tint
-                e.currentTarget.style.color = '#ea580c'; // Brand orange
-                e.currentTarget.style.transform = 'scale(1.05)';
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = '#fff7ed'; // Brand orange tint
+              e.currentTarget.style.color = '#ea580c'; // Brand orange
+              e.currentTarget.style.transform = 'scale(1.05)';
             }}
-            onMouseLeave={(e) => { 
-                e.currentTarget.style.background = 'transparent'; 
-                e.currentTarget.style.color = '#0f172a'; 
-                e.currentTarget.style.transform = 'scale(1)';
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent';
+              e.currentTarget.style.color = '#0f172a';
+              e.currentTarget.style.transform = 'scale(1)';
             }}
           >
             <FaBars size={20} />
           </button>
         )}
-        
-        <div 
-            style={{ display: 'flex', alignItems: 'center', gap: 14, cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap', flexShrink: 0 }}
-            onClick={() => router.push(isCustomer ? '/' : '/owner')}
+
+        <div
+          style={{ display: 'flex', alignItems: 'center', gap: 14, cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap', flexShrink: 0 }}
+          onClick={() => router.push(router.pathname.startsWith('/app') ? '/app' : '/owner')}
         >
-          <img 
-            src="/cafeqr-logo.svg" 
-            alt="Cafe QR" 
-            width={34} 
-            height={34} 
-            style={{ filter: 'drop-shadow(0 4px 6px rgba(234, 88, 12, 0.2))' }} 
+          <img
+            src="/cafeqr-logo.svg"
+            alt="Cafe QR"
+            width={34}
+            height={34}
+            style={{ filter: 'drop-shadow(0 4px 6px rgba(234, 88, 12, 0.2))' }}
           />
-          <strong style={{ 
-            fontSize: 22, 
-            fontWeight: 800, 
+          <strong style={{
+            fontSize: 22,
+            fontWeight: 800,
             letterSpacing: '-0.03em',
             // Premium Brand Gradient (Orange -> Red)
             color: '#ea580c'
@@ -477,33 +478,33 @@ function Header({ showSidebar, onHamburger, isCustomer }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         {!isCustomer && (
           <nav style={{ display: 'flex', alignItems: 'center' }}>
-            <Link 
-                href="/faq" 
-                className="header-link"
-                style={{ 
-                    padding: '6px 12px',
-                    borderRadius: 99,
-                    color: '#334155', // Slate 700 - reduced grey-ness
-                    textDecoration: 'none', 
-                    fontWeight: 600, 
-                    fontSize: 13,
-                    background: '#f8fafc',
-                    border: '1px solid #e2e8f0', // lighter border
-                    transition: 'all 0.2s ease'
-                }}
+            <Link
+              href="/faq"
+              className="header-link"
+              style={{
+                padding: '6px 12px',
+                borderRadius: 99,
+                color: '#334155', // Slate 700 - reduced grey-ness
+                textDecoration: 'none',
+                fontWeight: 600,
+                fontSize: 13,
+                background: '#f8fafc',
+                border: '1px solid #e2e8f0', // lighter border
+                transition: 'all 0.2s ease'
+              }}
             >
               FAQ
             </Link>
           </nav>
         )}
-        
+
         {isOwnerRoute && hasSession ? (
-            <>
-                <div style={{ width: 1, height: 24, background: '#e2e8f0' }}></div>
-                <div style={{ display: 'flex', alignItems: 'center' }}>
-                    <OwnerNotificationsBell />
-                </div>
-            </>
+          <>
+            <div style={{ width: 1, height: 24, background: '#e2e8f0' }}></div>
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <OwnerNotificationsBell />
+            </div>
+          </>
         ) : null}
       </div>
       <style jsx>{`
@@ -552,12 +553,12 @@ function Sidebar({ collapsed, onSignOut, isSigningOut }) {
   const renderItem = (it) => {
     if (!canAccess(it.href, role)) return null;
     const active =
-      router.pathname === it.href || 
+      router.pathname === it.href ||
       (it.href !== '/owner' && router.pathname.startsWith(it.href + '/'));
     return (
-      <Link 
-        key={it.href} 
-        href={it.href} 
+      <Link
+        key={it.href}
+        href={it.href}
         className={`sidebar-link ${active ? 'active' : ''}`}
         onClick={triggerHaptic}
       >
@@ -591,27 +592,27 @@ function Sidebar({ collapsed, onSignOut, isSigningOut }) {
   const credit =
     feature.credit_enabled && canAccess('/owner/credit-customers', role)
       ? [
-          {
-            href: '/owner/credit-customers',
-            label: 'Credit Customers',
-            icon: <FaUsers />,
-          },
-          {
-            href: '/owner/credit-sales-report',
-            label: 'Credit Sales Report',
-            icon: <FaFileAlt />,
-          },
-        ]
+        {
+          href: '/owner/credit-customers',
+          label: 'Credit Customers',
+          icon: <FaUsers />,
+        },
+        {
+          href: '/owner/credit-sales-report',
+          label: 'Credit Sales Report',
+          icon: <FaFileAlt />,
+        },
+      ]
       : [];
 
   const customersSection = [
-  ...(feature.customers_enabled
-    ? [{ href: '/owner/customers', label: 'Customers', icon: <FaIdBadge /> }]
-    : []),
-  ...(feature.loyalty_enabled
-    ? [{ href: '/owner/loyalty', label: 'Loyalty', icon: <FaCrown /> }]
-    : []),
-];
+    ...(feature.customers_enabled
+      ? [{ href: '/owner/customers', label: 'Customers', icon: <FaIdBadge /> }]
+      : []),
+    ...(feature.loyalty_enabled
+      ? [{ href: '/owner/loyalty', label: 'Loyalty', icon: <FaCrown /> }]
+      : []),
+  ];
 
 
 
@@ -626,16 +627,16 @@ function Sidebar({ collapsed, onSignOut, isSigningOut }) {
   ];
 
   const account = [
-  // Only admin should see Team & Access
-  ...(role === 'admin'
-    ? [
+    // Only admin should see Team & Access
+    ...(role === 'admin'
+      ? [
         {
           href: '/owner/staff',
           label: 'Team & Access',
           icon: <FaUsers />,
         },
       ]
-    : []),
+      : []),
     {
       href: '/owner/subscription',
       label: 'Subscription',
@@ -647,12 +648,12 @@ function Sidebar({ collapsed, onSignOut, isSigningOut }) {
 
   const integrations = hasAggregatorIntegration
     ? [
-        {
-          href: '/owner/aggregator-poller',
-          label: 'Aggregator Orders',
-          icon: <FaUtensils />,
-        },
-      ]
+      {
+        href: '/owner/aggregator-poller',
+        label: 'Aggregator Orders',
+        icon: <FaUtensils />,
+      },
+    ]
     : [];
 
   const handleSignOutClick = () => {
@@ -701,10 +702,10 @@ function Sidebar({ collapsed, onSignOut, isSigningOut }) {
         {addons.map(renderItem)}
         {credit.map(renderItem)}
 
-{!collapsed && customersSection.length > 0 && (
-  <div style={sectionStyle}>Customers</div>
-)}
-{customersSection.map(renderItem)}
+        {!collapsed && customersSection.length > 0 && (
+          <div style={sectionStyle}>Customers</div>
+        )}
+        {customersSection.map(renderItem)}
 
 
         {!collapsed && <div style={sectionStyle}>Insights</div>}
@@ -723,47 +724,47 @@ function Sidebar({ collapsed, onSignOut, isSigningOut }) {
       </nav>
 
       <div style={{ marginTop: 'auto', padding: collapsed ? '12px 0' : '16px 12px' }}>
-         <button
+        <button
           onClick={handleSignOutClick}
           className="sidebar-link-logout"
           title="Sign Out"
           disabled={isSigningOut}
           style={{
-             width: '100%',
-             display: 'flex',
-             alignItems: 'center',
-             justifyContent: collapsed ? 'center' : 'center',
-             gap: collapsed ? 0 : 10,
-             padding: collapsed ? '12px 0' : '12px 20px',
-             background: 'linear-gradient(135deg, #FFFBFC 0%, #FFF1F2 100%)',
-             border: '1px solid #FFE4E6',
-             borderRadius: '16px',
-             color: '#E11D48',
-             cursor: 'pointer',
-             transition: 'all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
-             boxShadow: '0 4px 12px rgba(225, 29, 72, 0.05)',
-             position: 'relative',
-             overflow: 'hidden'
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: collapsed ? 'center' : 'center',
+            gap: collapsed ? 0 : 10,
+            padding: collapsed ? '12px 0' : '12px 20px',
+            background: 'linear-gradient(135deg, #FFFBFC 0%, #FFF1F2 100%)',
+            border: '1px solid #FFE4E6',
+            borderRadius: '16px',
+            color: '#E11D48',
+            cursor: 'pointer',
+            transition: 'all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
+            boxShadow: '0 4px 12px rgba(225, 29, 72, 0.05)',
+            position: 'relative',
+            overflow: 'hidden'
           }}
           onMouseEnter={(e) => {
-             e.currentTarget.style.transform = 'translateY(-2px)';
-             e.currentTarget.style.boxShadow = '0 6px 20px rgba(225, 29, 72, 0.12)';
-             e.currentTarget.style.borderColor = '#FECDD3';
+            e.currentTarget.style.transform = 'translateY(-2px)';
+            e.currentTarget.style.boxShadow = '0 6px 20px rgba(225, 29, 72, 0.12)';
+            e.currentTarget.style.borderColor = '#FECDD3';
           }}
           onMouseLeave={(e) => {
-             e.currentTarget.style.transform = 'none';
-             e.currentTarget.style.boxShadow = '0 4px 12px rgba(225, 29, 72, 0.05)';
-             e.currentTarget.style.borderColor = '#FFE4E6';
+            e.currentTarget.style.transform = 'none';
+            e.currentTarget.style.boxShadow = '0 4px 12px rgba(225, 29, 72, 0.05)';
+            e.currentTarget.style.borderColor = '#FFE4E6';
           }}
         >
-           <div style={{ fontSize: 18, display: 'flex' }}>
-             <FaSignOutAlt />
-           </div>
-           {!collapsed && (
-             <span style={{ fontWeight: 700, fontSize: 14, letterSpacing: '0.02em' }}>
-               Sign Out
-             </span>
-           )}
+          <div style={{ fontSize: 18, display: 'flex' }}>
+            <FaSignOutAlt />
+          </div>
+          {!collapsed && (
+            <span style={{ fontWeight: 700, fontSize: 14, letterSpacing: '0.02em' }}>
+              Sign Out
+            </span>
+          )}
         </button>
       </div>
       <style jsx global>{`
@@ -922,27 +923,27 @@ function MobileSidebar({ onNavigate, onSignOut, isSigningOut }) {
 
   const credit = feature.credit_enabled
     ? [
-        {
-          href: '/owner/credit-customers',
-          label: 'Credit Customers',
-          icon: <FaUsers />,
-        },
-        {
-          href: '/owner/credit-sales-report',
-          label: 'Credit Sales Report',
-          icon: <FaFileAlt />,
-        },
-      ].filter((it) => canAccess(it.href, role))
+      {
+        href: '/owner/credit-customers',
+        label: 'Credit Customers',
+        icon: <FaUsers />,
+      },
+      {
+        href: '/owner/credit-sales-report',
+        label: 'Credit Sales Report',
+        icon: <FaFileAlt />,
+      },
+    ].filter((it) => canAccess(it.href, role))
     : [];
 
   const customers = [
-  ...(feature.customers_enabled
-    ? [{ href: '/owner/customers', label: 'Customers', icon: <FaIdBadge /> }]
-    : []),
-  ...(feature.loyalty_enabled
-    ? [{ href: '/owner/loyalty', label: 'Loyalty', icon: <FaCrown /> }]
-    : []),
-].filter((it) => canAccess(it.href, role));
+    ...(feature.customers_enabled
+      ? [{ href: '/owner/customers', label: 'Customers', icon: <FaIdBadge /> }]
+      : []),
+    ...(feature.loyalty_enabled
+      ? [{ href: '/owner/loyalty', label: 'Loyalty', icon: <FaCrown /> }]
+      : []),
+  ].filter((it) => canAccess(it.href, role));
 
 
 
@@ -957,15 +958,15 @@ function MobileSidebar({ onNavigate, onSignOut, isSigningOut }) {
   ].filter((it) => canAccess(it.href, role));
 
   const account = [
-  ...(role === 'admin'
-    ? [
+    ...(role === 'admin'
+      ? [
         {
           href: '/owner/staff',
           label: 'Team & Access',
           icon: <FaUsers />,
         },
       ]
-    : []),
+      : []),
 
     {
       href: '/owner/subscription',
@@ -978,12 +979,12 @@ function MobileSidebar({ onNavigate, onSignOut, isSigningOut }) {
 
   const integrations = hasAggregatorIntegration
     ? [
-        {
-          href: '/owner/aggregator-poller',
-          label: 'Aggregator Orders',
-          icon: <FaUtensils />,
-        },
-      ].filter((it) => canAccess(it.href, role))
+      {
+        href: '/owner/aggregator-poller',
+        label: 'Aggregator Orders',
+        icon: <FaUtensils />,
+      },
+    ].filter((it) => canAccess(it.href, role))
     : [];
 
   const handleSignOut = () => {

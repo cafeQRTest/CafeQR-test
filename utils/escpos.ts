@@ -14,8 +14,10 @@ export function textToEscPos(text: string, opts?: { codepage?: number; feed?: nu
 
   // IMPORTANT CHANGE:
   // Do NOT newline-normalize when the payload contains raster bitmap (GS v 0 / 1D 76 30)
-  const hasRaster = text.indexOf("\x1dv0") !== -1; // 0x1D 0x76 0x30
-  const normalized = hasRaster ? text : text.replace(/\r?\n/g, '\r\n');
+// utils/escpos.ts
+const rasterSig = String.fromCharCode(0x1d, 0x76, 0x30); // GS v 0
+const hasRaster = text.indexOf(rasterSig) !== -1; // GS v 0 [web:1034]
+const normalized = hasRaster ? text : text.replace(/\r?\n/g, "\r\n");
 
   for (let i = 0; i < normalized.length; i++) {
     bytes.push(normalized.charCodeAt(i) & 0xff);

@@ -27,7 +27,7 @@
     />
 
     <application
-        android:name=".MainApplication"
+        android:name="com.cafeqr.app.MainApplication"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
@@ -35,7 +35,7 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
         <activity
-            android:name=".MainActivity"
+            android:name="com.cafeqr.app.MainActivity"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
             android:exported="true"
             android:label="@string/title_activity_main"
@@ -58,20 +58,20 @@
 </provider>
 
 
-        <service android:name=".MyFirebaseMessagingService" android:exported="false">
+        <service android:name="com.cafeqr.app.MyFirebaseMessagingService" android:exported="false">
             <intent-filter>
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
 
         <service
-            android:name=".MyForegroundService"
+            android:name="com.cafeqr.app.MyForegroundService"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="remoteMessaging"
         />
 
-        <receiver android:name=".BootReceiver" android:enabled="true" android:exported="true">
+        <receiver android:name="com.cafeqr.app.BootReceiver" android:enabled="true" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.QUICKBOOT_POWERON" />

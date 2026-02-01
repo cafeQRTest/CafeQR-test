@@ -1,7 +1,7 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace "com.cafeqr.test"
+    namespace "com.cafeqr.app"
     compileSdk rootProject.ext.compileSdkVersion
     defaultConfig {
         applicationId "com.cafeqr.test"

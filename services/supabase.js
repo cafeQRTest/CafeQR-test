@@ -62,7 +62,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error("Supabase URL and Anon Key must be defined in .env.local")
 }
 
-const ServerStorageAdapter = { getItem: () => null, setItem: () => {}, removeItem: () => {} }
+const ServerStorageAdapter = { getItem: () => null, setItem: () => { }, removeItem: () => { } }
 
 const storageAdapter = {
   getItem: async (key) => {
@@ -86,11 +86,14 @@ let supabaseInstance
 export function getSupabase() {
   if (!supabaseInstance) {
     supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
+      global: {
+        headers: { 'Cache-Control': 'no-cache' }
+      },
       auth: {
         storage: typeof window === 'undefined' ? ServerStorageAdapter : storageAdapter,
         autoRefreshToken: true,    // keep access token fresh [web:609]
         persistSession: true,
-        detectSessionInUrl: false,
+        detectSessionInUrl: true,
       },
     })
   }
