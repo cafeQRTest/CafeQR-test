@@ -15,38 +15,47 @@ export default function CustomerAuthPage() {
     typeof router.query.next === "string" ? router.query.next : "/app/address";
 
   const [email, setEmail] = useState("");
-  const [sent, setSent] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpToken, setOtpToken] = useState("");
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showManual, setShowManual] = useState(false);
 
-  const sendMagicLink = async (e) => {
-    e.preventDefault(); // support form submit
+  const sendOtp = async (e) => {
+    e.preventDefault();
     setErr("");
     setLoading(true);
 
-    // Persist where to go after login
-    if (typeof window !== "undefined") {
-      localStorage.setItem(DELIVERY_NEXT_KEY, next);
-    }
-
-    // Strictly use NEXT_PUBLIC_BASE_URL - must be set in .env.local or Vercel
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
-    if (!baseUrl) {
-      setErr("Configuration error: NEXT_PUBLIC_BASE_URL environment variable is not set");
-      setLoading(false);
-      return;
-    }
-    const emailRedirectTo = `${baseUrl}/app/auth/callback`;
-
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo },
     });
 
     setLoading(false);
 
     if (error) return setErr(error.message);
-    setSent(true);
+    setOtpSent(true);
+  };
+
+  const verifyOtp = async (e) => {
+    e.preventDefault();
+    if (otpToken.length !== 8) {
+      return setErr("Code must be 8 digits");
+    }
+    setErr("");
+    setLoading(true);
+
+    const { error } = await supabase.auth.verifyOtp({
+      email,
+      token: otpToken,
+      type: 'email',
+    });
+
+    if (error) {
+      setLoading(false);
+      return setErr(error.message);
+    }
+
+    router.push("/app/address");
   };
 
   return (
@@ -54,14 +63,13 @@ export default function CustomerAuthPage() {
       <div className="delivery-auth-card">
 
         <AnimatePresence mode="wait">
-          {!sent ? (
+          {!otpSent ? (
             <motion.div
-              key="form"
+              key="email-form"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
             >
-              {/* Logo & Header */}
               <div className="delivery-auth-logo">
                 <img src="/cafeqr-logo.svg" alt="CafeQR" />
               </div>
@@ -71,7 +79,7 @@ export default function CustomerAuthPage() {
                 <p>Enter your email to sign in</p>
               </div>
 
-              <form onSubmit={sendMagicLink} className="delivery-auth-form">
+              <form onSubmit={sendOtp} className="delivery-auth-form">
                 <div>
                   <label htmlFor="email">Email Address</label>
                   <input
@@ -84,68 +92,59 @@ export default function CustomerAuthPage() {
                   />
                 </div>
 
-                {err && (
-                  <div className="delivery-auth-error">{err}</div>
-                )}
+                {err && <div className="delivery-auth-error">{err}</div>}
 
                 <button type="submit" disabled={loading} className="delivery-auth-submit">
-                  {loading ? 'Sending Link...' : 'Send Login Link'}
+                  {loading ? 'Sending Code...' : 'Send Login Code'}
                 </button>
               </form>
             </motion.div>
           ) : (
             <motion.div
-              key="success"
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.5 }}
-              className="delivery-auth-sent"
+              key="otp-form"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
             >
-              <div className="delivery-auth-sent-icon">
-                <motion.div
-                  animate={{ y: [-5, 5, -5], rotate: [0, 5, 0, -5, 0] }}
-                  transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                >
-                  <Mail className="w-16 h-16 text-green-500" strokeWidth={1.5} />
-                  <motion.div
-                    animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }}
-                    transition={{ duration: 2, repeat: Infinity }}
-                    className="sparkle-badge"
-                  >
-                    <Sparkles className="w-6 h-6 text-yellow-400 fill-yellow-400" />
-                  </motion.div>
-                </motion.div>
+              <div className="delivery-auth-logo">
+                <img src="/cafeqr-logo.svg" alt="CafeQR" />
               </div>
 
-              <motion.h3
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-              >
-                Check your email
-              </motion.h3>
+              <div className="delivery-auth-header">
+                <h1>Verify Code</h1>
+                <p>Enter the 8-digit code sent to<br /><span className="font-bold text-gray-800">{email}</span></p>
+              </div>
 
-              <motion.p
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-              >
-                We sent a magic login link to<br />
-                <span className="email-highlight">{email}</span>
-              </motion.p>
+              <form onSubmit={verifyOtp} className="delivery-auth-form">
+                <div>
+                  <label htmlFor="otp">Enter Code</label>
+                  <input
+                    id="otp"
+                    type="text"
+                    required
+                    value={otpToken}
+                    onChange={(e) => setOtpToken(e.target.value)}
+                    placeholder="12345678"
+                    className="text-center tracking-widest text-xl"
+                    maxLength={8}
+                  />
+                </div>
 
-              <motion.button
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.4 }}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => setSent(false)}
-                className="delivery-auth-back-btn"
-              >
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                <span>Try a different email</span>
-              </motion.button>
+                {err && <div className="delivery-auth-error">{err}</div>}
+
+                <button type="submit" disabled={loading || otpToken.length !== 8} className="delivery-auth-submit">
+                  {loading ? 'Verifying...' : 'Verify & Login'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setOtpSent(false)}
+                  className="delivery-auth-back-btn w-full mt-4"
+                >
+                  <ArrowLeft className="w-4 h-4 mr-2" />
+                  <span>Use a different email</span>
+                </button>
+              </form>
             </motion.div>
           )}
         </AnimatePresence>
