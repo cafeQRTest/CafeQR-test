@@ -2417,34 +2417,35 @@ const handleEditSave = async (edited) => {
       return;
     }
  
-    // Broadcast to other devices (e.g., Main Counter) for global KOT printing
-    if (channelRef.current && data.order_for_print) {
-      console.log('[EDIT] Broadcasting order edit:', data.order_for_print.id);
-      console.log('[EDIT] Channel state:', channelRef.current.state);
-      
-      channelRef.current.send({
-        type: 'broadcast',
-        event: 'order-edited',
-        payload: data.order_for_print
-      }).then(() => {
-        console.log('[EDIT] Broadcast sent successfully');
-      }).catch(err => {
-        console.error('[BROADCAST] Failed to send edit notification:', err);
-      });
-    } else {
-      console.warn('[EDIT] Cannot broadcast - channel:', !!channelRef.current, 'data:', !!data.order_for_print);
+    // Insert into print queue for cross-device KOT printing
+    if (data.order_for_print && (editingOrder.status === 'new' || editingOrder.status === 'in_progress')) {
+      try {
+        await supabase
+          .from('kot_print_queue')
+          .insert({
+            restaurant_id: restaurantId,
+            order_id: editingOrder.id,
+            print_data: data.order_for_print,
+            processed: false
+          });
+        console.log('[EDIT] Inserted into print queue for order:', editingOrder.id);
+      } catch (err) {
+        console.error('[EDIT] Failed to insert into print queue:', err);
+      }
     }
 
-    // Also dispatch locally for this device to print if needed
-    window.dispatchEvent(
-      new CustomEvent('auto-print-order', {
-        detail: {
-          ...data.order_for_print,
-          autoPrint: true,
-          kind: 'kot',
-        },
-      })
-    );
+    // Dispatch locally for this device to print if needed
+    if (data.order_for_print) {
+      window.dispatchEvent(
+        new CustomEvent('auto-print-order', {
+          detail: {
+            ...data.order_for_print,
+            autoPrint: true,
+            kind: 'kot',
+          },
+        })
+      );
+    }
 
     // Refresh & close
     await loadOrders();
@@ -2526,11 +2527,7 @@ useEffect(() => {
   if (!supabase || !restaurantId) return;
 
   const channel = supabase
-    .channel(`orders:${restaurantId}`, {
-      config: {
-        broadcast: { ack: false, self: true }
-      }
-    })
+    .channel(`orders:${restaurantId}`)
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'orders', filter: `restaurant_id=eq.${restaurantId}` },
@@ -2565,9 +2562,6 @@ useEffect(() => {
     )
     .subscribe();
 
-  // Store the orders channel for broadcasting edits
-  channelRef.current = channel;
-
   function onVisible() {
     if (document.visibilityState === 'visible') {
       setTimeout(async () => {
@@ -2596,10 +2590,7 @@ useEffect(() => {
   window.addEventListener('visibilitychange', onVisible);
   return () => {
     window.removeEventListener('visibilitychange', onVisible);
-    if (supabase) {
-        supabase.removeChannel(channel);
-    }
-    channelRef.current = null; // Clean up ref
+    if (supabase) supabase.removeChannel(channel);
   };
 }, [supabase, restaurantId, playNotificationSound]);
 
