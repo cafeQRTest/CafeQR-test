@@ -262,7 +262,11 @@ export default function DeliveryPayment() {
         )}&method=cod&amt=${amt}`
       );
     } catch (e) {
-      alert(e?.message || "Failed to place order.");
+      console.error("Supabase/Order Error:", e);
+      const msg = 'An error occurred while confirming your order. Please check your "Order History" to see if it was successfully placed. If it is not there, please try placing it again.';
+      if (confirm(msg)) {
+        router.push("/app/orders/history");
+      }
     } finally {
       setPlacing(false);
     }
