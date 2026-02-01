@@ -2526,7 +2526,11 @@ useEffect(() => {
   if (!supabase || !restaurantId) return;
 
   const channel = supabase
-    .channel(`orders:${restaurantId}`)
+    .channel(`orders:${restaurantId}`, {
+      config: {
+        broadcast: { ack: false, self: true }
+      }
+    })
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'orders', filter: `restaurant_id=eq.${restaurantId}` },
