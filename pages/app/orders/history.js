@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, Clock, ShoppingBag, ArrowRight as ArrowIcon, CheckCircle2, RefreshCw } from "lucide-react";
 import { getSupabase } from "../../../services/supabase";
 import { useCustomerAuth } from "../../../context/CustomerAuthContext";
+import CafeQRLoader from "../../../components/CafeQRLoader";
 
 const cartKey = (restaurantId) => `cart_delivery_${restaurantId}`;
 
@@ -171,20 +172,7 @@ export default function OrderHistory() {
   };
 
   if (authLoading || loading) {
-    return (
-      <div className="history-page">
-        <div className="history-loading">
-          <motion.div
-            animate={{ rotate: 360 }}
-            transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
-          >
-            <RefreshCw className="w-6 h-6 text-orange-500" />
-          </motion.div>
-          <span>Loading your orders...</span>
-        </div>
-        <style jsx>{styles}</style>
-      </div>
-    );
+    return <CafeQRLoader message="Loading your orders..." />;
   }
 
   return (
