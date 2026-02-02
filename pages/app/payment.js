@@ -25,6 +25,8 @@ export default function DeliveryPayment() {
   const [custName, setCustName] = useState("");
   const [custPhone, setCustPhone] = useState("");
   const [custAddress, setCustAddress] = useState("");
+  const [custHouseNo, setCustHouseNo] = useState("");
+  const [custStreet, setCustStreet] = useState("");
   const [note, setNote] = useState("");
 
   useEffect(() => {
@@ -145,7 +147,9 @@ export default function DeliveryPayment() {
     if (!custPhone.trim() || custPhone.trim().length < 8)
       return "Please enter a valid phone number.";
     if (!custAddress.trim() || custAddress.trim().length < 8)
-      return "Please enter a delivery address.";
+      return "Detected location invalid.";
+    if (!custHouseNo.trim()) return "Please enter House / Flat / Building.";
+    if (!custStreet.trim()) return "Please enter Street / Locality.";
     if (!restaurantId) return "Missing restaurant.";
     if (!cart?.length) return "Cart is empty.";
     if (!Number.isFinite(totals.totalInc) || totals.totalInc <= 0)
@@ -185,7 +189,8 @@ export default function DeliveryPayment() {
       "Delivery Details:",
       `Name: ${custName.trim()}`,
       `Phone: ${custPhone.trim()}`,
-      `Address: ${custAddress.trim()}`,
+      `Address: ${custHouseNo.trim()}, ${custStreet.trim()}`,
+      `Map Location: ${custAddress.trim()}`,
       note.trim() ? `Note: ${note.trim()}` : "",
     ]
       .filter(Boolean)
@@ -490,12 +495,35 @@ export default function DeliveryPayment() {
 
           <div style={{ height: 10 }} />
 
-          <label style={{ fontSize: 12, color: "#6b7280" }}>Delivery address</label>
-          <textarea
-            value={custAddress}
-            onChange={(e) => setCustAddress(e.target.value)}
-            placeholder="House no, street, area, landmark, city"
-            rows={3}
+          <label style={{ fontSize: 12, color: "#6b7280" }}>Delivery Location</label>
+          <div
+            style={{
+              width: "100%",
+              padding: "10px 12px",
+              borderRadius: 12,
+              border: "1px solid #e5e7eb",
+              marginTop: 6,
+              background: "#f9fafb",
+              color: "#374151",
+              fontSize: 13,
+              display: "flex",
+              alignItems: "center",
+              gap: 8
+            }}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-orange-500"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+            <div style={{ flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {custAddress || "Location not detected"}
+            </div>
+          </div>
+
+          <div style={{ height: 10 }} />
+
+          <label style={{ fontSize: 12, color: "#6b7280" }}>Address details</label>
+          <input
+            value={custHouseNo}
+            onChange={(e) => setCustHouseNo(e.target.value)}
+            placeholder="House / Flat No. / Building Name"
             style={{
               width: "100%",
               padding: 12,
@@ -503,7 +531,19 @@ export default function DeliveryPayment() {
               border: "1px solid #e5e7eb",
               marginTop: 6,
               outline: "none",
-              resize: "vertical",
+            }}
+          />
+          <input
+            value={custStreet}
+            onChange={(e) => setCustStreet(e.target.value)}
+            placeholder="Street / Locality / Landmark"
+            style={{
+              width: "100%",
+              padding: 12,
+              borderRadius: 12,
+              border: "1px solid #e5e7eb",
+              marginTop: 8, // slight gap between these two related fields
+              outline: "none",
             }}
           />
 
