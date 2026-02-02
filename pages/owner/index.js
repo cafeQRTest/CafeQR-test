@@ -135,7 +135,9 @@ export default function OwnerOverview() {
 
         const rows = Array.isArray(todayRows) ? todayRows : [];
         const totalFor = (o) => Number(o.total_inc_tax ?? 0);
-        const revenueToday = rows.reduce((a, o) => a + totalFor(o), 0);
+        const revenueToday = rows
+          .filter(o => o.status !== 'cancelled' && o.status !== 'voided') 
+          .reduce((a, o) => a + totalFor(o), 0);
         const completed = rows.filter((o) => String(o.status) === 'completed');
         const avgTicket = completed.length > 0
           ? completed.reduce((a, o) => a + totalFor(o), 0) / completed.length
