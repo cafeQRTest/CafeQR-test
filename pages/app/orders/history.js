@@ -1,13 +1,20 @@
-//pages/app/orders/history.js
+// pages/app/orders/history.js
 
 import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, Clock, MapPin, ChevronRight, Package, RefreshCw, ShoppingBag } from "lucide-react";
+import { ArrowLeft, Clock, ShoppingBag, ArrowRight as ArrowIcon, CheckCircle2, RefreshCw } from "lucide-react";
 import { getSupabase } from "../../../services/supabase";
 import { useCustomerAuth } from "../../../context/CustomerAuthContext";
 
 const cartKey = (restaurantId) => `cart_delivery_${restaurantId}`;
+
+const STOCK_IMAGES = [
+  "https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=200&q=80",
+  "https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?auto=format&fit=crop&w=200&q=80",
+  "https://images.unsplash.com/photo-1559339352-11d035aa65de?auto=format&fit=crop&w=200&q=80",
+  "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=200&q=80",
+];
 
 export default function OrderHistory() {
   const router = useRouter();
@@ -33,7 +40,6 @@ export default function OrderHistory() {
 
     setLoading(true);
     try {
-      // Fetch orders for the current user, sorted by newest first
       const { data: ordersData, error } = await supabase
         .from("orders")
         .select("*")
@@ -45,8 +51,7 @@ export default function OrderHistory() {
 
       setOrders(ordersData || []);
 
-      // Fetch restaurant names if not present in order object
-      const restaurantIds = [...new Set((ordersData || []).filter(o => !o.restaurant_name).map(o => o.restaurant_id).filter(Boolean))];
+      const restaurantIds = [...new Set((ordersData || []).map(o => o.restaurant_id).filter(Boolean))];
       if (restaurantIds.length > 0) {
         const { data: restaurantsData } = await supabase
           .from("restaurants")
@@ -55,7 +60,7 @@ export default function OrderHistory() {
 
         const restaurantMap = {};
         (restaurantsData || []).forEach(r => {
-          restaurantMap[r.id] = r.name;
+          restaurantMap[r.id] = { name: r.name };
         });
         setRestaurants(restaurantMap);
       }
@@ -67,32 +72,47 @@ export default function OrderHistory() {
   };
 
   const handleReorder = async (order) => {
-    // ... existing handleReorder logic ...
-    // Keeping this function body unchanged for brevity in this replacement block as the user only asked for layout/data changes
     if (!order?.restaurant_id || !order?.items) return;
 
     setReordering(order.id);
 
     try {
       const existingCart = JSON.parse(localStorage.getItem(cartKey(order.restaurant_id)) || "[]");
-      // Add order items to cart
-      const newItems = (order.items || []).map(item => ({
-        id: `reorder_${Date.now()}_${Math.random()}`, // Unique cart ID to avoid key conflicts
-        menu_item_id: item.menu_item_id || item.id, // Persist the REAL UUID for backend lookup
-        name: item.name,
-        price: item.price,
-        quantity: item.quantity || 1,
-        veg: item.veg ?? true,
-        selectedVariant: item.variant_id ? {
-          variant_id: item.variant_id,
-          variant_name: item.variant_name,
-        } : null,
-      }));
+
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+      const newItems = (order.items || []).map(item => {
+        // Resolve a valid UUID or skip
+        const realId = item.menu_item_id && uuidRegex.test(item.menu_item_id)
+          ? item.menu_item_id
+          : (item.id && uuidRegex.test(item.id) ? item.id : null);
+
+        if (!realId) return null;
+
+        return {
+          id: `reorder_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          menu_item_id: realId,
+          name: item.name,
+          price: item.price,
+          quantity: item.quantity || 1,
+          veg: item.veg ?? true,
+          selectedVariant: item.variant_id ? {
+            variant_id: item.variant_id,
+            variant_name: item.variant_name,
+          } : null,
+        };
+      }).filter(Boolean);
+
+      if (newItems.length === 0) {
+        alert("Unable to reorder items (items not found).");
+        setReordering(null);
+        return;
+      }
 
       const mergedCart = [...existingCart];
       newItems.forEach(newItem => {
         const existingIndex = mergedCart.findIndex(
-          c => c.id === newItem.id && (!c.selectedVariant?.variant_id || c.selectedVariant?.variant_id === newItem.selectedVariant?.variant_id)
+          c => c.menu_item_id === newItem.menu_item_id && (!c.selectedVariant?.variant_id || c.selectedVariant?.variant_id === newItem.selectedVariant?.variant_id)
         );
         if (existingIndex >= 0) {
           mergedCart[existingIndex].quantity += newItem.quantity;
@@ -102,6 +122,8 @@ export default function OrderHistory() {
       });
 
       localStorage.setItem(cartKey(order.restaurant_id), JSON.stringify(mergedCart));
+      // Simulate delay for feedback
+      await new Promise(r => setTimeout(r, 600));
       await router.push(`/app/restaurants?r=${order.restaurant_id}`);
     } catch (err) {
       console.error("Failed to reorder:", err);
@@ -112,32 +134,26 @@ export default function OrderHistory() {
   };
 
   const formatDate = (dateStr) => {
-    // ... existing formatDate ...
     if (!dateStr) return "";
     const date = new Date(dateStr);
-    return date.toLocaleDateString("en-IN", {
+    return date.toLocaleDateString("en-US", {
+      month: "long",
       day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true
+    }).replace(' at', ',');
   };
 
-  const getStatusColor = (status) => {
-    // ... existing getStatusColor ...
-    switch (status?.toLowerCase()) {
-      case "delivered":
-      case "completed":
-        return { bg: "#dcfce7", color: "#166534" };
-      case "preparing":
-      case "in_progress":
-        return { bg: "#fef3c7", color: "#92400e" };
-      case "cancelled":
-        return { bg: "#fee2e2", color: "#dc2626" };
-      case "new":
-      case "pending":
-      default:
-        return { bg: "#e0e7ff", color: "#4338ca" };
+  const getStatusDisplay = (status) => {
+    const s = (status || "").toLowerCase();
+
+    if (s === 'delivered' || s === 'completed') {
+      return { text: 'Delivered', icon: <CheckCircle2 className="w-4 h-4 text-green-600" fill="#dcfce7" /> };
     }
+    if (s === 'cancelled') return { text: 'Cancelled', icon: null, color: 'text-red-600' };
+
+    return { text: s.charAt(0).toUpperCase() + s.slice(1), icon: null, color: 'text-orange-600' };
   };
 
   const cardVariants = {
@@ -175,45 +191,47 @@ export default function OrderHistory() {
     <div className="history-page">
       <div className="history-bg" />
 
-      {/* Header */}
       <motion.div
         className="history-header"
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ type: "spring", stiffness: 100, damping: 15 }}
       >
         <button className="back-btn" onClick={() => router.push("/app/restaurants")}>
           <ArrowLeft className="w-5 h-5" />
         </button>
-        <h1>Order History</h1>
+        <h1>Past Orders</h1>
         <div className="header-spacer" />
       </motion.div>
 
-      {/* Orders List */}
       <div className="history-content">
         {orders.length === 0 ? (
           <motion.div
             className="empty-state"
-            initial={{ opacity: 0, scale: 0.9 }}
+            initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.2 }}
           >
             <div className="empty-icon">
-              <ShoppingBag className="w-12 h-12 text-gray-400" />
+              <ShoppingBag className="w-12 h-12 text-gray-300" />
             </div>
             <h2>No orders yet</h2>
-            <p>Your order history will appear here once you place your first order.</p>
-            <button className="start-order-btn mt-12" onClick={() => router.push("/app/restaurants")}>
-              Start Ordering
+            <p>Your food journey begins here</p>
+            <button className="start-order-btn mt-8" onClick={() => router.push("/app/restaurants")}>
+              Browse Restaurants
             </button>
           </motion.div>
         ) : (
           <div className="orders-list">
             <AnimatePresence>
               {orders.map((order, index) => {
-                const statusStyle = getStatusColor(order.status);
-                const restaurantName = order.restaurant_name || restaurants[order.restaurant_id] || "Restaurant";
-                const displayId = order.id ? `#${order.id.slice(0, 8)}` : "#Pending";
+                const rData = restaurants[order.restaurant_id] || {};
+                const rName = order.restaurant_name || rData.name || "Restaurant";
+
+                const { text: statusText, icon: statusIcon, color: statusColorClass } = getStatusDisplay(order.status);
+
+                const imgIdx = (order.restaurant_id || "").charCodeAt(0) % STOCK_IMAGES.length;
+                const imgUrl = STOCK_IMAGES[imgIdx || 0];
+
+                const orderItems = Array.isArray(order.items) ? order.items : [];
 
                 return (
                   <motion.div
@@ -225,48 +243,59 @@ export default function OrderHistory() {
                     custom={index}
                     layout
                   >
-                    <div className="order-main">
-                      {/* Top Section: Restaurant Name in Bold */}
-                      <div className="order-header">
-                        <h3 className="restaurant-name">{restaurantName}</h3>
-                        <div
-                          className="status-badge"
-                          style={{ background: statusStyle.bg, color: statusStyle.color }}
-                        >
-                          {order.status || "Pending"}
+                    <div className="card-header">
+                      <div className="rest-info-group">
+                        <img src={imgUrl} alt="" className="rest-logo" />
+                        <div className="rest-text">
+                          <h3 className="rest-name">{rName}</h3>
                         </div>
                       </div>
 
-                      {/* Middle Section: Order ID + Total Amount */}
-                      <div className="order-mid-section">
-                        <span className="order-id-pill">{displayId}</span>
-                        <span className="order-amount">₹{Number(order.total_amount || 0).toFixed(2)}</span>
-                      </div>
-
-                      {/* Footer: Date and Reorder */}
-                      <div className="order-footer">
-                        <div className="order-date">
-                          <Clock className="w-3 h-3" />
-                          <span>{formatDate(order.created_at)}</span>
-                        </div>
-                        <motion.button
-                          className="reorder-btn"
-                          onClick={() => handleReorder(order)}
-                          disabled={reordering === order.id}
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                        >
-                          {reordering === order.id ? (
-                            <RefreshCw className="w-3 h-3 animate-spin" />
-                          ) : (
-                            <>
-                              <Package className="w-3 h-3" />
-                              <span>Re-order</span>
-                            </>
-                          )}
-                        </motion.button>
+                      <div className={`order-status ${statusColorClass || ''}`}>
+                        <span>{statusText}</span>
+                        {statusIcon}
                       </div>
                     </div>
+
+                    <div className="card-divider" />
+
+                    <div className="order-items-list">
+                      {orderItems.map((item, idx) => (
+                        <div key={idx} className="order-item-row">
+                          <div className="item-qty-name">
+                            <span className="item-qty">{item.quantity} x</span>
+                            <span className="item-name">{item.name}</span>
+                          </div>
+                        </div>
+                      ))}
+                      {orderItems.length === 0 && <span className="text-gray-400 text-xs">Items not available</span>}
+                    </div>
+
+                    <div className="card-divider" />
+
+                    <div className="action-row">
+                      <motion.button
+                        className="reorder-btn-full"
+                        onClick={() => handleReorder(order)}
+                        disabled={reordering === order.id}
+                        whileTap={{ scale: 0.98 }}
+                      >
+                        {reordering === order.id ? (
+                          <span>Adding...</span>
+                        ) : (
+                          <div className="btn-content">
+                            <span>REORDER</span>
+                            <ArrowIcon className="w-4 h-4 ml-1" />
+                          </div>
+                        )}
+                      </motion.button>
+                    </div>
+
+                    <div className="card-footer-info">
+                      <span>{formatDate(order.created_at)}</span>
+                      <span>₹{Number(order.total_amount || 0).toFixed(0)}</span>
+                    </div>
+
                   </motion.div>
                 );
               })}
@@ -285,31 +314,10 @@ const styles = `
     min-height: 100vh;
     min-height: 100dvh;
     width: 100%;
-    background: #f9fafb;
+    background: #f3f4f6;
     display: flex;
     flex-direction: column;
     font-family: system-ui, -apple-system, sans-serif;
-    position: relative;
-  }
-  .history-bg {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 200px;
-    background: linear-gradient(180deg, rgba(249, 115, 22, 0.06) 0%, transparent 100%);
-    z-index: 0;
-    pointer-events: none;
-  }
-  .history-loading {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 16px;
-    color: #6b7280;
-    font-size: 15px;
   }
   .history-header {
     display: flex;
@@ -317,201 +325,162 @@ const styles = `
     justify-content: space-between;
     padding: 16px 20px;
     background: #fff;
-    border-bottom: 1px solid #e5e7eb;
     position: sticky;
     top: 0;
     z-index: 10;
+    border-bottom: 1px solid #e5e7eb;
   }
   .history-header h1 {
-    font-size: 18px;
+    font-size: 17px;
     font-weight: 700;
     color: #111827;
     margin: 0;
   }
   .back-btn {
-    width: 40px;
-    height: 40px;
+    width: 36px;
+    height: 36px;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: #f3f4f6;
+    background: transparent;
     border: none;
-    border-radius: 12px;
     cursor: pointer;
     color: #374151;
-    transition: all 0.2s ease;
   }
-  .back-btn:hover {
-    background: #e5e7eb;
-  }
-  .header-spacer {
-    width: 40px;
-  }
+  .header-spacer { width: 36px; }
+
   .history-content {
     flex: 1;
-    padding: 20px;
-    max-width: 480px;
+    padding: 16px;
+    max-width: 600px;
     width: 100%;
     margin: 0 auto;
-    position: relative;
-    z-index: 1;
   }
+
+  .orders-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .order-card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 16px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  }
+
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .rest-info-group {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+  .rest-logo {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    object-fit: cover;
+    background: #f3f4f6;
+  }
+  .rest-text {
+    display: flex;
+    flex-direction: column;
+  }
+  .rest-name {
+    font-size: 15px;
+    font-weight: 700;
+    color: #111827;
+    margin: 0;
+    line-height: 1.2;
+  }
+  .order-status {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .card-divider {
+    height: 1px;
+    background: #f3f4f6;
+    margin: 12px -16px; 
+  }
+
+  .order-items-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 16px;
+    padding-top: 12px;
+  }
+  .order-item-row {
+    font-size: 13px;
+    color: #374151;
+  }
+  .item-qty {
+    font-weight: 600;
+    color: #6b7280;
+    margin-right: 6px;
+  }
+
+  .action-row {
+    margin-top: 8px; /* Added spacing */
+    margin-bottom: 12px;
+  }
+  .reorder-btn-full {
+    width: 100%;
+    background: #fff7ed;
+    color: #ea580c;
+    border: none;
+    padding: 12px;
+    border-radius: 12px;
+    font-weight: 700;
+    font-size: 13px;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: background 0.2s;
+  }
+  .reorder-btn-full:hover {
+    background: #ffedd5;
+  }
+  .btn-content {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    letter-spacing: 0.03em;
+  }
+
+  .card-footer-info {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: #9ca3af;
+    font-weight: 500;
+  }
+
   .empty-state {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    text-align: center;
     padding: 60px 20px;
-    background: #fff;
-    border-radius: 24px;
-    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.08);
-    margin-top: 40px;
-  }
-  .empty-icon {
-    width: 80px;
-    height: 80px;
-    background: #f3f4f6;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 20px;
-  }
-  .empty-state h2 {
-    font-size: 20px;
-    font-weight: 700;
-    color: #111827;
-    margin: 0 0 8px;
-  }
-  .empty-state p {
-    color: #6b7280;
-    font-size: 14px;
-    margin: 0 0 40px;
-    max-width: 260px;
+    text-align: center;
   }
   .start-order-btn {
-    padding: 14px 32px;
-    background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+    padding: 12px 24px;
+    background: #f97316;
     color: #fff;
+    border-radius: 100px;
+    font-weight: 600;
     border: none;
-    border-radius: 100px;
-    font-weight: 600;
-    font-size: 15px;
-    cursor: pointer;
-    box-shadow: 0 6px 16px rgba(249, 115, 22, 0.3);
-    transition: all 0.2s ease;
-  }
-  .start-order-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 20px rgba(249, 115, 22, 0.35);
-  }
-  .orders-list {
-    display: flex;
-    flex-direction: column;
-    gap: 40px;
-  }
-  .order-card {
-    background: #fff;
-    border-radius: 20px;
-    overflow: hidden;
-    box-shadow: 
-      0 2px 4px rgba(0,0,0,0.04),
-      0 4px 8px rgba(0,0,0,0.06);
-    border: 1px solid rgba(0,0,0,0.04);
-  }
-  .order-main {
-    padding: 24px;
-  }
-  .order-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 12px;
-  }
-  .restaurant-name {
-    font-size: 16px;
-    font-weight: 800;
-    color: #111827;
-    margin: 0;
-    letter-spacing: -0.01em;
-  }
-  .status-badge {
-    padding: 6px 14px;
-    border-radius: 100px;
-    font-size: 12px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-  }
-  .order-mid-section {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    background: #f9fafb;
-    padding: 12px 16px;
-    border-radius: 12px;
-    margin-bottom: 40px;
-  }
-  .order-id-pill {
-    background: #fff;
-    padding: 4px 10px;
-    border-radius: 6px;
-    font-size: 12px;
-    font-family: 'SF Mono', 'Monaco', monospace;
-    color: #6b7280;
-    font-weight: 600;
-    border: 1px solid #e5e7eb;
-  }
-  .order-amount {
-    font-size: 18px;
-    font-weight: 800;
-    color: #111827;
-  }
-  .order-footer {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-  .order-date {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    color: #9ca3af;
-    font-size: 13px;
-    font-weight: 500;
-  }
-  .reorder-btn {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 20px;
-    background: #ffffff;
-    color: #ea580c;
-    border: 1px solid #ea580c;
-    border-radius: 100px;
-    font-weight: 700;
-    font-size: 13px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-  }
-  .reorder-btn:hover {
-    background: #fff7ed;
-  }
-  .reorder-btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-
-  @media (min-width: 640px) {
-    .history-content {
-      padding: 32px 20px;
-    }
-    .order-card {
-      border-radius: 24px;
-    }
-    .order-main {
-      padding: 28px;
-    }
   }
 `;

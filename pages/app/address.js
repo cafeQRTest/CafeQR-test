@@ -82,19 +82,26 @@ export default function AddressPage() {
         // -----------------------------
 
         try {
+          // Reverted to Nominatim (Free)
           const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`, {
             headers: { 'User-Agent': 'CafeQrDeliveryApp/1.0' }
           });
           const data = await res.json();
+          let foundAddress = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
 
-          if (data && data.display_name) {
-            const { road, suburb, city, state, postcode } = data.address || {};
-            const parts = [road, suburb, city, state, postcode].filter(Boolean);
-            const rawAddr = parts.length > 0 ? parts.join(", ") : data.display_name;
-            setAddress(rawAddr);
-          } else {
-            setAddress(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+          if (data && data.address) {
+            const { road, suburb, neighbourhood, city, town, village, county } = data.address;
+
+            // Prioritize: Suburb/Road -> City/Town
+            const area = suburb || neighbourhood || road || village;
+            const locality = city || town || county;
+
+            const parts = [area, locality].filter(Boolean);
+
+            if (parts.length > 0) foundAddress = parts.join(", ");
+            else if (data.display_name) foundAddress = data.display_name;
           }
+          setAddress(foundAddress);
         } catch (err) {
           console.error("Geocoding failed", err);
           setAddress(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
@@ -336,33 +343,13 @@ export default function AddressPage() {
 
       {/* Scoped styles - ONLY affects this delivery address page */}
       {/* Fixed bottom CTA for mobile */}
-      <div className="delivery-address-fixed-cta">
-        {!fetchingLoc && address && (
-          <motion.button
-            onClick={handleContinue}
-            disabled={busy}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.97 }}
-            className={`delivery-address-fixed-btn ${busy ? 'is-busy' : ''}`}
-          >
-            {busy ? (
-              <>
-                <Loader2 className="w-6 h-6 animate-spin" />
-                <span>Loading...</span>
-              </>
-            ) : (
-              <>
-                <span>Continue to Order</span>
-                <ArrowRight className="w-6 h-6" />
-              </>
-            )}
-          </motion.button>
-        )}
-      </div>
+      {/* Fixed bottom CTA removed as per mobile layout cleanup */}
 
       {/* Scoped styles - ONLY affects this delivery address page */}
       <style jsx>{`
-        .delivery-address-page {
+        /* Removed fixed CTA styles */
+        
+       .delivery-address-page {
           min-height: 100vh;
           min-height: 100dvh;
           width: 100%;
@@ -371,7 +358,7 @@ export default function AddressPage() {
           flex-direction: column;
           align-items: center;
           justify-content: flex-start;
-          padding: 80px 20px 120px;
+          padding: 40px 20px 60px; /* Reduced top padding for mobile to prevent overlap */
           position: relative;
           overflow-x: hidden;
           font-family: system-ui, -apple-system, sans-serif;
@@ -393,7 +380,7 @@ export default function AddressPage() {
           pointer-events: none;
         }
         .delivery-address-card {
-          width: 100%;
+          width: 90%; /* Mobile First: 90% width */
           max-width: 400px;
           display: flex;
           flex-direction: column;
@@ -538,7 +525,7 @@ export default function AddressPage() {
         }
         .delivery-address-continue {
           width: 100%;
-          display: none;
+          display: block; /* Always show inline button */
         }
         .delivery-address-continue-btn {
           width: 100%;
@@ -575,48 +562,9 @@ export default function AddressPage() {
           margin-top: 20px;
         }
 
-        /* Fixed bottom CTA for mobile */
-        .delivery-address-fixed-cta {
-          position: fixed;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          display: flex;
-          justify-content: center;
-          padding: 16px;
-          padding-bottom: calc(16px + env(safe-area-inset-bottom));
-          background: linear-gradient(180deg, rgba(249,250,251,0) 0%, #f9fafb 30%);
-          z-index: 50;
-        }
-        .delivery-address-fixed-btn {
-          width: 100%;
-          max-width: 340px;
-          padding: 16px 24px;
-          border-radius: 14px;
-          font-weight: 600;
-          font-size: 16px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 10px;
-          background: #f97316;
-          color: #fff;
-          border: none;
-          cursor: pointer;
-          box-shadow: 0 4px 14px rgba(249,115,22,0.3);
-          transition: all 0.2s ease;
-        }
-        .delivery-address-fixed-btn:hover {
-          background: #ea580c;
-          box-shadow: 0 6px 20px rgba(249,115,22,0.35);
-        }
-        .delivery-address-fixed-btn.is-busy {
-          background: #fdba74;
-          cursor: not-allowed;
-          box-shadow: none;
-        }
+        /* Fixed CTA styles removed */
 
-        /* Desktop: show inline button, hide fixed */
+        /* Desktop layout adjustments */
         @media (min-width: 640px) {
           .delivery-address-page {
             padding-bottom: 40px;
@@ -624,12 +572,6 @@ export default function AddressPage() {
           .delivery-address-card {
             max-width: 400px;
             padding: 44px 32px 36px;
-          }
-          .delivery-address-continue {
-            display: block;
-          }
-          .delivery-address-fixed-cta {
-            display: none;
           }
         }
       `}</style>
