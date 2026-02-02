@@ -76,6 +76,10 @@ export default function DeliveryPayment() {
         } catch {
           // ignore
         }
+
+        // Prefill detected address
+        const detected = localStorage.getItem("detected_delivery_address");
+        if (detected) setCustAddress(detected);
       }
 
       setLoading(false);
@@ -253,6 +257,7 @@ export default function DeliveryPayment() {
 
       if (typeof window !== "undefined") {
         localStorage.removeItem(cartKey(restaurantId));
+        localStorage.removeItem("detected_delivery_address");
       }
 
       const amt = encodeURIComponent(String(totals.totalInc));
@@ -378,6 +383,7 @@ export default function DeliveryPayment() {
           } catch {
             // ignore
           }
+          localStorage.removeItem("detected_delivery_address");
           window.location.href = "/app/payment-success";
         },
         modal: {

@@ -188,6 +188,7 @@ export default function AddressPage() {
       }
 
       localStorage.setItem('cafeqr_address', address);
+      localStorage.setItem('detected_delivery_address', address);
 
       // 4. Force Navigation
       router.push({
