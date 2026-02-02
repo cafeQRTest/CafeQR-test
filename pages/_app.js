@@ -14,11 +14,7 @@ import { Capacitor } from '@capacitor/core'
 import { getFCMToken } from '../lib/firebase/messaging'
 import { CustomerAuthProvider, useCustomerAuth } from "../context/CustomerAuthContext";
 import {
-  getSupabase,
-  forceSupabaseSessionRestore,
-  bootstrapSupabaseSession,
-  saveSessionSnapshot,
-  clearSessionSnapshot
+  getSupabase
 } from '../services/supabase'
 import { ensureSessionValid } from '../lib/authActions'
 import { usePrintService } from '../lib/usePrintService'
@@ -235,16 +231,11 @@ function MyApp({ Component, pageProps }) {
   const [ready, setReady] = useState(false)
   const [mounted, setMounted] = useState(false)
 
-  // Persist/restore Supabase auth
+  // Persist/restore Supabase auth (Simplified)
+  // No need for snapshots anymore, client adapter handles it.
   useEffect(() => {
-    const supabase = getSupabase()
-    const {
-      data: { subscription }
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT') clearSessionSnapshot()
-      else if (session) saveSessionSnapshot(session)
-    })
-    return () => subscription?.unsubscribe()
+    // Just ensure the listener is active if needed, but Context handles most of it.
+    // We can keep this empty or minimal if no global sync is needed.
   }, [])
 
   // App foreground/background lifecycle + token refresh
@@ -258,8 +249,7 @@ function MyApp({ Component, pageProps }) {
         } catch { }
         const supabase = getSupabase()
         const onForeground = async () => {
-          await bootstrapSupabaseSession()
-          await forceSupabaseSessionRestore()
+          // Native persistence is handled by adapter. Just ensure valid session.
           await supabase.auth.startAutoRefresh()
           await ensureSessionValid()
         }
@@ -304,7 +294,8 @@ function MyApp({ Component, pageProps }) {
     setMounted(true)
   }, [])
   useEffect(() => {
-    if (mounted) forceSupabaseSessionRestore().then(() => setReady(true))
+    // Simply set ready, session is auto-restored
+    if (mounted) setReady(true);
   }, [mounted])
 
   // FCM/web init
