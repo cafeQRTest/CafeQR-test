@@ -69,25 +69,52 @@ export default function DeliveryPayment() {
           setCart([]);
         }
 
-        // Optional: prefill from last delivery attempt
-        try {
-          const last = JSON.parse(localStorage.getItem("last_delivery_details") || "{}");
-          if (last?.name) setCustName(String(last.name));
-          if (last?.phone) setCustPhone(String(last.phone));
-          if (last?.address) setCustAddress(String(last.address));
-        } catch {
-          // ignore
-        }
-
         // Prefill detected address
         const detected = localStorage.getItem("detected_delivery_address");
         if (detected) setCustAddress(detected);
+
+        // Fetch Profile Data (SSOT)
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: profile } = await supabase
+            .from('customers')
+            .select('name, phone')
+            .eq('user_id', user.id)
+            .maybeSingle();
+
+          if (profile) {
+            if (profile.name) setCustName(profile.name);
+            if (profile.phone) setCustPhone(profile.phone);
+          }
+        }
       }
 
       setLoading(false);
     };
 
     load();
+
+    // Listen for auth changes to re-fetch if needed
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        if (session?.user) {
+          const { data: profile } = await supabase
+            .from('customers')
+            .select('name, phone')
+            .eq('user_id', session.user.id)
+            .maybeSingle();
+
+          if (profile) {
+            if (profile.name) setCustName(profile.name);
+            if (profile.phone) setCustPhone(profile.phone);
+          }
+        }
+      }
+    });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
   }, [restaurantId, supabase]);
 
   const brandColor = restaurant?.restaurant_profiles?.brand_color || "#f59e0b";
@@ -169,7 +196,8 @@ export default function DeliveryPayment() {
     }
   };
 
-  const saveLastDeliveryDetails = () => {
+  const saveLastDeliveryDetails = async (user) => {
+    // 1. Local Storage (Backup)
     try {
       localStorage.setItem(
         "last_delivery_details",
@@ -179,8 +207,32 @@ export default function DeliveryPayment() {
           address: custAddress.trim(),
         })
       );
-    } catch {
-      // ignore
+    } catch { }
+
+    // 2. DB Sync (SSOT)
+    if (user) {
+      try {
+        const { data: existing } = await supabase
+          .from('customers')
+          .select('id')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (existing) {
+          await supabase.from('customers').update({
+            name: custName.trim(),
+            phone: custPhone.trim()
+          }).eq('id', existing.id);
+        } else {
+          await supabase.from('customers').insert({
+            user_id: user.id,
+            name: custName.trim(),
+            phone: custPhone.trim()
+          });
+        }
+      } catch (err) {
+        console.error("Profile sync failed:", err);
+      }
     }
   };
 
@@ -237,7 +289,7 @@ export default function DeliveryPayment() {
 
     setPlacing(true);
     try {
-      saveLastDeliveryDetails();
+      await saveLastDeliveryDetails(currentUser);
 
       const orderData = {
         ...buildOrderPayload(),
@@ -319,7 +371,7 @@ export default function DeliveryPayment() {
 
     setPlacing(true);
     try {
-      saveLastDeliveryDetails();
+      await saveLastDeliveryDetails(currentUser);
       await ensureRazorpayScript();
 
       // 1) Create Razorpay order on server
