@@ -784,6 +784,10 @@ const SectionLabel = ({ children }) => (
 
 
 
+import { useSubscription } from '../../context/SubscriptionContext';
+
+// ... (keep surrounding code) ...
+
 // -------------------------------
 // Counter Sale Page
 // -------------------------------
@@ -791,7 +795,16 @@ export default function CounterSale() {
   const supabase = getSupabase();
   const { checking } = useRequireAuth(supabase);
   const { restaurant, loading: loadingRestaurant } = useRestaurant();
+  const { subscription, loading: subLoading } = useSubscription();
   const router = useRouter();
+
+  // Subscription check
+  useEffect(() => {
+    if (!checking && !subLoading && subscription && !subscription.is_active) {
+       router.replace('/owner/subscription');
+    }
+  }, [subscription, subLoading, checking, router]);
+
   const restaurantId = restaurant?.id;
   const [popularIds, setPopularIds] = useState(new Set());
   const [popCounts, setPopCounts] = useState(new Map());   // id -> total qty

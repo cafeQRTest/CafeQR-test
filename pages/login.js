@@ -33,7 +33,7 @@ export default function LoginPage() {
         } catch {}
       }
 
-      router.push('/owner')
+      router.push('/owner/counter')
     } catch (e) {
       setLoading(false)
       setMessage(e.message)
