@@ -453,8 +453,7 @@ function Header({ showSidebar, onHamburger, isCustomer }) {
         )}
 
         <div
-          style={{ display: 'flex', alignItems: 'center', gap: 14, cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap', flexShrink: 0 }}
-          onClick={() => router.push(router.pathname.startsWith('/app') ? '/app' : '/owner')}
+          style={{ display: 'flex', alignItems: 'center', gap: 14, cursor: 'default', userSelect: 'none', whiteSpace: 'nowrap', flexShrink: 0 }}
         >
           <img
             src="/cafeqr-logo.svg"
@@ -582,7 +581,10 @@ function Sidebar({ collapsed, onSignOut, isSigningOut }) {
       ? [{ href: '/owner/inventory', label: 'Inventory', icon: <FaBoxes /> }]
       : []),
     ...(feature.table_ordering_enabled
-      ? [{ href: '/owner/availability', label: 'Availability', icon: <FaClock /> }]
+      ? [
+          { href: '/owner/tables', label: 'Tables', icon: <FaUtensils /> },
+          { href: '/owner/availability', label: 'Availability', icon: <FaClock /> }
+        ]
       : []),
     ...(feature.production_enabled
       ? [{ href: '/owner/production', label: 'Production', icon: <FaIndustry /> }]
@@ -914,7 +916,10 @@ function MobileSidebar({ onNavigate, onSignOut, isSigningOut }) {
       ? [{ href: '/owner/inventory', label: 'Inventory', icon: <FaBoxes /> }]
       : []),
     ...(feature.table_ordering_enabled
-      ? [{ href: '/owner/availability', label: 'Availability', icon: <FaClock /> }]
+      ? [
+          { href: '/owner/tables', label: 'Tables', icon: <FaUtensils /> },
+          { href: '/owner/availability', label: 'Availability', icon: <FaClock /> }
+        ]
       : []),
     ...(feature.production_enabled
       ? [{ href: '/owner/production', label: 'Production', icon: <FaIndustry /> }]
