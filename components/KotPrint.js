@@ -18,6 +18,34 @@ function readJson(key, fallback) {
   }
 }
 
+function getNetworkConfig(kind /* 'bill' | 'kot' */) {
+  const relayUrl = (localStorage.getItem('PRINT_RELAY_URL') || '').trim();
+  const list = readJson('PRINT_NET_PRINTERS_V1', []);
+  const targetsKey = kind === 'kot' ? 'PRINT_NET_TARGET_IDS_KOT' : 'PRINT_NET_TARGET_IDS_BILL';
+  const ids = uniq(readJson(targetsKey, []));
+
+  const map = new Map((Array.isArray(list) ? list : []).map(p => [p?.id, p]));
+  const targets = ids
+    .map(id => map.get(id))
+    .filter(p => p && p.ip)
+    .map(p => ({ ip: String(p.ip).trim(), port: Number(p.port || 9100) || 9100 }));
+
+  return { relayUrl, targets };
+}
+
+function getRouteNetworkTargets(route) {
+  const relayUrl = (localStorage.getItem('PRINT_RELAY_URL') || '').trim();
+  const list = readJson('PRINT_NET_PRINTERS_V1', []);
+  const map = new Map((Array.isArray(list) ? list : []).map(p => [p?.id, p]));
+  const ids = uniq(route?.netPrinterIds || []);
+  const targets = ids
+    .map(id => map.get(id))
+    .filter(p => p && p.ip)
+    .map(p => ({ ip: String(p.ip).trim(), port: Number(p.port || 9100) || 9100 }));
+  return { relayUrl, targets };
+}
+
+
 function kotRoutesEnabled() {
   return localStorage.getItem('PRINT_KOT_CATEGORY_ROUTING') === '1';
 }
@@ -307,6 +335,24 @@ const doPrint = useCallback(async () => {
         continue;
       }
 
+const routeNet = getRouteNetworkTargets(r);
+
+// 1) Send to route network printers (if configured)
+if (routeNet.relayUrl && routeNet.targets.length) {
+  for (const t of routeNet.targets) {
+    await printUniversal({
+      text,
+      relayUrl: routeNet.relayUrl,
+      ip: t.ip,
+      port: t.port,
+      codepage: 0,
+      allowPrompt: false,
+      allowSystemDialog: false,
+      scale,
+      jobKind: 'kot',
+    });
+  }
+}
       await printUniversal({
         text,
         relayUrl: localStorage.getItem('PRINT_RELAY_URL') || undefined,
@@ -339,18 +385,25 @@ const doPrint = useCallback(async () => {
 }, [fullOrder, bill, restaurantProfile, onPrint, onClose, kind]);
 
   // Auto‑run once data is ready
-  useEffect(() => {
-    if (!autoPrint || !order?.id || loadingData) return;
+useEffect(() => {
+  if (!autoPrint || !order?.id || loadingData) return;
 
-    const id = order.id;
-    if (hasPrintedRecently(id, kind)) return;
+  const id = order.id;
+  if (hasPrintedRecently(id, kind)) return;
+  if (ranRef.current) return;
+  ranRef.current = true;
 
-    markPrinted(id, kind);
-    if (ranRef.current) return;
-    ranRef.current = true;
+  (async () => {
+    try {
+      await doPrint();
+      markPrinted(id, kind); // moved AFTER success
+    } catch {
+      // allow retry on next realtime event or manual print
+      ranRef.current = false;
+    }
+  })();
+}, [autoPrint, loadingData, order?.id, kind, doPrint]);
 
-    doPrint();
-  }, [autoPrint, loadingData, order?.id, kind, doPrint]);
 
 
   // Android PWA explicit modal
