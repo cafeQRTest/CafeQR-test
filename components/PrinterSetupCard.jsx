@@ -78,6 +78,8 @@ const [safeCols, setSafeCols]   = useState(() => localStorage.getItem('PRINT_SAF
       enabled: r?.enabled !== false,
       printerNames: uniq(r?.printerNames || []),
       categories: uniq(r?.categories || []),
+      netPrinterIds: uniq(r?.netPrinterIds || []), // NEW
+
     }));
   });
 
@@ -213,6 +215,53 @@ const [safeCols, setSafeCols]   = useState(() => localStorage.getItem('PRINT_SAF
     setMsg('Saved Bluetooth printers cleared. Next Android bill/KOT print will ask you to select again.');
   };
 
+// ---------- Network (Ethernet/Wi‑Fi) printers ----------
+const [relayUrl, setRelayUrl] = useState(() => localStorage.getItem('PRINT_RELAY_URL') || '');
+
+const [netPrinters, setNetPrinters] = useState(() =>
+  readJson('PRINT_NET_PRINTERS_V1', [])
+);
+
+const [billNetIds, setBillNetIds] = useState(() =>
+  uniq(readJson('PRINT_NET_TARGET_IDS_BILL', []))
+);
+
+const [kotNetIds, setKotNetIds] = useState(() =>
+  uniq(readJson('PRINT_NET_TARGET_IDS_KOT', []))
+);
+
+function addNetPrinter() {
+  setNetPrinters(prev => [
+    ...(Array.isArray(prev) ? prev : []),
+    { id: uid(), label: 'Network printer', ip: '', port: 9100 },
+  ]);
+}
+
+
+function updateNetPrinter(id, patch) {
+  setNetPrinters(prev =>
+    (Array.isArray(prev) ? prev : []).map(p => (p?.id === id ? { ...p, ...patch } : p))
+  );
+}
+
+function deleteNetPrinter(id) {
+  setNetPrinters(prev => (Array.isArray(prev) ? prev : []).filter(p => p?.id !== id));
+}
+
+function saveNetworkPrinters() {
+  localStorage.setItem('PRINT_RELAY_URL', relayUrl.trim());
+  writeJson('PRINT_NET_PRINTERS_V1', Array.isArray(netPrinters) ? netPrinters : []);
+  writeJson('PRINT_NET_TARGET_IDS_BILL', uniq(billNetIds));
+  writeJson('PRINT_NET_TARGET_IDS_KOT', uniq(kotNetIds));
+
+  // routes now may include netPrinterIds; persist it alongside your existing routing save logic
+  writeJson('PRINT_KOT_ROUTES_V1', routes);
+
+  localStorage.setItem('PRINTER_READY', '1');
+  setMsg('✓ Network printers saved');
+}
+
+
   // ---------- SAVE ----------
   const saveWired = () => {
     const bill = uniq(billPrinters);
@@ -283,7 +332,7 @@ const [safeCols, setSafeCols]   = useState(() => localStorage.getItem('PRINT_SAF
   const addRoute = () => {
     setRoutes(prev => [
       ...prev,
-      { id: uid(), label: 'New Route', enabled: true, printerNames: [], categories: [] },
+    { id: uid(), label: 'New Route', enabled: true, printerNames: [], categories: [], netPrinterIds: [] },
     ]);
   };
 
@@ -452,6 +501,143 @@ const [safeCols, setSafeCols]   = useState(() => localStorage.getItem('PRINT_SAF
           </div>
         </div>
 
+{/* Network (Ethernet/Wi‑Fi) */}
+<div style={{ borderRadius: 6, border: '1px solid #e5e7eb', padding: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
+  <div style={{ fontWeight: 600, fontSize: 13 }}>Network printers (Ethernet / Wi‑Fi via Relay)</div>
+
+  <div style={{ fontSize: 12, color: '#6b7280' }}>
+    Enter printer IP/port (usually 9100). The app sends ESC/POS bytes to your relay, and the relay opens the TCP connection to the printer.
+  </div>
+
+  <label style={{ fontSize: 13, fontWeight: 600 }}>Relay URL</label>
+  <input
+    value={relayUrl}
+    onChange={e => setRelayUrl(e.target.value)}
+    placeholder="e.g. http://192.168.1.10:3333/relayPrint"
+    style={{ width: '100%', padding: 6, fontSize: 13 }}
+  />
+
+  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+    <button onClick={addNetPrinter} style={{ padding: '6px 10px', fontSize: 13 }}>Add network printer</button>
+    <button onClick={saveNetworkPrinters} style={{ padding: '6px 10px', fontSize: 13 }}>Save network</button>
+  </div>
+
+  {(Array.isArray(netPrinters) ? netPrinters : []).map(p => (
+    <div key={p.id} style={{ border: '1px solid #e5e7eb', borderRadius: 6, padding: 10, display: 'grid', gridTemplateColumns: '1fr 1fr 90px auto', gap: 8 }}>
+      <input
+        value={p.label || ''}
+        onChange={e => updateNetPrinter(p.id, { label: e.target.value })}
+        placeholder="Label"
+        style={{ padding: 6, fontSize: 13 }}
+      />
+      <input
+        value={p.ip || ''}
+        onChange={e => updateNetPrinter(p.id, { ip: e.target.value.trim() })}
+        placeholder="Printer IP (e.g. 192.168.1.50)"
+        style={{ padding: 6, fontSize: 13 }}
+      />
+      <input
+        value={String(p.port ?? 9100)}
+        onChange={e => updateNetPrinter(p.id, { port: Number(e.target.value.replace(/[^\d]/g, '')) || 9100 })}
+        placeholder="9100"
+        style={{ padding: 6, fontSize: 13 }}
+        inputMode="numeric"
+      />
+      <button onClick={() => deleteNetPrinter(p.id)} style={{ padding: '6px 10px', fontSize: 13 }}>Delete</button>
+    </div>
+  ))}
+
+  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <label style={{ fontSize: 13, fontWeight: 600 }}>Bill network targets (multi)</label>
+      <select
+        multiple
+        value={billNetIds}
+        onChange={e => setBillNetIds(uniq(Array.from(e.target.selectedOptions).map(o => o.value)))}
+        size={Math.min(6, Math.max(3, (netPrinters || []).length || 3))}
+        style={{ width: '100%', minHeight: 90, padding: 6, fontSize: 13 }}
+      >
+        {(netPrinters || []).map(p => (
+          <option key={p.id} value={p.id}>{p.label || p.ip}</option>
+        ))}
+      </select>
+    </div>
+
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <label style={{ fontSize: 13, fontWeight: 600 }}>KOT network targets (multi)</label>
+      <select
+        multiple
+        value={kotNetIds}
+        onChange={e => setKotNetIds(uniq(Array.from(e.target.selectedOptions).map(o => o.value)))}
+        size={Math.min(6, Math.max(3, (netPrinters || []).length || 3))}
+        style={{ width: '100%', minHeight: 90, padding: 6, fontSize: 13 }}
+      >
+        {(netPrinters || []).map(p => (
+          <option key={p.id} value={p.id}>{p.label || p.ip}</option>
+        ))}
+      </select>
+    </div>
+  </div>
+
+  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+    <button
+      onClick={async () => {
+        try {
+          const ids = uniq(billNetIds);
+          const map = new Map((netPrinters || []).map(p => [p.id, p]));
+          for (const id of ids) {
+            const t = map.get(id);
+            if (!t?.ip) continue;
+            await printUniversal({
+              text: '*** TEST BILL (NET) ***\\nNetwork printer test\\n\\n',
+              relayUrl: relayUrl.trim(),
+              ip: t.ip,
+              port: Number(t.port || 9100),
+              allowPrompt: false,
+              allowSystemDialog: false,
+              jobKind: 'bill',
+            });
+          }
+          setMsg('✓ Network bill test sent');
+        } catch (e) {
+          setMsg(`✗ Network bill test failed: ${e?.message || String(e)}`);
+        }
+      }}
+      style={{ padding: '6px 10px', fontSize: 13 }}
+    >
+      Test bill (network)
+    </button>
+
+    <button
+      onClick={async () => {
+        try {
+          const ids = uniq(kotNetIds);
+          const map = new Map((netPrinters || []).map(p => [p.id, p]));
+          for (const id of ids) {
+            const t = map.get(id);
+            if (!t?.ip) continue;
+            await printUniversal({
+              text: '*** TEST KOT (NET) ***\\nKitchen Ticket\\n\\n',
+              relayUrl: relayUrl.trim(),
+              ip: t.ip,
+              port: Number(t.port || 9100),
+              allowPrompt: false,
+              allowSystemDialog: false,
+              jobKind: 'kot',
+            });
+          }
+          setMsg('✓ Network KOT test sent');
+        } catch (e) {
+          setMsg(`✗ Network KOT test failed: ${e?.message || String(e)}`);
+        }
+      }}
+      style={{ padding: '6px 10px', fontSize: 13 }}
+    >
+      Test KOT (network)
+    </button>
+  </div>
+</div>
+
         {/* Bluetooth serial */}
         <div style={{ borderRadius: 6, border: '1px solid #e5e7eb', padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ fontWeight: 600, fontSize: 13 }}>Wireless (Bluetooth serial)</div>
@@ -531,6 +717,25 @@ const [safeCols, setSafeCols]   = useState(() => localStorage.getItem('PRINT_SAF
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <div style={{ fontSize: 13, fontWeight: 600 }}>Route printers</div>
+<div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+  <div style={{ fontSize: 13, fontWeight: 600 }}>Route network printers</div>
+  <select
+    multiple
+    disabled={!canEditRouting}
+    value={r.netPrinterIds || []}
+    onChange={(e) => {
+      const next = uniq(Array.from(e.target.selectedOptions).map(o => o.value));
+      updateRoute(r.id, { netPrinterIds: next });
+    }}
+    size={Math.min(6, Math.max(3, (netPrinters || []).length || 3))}
+    style={{ width: '100%', minHeight: 90, padding: 6, fontSize: 13 }}
+  >
+    {(netPrinters || []).map(p => (
+      <option key={p.id} value={p.id}>{p.label || p.ip}</option>
+    ))}
+  </select>
+</div>
+
                 <select
                   multiple
                   disabled={!canEditRouting}

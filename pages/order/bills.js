@@ -1,13 +1,9 @@
-// pages/order/bills.js
-const isNative = process.env.NATIVE_BUILD === '1';
+import WebBills, { getServerSideProps as webSSP } from '../../page-variants/order/bills.web'
+import NativeBills from '../../page-variants/order/bills.native'
 
-if (isNative) {
-  module.exports = require('../../page-variants/order/bills.native');
-} else {
-  const mod = require('../../page-variants/order/bills.web');
-  module.exports = {
-    ...mod,
-    default: mod.default,
-    getServerSideProps: mod.getServerSideProps,
-  };
-}
+const isNative = process.env.NATIVE_BUILD === '1'
+
+export const getServerSideProps = isNative ? async () => ({ props: {} }) : webSSP
+
+export default isNative ? NativeBills : WebBills
+

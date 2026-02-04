@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Cafe QR Delivery Test</string>
+    <string name="title_activity_main">Cafe QR Delivery Test</string>
+    <string name="package_name">com.cafeqr.delivery.test</string>
+    <string name="custom_url_scheme">com.cafeqr.delivery.test</string>
+</resources>

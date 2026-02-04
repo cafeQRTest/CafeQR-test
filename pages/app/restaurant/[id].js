@@ -4,6 +4,8 @@ import { useRouter } from "next/router";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { getSupabase } from "../../../services/supabase";
+import { motion, AnimatePresence } from "framer-motion";
+import CafeQRLoader from "../../../components/CafeQRLoader";
 
 const cartKey = (restaurantId) => `cart_delivery_${restaurantId}`;
 
@@ -22,7 +24,15 @@ export default function DeliveryRestaurantMenu() {
   const [q, setQ] = useState("");
 
   const [cart, setCart] = useState([]);
-  const [cartOpen, setCartOpen] = useState(true);
+  const [cartOpen, setCartOpen] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(false);
+
+  useEffect(() => {
+    const check = () => setIsDesktop(window.innerWidth > 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
 
   useEffect(() => {
     if (!restaurantId) return;
@@ -108,7 +118,7 @@ export default function DeliveryRestaurantMenu() {
         selectedVariant: null,
       },
     ]);
-    setCartOpen(true);
+    // Do NOT auto-open cart: setCartOpen(true);
   };
 
   const updateQty = (target, qty) => {
@@ -181,7 +191,7 @@ export default function DeliveryRestaurantMenu() {
     return { subtotalEx, taxAmount, totalInc };
   }, [cart, restaurant]);
 
-  if (loading) return <div style={{ padding: 40, textAlign: "center" }}>Loading…</div>;
+  if (loading) return <CafeQRLoader message="Loading restaurant..." />;
   if (!restaurantId) return <div style={{ padding: 40, textAlign: "center" }}>Missing restaurant.</div>;
 
   return (
@@ -264,59 +274,122 @@ export default function DeliveryRestaurantMenu() {
 
       <div className="menu-content">
         {itemsLoading ? (
-          <div style={{ padding: 20, textAlign: "center" }}>Loading menu…</div>
+          <CafeQRLoader message="Loading menu..." fullScreen={false} />
         ) : filteredItems.length === 0 ? (
           <div style={{ padding: 20, textAlign: "center", color: "#6b7280" }}>No items found.</div>
         ) : (
           <div className="menu-grid">
-            {filteredItems.map((it) => (
-              <div
-                key={it.id}
-                className="menu-item"
-              >
-                {it.image_url ? (
-                  <img
-                    src={it.image_url}
-                    alt={it.name}
-                    style={{ width: 56, height: 56, borderRadius: 12, objectFit: "cover" }}
-                  />
-                ) : (
-                  <div
-                    style={{
-                      width: 56,
-                      height: 56,
-                      borderRadius: 12,
-                      background: "#f3f4f6",
-                    }}
-                  />
-                )}
+            {filteredItems.map((it) => {
+              const inCart = cart.find(
+                (c) => c.id === it.id && !c.selectedVariant
+              );
+              const quantity = inCart?.quantity || 0;
 
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 900, color: "#111827" }}>
-                    {it.name} <span style={{ fontSize: 12 }}>{it.veg ? "🟢" : "🔺"}</span>
+              return (
+                <div key={it.id} className="menu-item">
+                  {it.image_url ? (
+                    <img
+                      src={it.image_url}
+                      alt={it.name}
+                      style={{
+                        width: 56,
+                        height: 56,
+                        borderRadius: 12,
+                        objectFit: "cover",
+                      }}
+                    />
+                  ) : (
+                    <div
+                      style={{
+                        width: 56,
+                        height: 56,
+                        borderRadius: 12,
+                        background: "#f3f4f6",
+                      }}
+                    />
+                  )}
+
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 900, color: "#111827" }}>
+                      {it.name}{" "}
+                      <span style={{ fontSize: 12 }}>{it.veg ? "🟢" : "🔺"}</span>
+                    </div>
+                    <div style={{ marginTop: 6, color: "#6b7280", fontSize: 13 }}>
+                      ₹{Number(it.price || 0).toFixed(2)}
+                    </div>
                   </div>
-                  <div style={{ marginTop: 6, color: "#6b7280", fontSize: 13 }}>
-                    ₹{Number(it.price || 0).toFixed(2)}
-                  </div>
+
+                  {quantity > 0 ? (
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        border: `1px solid ${brandColor}`,
+                        borderRadius: 12,
+                        overflow: "hidden",
+                        background: "#fff",
+                      }}
+                    >
+                      <button
+                        onClick={() => updateQty(inCart, quantity - 1)}
+                        style={{
+                          padding: "8px 12px",
+                          border: "none",
+                          background: "#fff",
+                          color: brandColor,
+                          fontWeight: 900,
+                          fontSize: 16,
+                          cursor: "pointer",
+                        }}
+                      >
+                        -
+                      </button>
+                      <span
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 700,
+                          minWidth: 24,
+                          textAlign: "center",
+                          color: "#111827",
+                        }}
+                      >
+                        {quantity}
+                      </span>
+                      <button
+                        onClick={() => updateQty(inCart, quantity + 1)}
+                        style={{
+                          padding: "8px 12px",
+                          border: "none",
+                          background: "#fff",
+                          color: brandColor,
+                          fontWeight: 900,
+                          fontSize: 16,
+                          cursor: "pointer",
+                        }}
+                      >
+                        +
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => addItem(it)}
+                      style={{
+                        background: "#fff",
+                        border: `2px solid ${brandColor}`,
+                        color: brandColor,
+                        borderRadius: 12,
+                        padding: "10px 12px",
+                        fontWeight: 900,
+                        cursor: "pointer",
+                        minWidth: 76,
+                      }}
+                    >
+                      Add
+                    </button>
+                  )}
                 </div>
-
-                <button
-                  onClick={() => addItem(it)}
-                  style={{
-                    background: "#fff",
-                    border: `2px solid ${brandColor}`,
-                    color: brandColor,
-                    borderRadius: 12,
-                    padding: "10px 12px",
-                    fontWeight: 900,
-                    cursor: "pointer",
-                    minWidth: 76,
-                  }}
-                >
-                  Add
-                </button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -377,127 +450,328 @@ export default function DeliveryRestaurantMenu() {
           box-shadow: 0 4px 12px rgba(0,0,0,0.06);
           transform: translateY(-2px);
         }
+        @keyframes slideUp {
+          from { transform: translateY(100%); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+        @keyframes pulse {
+          0% { transform: scale(1); }
+          50% { transform: scale(1.1); }
+          100% { transform: scale(1); }
+        }
+        .view-cart-bar {
+          transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .view-cart-bar:active {
+          transform: scale(0.98);
+        }
       `}</style>
 
-      {cart.length ? (
-        <div
-          style={{
-            position: "fixed",
-            left: 12,
-            right: 12,
-            bottom: 76,
-            background: "#fff",
-            border: "1px solid #e5e7eb",
-            borderRadius: 16,
-            padding: 12,
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <button
-              onClick={() => setCartOpen((v) => !v)}
-              style={{
-                border: "1px solid #e5e7eb",
-                background: "#fff",
-                borderRadius: 12,
-                padding: "8px 10px",
-                cursor: "pointer",
-                fontWeight: 900,
-              }}
+      <AnimatePresence>
+        {cart.length > 0 && !cartOpen && (
+          <motion.div
+            key="cart-floating-bar"
+            layout
+            initial={{ y: 100, opacity: 0, scale: 0.9 }}
+            animate={{ y: 0, opacity: 1, scale: 1 }}
+            exit={{ y: 100, opacity: 0, scale: 0.9 }}
+            onClick={() => setCartOpen(true)}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.96 }}
+            style={{
+              position: "fixed",
+              left: 0,
+              right: 0,
+              margin: "0 auto",
+              bottom: 40,
+              width: "max-content",
+              minWidth: "300px",
+              background: brandColor,
+              borderRadius: 9999,
+              padding: "16px 24px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
+              zIndex: 50,
+              cursor: "pointer",
+              color: "#fff",
+              backdropFilter: "blur(6px)",
+            }}
+          >
+            {/* Left: Count */}
+            <motion.div
+              key={`count-${cart.reduce((n, it) => n + Number(it.quantity || 0), 0)}`}
+              animate={{ scale: [1, 1.2, 1] }}
+              transition={{ duration: 0.3 }}
+              style={{ fontWeight: 900, fontSize: 15 }}
             >
-              {cartOpen ? "Hide" : "Show"}
-            </button>
+              {cart.reduce((n, it) => n + Number(it.quantity || 0), 0)} Items
+            </motion.div>
 
-            <div style={{ flex: 1, fontWeight: 900 }}>
-              {cart.reduce((n, it) => n + Number(it.quantity || 0), 0)} items • ₹{totals.totalInc.toFixed(2)}
+            {/* Divider */}
+            <div style={{ width: 1, height: 18, background: "rgba(255,255,255,0.3)" }} />
+
+            {/* Center: Label */}
+            <div style={{ fontWeight: 800, fontSize: 16, letterSpacing: "0.5px" }}>
+              View Cart
             </div>
 
-            <Link
-              href={`/app/payment?r=${restaurantId}`}
+            {/* Divider */}
+            <div style={{ width: 1, height: 18, background: "rgba(255,255,255,0.3)" }} />
+
+            {/* Right: Price */}
+            <motion.div
+              key={`price-${totals.totalInc}`}
+              animate={{ scale: [1, 1.1, 1] }}
+              transition={{ duration: 0.3 }}
+              style={{ fontWeight: 900, fontSize: 15 }}
+            >
+              ₹{totals.totalInc.toFixed(2)}
+            </motion.div>
+          </motion.div>
+        )}
+
+        {cart.length > 0 && cartOpen && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              key="drawer-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setCartOpen(false)}
               style={{
-                background: brandColor,
-                color: "#fff",
-                textDecoration: "none",
-                borderRadius: 14,
-                padding: "10px 14px",
-                fontWeight: 900,
+                position: "fixed",
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background: "rgba(0,0,0,0.5)",
+                zIndex: 90,
+                backdropFilter: "blur(8px)",
+              }}
+            />
+
+            {/* Responsive Drawer */}
+            <motion.div
+              key="cart-drawer"
+              initial={isDesktop ? { x: "100%" } : { y: "100%" }}
+              animate={isDesktop ? { x: 0 } : { y: 0 }}
+              exit={isDesktop ? { x: "100%" } : { y: "100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              drag={isDesktop ? false : "y"}
+              dragConstraints={{ top: 0 }}
+              dragElastic={0.05}
+              onDragEnd={(e, { offset, velocity }) => {
+                if (offset.y > 100 || velocity.y > 100) setCartOpen(false);
+              }}
+              style={{
+                position: "fixed",
+                background: "#fff",
+                zIndex: 100,
+                overflow: "hidden",
+                display: "flex",
+                flexDirection: "column",
+                boxShadow: "0 -20px 60px rgba(0,0,0,0.4)",
+                ...(isDesktop
+                  ? {
+                    top: 0,
+                    right: 0,
+                    bottom: 0,
+                    width: "30%",
+                    minWidth: 450,
+                    borderTopLeftRadius: 32,
+                    borderBottomLeftRadius: 32,
+                  }
+                  : {
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    height: "80vh",
+                    borderTopLeftRadius: 32,
+                    borderTopRightRadius: 32,
+                  }
+                ),
               }}
             >
-              Checkout
-            </Link>
-          </div>
-
-          {cartOpen ? (
-            <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
-              {cart.map((it) => (
+              {/* Mobile Drag Handle */}
+              {!isDesktop && (
                 <div
-                  key={`${it.id}-${it.selectedVariant?.variant_id || "base"}`}
                   style={{
-                    border: "1px solid #e5e7eb",
-                    borderRadius: 14,
-                    padding: 10,
+                    width: "100%",
+                    display: "flex",
+                    justifyContent: "center",
+                    paddingTop: 16,
+                    paddingBottom: 8,
+                    cursor: "grab",
+                    background: "transparent"
+                  }}
+                  onClick={() => setCartOpen(false)}
+                >
+                  <div style={{ width: 48, height: 5, borderRadius: 3, background: "#d1d5db" }} />
+                </div>
+              )}
+
+              {/* Header */}
+              <div style={{ padding: "20px 32px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+                <div style={{ fontSize: 24, fontWeight: 900, color: "#111827" }}>Your Order</div>
+                <motion.button
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => persist([])}
+                  style={{
+                    background: "#fee2e2",
+                    color: "#ef4444",
+                    border: "none",
+                    borderRadius: 8,
+                    padding: "8px",
+                    cursor: "pointer",
                     display: "flex",
                     alignItems: "center",
-                    gap: 10,
+                    justifyContent: "center"
                   }}
                 >
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 900, fontSize: 13, color: "#111827" }}>
-                      {it.displayName || it.name}
-                    </div>
-                    <div style={{ color: "#6b7280", fontSize: 12 }}>
-                      ₹{Number(it.price || 0).toFixed(2)}
-                    </div>
-                  </div>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                  </svg>
+                </motion.button>
+              </div>
 
-                  <div style={{ display: "flex", border: "1px solid #e5e7eb", borderRadius: 12 }}>
-                    <button
-                      onClick={() => updateQty(it, (it.quantity || 1) - 1)}
-                      style={{
-                        width: 36,
-                        height: 36,
-                        border: "none",
-                        background: "#fff",
-                        cursor: "pointer",
-                        fontWeight: 900,
-                        color: brandColor,
+              {/* Scrollable Items */}
+              <motion.div
+                style={{ overflowY: "auto", flex: 1, padding: "0 32px 24px", display: "flex", flexDirection: "column" }}
+                initial="hidden"
+                animate="show"
+                variants={{
+                  hidden: { opacity: 0 },
+                  show: {
+                    opacity: 1,
+                    transition: { staggerChildren: 0.05, delayChildren: 0.1 }
+                  }
+                }}
+              >
+                <AnimatePresence mode="popLayout">
+                  {cart.map((it) => (
+                    <motion.div
+                      key={`${it.id}-${it.selectedVariant?.variant_id || "base"}`}
+                      layout
+                      variants={{
+                        hidden: { opacity: 0, y: 10, scale: 0.98 },
+                        show: { opacity: 1, y: 0, scale: 1 }
                       }}
-                    >
-                      -
-                    </button>
-                    <div
+                      exit={{ opacity: 0, height: 0, scale: 0.9, marginBottom: 0 }}
                       style={{
-                        width: 36,
-                        height: 36,
+                        padding: "16px 0",
+                        borderBottom: "1px solid #f3f4f6", // Light border
                         display: "flex",
                         alignItems: "center",
-                        justifyContent: "center",
-                        background: "#f8f9fa",
-                        fontWeight: 900,
+                        justifyContent: "space-between"
                       }}
                     >
-                      {it.quantity}
-                    </div>
-                    <button
-                      onClick={() => updateQty(it, (it.quantity || 1) + 1)}
-                      style={{
-                        width: 36,
-                        height: 36,
-                        border: "none",
-                        background: "#fff",
-                        cursor: "pointer",
-                        fontWeight: 900,
-                        color: brandColor,
-                      }}
-                    >
-                      +
-                    </button>
-                  </div>
+                      {/* Left: Info */}
+                      <div style={{ flex: 1, paddingRight: 16 }}>
+                        <div style={{ fontWeight: 700, fontSize: 16, color: "#111827" }}>
+                          {it.displayName || it.name}
+                        </div>
+                        <div style={{ fontSize: 14, color: "#9ca3af", marginTop: 4 }}>
+                          ₹{Number(it.price).toFixed(2)} x {it.quantity}
+                        </div>
+                      </div>
+
+                      {/* Right: Controls & Subtotal */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                        {/* Controls */}
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <motion.button
+                            whileTap={{ scale: 0.9 }}
+                            onClick={() => updateQty(it, (it.quantity || 1) - 1)}
+                            style={{
+                              width: 28, height: 28,
+                              border: `1px solid ${brandColor}`, borderRadius: 6,
+                              background: "#fff", color: brandColor,
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              cursor: "pointer", fontSize: 16
+                            }}
+                          >-</motion.button>
+                          <span style={{ fontWeight: 700, fontSize: 15, minWidth: 20, textAlign: "center", color: "#111827" }}>{it.quantity}</span>
+                          <motion.button
+                            whileTap={{ scale: 0.9 }}
+                            onClick={() => updateQty(it, (it.quantity || 1) + 1)}
+                            style={{
+                              width: 28, height: 28,
+                              border: `1px solid ${brandColor}`, borderRadius: 6,
+                              background: "#fff", color: brandColor,
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              cursor: "pointer", fontSize: 16
+                            }}
+                          >+</motion.button>
+                        </div>
+
+                        {/* Subtotal */}
+                        <div style={{ fontWeight: 800, fontSize: 16, color: "#111827", minWidth: 60, textAlign: "right" }}>
+                          ₹{(Number(it.price) * (it.quantity || 1)).toFixed(2)}
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </motion.div>
+
+              {/* Footer */}
+              {/* Footer */}
+              <div style={{ padding: "32px", borderTop: "1px solid #e5e7eb", background: "#fff", flexShrink: 0 }}>
+
+                {/* Extras: ReadOnly Discount */}
+                <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
+                  <span style={{ color: brandColor, fontWeight: 700, fontSize: 14, cursor: "default", opacity: 0.8 }}>
+                    + Add Discount
+                  </span>
                 </div>
-              ))}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
+
+                {/* Total */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+                  <span style={{ fontSize: 18, fontWeight: 800, color: "#111827" }}>Total</span>
+                  <motion.div
+                    key={totals.totalInc}
+                    initial={{ scale: 1.2, color: brandColor }}
+                    animate={{ scale: 1, color: brandColor }}
+                    style={{ fontSize: 32, fontWeight: 900, color: brandColor, lineHeight: 1 }}
+                  >
+                    ₹{totals.totalInc.toFixed(2)}
+                  </motion.div>
+                </div>
+
+                <Link
+                  href={`/app/payment?r=${restaurantId}`}
+                  style={{ textDecoration: 'none' }}
+                >
+                  <motion.div
+                    key={totals.totalInc}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.96 }}
+                    animate={{ scale: [1, 1.02, 1], transition: { duration: 0.3 } }}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      background: brandColor,
+                      color: "#fff",
+                      padding: "20px",
+                      borderRadius: 12,
+                      fontWeight: 800,
+                      fontSize: 18,
+                      boxShadow: `0 8px 20px -4px ${brandColor}66`,
+                    }}
+                  >
+                    Complete Order • ₹{totals.totalInc.toFixed(2)}
+                  </motion.div>
+                </Link>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       <BottomNav active="home" />
     </div>

@@ -14,59 +14,98 @@ export default function ProfilePage() {
   const [phone, setPhone] = useState("");
 
   const [msg, setMsg] = useState("");
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    let mounted = true;
     const init = async () => {
       setLoading(true);
 
       const { data } = await supabase.auth.getUser();
       const user = data?.user || null;
-      setSessionUser(user);
+      if (mounted) setSessionUser(user);
 
-      // Load local profile first
-      try {
-        const local = JSON.parse(localStorage.getItem("delivery_profile") || "{}");
-        if (local?.name) setName(String(local.name));
-        if (local?.phone) setPhone(String(local.phone));
-      } catch { }
+      if (user) {
+        // Fetch profile from 'customers' table using user_id
+        const { data: profile, error } = await supabase
+          .from('customers')
+          .select('name, phone')
+          .eq('user_id', user.id)
+          .maybeSingle();
 
-      // Fill from Supabase user if possible
-      if (user?.phone && !phone) setPhone(String(user.phone));
-      if (user?.user_metadata?.full_name && !name) setName(String(user.user_metadata.full_name));
+        if (error) {
+          console.error("Error fetching profile:", error);
+        }
 
-      setLoading(false);
+        if (mounted && profile) {
+          if (profile.name) setName(profile.name);
+          if (profile.phone) setPhone(profile.phone);
+        }
+      }
+
+      if (mounted) setLoading(false);
     };
 
     init();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => { mounted = false; };
   }, []);
 
   const save = async () => {
+    if (saving) return;
     setMsg("");
+    setSaving(true);
+
+    // Get fresh session
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      setMsg("Please log in to save.");
+      setSaving(false);
+      setTimeout(() => setMsg(""), 1500);
+      return;
+    }
 
     const nextName = name.trim();
     const nextPhone = phone.trim();
 
-    // local cache
-    try {
-      localStorage.setItem("delivery_profile", JSON.stringify({ name: nextName, phone: nextPhone }));
-    } catch { }
+    // Use 'customers' table, matching on user_id
+    // First, try to find existing to get the ID (to support update if upsert on user_id is not uniquely constrained)
+    const { data: existing } = await supabase
+      .from('customers')
+      .select('id')
+      .eq('user_id', user.id)
+      .maybeSingle();
 
-    if (sessionUser) {
-      // ensure customer exists
-      const customer = await getOrCreateCustomer();
+    let error;
 
-      // store in your app table (recommended)
-      await supabase
-        .from("customers")
-        .update({ name: nextName || null, phone: nextPhone || null })
-        .eq("id", customer.id);
-
-      // optional: also store in auth metadata (NOT auth.users.phone)
-      await supabase.auth.updateUser({ data: { full_name: nextName || null, phone: nextPhone || null } }); // metadata update [web:70]
+    if (existing) {
+      // Update
+      const { error: updateErr } = await supabase
+        .from('customers')
+        .update({ name: nextName, phone: nextPhone })
+        .eq('id', existing.id);
+      error = updateErr;
+    } else {
+      // Insert
+      const { error: insertErr } = await supabase
+        .from('customers')
+        .insert({
+          user_id: user.id,
+          name: nextName,
+          phone: nextPhone,
+          email: user.email // optional but good practice
+        });
+      error = insertErr;
     }
 
-    setMsg("Saved.");
+    if (error) {
+      console.error("Supabase Error Details:", error);
+      setMsg("Error saving.");
+    } else {
+      setMsg("Saved.");
+    }
+
+    setSaving(false);
     setTimeout(() => setMsg(""), 1500);
   };
 
@@ -148,17 +187,18 @@ export default function ProfilePage() {
           <div style={{ display: "flex", gap: 10, marginTop: 12, alignItems: "center" }}>
             <button
               onClick={save}
+              disabled={saving}
               style={{
-                background: "#f59e0b",
+                background: saving ? "#cbd5e1" : "#f59e0b",
                 border: "none",
                 color: "#fff",
                 borderRadius: 12,
                 padding: "12px 14px",
                 fontWeight: 900,
-                cursor: "pointer",
+                cursor: saving ? "default" : "pointer",
               }}
             >
-              Save
+              {saving ? "Saving..." : "Save"}
             </button>
             {msg ? <div style={{ color: "#6b7280", fontSize: 13 }}>{msg}</div> : null}
           </div>
