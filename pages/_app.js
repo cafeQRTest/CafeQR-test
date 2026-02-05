@@ -219,7 +219,7 @@ function DeliveryAuthGate({ children }) {
 
   // Optional loader (prevents flashing protected page before redirect)
   if (isProtected && (loading || !isLoggedIn)) {
-    return <CafeQRLoader message="Please sign in..." />;
+    return <CafeQRLoader message="Logging out..." />;
   }
 
   return <>{children}</>;
