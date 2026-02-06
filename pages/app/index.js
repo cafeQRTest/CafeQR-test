@@ -6,6 +6,7 @@ import Link from "next/link";
 import { getSupabase } from "../../services/supabase";
 import { getOrCreateCustomer } from "../../lib/customer/getOrCreateCustomer";
 import LandingPage from "../../components/LandingPage";
+import CafeQRLoader from "../../components/CafeQRLoader";
 
 export default function DeliveryAppHome() {
   const supabase = getSupabase();
@@ -76,42 +77,7 @@ export default function DeliveryAppHome() {
   }, [addrLoading, defaultAddress]);
 
   if (addrLoading) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-white">
-        <motion.div
-          initial={{ scale: 0.8, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ duration: 0.5 }}
-          className="flex flex-col items-center"
-        >
-          <motion.img
-            src="/cafeqr-logo.svg"
-            alt="CafeQR"
-            className="w-24 h-24 mb-6 object-contain"
-            animate={{
-              y: [0, -10, 0],
-              rotate: [0, 5, -5, 0]
-            }}
-            transition={{
-              duration: 2,
-              repeat: Infinity,
-              ease: "easeInOut"
-            }}
-          />
-          <motion.div
-            className="h-2 w-24 bg-gray-100 rounded-full overflow-hidden"
-          >
-            <motion.div
-              className="h-full bg-brand-orange"
-              initial={{ x: "-100%" }}
-              animate={{ x: "100%" }}
-              transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
-            />
-          </motion.div>
-          <p className="mt-4 text-gray-500 font-medium text-sm">Loading restaurants...</p>
-        </motion.div>
-      </div>
-    );
+    return <CafeQRLoader message="Loading restaurants..." />;
   }
 
   if (defaultAddress) {

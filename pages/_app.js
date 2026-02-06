@@ -18,6 +18,7 @@ import {
 } from '../services/supabase'
 import { ensureSessionValid } from '../lib/authActions'
 import { usePrintService } from '../lib/usePrintService'
+import CafeQRLoader from "../components/CafeQRLoader";
 
 // ── constants ────────────────────────────────────────────────────────────────
 const OWNER_PREFIX = '/owner'
@@ -218,7 +219,7 @@ function DeliveryAuthGate({ children }) {
 
   // Optional loader (prevents flashing protected page before redirect)
   if (isProtected && (loading || !isLoggedIn)) {
-    return <div style={{ padding: 16 }}>Please sign in…</div>;
+    return <CafeQRLoader message="Logging out..." />;
   }
 
   return <>{children}</>;
@@ -327,7 +328,7 @@ function MyApp({ Component, pageProps }) {
     }
   }, [router, ready])
 
-  if (!mounted || !router.isReady) return <div>Loading...</div>
+  if (!mounted || !router.isReady) return <CafeQRLoader message="Loading..." />;
 
   const path = router.pathname || ''
   const isOwner = path.startsWith(OWNER_PREFIX)

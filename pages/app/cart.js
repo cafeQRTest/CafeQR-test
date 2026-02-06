@@ -4,6 +4,7 @@ import { useRouter } from "next/router";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { getSupabase } from "../../services/supabase";
+import CafeQRLoader from "../../components/CafeQRLoader";
 
 const cartKey = (restaurantId) => `cart_delivery_${restaurantId}`;
 
@@ -122,7 +123,7 @@ export default function DeliveryCart() {
     return { subtotalEx, taxAmount, totalInc, taxRateDisplay: gstEnabled ? baseRate : 0 };
   }, [cart, restaurant]);
 
-  if (loading) return <div style={{ padding: 40, textAlign: "center" }}>Loading cart…</div>;
+  if (loading) return <CafeQRLoader message="Loading cart..." />;
 
   if (!restaurantId) {
     return (

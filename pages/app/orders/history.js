@@ -43,10 +43,12 @@ export default function OrderHistory() {
     try {
       const { data: ordersData, error } = await supabase
         .from("orders")
-        .select("*")
+        .select("*, items:order_items(*)")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
         .limit(50);
+
+      console.log('Order Data:', ordersData);
 
       if (error) throw error;
 
@@ -80,25 +82,23 @@ export default function OrderHistory() {
     try {
       const existingCart = JSON.parse(localStorage.getItem(cartKey(order.restaurant_id)) || "[]");
 
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
       const newItems = (order.items || []).map(item => {
-        // Resolve a valid UUID or skip
-        const realId = item.menu_item_id && uuidRegex.test(item.menu_item_id)
-          ? item.menu_item_id
-          : (item.id && uuidRegex.test(item.id) ? item.id : null);
+        // Use menu_item_id if available, otherwise fallback to id
+        // We relax the UUID check to allow legacy or different ID formats
+        const realId = item.menu_item_id || item.id;
 
         if (!realId) return null;
 
         return {
           id: `reorder_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           menu_item_id: realId,
-          name: item.name,
+          name: item.item_name || item.name, // Handle DB field item_name
+          displayName: item.item_name || item.name,
           price: item.price,
           quantity: item.quantity || 1,
-          veg: item.veg ?? true,
-          selectedVariant: item.variant_id ? {
-            variant_id: item.variant_id,
+          veg: item.veg ?? true, // order_items might not have veg flag, might need to fetch or defaulting is okay
+          selectedVariant: (item.variant_option_id || item.variant_id) ? {
+            variant_id: item.variant_option_id || item.variant_id,
             variant_name: item.variant_name,
           } : null,
         };
@@ -110,22 +110,16 @@ export default function OrderHistory() {
         return;
       }
 
-      const mergedCart = [...existingCart];
-      newItems.forEach(newItem => {
-        const existingIndex = mergedCart.findIndex(
-          c => c.menu_item_id === newItem.menu_item_id && (!c.selectedVariant?.variant_id || c.selectedVariant?.variant_id === newItem.selectedVariant?.variant_id)
-        );
-        if (existingIndex >= 0) {
-          mergedCart[existingIndex].quantity += newItem.quantity;
-        } else {
-          mergedCart.push(newItem);
-        }
-      });
+      // Clear existing cart and set new items (overwrite)
+      const finalCart = newItems;
 
-      localStorage.setItem(cartKey(order.restaurant_id), JSON.stringify(mergedCart));
+      localStorage.setItem(cartKey(order.restaurant_id), JSON.stringify(finalCart));
+
       // Simulate delay for feedback
       await new Promise(r => setTimeout(r, 600));
-      await router.push(`/app/restaurants?r=${order.restaurant_id}`);
+
+      // Navigate to the specific restaurant menu page
+      await router.push(`/app/restaurant/${order.restaurant_id}`);
     } catch (err) {
       console.error("Failed to reorder:", err);
       alert("Failed to add items to cart. Please try again.");
@@ -252,7 +246,7 @@ export default function OrderHistory() {
                         <div key={idx} className="order-item-row">
                           <div className="item-qty-name">
                             <span className="item-qty">{item.quantity} x</span>
-                            <span className="item-name">{item.name}</span>
+                            <span className="item-name">{item.item_name || item.name}</span>
                           </div>
                         </div>
                       ))}

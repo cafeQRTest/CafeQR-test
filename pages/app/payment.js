@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { getSupabase } from "../../services/supabase";
 import { useCustomerAuth } from "../../context/CustomerAuthContext";
+import CafeQRLoader from "../../components/CafeQRLoader";
 
 const cartKey = (restaurantId) => `cart_delivery_${restaurantId}`;
 
@@ -458,7 +459,7 @@ export default function DeliveryPayment() {
     }
   };
 
-  if (loading) return <div style={{ padding: 40, textAlign: "center" }}>Loading…</div>;
+  if (loading) return <CafeQRLoader message="Loading Payment..." />;
 
   if (!restaurantId || !restaurant) {
     return (
