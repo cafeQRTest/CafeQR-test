@@ -1176,19 +1176,10 @@ export default function SettingsPage() {
                 <SectionIcon>⚙️</SectionIcon>
                 <div>
                   <SectionTitle>Operations & Setup</SectionTitle>
-                  <div style={{ fontSize: 13, color: 'gray', fontWeight: 400 }}>Table management & payment config</div>
+                  <div style={{ fontSize: 13, color: 'gray', fontWeight: 400 }}>Payment configuration and UPI setup</div>
                 </div>
               </SectionHeader>
               <SectionBody>
-                <FormField>
-                  <Label>Total Tables <Required>*</Required></Label>
-                  <Input type="number" min={originalTables || 0} max="100" value={form.tables_count} onChange={onChange('tables_count')} />
-                  <HelperText>Increasing this will generate new QR codes.</HelperText>
-                </FormField>
-                <FormField>
-                  <Label>Table Prefix</Label>
-                  <Input value={form.table_prefix} onChange={onChange('table_prefix')} placeholder="e.g. T" maxLength={3} />
-                </FormField>
                 {/* OPERATIONS CARD */}
                 <FormField span={2}>
                   <Label>UPI ID (VPA) <Required>*</Required></Label>
@@ -1341,10 +1332,10 @@ export default function SettingsPage() {
                   checked={form.features_table_ordering_enabled}
                   onClick={() => setForm(f => ({ ...f, features_table_ordering_enabled: !f.features_table_ordering_enabled }))}
                 >
-                  <FeatureIcon active={form.features_table_ordering_enabled}>🤳</FeatureIcon>
+                  <FeatureIcon active={form.features_table_ordering_enabled}>🪑</FeatureIcon>
                   <FeatureText>
-                    <FeatureTitle>QR Ordering</FeatureTitle>
-                    <FeatureDesc>Customers order at table</FeatureDesc>
+                    <FeatureTitle>Table Management</FeatureTitle>
+                    <FeatureDesc>Manage tables & QR ordering</FeatureDesc>
                   </FeatureText>
                   <Switch checked={form.features_table_ordering_enabled} />
                 </FeatureCard>

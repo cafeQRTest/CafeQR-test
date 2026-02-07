@@ -29,7 +29,7 @@ const SIZE_2H = GS + "!" + b(0x01); // 1x width, 2x height (your current â€œDHâ€
 
 
 
-function toDisplayItems(order) {
+export function toDisplayItems(order) {
   
   // DB/API shape (HAS discount data)
   if (Array.isArray(order?.order_items) && order.order_items.length) {

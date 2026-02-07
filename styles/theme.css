@@ -35,9 +35,10 @@ html, body, #__next {
 * { box-sizing: border-box; }
 
 .container {
-  max-width: 1200px;
+  width: 100%;
+  max-width: 100%;
   margin: 0 auto;
-  padding: 0 var(--pad-3);
+  padding: 0 32px;
 }
 @media (max-width: 600px) {
   .container {
