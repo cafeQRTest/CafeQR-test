@@ -4,7 +4,7 @@ import path from 'path';
 import nodemailer from 'nodemailer';
 import QRCode from 'qrcode';
 import { createCanvas, loadImage, registerFont } from 'canvas';
-import { getSupabase } from '../../lib/supabase';
+import { getSupabase } from '../../services/supabase';
 
 registerFont(path.join(process.cwd(), 'public/fonts/NotoSans-Bold.ttf'), {
   family: 'NotoSans',
