@@ -19,6 +19,7 @@ import {
 import { ensureSessionValid } from '../lib/authActions'
 import { usePrintService } from '../lib/usePrintService'
 import CafeQRLoader from "../components/CafeQRLoader";
+import ReactQueryProvider from '../lib/react-query-provider';
 
 // ── constants ────────────────────────────────────────────────────────────────
 const OWNER_PREFIX = '/owner'
@@ -341,28 +342,30 @@ function MyApp({ Component, pageProps }) {
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
       </Head>
 
-      <CustomerAuthProvider>
-        <DeliveryAuthGate>
-          <RestaurantProvider>
-            <AlertProvider>
-              <SubscriptionProvider>
-                <GlobalSubscriptionGate>
-                  <Layout
-                    title={pageProps.title}
-                    showSidebar={isOwner}
-                    hideChrome={isCustomer}
-                    showCustomerHeader={isCustomer}
-                  >
-                    <Component {...pageProps} />
-                  </Layout>
-                  {/* Only render print orchestrator for POS/owner routes, not delivery app */}
-                  {!isDeliveryApp && <AppPrintOrchestrator />}
-                </GlobalSubscriptionGate>
-              </SubscriptionProvider>
-            </AlertProvider>
-          </RestaurantProvider>
-        </DeliveryAuthGate>
-      </CustomerAuthProvider>
+      <ReactQueryProvider>
+        <CustomerAuthProvider>
+          <DeliveryAuthGate>
+            <RestaurantProvider>
+              <AlertProvider>
+                <SubscriptionProvider>
+                  <GlobalSubscriptionGate>
+                    <Layout
+                      title={pageProps.title}
+                      showSidebar={isOwner}
+                      hideChrome={isCustomer}
+                      showCustomerHeader={isCustomer}
+                    >
+                      <Component {...pageProps} />
+                    </Layout>
+                    {/* Only render print orchestrator for POS/owner routes, not delivery app */}
+                    {!isDeliveryApp && <AppPrintOrchestrator />}
+                  </GlobalSubscriptionGate>
+                </SubscriptionProvider>
+              </AlertProvider>
+            </RestaurantProvider>
+          </DeliveryAuthGate>
+        </CustomerAuthProvider>
+      </ReactQueryProvider>
     </>
   );
 }

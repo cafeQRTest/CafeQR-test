@@ -17,6 +17,7 @@ import { buildKotText, downloadTextAndShare } from '../../utils/printUtils';
 import PaymentConfirmDialog from '../../components/PaymentConfirmDialog';
 import { calculateOrderTotals } from '../../utils/orderCalculations';
 import { useAlert } from '../../context/AlertContext';
+import { useTables, useSections, useFloors, useTableMutation, useDeleteTable, useUpdateTableStatus } from '../../hooks/useTables';
 
 // Animations
 const fadeIn = keyframes`
@@ -970,6 +971,257 @@ const TableListRow = styled.div`
   }
 `;
 
+// Visual Floor Plan Components
+const FloorPlanContainer = styled.div`
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border-radius: 24px;
+  padding: 40px;
+  min-height: 600px;
+  max-height: 800px;
+  position: relative;
+  overflow: auto;
+  box-shadow: inset 0 2px 20px rgba(0,0,0,0.02);
+  
+  /* Smooth scrolling */
+  scroll-behavior: smooth;
+  
+  /* Custom scrollbar */
+  &::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+  }
+  
+  &::-webkit-scrollbar-track {
+    background: rgba(241, 245, 249, 0.5);
+    border-radius: 10px;
+  }
+  
+  &::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.5);
+    border-radius: 10px;
+    
+    &:hover {
+      background: rgba(148, 163, 184, 0.7);
+    }
+  }
+  
+  /* Grid background */
+  background-image:
+    linear-gradient(to right, rgba(148, 163, 184, 0.08) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(148, 163, 184, 0.08) 1px, transparent 1px);
+  background-size: 40px 40px;
+  
+  @media (max-width: 768px) {
+    padding: 20px;
+    min-height: 400px;
+    max-height: calc(100vh - 300px);
+  }
+`;
+
+const VisualTable = styled.div`
+  position: absolute;
+  width: ${props => props.shape === 'round' ? '100px' : '120px'};
+  height: ${props => props.shape === 'round' ? '100px' : '80px'};
+  left: ${props => props.x || 0}px;
+  top: ${props => props.y || 0}px;
+  background: ${props => 
+    props.status === 'available' ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' :
+    props.status === 'occupied' ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)' :
+    props.status === 'reserved' ? 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)' :
+    props.status === 'cleaning' ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' :
+    'linear-gradient(135deg, #64748b 0%, #475569 100%)'
+  };
+  border-radius: ${props => props.shape === 'round' ? '50%' : '16px'};
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15), 0 2px 8px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  cursor: move;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+  z-index: ${props => props.isDragging ? 1000 : 1};
+  
+  &:hover {
+    transform: scale(1.05) translateY(-4px);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2), 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 10;
+  }
+  
+  &:active {
+    cursor: grabbing;
+    transform: scale(1.08);
+  }
+`;
+
+const VisualTableNumber = styled.div`
+  font-size: 24px;
+  font-weight: 800;
+  margin-bottom: 4px;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+`;
+
+const VisualTableCapacity = styled.div`
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.9;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+`;
+
+const FloorPlanLegend = styled.div`
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: white;
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  z-index: 10;
+`;
+
+const LegendItem = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+`;
+
+const LegendDot = styled.div`
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: ${props => props.color};
+`;
+
+const VisualTablePopover = styled.div`
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  background: linear-gradient(180deg, #ffffff 0%, #fafafa 100%);
+  border-radius: 24px;
+  padding: 24px;
+  box-shadow: 
+    0 30px 80px rgba(0, 0, 0, 0.25), 
+    0 10px 30px rgba(0, 0, 0, 0.15),
+    0 0 0 1px rgba(0, 0, 0, 0.05);
+  z-index: 1001;
+  min-width: 380px;
+  max-width: 90vw;
+  max-height: 90vh;
+  overflow-y: auto;
+  animation: ${fadeIn} 0.2s ease-out;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  
+  /* Custom scrollbar for popover content */
+  &::-webkit-scrollbar {
+    width: 8px;
+  }
+  
+  &::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 4px;
+  }
+  
+  &::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+    
+    &:hover {
+      background: #94a3b8;
+    }
+  }
+  
+  @media (max-width: 768px) {
+    max-width: 95vw;
+    max-height: 85vh;
+    padding: 20px 16px;
+    min-width: 320px;
+  }
+`;
+
+const PopoverHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+  padding-bottom: 20px;
+  border-bottom: 2px solid #f1f5f9;
+  gap: 16px;
+`;
+
+const PopoverTitle = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+`;
+
+const PopoverTableNumber = styled.div`
+  font-size: 24px;
+  font-weight: 800;
+  color: #0f172a;
+`;
+
+const PopoverCloseButton = styled.button`
+  background: transparent;
+  border: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: #64748b;
+  padding: 0;
+  
+  &:hover {
+    color: #ef4444;
+    transform: scale(1.15);
+  }
+  
+  &:active {
+    transform: scale(0.95);
+  }
+  
+  svg {
+    width: 22px;
+    height: 22px;
+    stroke-width: 2.5;
+  }
+`;
+
+const PopoverContent = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+`;
+
+const PopoverActions = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 2px solid #f1f5f9;
+`;
+
+const PopoverBackdrop = styled.div`
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  animation: ${fadeIn} 0.2s ease-out;
+`;
 
 
 const InfoIcon = styled.div`
@@ -1202,10 +1454,17 @@ export default function TableManagement() {
   const router = useRouter();
   const { showAlert, showConfirm } = useAlert();
   
-  const [tables, setTables] = useState([]);
-  const [sections, setSections] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list'
+  // React Query hooks for data fetching
+  const { data: tables = [], isLoading: loading, error, refetch } = useTables(restaurant?.id);
+  const { data: sections = [] } = useSections(restaurant?.id);
+  const { data: floors = [] } = useFloors(restaurant?.id, tables);
+  
+  // React Query mutations
+  const tableMutation = useTableMutation();
+  const deleteTableMutation = useDeleteTable();
+  const updateStatusMutation = useUpdateTableStatus();
+  
+  const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list' or 'visual'
   const [searchQuery, setSearchQuery] = useState('');
   const [filterSection, setFilterSection] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -1215,7 +1474,6 @@ export default function TableManagement() {
   const [showFloorsModal, setShowFloorsModal] = useState(false);
   const [editingTable, setEditingTable] = useState(null);
   const [viewOrder, setViewOrder] = useState(null);
-  const [floors, setFloors] = useState([]);
   
   // Status Note Modal State
   const [showNoteModal, setShowNoteModal] = useState(false);
@@ -1228,6 +1486,10 @@ export default function TableManagement() {
   const [newFloorName, setNewFloorName] = useState('');
   const [modalQrSent, setModalQrSent] = useState(false);
   const [modalQrError, setModalQrError] = useState(null);
+  
+  // Visual view popover state
+  const [activeVisualTable, setActiveVisualTable] = useState(null);
+  const [popoverPosition, setPopoverPosition] = useState({ x: 0, y: 0 });
   
   // Form state
   const [formData, setFormData] = useState({
@@ -1576,8 +1838,8 @@ const handleModalResend = async (table) => {
             
           if (error) throw error;
           
-          // Refresh data
-          loadData();
+          // Refresh data using React Query
+          refetch();
           if (viewOrder && viewOrder.id === orderId) {
              setViewOrder(prev => ({ ...prev, status: newStatus }));
           }
@@ -1587,82 +1849,7 @@ const handleModalResend = async (table) => {
       }
   };
   
-  useEffect(() => {
-    if (!checking && !loadingRestaurant && restaurant?.id) {
-      loadData();
-    }
-  }, [checking, loadingRestaurant, restaurant]);
-  
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      
-      // Load tables
-      const { data: tablesData, error: tablesError } = await supabase
-        .from('tables')
-        .select(`
-          *,
-          current_order:orders!current_order_id(id)
-        `)
-        .eq('restaurant_id', restaurant.id)
-        .eq('is_active', true)
-        .order('identifier');
-      
-      if (tablesError) {
-        console.error('Tables Error Details:', tablesError);
-        if (tablesError.code === '42P01' || tablesError.message?.includes('does not exist')) {
-          showAlert('Table Management Database Not Setup\n\nPlease run the migration script.');
-          return;
-        }
-        showAlert(`Failed to load tables: ${tablesError.message}`);
-        return;
-      }
-      setTables(tablesData || []);
-      
-      // Load sections
-      const { data: sectionsData, error: sectionsError } = await supabase
-        .from('table_sections')
-        .select('*')
-        .eq('restaurant_id', restaurant.id)
-        .eq('is_active', true)
-        .order('display_order');
-      
-      if (sectionsError) {
-        console.error('Sections error:', sectionsError);
-        if (sectionsError.code === '42P01' || sectionsError.message?.includes('does not exist')) {
-          setSections([{ id: 'default', section_name: 'Main', restaurant_id: restaurant.id }]);
-        }
-      } else {
-        setSections(sectionsData || []);
-      }
-
-      // Load floors
-      const { data: floorsData, error: floorsError } = await supabase
-        .from('table_floors')
-        .select('*')
-        .eq('restaurant_id', restaurant.id)
-        .eq('is_active', true)
-        .order('display_order');
-      
-      if (floorsError) {
-        console.error('Floors error:', floorsError);
-        // Fallback or setup if not exists
-        const uniqueFloors = Array.from(new Set((tablesData || []).map(t => t.floor_level))).filter(Boolean);
-        if (uniqueFloors.length === 0) uniqueFloors.push('Ground Floor', 'First Floor');
-        setFloors(uniqueFloors.map((name, i) => ({ id: i, floor_name: name, fallback: true })));
-      } else {
-        setFloors(floorsData || []);
-      }
-      
-    } catch (error) {
-      console.error('Error loading data:', error);
-      showAlert('Failed to load data: ' + error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Real-time subscription
+  // Real-time subscription - refetch when tables change
   useEffect(() => {
     if (!restaurant?.id) return;
 
@@ -1678,9 +1865,8 @@ const handleModalResend = async (table) => {
         },
         (payload) => {
           console.log('Real-time table update:', payload);
-          // Reload all data to be safe (or optimistically update)
-          // For simplicity and correctness with "current_order", reloading is safer
-          loadData();
+          // Use React Query's refetch instead of manual loading
+          refetch();
         }
       )
       .subscribe();
@@ -1688,7 +1874,8 @@ const handleModalResend = async (table) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [restaurant, supabase]);
+  }, [restaurant, supabase, refetch]);
+  
   
   // Statistics
   const stats = useMemo(() => {
@@ -2200,6 +2387,9 @@ const handleModalResend = async (table) => {
                   <ViewButton active={viewMode === 'list'} onClick={() => setViewMode('list')}>
                     List
                   </ViewButton>
+                  <ViewButton active={viewMode === 'visual'} onClick={() => setViewMode('visual')}>
+                    Visual
+                  </ViewButton>
                 </ViewToggle>
                 <Button primary onClick={handleAddTable}>
                   <span style={{fontSize: '18px', fontWeight: 300}}>+</span> Add Table
@@ -2222,6 +2412,296 @@ const handleModalResend = async (table) => {
                 </Button>
               )}
             </EmptyState>
+          ) : viewMode === 'visual' ? (
+            <>
+              <FloorPlanContainer>
+                <FloorPlanLegend>
+                  <LegendItem>
+                    <LegendDot color="#10b981" />
+                    Available
+                  </LegendItem>
+                  <LegendItem>
+                    <LegendDot color="#ef4444" />
+                    Occupied
+                  </LegendItem>
+                  <LegendItem>
+                    <LegendDot color="#3b82f6" />
+                    Reserved
+                  </LegendItem>
+                  <LegendItem>
+                    <LegendDot color="#f59e0b" />
+                    Cleaning
+                  </LegendItem>
+                  <LegendItem>
+                    <LegendDot color="#64748b" />
+                    Maintenance
+                  </LegendItem>
+                </FloorPlanLegend>
+                
+                {filteredTables.map((table, index) => {
+                  // Use position_x and position_y from database, or auto-arrange
+                  const x = table.position_x || (index % 5) * 150 + 50;
+                  const y = table.position_y || Math.floor(index / 5) * 130 + 50;
+                  
+                  return (
+                    <VisualTable
+                      key={table.id}
+                      x={x}
+                      y={y}
+                      status={table.status}
+                      shape={table.shape}
+                      onClick={(e) => {
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        setPopoverPosition({
+                          x: rect.left + rect.width / 2,
+                          y: rect.top
+                        });
+                        setActiveVisualTable(table);
+                      }}
+                      title={`Table ${table.identifier} - ${table.status}\n${table.capacity} seats - ${table.section}`}
+                    >
+                      <VisualTableNumber>{table.identifier}</VisualTableNumber>
+                      <VisualTableCapacity>{table.capacity} seats</VisualTableCapacity>
+                    </VisualTable>
+                  );
+                })}
+              </FloorPlanContainer>
+              
+              {/* Visual Table Popover */}
+              {activeVisualTable && (
+                <>
+                  <PopoverBackdrop onClick={() => setActiveVisualTable(null)} />
+                  <VisualTablePopover x={popoverPosition.x} y={popoverPosition.y}>
+                    <PopoverHeader>
+                      <PopoverTitle>
+                        <PopoverTableNumber>Table {activeVisualTable.identifier}</PopoverTableNumber>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <StatusBadge status={activeVisualTable.status}>{activeVisualTable.status}</StatusBadge>
+                          <span style={{ fontSize: '13px', color: '#64748b', fontWeight: 600 }}>
+                            {activeVisualTable.capacity} Seats
+                          </span>
+                        </div>
+                      </PopoverTitle>
+                      <PopoverCloseButton onClick={() => setActiveVisualTable(null)}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M18 6L6 18M6 6l12 12"></path>
+                        </svg>
+                      </PopoverCloseButton>
+                    </PopoverHeader>
+                    
+                    <PopoverContent>
+                      <InfoRow>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{color: '#94a3b8'}}>
+                          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                          <circle cx="12" cy="10" r="3"></circle>
+                        </svg>
+                        <InfoText>{activeVisualTable.section}</InfoText>
+                      </InfoRow>
+                      
+                      {activeVisualTable.current_order && (
+                        <InfoRow 
+                          onClick={() => {
+                            handleViewOrder(activeVisualTable.current_order.id);
+                          }}
+                          style={{ 
+                            cursor: 'pointer',
+                            transition: 'all 0.2s',
+                            padding: '8px 12px',
+                            borderRadius: '10px',
+                            margin: '-4px -12px'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'transparent';
+                          }}
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{color: '#ef4444'}}>
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14 2 14 8 20 8"></polyline>
+                            <line x1="16" y1="13" x2="8" y2="13"></line>
+                            <line x1="16" y1="17" x2="8" y2="17"></line>
+                            <polyline points="10 9 9 9 8 9"></polyline>
+                          </svg>
+                          <InfoText style={{fontWeight: 700, color: '#ef4444'}}>Order #{activeVisualTable.current_order.id.substr(0, 8)} →</InfoText>
+                        </InfoRow>
+                      )}
+                      
+                      {activeVisualTable.notes && (activeVisualTable.status === 'reserved' || activeVisualTable.status === 'cleaning' || activeVisualTable.status === 'maintenance') && (
+                        <InfoRow style={{ 
+                          color: activeVisualTable.status === 'reserved' ? '#1d4ed8' : 
+                                activeVisualTable.status === 'cleaning' ? '#c2410c' : '#475569',
+                          background: activeVisualTable.status === 'reserved' ? 'rgba(59, 130, 246, 0.05)' : 
+                                     activeVisualTable.status === 'cleaning' ? 'rgba(249, 115, 22, 0.05)' : 'rgba(0,0,0,0.03)',
+                          padding: '8px 12px',
+                          borderRadius: '12px',
+                          border: '1px solid rgba(0,0,0,0.02)'
+                        }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                          </svg>
+                          <InfoText style={{ fontWeight: 600, fontSize: '12px' }}>{activeVisualTable.notes}</InfoText>
+                        </InfoRow>
+                      )}
+                    </PopoverContent>
+                    
+                    <PopoverActions>
+                      {/* Occupied table actions */}
+                      {activeVisualTable.status === 'occupied' && activeVisualTable.current_order && (
+                        <>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <ActionButton 
+                              variant="primary"
+                              onClick={() => {
+                                handlePrintBill(activeVisualTable.current_order.id);
+                                setActiveVisualTable(null);
+                              }}
+                            >
+                              Bill
+                            </ActionButton>
+                            
+                            <ActionButton 
+                              variant="warning"
+                              onClick={async () => {
+                                const full = await fetchFullOrder(activeVisualTable.current_order.id);
+                                if(full) {
+                                  const txt = buildKotText(full);
+                                  downloadTextAndShare(txt);
+                                }
+                                setActiveVisualTable(null);
+                              }}
+                            >
+                              KOT
+                            </ActionButton>
+                          </div>
+                          
+                          <ActionButton 
+                            variant="success"
+                            fullWidth
+                            onClick={async () => {
+                              const full = await fetchFullOrder(activeVisualTable.current_order.id);
+                              if(full) setEditingOrder(full);
+                              setActiveVisualTable(null);
+                            }}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                            </svg>
+                            Edit Order
+                          </ActionButton>
+                          
+
+                          <ActionButton 
+                            variant="danger"
+                            fullWidth
+                            onClick={(e) => {
+                              handlePaymentClick(e, activeVisualTable);
+                              setActiveVisualTable(null);
+                            }}
+                          >
+                            Pay & Finish
+                          </ActionButton>
+                        </>
+                      )}
+                      
+                      {/* Available table actions */}
+                      {activeVisualTable.status === 'available' && (
+                        <>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <ActionButton 
+                              variant="primary"
+                              onClick={() => {
+                                openNoteModal(activeVisualTable.id, 'reserved', 'Reservation Details', 'e.g. Reserved for John at 7 PM');
+                                setActiveVisualTable(null);
+                              }}
+                            >
+                              Reservation
+                            </ActionButton>
+                            <ActionButton 
+                              variant="warning"
+                              onClick={() => {
+                                handleChangeStatus(activeVisualTable.id, 'cleaning');
+                                setActiveVisualTable(null);
+                              }}
+                            >
+                              Cleaning
+                            </ActionButton>
+                          </div>
+                          <ActionButton 
+                            variant="warning"
+                            fullWidth
+                            onClick={() => {
+                              handleChangeStatus(activeVisualTable.id, 'maintenance');
+                              setActiveVisualTable(null);
+                            }}
+                          >
+                            Maintenance
+                          </ActionButton>
+                        </>
+                      )}
+                      
+                      {/* Status-specific actions */}
+                      {activeVisualTable.status === 'cleaning' && (
+                        <ActionButton 
+                          variant="warning" 
+                          fullWidth 
+                          onClick={() => {
+                            handleChangeStatus(activeVisualTable.id, 'available', { notes: '' });
+                            setActiveVisualTable(null);
+                          }}
+                        >
+                          Finish Cleaning
+                        </ActionButton>
+                      )}
+                      
+                      {activeVisualTable.status === 'maintenance' && (
+                        <ActionButton 
+                          variant="warning" 
+                          fullWidth 
+                          onClick={() => {
+                            handleChangeStatus(activeVisualTable.id, 'available', { notes: '' });
+                            setActiveVisualTable(null);
+                          }}
+                        >
+                          Finish Maintenance
+                        </ActionButton>
+                      )}
+                      
+                      {activeVisualTable.status === 'reserved' && (
+                        <ActionButton 
+                          variant="warning" 
+                          fullWidth 
+                          onClick={() => {
+                            handleChangeStatus(activeVisualTable.id, 'available', { notes: '' });
+                            setActiveVisualTable(null);
+                          }}
+                        >
+                          Cancel Reservation
+                        </ActionButton>
+                      )}
+                      
+                      {/* Edit table settings (available for all statuses) */}
+                      <ActionButton 
+                        variant="secondary"
+                        fullWidth
+                        onClick={() => {
+                          handleEditTable(activeVisualTable);
+                          setActiveVisualTable(null);
+                        }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
+                          <circle cx="12" cy="12" r="3"></circle>
+                          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                        </svg>
+                        Edit Table Settings
+                      </ActionButton>
+                    </PopoverActions>
+                  </VisualTablePopover>
+                </>
+              )}
+            </>
           ) : viewMode === 'grid' ? (
             <TableGrid>
           {filteredTables.map(table => (
