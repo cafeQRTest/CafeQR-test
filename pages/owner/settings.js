@@ -762,6 +762,7 @@ export default function SettingsPage() {
             features_credit_enabled: !!profile.features_credit_enabled,
             features_menu_images_enabled: !!profile.features_menu_images_enabled,
             features_table_ordering_enabled: !!profile.features_table_ordering_enabled,
+            qr_ordering_enabled: profile.qr_ordering_enabled !== false, // Default to true if not set
             features_inventory_enabled: !!profile.features_inventory_enabled,
             features_counter_send_to_kitchen_enabled: profile.features_counter_send_to_kitchen_enabled !== false,
             featurescustomersenabled: !!profile.featurescustomersenabled, featuresloyaltyenabled: !!profile.featuresloyaltyenabled,
@@ -854,6 +855,7 @@ export default function SettingsPage() {
         features_credit_enabled: form.features_credit_enabled,
         features_menu_images_enabled: form.features_menu_images_enabled,
         features_table_ordering_enabled: form.features_table_ordering_enabled,
+        qr_ordering_enabled: form.qr_ordering_enabled,
         features_inventory_enabled: form.features_inventory_enabled,
         features_production_enabled: form.features_production_enabled,
         features_counter_send_to_kitchen_enabled: form.features_counter_send_to_kitchen_enabled,
@@ -1335,9 +1337,21 @@ export default function SettingsPage() {
                   <FeatureIcon active={form.features_table_ordering_enabled}>🪑</FeatureIcon>
                   <FeatureText>
                     <FeatureTitle>Table Management</FeatureTitle>
-                    <FeatureDesc>Manage tables & QR ordering</FeatureDesc>
+                    <FeatureDesc>Manage floor plan & tables</FeatureDesc>
                   </FeatureText>
                   <Switch checked={form.features_table_ordering_enabled} />
+                </FeatureCard>
+
+                <FeatureCard
+                  checked={form.qr_ordering_enabled}
+                  onClick={() => setForm(f => ({ ...f, qr_ordering_enabled: !f.qr_ordering_enabled }))}
+                >
+                  <FeatureIcon active={form.qr_ordering_enabled}>📱</FeatureIcon>
+                  <FeatureText>
+                    <FeatureTitle>Enable QR Ordering</FeatureTitle>
+                    <FeatureDesc>Show QR codes for customer ordering</FeatureDesc>
+                  </FeatureText>
+                  <Switch checked={form.qr_ordering_enabled} />
                 </FeatureCard>
 
                 <FeatureCard

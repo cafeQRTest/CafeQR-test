@@ -17,7 +17,18 @@ import EditOrderPanel from '../../components/EditOrderPanel';
 import PaymentConfirmDialog from '../../components/PaymentConfirmDialog';
 import { calculateOrderTotals } from '../../utils/orderCalculations';
 import { useAlert } from '../../context/AlertContext';
-import { useTables, useSections, useFloors, useTableMutation, useDeleteTable, useUpdateTableStatus } from '../../hooks/useTables';
+import { 
+  useTables, 
+  useSections, 
+  useFloors, 
+  useTableMutation, 
+  useDeleteTable, 
+  useUpdateTableStatus,
+  useAddSection,
+  useDeleteSection,
+  useAddFloor,
+  useDeleteFloor
+} from '../../hooks/useTables';
 
 // Animations
 const fadeIn = keyframes`
@@ -1535,6 +1546,11 @@ export default function TableManagement() {
   const deleteTableMutation = useDeleteTable();
   const updateStatusMutation = useUpdateTableStatus();
   
+  const addSectionMutation = useAddSection();
+  const deleteSectionMutation = useDeleteSection();
+  const addFloorMutation = useAddFloor();
+  const deleteFloorMutation = useDeleteFloor();
+  
   const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list' or 'visual'
   const [searchQuery, setSearchQuery] = useState('');
   const [filterSection, setFilterSection] = useState('all');
@@ -2087,22 +2103,21 @@ const handleModalResend = async (table) => {
         });
       }
       
+      let data;
       if (editingTable) {
         // Update existing table
-        const { error } = await supabase
-          .from('tables')
-          .update(tablesToCreate[0])
-          .eq('id', editingTable.id);
-        
-        if (error) throw error;
+        data = await tableMutation.mutateAsync({
+          table: { ...tablesToCreate[0], id: editingTable.id },
+          isEdit: true,
+          restaurantId: restaurant.id
+        });
       } else {
         // Create new table(s)
-        const { data, error } = await supabase
-          .from('tables')
-          .insert(tablesToCreate)
-          .select();
-        
-        if (error) throw error;
+        data = await tableMutation.mutateAsync({
+          table: tablesToCreate,
+          isEdit: false,
+          restaurantId: restaurant.id
+        });
 
         // Automatically send QR email if enabled
         if (formData.sendEmail && data && data.length > 0) {
@@ -2116,7 +2131,6 @@ const handleModalResend = async (table) => {
       
       setShowModal(false);
       setEditingTable(null); // Clear editing state
-      refetch();
     } catch (error) {
       console.error('Error saving table:', error);
       showAlert(error.message || 'Failed to save table');
@@ -2141,15 +2155,13 @@ const handleModalResend = async (table) => {
     if (!await showConfirm(`Are you sure you want to delete Table "${table.identifier}"? This will remove it from the floor plan.`)) return;
     
     try {
-      const { error } = await supabase
-        .from('tables')
-        .update({ is_active: false })
-        .eq('id', tableId);
+      await deleteTableMutation.mutateAsync({ 
+        tableId, 
+        restaurantId: restaurant.id 
+      });
       
-      if (error) throw error;
       setShowModal(false);
       setEditingTable(null);
-      refetch();
     } catch (error) {
       console.error('Error deleting table:', error);
       showAlert('Failed to delete table');
@@ -2164,13 +2176,9 @@ const handleModalResend = async (table) => {
         return;
       }
 
-      const { error } = await supabase
-        .from('table_sections')
-        .insert([{ restaurant_id: restaurant.id, section_name: name }]);
-      if (error) throw error;
-      refetch();
+      await addSectionMutation.mutateAsync({ name: name.trim(), restaurantId: restaurant.id });
     } catch (error) {
-      showAlert(error.message);
+      showAlert(error.message || 'Failed to add section');
     }
   };
 
@@ -2187,14 +2195,9 @@ const handleModalResend = async (table) => {
 
     if (!await showConfirm('Are you sure you want to delete this section?')) return;
     try {
-       const { error } = await supabase
-        .from('table_sections')
-        .update({ is_active: false })
-        .eq('id', id);
-      if (error) throw error;
-      refetch();
+      await deleteSectionMutation.mutateAsync({ sectionId: id, restaurantId: restaurant.id });
     } catch (error) {
-      showAlert(error.message);
+      showAlert(error.message || 'Failed to delete section');
     }
   };
 
@@ -2206,14 +2209,10 @@ const handleModalResend = async (table) => {
         return;
       }
 
-      const { error } = await supabase
-        .from('table_floors')
-        .insert([{ restaurant_id: restaurant.id, floor_name: name }]);
-      if (error) throw error;
-      refetch();
+      await addFloorMutation.mutateAsync({ name: name.trim(), restaurantId: restaurant.id });
     } catch (error) {
        console.error(error);
-       showAlert("Failed to add floor level.");
+       showAlert(error.message || "Failed to add floor level.");
     }
   };
 
@@ -2230,14 +2229,9 @@ const handleModalResend = async (table) => {
 
     if (!await showConfirm('Are you sure you want to delete this floor level?')) return;
     try {
-      const { error } = await supabase
-        .from('table_floors')
-        .update({ is_active: false })
-        .eq('id', id);
-      if (error) throw error;
-      refetch();
+      await deleteFloorMutation.mutateAsync({ floorId: id, restaurantId: restaurant.id });
     } catch (error) {
-      showAlert(error.message);
+      showAlert(error.message || 'Failed to delete floor level');
     }
   };
   
@@ -2245,19 +2239,14 @@ const handleModalResend = async (table) => {
     try {
       console.log('Changing status:', { tableId, newStatus, extraUpdates });
       
-      const { data, error } = await supabase
-        .from('tables')
-        .update({ status: newStatus, ...extraUpdates })
-        .eq('id', tableId)
-        .select();
+      await updateStatusMutation.mutateAsync({
+        tableId,
+        restaurantId: restaurant.id,
+        status: newStatus,
+        extraUpdates
+      });
       
-      if (error) {
-        console.error('Supabase error:', error);
-        throw error;
-      }
-      
-      console.log('Status updated successfully:', data);
-      await refetch();
+      console.log('Status updated successfully');
     } catch (error) {
       console.error('Error changing status:', error);
       showAlert(`Failed to change status: ${error.message}`);
@@ -2810,21 +2799,21 @@ const handleModalResend = async (table) => {
               }}
               style={{ cursor: table.status === 'occupied' ? 'pointer' : 'default' }}
             >
-               <TableCardHeader>
-                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                   <TableNumber>
-                     {table.identifier}
-                     <span>{table.capacity} Seats</span>
-                   </TableNumber>
-                   <StatusBadge status={table.status}>{table.status}</StatusBadge>
-                 </div>
-                 <EditIcon onClick={(e) => { e.stopPropagation(); handleEditTable(table); }} title="Edit Table Settings">
-                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                     <circle cx="12" cy="12" r="3"></circle>
-                     <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-                   </svg>
-                 </EditIcon>
-               </TableCardHeader>
+                <TableCardHeader>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <TableNumber>
+                      {table.identifier}
+                      <span>{table.capacity} Seats</span>
+                    </TableNumber>
+                    <StatusBadge status={table.status}>{table.status}</StatusBadge>
+                  </div>
+                  <EditIcon onClick={(e) => { e.stopPropagation(); handleEditTable(table); }} title="Edit Table Settings">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="3"></circle>
+                      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                    </svg>
+                  </EditIcon>
+                </TableCardHeader>
               
               <TableInfo>
                 <InfoRow>
@@ -2993,7 +2982,7 @@ const handleModalResend = async (table) => {
                 <EditIcon onClick={(e) => { e.stopPropagation(); handleEditTable(table); }} title="Edit Table Settings">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="3"></circle>
-                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
                   </svg>
                 </EditIcon>
                 <div style={{ fontWeight: 700, fontSize: '15px' }}>
@@ -3159,66 +3148,68 @@ const handleModalResend = async (table) => {
                 </ToggleCard>
               )}
 
-              {editingTable ? (
-                <ToggleCard 
-                  active={modalQrSent}
-                  onClick={() => !modalQrSent && !sendingQr[editingTable.id] && handleModalResend(editingTable)}
-                  style={{ 
-                    cursor: (sendingQr[editingTable.id] || modalQrSent) ? 'not-allowed' : 'pointer',
-                    opacity: (sendingQr[editingTable.id] || modalQrSent) ? 0.8 : 1,
-                    transition: 'all 0.3s ease',
-                    minHeight: '80px'
-                  }}
-                >
-                  <ToggleCardIcon active={modalQrSent || sendingQr[editingTable.id]}>
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      {sendingQr[editingTable.id] ? (
-                        <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
-                      ) : (
-                        <>
-                          <path d="m22 2-7 20-4-9-9-4Z"></path>
-                          <path d="M22 2 11 13"></path>
-                        </>
-                      )}
-                    </svg>
-                  </ToggleCardIcon>
-                  <ToggleCardContent>
-                    <ToggleCardTitle style={{ color: modalQrSent ? '#10b981' : 'inherit', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      {sendingQr[editingTable.id] ? 'Sending...' : modalQrSent ? 'Email Sent Successfully!' : 'Send QR Code Now'}
-                      {modalQrSent && (
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="20 6 9 17 4 12"></polyline>
-                        </svg>
-                      )}
-                    </ToggleCardTitle>
-                    <ToggleCardDescription style={{ color: modalQrError ? '#ef4444' : 'inherit' }}>
-                      {modalQrSent ? 'Owner will receive it shortly.' : modalQrError ? `Error: ${modalQrError}` : 'Click to send the QR code to the owner email immediately.'}
-                    </ToggleCardDescription>
-                  </ToggleCardContent>
-                  {!sendingQr[editingTable.id] && !modalQrSent && (
-                     <div style={{ color: '#ea580c', fontWeight: 700, fontSize: '13px', whiteSpace: 'nowrap' }}>Send Now →</div>
-                  )}
-                </ToggleCard>
-              ) : (
-                <ToggleCard 
-                  active={formData.sendEmail}
-                  onClick={() => setFormData({...formData, sendEmail: !formData.sendEmail})}
-                >
-                  <ToggleCardIcon active={formData.sendEmail}>
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="m22 2-7 20-4-9-9-4Z"></path>
-                      <path d="M22 2 11 13"></path>
-                    </svg>
-                  </ToggleCardIcon>
-                  <ToggleCardContent>
-                    <ToggleCardTitle>Email QR codes</ToggleCardTitle>
-                    <ToggleCardDescription>Send access links to owner</ToggleCardDescription>
-                  </ToggleCardContent>
-                  <ToggleSwitch style={{ pointerEvents: 'none' }}>
-                    <input type="checkbox" checked={formData.sendEmail} readOnly />
-                    <span></span>
-                  </ToggleSwitch>
-                </ToggleCard>
+              {restaurant?.features?.qr_ordering_enabled && (
+                editingTable ? (
+                  <ToggleCard 
+                    active={modalQrSent}
+                    onClick={() => !modalQrSent && !sendingQr[editingTable.id] && handleModalResend(editingTable)}
+                    style={{ 
+                      cursor: (sendingQr[editingTable.id] || modalQrSent) ? 'not-allowed' : 'pointer',
+                      opacity: (sendingQr[editingTable.id] || modalQrSent) ? 0.8 : 1,
+                      transition: 'all 0.3s ease',
+                      minHeight: '80px'
+                    }}
+                  >
+                    <ToggleCardIcon active={modalQrSent || sendingQr[editingTable.id]}>
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        {sendingQr[editingTable.id] ? (
+                          <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
+                        ) : (
+                          <>
+                            <path d="m22 2-7 20-4-9-9-4Z"></path>
+                            <path d="M22 2 11 13"></path>
+                          </>
+                        )}
+                      </svg>
+                    </ToggleCardIcon>
+                    <ToggleCardContent>
+                      <ToggleCardTitle style={{ color: modalQrSent ? '#10b981' : 'inherit', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {sendingQr[editingTable.id] ? 'Sending...' : modalQrSent ? 'Email Sent Successfully!' : 'Send QR Code Now'}
+                        {modalQrSent && (
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                          </svg>
+                        )}
+                      </ToggleCardTitle>
+                      <ToggleCardDescription style={{ color: modalQrError ? '#ef4444' : 'inherit' }}>
+                        {modalQrSent ? 'Owner will receive it shortly.' : modalQrError ? `Error: ${modalQrError}` : 'Click to send the QR code to the owner email immediately.'}
+                      </ToggleCardDescription>
+                    </ToggleCardContent>
+                    {!sendingQr[editingTable.id] && !modalQrSent && (
+                       <div style={{ color: '#ea580c', fontWeight: 700, fontSize: '13px', whiteSpace: 'nowrap' }}>Send Now →</div>
+                    )}
+                  </ToggleCard>
+                ) : (
+                  <ToggleCard 
+                    active={formData.sendEmail}
+                    onClick={() => setFormData({...formData, sendEmail: !formData.sendEmail})}
+                  >
+                    <ToggleCardIcon active={formData.sendEmail}>
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="m22 2-7 20-4-9-9-4Z"></path>
+                        <path d="M22 2 11 13"></path>
+                      </svg>
+                    </ToggleCardIcon>
+                    <ToggleCardContent>
+                      <ToggleCardTitle>Email QR codes</ToggleCardTitle>
+                      <ToggleCardDescription>Send access links to owner</ToggleCardDescription>
+                    </ToggleCardContent>
+                    <ToggleSwitch style={{ pointerEvents: 'none' }}>
+                      <input type="checkbox" checked={formData.sendEmail} readOnly />
+                      <span></span>
+                    </ToggleSwitch>
+                  </ToggleCard>
+                )
               )}
             </ToggleCardGrid>
 

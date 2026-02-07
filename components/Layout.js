@@ -583,7 +583,7 @@ function Sidebar({ collapsed, onSignOut, isSigningOut }) {
     ...(feature.table_ordering_enabled
       ? [
           { href: '/owner/tables', label: 'Tables', icon: <FaUtensils /> },
-          { href: '/owner/availability', label: 'Availability', icon: <FaClock /> }
+          ...(feature.qr_ordering_enabled !== false ? [{ href: '/owner/availability', label: 'Availability', icon: <FaClock /> }] : [])
         ]
       : []),
     ...(feature.production_enabled
@@ -918,7 +918,7 @@ function MobileSidebar({ onNavigate, onSignOut, isSigningOut }) {
     ...(feature.table_ordering_enabled
       ? [
           { href: '/owner/tables', label: 'Tables', icon: <FaUtensils /> },
-          { href: '/owner/availability', label: 'Availability', icon: <FaClock /> }
+          ...(feature.qr_ordering_enabled !== false ? [{ href: '/owner/availability', label: 'Availability', icon: <FaClock /> }] : [])
         ]
       : []),
     ...(feature.production_enabled

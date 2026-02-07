@@ -117,7 +117,7 @@ export function RestaurantProvider({ children }) {
             const { data: prof } = await supabase
   .from('restaurant_profiles')
   .select(
-    'features_credit_enabled,features_production_enabled,features_inventory_enabled,features_table_ordering_enabled,' +
+    'features_credit_enabled,features_production_enabled,features_inventory_enabled,features_table_ordering_enabled,qr_ordering_enabled,' +
     'featurescustomersenabled,featuresloyaltyenabled,' +
     'round_off_enabled,round_off_mode,round_off_auto_factor,round_off_manual_limit,' +
     'gst_enabled,gstin,fssai_license,prices_include_tax,default_tax_rate'
@@ -131,6 +131,7 @@ export function RestaurantProvider({ children }) {
   production_enabled: !!prof?.features_production_enabled,
   inventory_enabled: !!prof?.features_inventory_enabled,
   table_ordering_enabled: !!prof?.features_table_ordering_enabled,
+  qr_ordering_enabled: prof?.qr_ordering_enabled !== false, // Default to true if not set
 
   customers_enabled: !!prof?.featurescustomersenabled,
   loyalty_enabled: !!prof?.featuresloyaltyenabled,

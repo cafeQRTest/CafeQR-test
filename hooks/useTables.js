@@ -95,6 +95,7 @@ export function useTableMutation() {
   return useMutation({
     mutationFn: async ({ table, isEdit, restaurantId }) => {
       if (isEdit) {
+        // 'table' here is assumed to have an 'id'
         const { data, error } = await supabase
           .from('tables')
           .update(table)
@@ -104,6 +105,7 @@ export function useTableMutation() {
         if (error) throw error;
         return data;
       } else {
+        // 'table' can be a single object or an array for bulk creation
         const { data, error } = await supabase
           .from('tables')
           .insert(table)
@@ -142,26 +144,88 @@ export function useUpdateTableStatus() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ tableId, status, restaurantId }) => {
-      const { error } = await supabase
+    mutationFn: async ({ tableId, restaurantId, status, extraUpdates = {} }) => {
+      const { data, error } = await supabase
         .from('tables')
-        .update({ status })
-        .eq('id', tableId);
+        .update({ status, ...extraUpdates })
+        .eq('id', tableId)
+        .select();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data, variables) => {
+      // Invalidate the list to ensure all fields are fresh
+      queryClient.invalidateQueries({ queryKey: tableKeys.list(variables.restaurantId) });
+    },
+  });
+}
+
+// Section Mutations
+export function useAddSection() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ name, restaurantId }) => {
+      const { data, error } = await supabase
+        .from('table_sections')
+        .insert([{ restaurant_id: restaurantId, section_name: name }])
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: tableKeys.sections(variables.restaurantId) });
+    },
+  });
+}
+
+export function useDeleteSection() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ sectionId, restaurantId }) => {
+      const { error } = await supabase
+        .from('table_sections')
+        .update({ is_active: false })
+        .eq('id', sectionId);
       if (error) throw error;
     },
     onSuccess: (data, variables) => {
-      // Optimistically update the cache
-      queryClient.setQueryData(
-        tableKeys.list(variables.restaurantId),
-        (old) => {
-          if (!old) return old;
-          return old.map(table =>
-            table.id === variables.tableId
-              ? { ...table, status: variables.status }
-              : table
-          );
-        }
-      );
+      queryClient.invalidateQueries({ queryKey: tableKeys.sections(variables.restaurantId) });
+    },
+  });
+}
+
+// Floor Mutations
+export function useAddFloor() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ name, restaurantId }) => {
+      const { data, error } = await supabase
+        .from('table_floors')
+        .insert([{ restaurant_id: restaurantId, floor_name: name }])
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: tableKeys.floors(variables.restaurantId) });
+    },
+  });
+}
+
+export function useDeleteFloor() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ floorId, restaurantId }) => {
+      const { error } = await supabase
+        .from('table_floors')
+        .update({ is_active: false })
+        .eq('id', floorId);
+      if (error) throw error;
+    },
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: tableKeys.floors(variables.restaurantId) });
     },
   });
 }
