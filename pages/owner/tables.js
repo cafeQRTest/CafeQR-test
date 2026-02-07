@@ -268,7 +268,8 @@ const SidebarFilterList = styled.div`
   
   @media (max-width: 1200px) {
     flex-direction: row;
-    overflow-x: auto;
+    flex-wrap: wrap;
+    gap: 6px;
   }
 `;
 
@@ -281,7 +282,9 @@ const ToolbarLeft = styled.div`
   
   @media (max-width: 1024px) {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
+    gap: 12px;
+    width: 100%;
   }
 `;
 
@@ -309,6 +312,8 @@ const FilterCarousel = styled.div`
   @media (max-width: 1024px) {
     max-width: 100%;
     width: 100%;
+    padding: 4px 0;
+    gap: 6px;
   }
 `;
 
@@ -378,8 +383,15 @@ const ToolbarRight = styled.div`
   gap: 12px;
   align-items: center;
   
-  @media (max-width: 640px) {
+  @media (max-width: 1024px) {
+    width: 100%;
     justify-content: space-between;
+  }
+  
+  @media (max-width: 640px) {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
   }
 `;
 
@@ -674,6 +686,7 @@ const ViewToggle = styled.div`
   @media (max-width: 640px) {
     background: white;
     border: 1px solid #e2e8f0;
+    width: 100%;
   }
 `;
 
@@ -688,6 +701,10 @@ const ViewButton = styled.button`
   cursor: pointer;
   box-shadow: ${props => props.active ? '0 2px 4px rgba(0,0,0,0.05)' : 'none'};
   transition: all 0.2s;
+  
+  @media (max-width: 640px) {
+    flex: 1;
+  }
 `;
 
 // Dynamic Grid
@@ -1012,9 +1029,16 @@ const FloorPlanContainer = styled.div`
   background-size: 40px 40px;
   
   @media (max-width: 768px) {
-    padding: 20px;
-    min-height: 400px;
-    max-height: calc(100vh - 300px);
+    padding: 16px;
+    min-height: 300px;
+    max-height: calc(100vh - 250px);
+    border-radius: 16px;
+    background-size: 30px 30px;
+    
+    &::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
   }
 `;
 
@@ -1038,7 +1062,7 @@ const VisualTable = styled.div`
   align-items: center;
   justify-content: center;
   color: white;
-  cursor: move;
+  cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   user-select: none;
   z-index: ${props => props.isDragging ? 1000 : 1};
@@ -1053,6 +1077,20 @@ const VisualTable = styled.div`
     cursor: grabbing;
     transform: scale(1.08);
   }
+  
+  @media (max-width: 768px) {
+    width: ${props => props.shape === 'round' ? '70px' : '90px'};
+    height: ${props => props.shape === 'round' ? '70px' : '60px'};
+    border-radius: ${props => props.shape === 'round' ? '50%' : '12px'};
+    
+    &:hover {
+      transform: scale(1.03);
+    }
+    
+    &:active {
+      transform: scale(1.05);
+    }
+  }
 `;
 
 const VisualTableNumber = styled.div`
@@ -1060,6 +1098,11 @@ const VisualTableNumber = styled.div`
   font-weight: 800;
   margin-bottom: 4px;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  
+  @media (max-width: 768px) {
+    font-size: 18px;
+    margin-bottom: 2px;
+  }
 `;
 
 const VisualTableCapacity = styled.div`
@@ -1068,6 +1111,11 @@ const VisualTableCapacity = styled.div`
   opacity: 0.9;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  
+  @media (max-width: 768px) {
+    font-size: 9px;
+    letter-spacing: 0.3px;
+  }
 `;
 
 const FloorPlanLegend = styled.div`
@@ -1082,6 +1130,19 @@ const FloorPlanLegend = styled.div`
   flex-direction: column;
   gap: 12px;
   z-index: 10;
+  
+  @media (max-width: 768px) {
+    top: auto;
+    bottom: 12px;
+    left: 12px;
+    right: 12px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    gap: 8px;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
 `;
 
 const LegendItem = styled.div`
@@ -1091,6 +1152,11 @@ const LegendItem = styled.div`
   font-size: 13px;
   font-weight: 600;
   color: #475569;
+  
+  @media (max-width: 768px) {
+    gap: 6px;
+    font-size: 11px;
+  }
 `;
 
 const LegendDot = styled.div`
@@ -1098,6 +1164,11 @@ const LegendDot = styled.div`
   height: 12px;
   border-radius: 50%;
   background: ${props => props.color};
+  
+  @media (max-width: 768px) {
+    width: 10px;
+    height: 10px;
+  }
 `;
 
 const VisualTablePopover = styled.div`
@@ -2452,9 +2523,17 @@ const handleModalResend = async (table) => {
                 </FloorPlanLegend>
                 
                 {filteredTables.map((table, index) => {
+                  // Responsive grid layout
+                  const isMobile = window.innerWidth <= 768;
+                  const cols = isMobile ? 3 : 5; // 3 columns on mobile, 5 on desktop
+                  const spacingX = isMobile ? 100 : 150; // Tighter spacing on mobile
+                  const spacingY = isMobile ? 85 : 130;
+                  const offsetX = isMobile ? 10 : 50;
+                  const offsetY = isMobile ? 10 : 50;
+                  
                   // Use position_x and position_y from database, or auto-arrange
-                  const x = table.position_x || (index % 5) * 150 + 50;
-                  const y = table.position_y || Math.floor(index / 5) * 130 + 50;
+                  const x = table.position_x || (index % cols) * spacingX + offsetX;
+                  const y = table.position_y || Math.floor(index / cols) * spacingY + offsetY;
                   
                   return (
                     <VisualTable
