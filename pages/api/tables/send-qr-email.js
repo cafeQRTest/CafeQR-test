@@ -92,9 +92,9 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'SMTP credentials not configured' });
     }
 
-    // Construct full QR URL
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-    const fullQrPageUrl = qrUrl.startsWith('http') ? qrUrl : `${appUrl}${qrUrl}`;
+    // Construct full QR URL with proper format: /order?r=restaurantId&t=tableNumber
+    const baseUrl = (process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000').replace(/\/$/, ''); // Remove trailing slash
+    const fullQrPageUrl = `${baseUrl}/order?r=${restaurantId}&t=${identifier}`;
 
     // Create Canvas for the QR code image (matching bulk sender's logic)
     const WIDTH = 1200;

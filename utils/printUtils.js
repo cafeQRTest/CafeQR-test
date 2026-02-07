@@ -473,11 +473,8 @@ export async function downloadTextAndShare(order, bill, restaurantProfile) {
 
     const orderId = order?.id?.slice(0, 8)?.toUpperCase() || "N/A";
 
-    if (navigator.canShare && navigator.canShare({ text })) {
-      await navigator.share({ title: `BILL-${orderId}`, text });
-      return { success: true, method: "share" };
-    }
-
+    // Always download for KOT and Bills - skip share dialog
+    // Share dialog is confusing for printing workflows
     const blob = new Blob([text], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -494,6 +491,7 @@ export async function downloadTextAndShare(order, bill, restaurantProfile) {
     return { success: false, error: error?.message || String(error) };
   }
 }
+
 
 export function buildReceiptText(order, bill, restaurantProfile) {
   try {

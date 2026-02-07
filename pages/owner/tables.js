@@ -13,7 +13,7 @@ import UiButton from '../../components/ui/Button'; // Renamed to avoid conflict 
 import OrderItemsModal from '../../components/OrderItemsModal';
 import EditOrderPanel from '../../components/EditOrderPanel';
 
-import { buildKotText, downloadTextAndShare } from '../../utils/printUtils';
+
 import PaymentConfirmDialog from '../../components/PaymentConfirmDialog';
 import { calculateOrderTotals } from '../../utils/orderCalculations';
 import { useAlert } from '../../context/AlertContext';
@@ -1634,6 +1634,14 @@ const handleModalResend = async (table) => {
       ].filter(Boolean).join(', ')
     };
 
+    console.log('📧 Sending QR email with data:', {
+      tableId: table.id,
+      identifier: table.identifier,
+      qrUrl: table.qr_code_url,
+      restaurantId: restaurant.id,
+      restaurantData
+    });
+
     const response = await fetch('/api/tables/send-qr-email', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1647,15 +1655,20 @@ const handleModalResend = async (table) => {
     });
     
     const data = await response.json();
+    
+    console.log('📧 Email API response:', { status: response.status, data });
+    
     if (!response.ok) throw new Error(data.error || 'Failed to send QR code');
     
     setModalQrSent(true);
+    showAlert('QR code email sent successfully!');
     // Auto-reset "Sent" indication after 5 seconds
     setTimeout(() => setModalQrSent(false), 5000);
     
   } catch (error) {
-    console.error('Error in modal QR resend:', error);
+    console.error('❌ Error in modal QR resend:', error);
     setModalQrError(error.message);
+    showAlert(`Failed to send email: ${error.message}`);
   } finally {
     setSendingQr(prev => ({ ...prev, [table.id]: false }));
   }
@@ -1727,7 +1740,7 @@ const handleModalResend = async (table) => {
        setShowPaymentModal(false);
        setPaymentOrder(null);
        setPaymentTotals(null);
-       loadData(); // Reload to see table as available
+       refetch(); // Reload to see table as available
        
        // Alert updated order? No, just finish.
      } catch (e) {
@@ -1792,7 +1805,7 @@ const handleModalResend = async (table) => {
       }
 
       // Refresh & close
-      await loadData();
+      await refetch();
       setEditingOrder(null);
      
     } catch (e) {
@@ -2032,7 +2045,7 @@ const handleModalResend = async (table) => {
       
       setShowModal(false);
       setEditingTable(null); // Clear editing state
-      loadData();
+      refetch();
     } catch (error) {
       console.error('Error saving table:', error);
       showAlert(error.message || 'Failed to save table');
@@ -2065,7 +2078,7 @@ const handleModalResend = async (table) => {
       if (error) throw error;
       setShowModal(false);
       setEditingTable(null);
-      loadData();
+      refetch();
     } catch (error) {
       console.error('Error deleting table:', error);
       showAlert('Failed to delete table');
@@ -2084,7 +2097,7 @@ const handleModalResend = async (table) => {
         .from('table_sections')
         .insert([{ restaurant_id: restaurant.id, section_name: name }]);
       if (error) throw error;
-      loadData();
+      refetch();
     } catch (error) {
       showAlert(error.message);
     }
@@ -2108,7 +2121,7 @@ const handleModalResend = async (table) => {
         .update({ is_active: false })
         .eq('id', id);
       if (error) throw error;
-      loadData();
+      refetch();
     } catch (error) {
       showAlert(error.message);
     }
@@ -2126,7 +2139,7 @@ const handleModalResend = async (table) => {
         .from('table_floors')
         .insert([{ restaurant_id: restaurant.id, floor_name: name }]);
       if (error) throw error;
-      loadData();
+      refetch();
     } catch (error) {
        console.error(error);
        showAlert("Failed to add floor level.");
@@ -2151,7 +2164,7 @@ const handleModalResend = async (table) => {
         .update({ is_active: false })
         .eq('id', id);
       if (error) throw error;
-      loadData();
+      refetch();
     } catch (error) {
       showAlert(error.message);
     }
@@ -2173,7 +2186,7 @@ const handleModalResend = async (table) => {
       }
       
       console.log('Status updated successfully:', data);
-      await loadData();
+      await refetch();
     } catch (error) {
       console.error('Error changing status:', error);
       showAlert(`Failed to change status: ${error.message}`);
@@ -2566,8 +2579,11 @@ const handleModalResend = async (table) => {
                               onClick={async () => {
                                 const full = await fetchFullOrder(activeVisualTable.current_order.id);
                                 if(full) {
-                                  const txt = buildKotText(full);
-                                  downloadTextAndShare(txt);
+                                  window.dispatchEvent(
+                                    new CustomEvent('auto-print-order', {
+                                      detail: { ...full, autoPrint: true, kind: 'kot' }
+                                    })
+                                  );
                                 }
                                 setActiveVisualTable(null);
                               }}
@@ -2794,8 +2810,11 @@ const handleModalResend = async (table) => {
                       onClick={async () => {
                         const full = await fetchFullOrder(table.current_order.id);
                         if(full) {
-                            const txt = buildKotText(full);
-                            downloadTextAndShare(txt);
+                          window.dispatchEvent(
+                            new CustomEvent('auto-print-order', {
+                              detail: { ...full, autoPrint: true, kind: 'kot' }
+                            })
+                          );
                         }
                       }}
                     >
@@ -2865,20 +2884,6 @@ const handleModalResend = async (table) => {
 
                  {table.status === 'occupied' && (
                    <>
-                    <ActionButton 
-                      variant="info" 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleSendQrCode(table);
-                      }}
-                      disabled={sendingQr[table.id]}
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
-                        <path d="m22 2-7 20-4-9-9-4Z"></path>
-                        <path d="M22 2 11 13"></path>
-                      </svg>
-                      {sendingQr[table.id] ? 'Sending...' : 'Resend QR'}
-                    </ActionButton>
 
                     <ActionButton 
                       variant="danger"
@@ -2943,8 +2948,11 @@ const handleModalResend = async (table) => {
                       onClick={async () => {
                          const full = await fetchFullOrder(table.current_order.id);
                          if(full) {
-                             const txt = buildKotText(full);
-                             downloadTextAndShare(txt);
+                           window.dispatchEvent(
+                             new CustomEvent('auto-print-order', {
+                               detail: { ...full, autoPrint: true, kind: 'kot' }
+                             })
+                           );
                          }
                       }}
                    >
@@ -2997,20 +3005,6 @@ const handleModalResend = async (table) => {
 
                 {table.status === 'occupied' && (
                   <>
-                    <ActionButton 
-                      variant="info" 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleSendQrCode(table);
-                      }}
-                      disabled={sendingQr[table.id]}
-                    >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '4px' }}>
-                        <path d="m22 2-7 20-4-9-9-4Z"></path>
-                        <path d="M22 2 11 13"></path>
-                      </svg>
-                      {sendingQr[table.id] ? 'Sending...' : 'Resend QR'}
-                    </ActionButton>
                     <ActionButton 
                       variant="danger"
                       onClick={(e) => {
