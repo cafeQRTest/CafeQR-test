@@ -4,6 +4,7 @@ import path from 'path';
 import nodemailer from 'nodemailer';
 import QRCode from 'qrcode';
 import { createCanvas, loadImage, registerFont } from 'canvas';
+import { getSupabase } from '../../lib/supabase';
 
 registerFont(path.join(process.cwd(), 'public/fonts/NotoSans-Bold.ttf'), {
   family: 'NotoSans',
@@ -14,6 +15,7 @@ registerFont(path.join(process.cwd(), 'public/fonts/NotoSans-Regular.ttf'), {
   weight: 'normal',
 });
 
+export default async function handler(req, res) {
   try {
     const { qrCodes = [], restaurantData: passedRestaurantData, isIncremental = false, restaurantId } = req.body;
     const smtpUser = process.env.SMTP_USER;
