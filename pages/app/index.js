@@ -42,8 +42,6 @@ export default function DeliveryAppHome() {
 
   if (checking) return <CafeQRLoader message="Checking session..." />;
 
-  return <LandingPage />;
-}
 
 
   return (

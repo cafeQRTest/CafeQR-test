@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import { getSupabase } from "../../services/supabase";
 import { getOrCreateCustomer } from "../../lib/customer/getOrCreateCustomer";
@@ -21,56 +21,107 @@ export default function AddressPage() {
   const [geoSaved, setGeoSaved] = useState(false);
   const [savingGeo, setSavingGeo] = useState(false);
 
-  const fetchLocation = () => {
-  setFetchingLoc(true);
-  setSavingGeo(true);
-  setAddress("");
-  setError("");
-  setShowRefresh(false);
-  setGeoSaved(false);
+  const processPosition = async (latitude, longitude) => {
+    setCoords({ lat: latitude, lng: longitude });
 
-  (async () => {
+    // --- Background Sync to 'user_location_sync' table (silent) ---
     try {
-      // Native Android (APK) path
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: custData } = await supabase
+          .from("customers")
+          .select("id")
+          .eq("user_id", user.id)
+          .single();
+
+        if (custData?.id) {
+          const payload = {
+            customer_id: custData.id,
+            latitude,
+            longitude,
+          };
+
+          const { error: saveErr } = await supabase
+            .from("user_location_sync")
+            .insert(payload)
+            .select();
+
+          if (!saveErr) setGeoSaved(true);
+        }
+      }
+    } catch (dbErr) {
+      console.error("Background Save Exception:", dbErr);
+    } finally {
+      setSavingGeo(false);
+    }
+
+    // --- Reverse geocode (best-effort) ---
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`,
+        { headers: { "User-Agent": "CafeQrDeliveryApp/1.0" } }
+      );
+      const data = await res.json();
+
+      let foundAddress = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+      if (data?.address) {
+        const { road, suburb, neighbourhood, city, town, village, county } = data.address;
+        const area = suburb || neighbourhood || road || village;
+        const locality = city || town || county;
+        const parts = [area, locality].filter(Boolean);
+        if (parts.length > 0) foundAddress = parts.join(", ");
+        else if (data.display_name) foundAddress = data.display_name;
+      }
+      setAddress(foundAddress);
+    } catch (e) {
+      console.error("Geocoding failed", e);
+      setAddress(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+    } finally {
+      setFetchingLoc(false);
+      setShowRefresh(true);
+    }
+  };
+
+  const fetchLocation = async () => {
+    setFetchingLoc(true);
+    setSavingGeo(true);
+    setAddress("");
+    setError("");
+    setShowRefresh(false);
+    setGeoSaved(false);
+
+    try {
+      // Native APK path
       if (Capacitor.isNativePlatform()) {
-        await Geolocation.requestPermissions(); // runtime prompt [web:1453][web:1455]
+        await Geolocation.requestPermissions();
         const pos = await Geolocation.getCurrentPosition({
           enableHighAccuracy: true,
           timeout: 10000,
         });
-
         const { latitude, longitude } = pos.coords;
-        // continue with your existing flow using latitude/longitude...
-        // (keep your DB sync + reverse geocoding unchanged)
-        // IMPORTANT: remove the navigator.geolocation.getCurrentPosition usage in this branch
-        // so it doesn't double-trigger
-        // ...
+        await processPosition(latitude, longitude);
         return;
       }
 
-      // Web/PWA path (unchanged)
+      // Web/PWA path
       if (!navigator.geolocation) {
         setError("Geolocation is not supported by your browser.");
         setFetchingLoc(false);
         setSavingGeo(false);
+        setShowRefresh(true);
         return;
       }
 
-      navigator.geolocation.getCurrentPosition(
-        async (pos) => {
-          const { latitude, longitude } = pos.coords;
-          // existing code continues...
-        },
-        (err) => {
-          console.error(err);
-          setError("Unable to retrieve your location. Check GPS settings.");
-          setFetchingLoc(false);
-          setSavingGeo(false);
-          setAddress("");
-          setShowRefresh(true);
-        },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-      );
+      const pos = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0,
+        });
+      });
+
+      const { latitude, longitude } = pos.coords;
+      await processPosition(latitude, longitude);
     } catch (e) {
       console.error(e);
       setError("Location permission denied or GPS is off.");
@@ -78,108 +129,6 @@ export default function AddressPage() {
       setSavingGeo(false);
       setShowRefresh(true);
     }
-  })();
-};
-
-
-    setFetchingLoc(true);
-    setSavingGeo(true); // Start saving spinner for DB
-    setAddress("");
-    setError("");
-    setShowRefresh(false);
-    setGeoSaved(false);
-
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const { latitude, longitude } = pos.coords;
-        setCoords({ lat: latitude, lng: longitude });
-
-        // --- Background Sync to 'user_location_sync' table ---
-        try {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user) {
-            // Resolve customer ID
-            const { data: custData } = await supabase
-              .from('customers')
-              .select('id')
-              .eq('user_id', user.id)
-              .single();
-
-            if (custData) {
-              const payload = {
-                customer_id: custData.id,
-                latitude: latitude,
-                longitude: longitude
-              };
-
-              console.log('Syncing to new table:', payload);
-
-              const { data, error: saveErr } = await supabase
-                .from('user_location_sync')
-                .insert(payload)
-                .select();
-
-              if (saveErr) {
-                console.error("DB Sync Error (Silent):", saveErr);
-                // Silent fail: do not show error to user
-              } else {
-                console.log("DB Sync Success:", data);
-                setGeoSaved(true);
-              }
-            } else {
-              console.error("Customer not found for user:", user.id);
-            }
-          }
-        } catch (dbErr) {
-          console.error("Background Save Exception:", dbErr);
-        } finally {
-          setSavingGeo(false);
-        }
-        // -----------------------------
-
-        try {
-          // Reverted to Nominatim (Free)
-          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`, {
-            headers: { 'User-Agent': 'CafeQrDeliveryApp/1.0' }
-          });
-          const data = await res.json();
-          let foundAddress = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
-
-          if (data && data.address) {
-            const { road, suburb, neighbourhood, city, town, village, county } = data.address;
-
-            // Prioritize: Suburb/Road -> City/Town
-            const area = suburb || neighbourhood || road || village;
-            const locality = city || town || county;
-
-            const parts = [area, locality].filter(Boolean);
-
-            if (parts.length > 0) foundAddress = parts.join(", ");
-            else if (data.display_name) foundAddress = data.display_name;
-          }
-          setAddress(foundAddress);
-        } catch (err) {
-          console.error("Geocoding failed", err);
-          setAddress(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
-        } finally {
-          setFetchingLoc(false);
-          setShowRefresh(true);
-        }
-      },
-      (err) => {
-        console.error(err);
-        setError("Unable to retrieve your location. Check GPS settings.");
-        setFetchingLoc(false);
-        setSavingGeo(false);
-        setAddress("");
-        setShowRefresh(true);
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0
-      }
-    );
   };
 
   useEffect(() => {
@@ -187,48 +136,34 @@ export default function AddressPage() {
       try {
         const c = await getOrCreateCustomer();
         setCustomer(c);
-        fetchLocation();
+        await fetchLocation();
       } catch (e) {
         console.error(e);
       }
     };
     init();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleContinue = async () => {
-    if (!address || !customer) return;
+    if (!address || !customer || !coords) return;
 
     setBusy(true);
-
     try {
-      // 1. Check for available restaurants within radius
-      const { data: restaurants, error: rpcError } = await supabase.rpc('get_restaurants_within_radius', {
+      const { data: restaurants } = await supabase.rpc("get_restaurants_within_radius", {
         user_lat: coords.lat,
-        user_lng: coords.lng
+        user_lng: coords.lng,
       });
 
-      if (rpcError) {
-        console.warn("RPC Error (Silent):", rpcError);
-        // Do not block user, let them proceed (maybe filtering happens on next page too)
-      } else if (!restaurants || restaurants.length === 0) {
-        // Even if 0 restaurants, we might want to let them see the empty state on the listing page?
-        // User request said: "If no restaurants... show a clear message".
-        // But in this specific request step, they said "Ensure 'Continue to Order' button's onClick function to immediately navigate..."
-        // I will prioritize navigation, but store empty list so next page handles it.
-        console.log("No restaurants found in range.");
-      }
+      localStorage.setItem("available_restaurants", JSON.stringify(restaurants || []));
 
-      // 2. Save restaurants to global state (localStorage as proxy)
-      if (restaurants) {
-        localStorage.setItem('available_restaurants', JSON.stringify(restaurants));
-      } else {
-        localStorage.setItem('available_restaurants', JSON.stringify([]));
-      }
-
-      // 3. Save Address to DB (Legacy/Required flow)
-      // We do this concurrently or await it. Since safety is key, we await.
+      // Save address (best-effort)
       try {
-        await supabase.from("customer_addresses").update({ is_default: false }).eq("customer_id", customer.id);
+        await supabase
+          .from("customer_addresses")
+          .update({ is_default: false })
+          .eq("customer_id", customer.id);
+
         await supabase.from("customer_addresses").insert({
           customer_id: customer.id,
           label: "Current Location",
@@ -237,69 +172,49 @@ export default function AddressPage() {
           state: "",
           pincode: "",
           geo: { lat: coords.lat, lng: coords.lng },
-          is_default: true
+          is_default: true,
         });
       } catch (dbEx) {
         console.warn("Address save failed silently", dbEx);
       }
 
-      localStorage.setItem('cafeqr_address', address);
-      localStorage.setItem('detected_delivery_address', address);
+      localStorage.setItem("cafeqr_address", address);
+      localStorage.setItem("detected_delivery_address", address);
 
-      // 4. Force Navigation
       router.push({
         pathname: "/app/restaurants",
-        query: { lat: coords.lat, lng: coords.lng }
+        query: { lat: coords.lat, lng: coords.lng },
       });
-
     } catch (e) {
       console.error(e);
-      // Fallback navigation even on error
       router.push("/app/restaurants");
     } finally {
-      // No need to setBusy(false) if reducing jank on nav, but safe practice
-      // setBusy(false); 
+      setBusy(false);
     }
   };
 
-  // Card entrance animation - fade in and slide up
   const cardVariants = {
     hidden: { opacity: 0, y: 30 },
     show: {
       opacity: 1,
       y: 0,
-      transition: {
-        type: "spring",
-        stiffness: 100,
-        damping: 15,
-        staggerChildren: 0.1,
-        delayChildren: 0.2
-      }
-    }
+      transition: { type: "spring", stiffness: 100, damping: 15, staggerChildren: 0.1, delayChildren: 0.2 },
+    },
   };
 
   const itemVariants = {
     hidden: { opacity: 0, y: 15 },
-    show: {
-      opacity: 1,
-      y: 0,
-      transition: { type: "spring", stiffness: 120, damping: 14 }
-    }
+    show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 120, damping: 14 } },
   };
 
   return (
     <div className="delivery-address-page">
       <div className="delivery-address-bg" />
 
-      <motion.div
-        className="delivery-address-card"
-        initial="hidden"
-        animate="show"
-        variants={cardVariants}
-      >
+      <motion.div className="delivery-address-card" initial="hidden" animate="show" variants={cardVariants}>
         <motion.div variants={itemVariants} className="delivery-address-icon">
           <motion.div
-            className={`icon-circle ${fetchingLoc ? 'is-detecting' : ''}`}
+            className={`icon-circle ${fetchingLoc ? "is-detecting" : ""}`}
             animate={fetchingLoc ? { scale: [1, 1.05, 1] } : {}}
             transition={fetchingLoc ? { repeat: Infinity, duration: 1.5, ease: "easeInOut" } : {}}
           >
@@ -313,13 +228,10 @@ export default function AddressPage() {
         </motion.div>
 
         <motion.div variants={itemVariants} className="delivery-address-input-wrap">
-          <div className={`delivery-address-input-box ${fetchingLoc ? 'is-loading' : ''} ${error ? 'has-error' : ''}`}>
+          <div className={`delivery-address-input-box ${fetchingLoc ? "is-loading" : ""} ${error ? "has-error" : ""}`}>
             <div className="input-icon">
               {fetchingLoc ? (
-                <motion.div
-                  animate={{ y: [0, -8, 0] }}
-                  transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
-                >
+                <motion.div animate={{ y: [0, -8, 0] }} transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}>
                   <MapPin className="w-6 h-6 text-[#f97316]" />
                 </motion.div>
               ) : (
@@ -328,10 +240,7 @@ export default function AddressPage() {
             </div>
 
             <div className="input-content">
-              <p className="input-label">
-                {fetchingLoc ? 'Locating you...' : 'Delivery location'}
-              </p>
-
+              <p className="input-label">{fetchingLoc ? "Locating you..." : "Delivery location"}</p>
               {fetchingLoc ? (
                 <div className="input-skeleton" />
               ) : (
@@ -347,7 +256,6 @@ export default function AddressPage() {
             </div>
           </div>
 
-          {/* Action Buttons Container with Gap */}
           <div className="delivery-address-actions">
             {!fetchingLoc && showRefresh && (
               <motion.button
@@ -377,7 +285,7 @@ export default function AddressPage() {
                     disabled={busy}
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.97 }}
-                    className={`delivery-address-continue-btn ${busy ? 'is-busy' : ''}`}
+                    className={`delivery-address-continue-btn ${busy ? "is-busy" : ""}`}
                   >
                     {busy ? (
                       <>
@@ -398,15 +306,8 @@ export default function AddressPage() {
         </motion.div>
       </motion.div>
 
-      {/* Scoped styles - ONLY affects this delivery address page */}
-      {/* Fixed bottom CTA for mobile */}
-      {/* Fixed bottom CTA removed as per mobile layout cleanup */}
-
-      {/* Scoped styles - ONLY affects this delivery address page */}
       <style jsx>{`
-        /* Removed fixed CTA styles */
-        
-       .delivery-address-page {
+        .delivery-address-page {
           min-height: 100vh;
           min-height: 100dvh;
           width: 100%;
@@ -415,7 +316,7 @@ export default function AddressPage() {
           flex-direction: column;
           align-items: center;
           justify-content: flex-start;
-          padding: 40px 20px 60px; /* Reduced top padding for mobile to prevent overlap */
+          padding: 40px 20px 60px;
           position: relative;
           overflow-x: hidden;
           font-family: system-ui, -apple-system, sans-serif;
@@ -432,12 +333,12 @@ export default function AddressPage() {
           left: 0;
           width: 100%;
           height: 40%;
-          background: linear-gradient(180deg, rgba(255,237,213,0.2) 0%, transparent 100%);
+          background: linear-gradient(180deg, rgba(255, 237, 213, 0.2) 0%, transparent 100%);
           z-index: 0;
           pointer-events: none;
         }
         .delivery-address-card {
-          width: 90%; /* Mobile First: 90% width */
+          width: 90%;
           max-width: 400px;
           display: flex;
           flex-direction: column;
@@ -445,11 +346,9 @@ export default function AddressPage() {
           background: #ffffff;
           border-radius: 24px;
           padding: 40px 28px 36px;
-          box-shadow: 
-            0 4px 6px -1px rgba(0,0,0,0.1),
-            0 10px 15px -3px rgba(0,0,0,0.1),
-            0 20px 25px -5px rgba(0,0,0,0.05);
-          border: 1px solid rgba(0,0,0,0.04);
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 10px 15px -3px rgba(0, 0, 0, 0.1),
+            0 20px 25px -5px rgba(0, 0, 0, 0.05);
+          border: 1px solid rgba(0, 0, 0, 0.04);
           position: relative;
           z-index: 1;
         }
@@ -464,12 +363,12 @@ export default function AddressPage() {
           display: flex;
           align-items: center;
           justify-content: center;
-          box-shadow: 0 4px 12px rgba(249,115,22,0.15);
+          box-shadow: 0 4px 12px rgba(249, 115, 22, 0.15);
           border: 2px solid #fed7aa;
           transition: all 0.3s ease;
         }
         .icon-circle.is-detecting {
-          box-shadow: 0 4px 20px rgba(249,115,22,0.25);
+          box-shadow: 0 4px 20px rgba(249, 115, 22, 0.25);
           border-color: #fdba74;
         }
         .delivery-address-header {
@@ -506,7 +405,7 @@ export default function AddressPage() {
         }
         .delivery-address-input-box:focus-within {
           border-color: #f97316;
-          box-shadow: 0 0 0 3px rgba(249,115,22,0.1);
+          box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
         }
         .delivery-address-input-box.is-loading {
           border-color: #fdba74;
@@ -547,8 +446,12 @@ export default function AddressPage() {
           animation: shimmer 1.5s infinite;
         }
         @keyframes shimmer {
-          0% { background-position: 200% 0; }
-          100% { background-position: -200% 0; }
+          0% {
+            background-position: 200% 0;
+          }
+          100% {
+            background-position: -200% 0;
+          }
         }
         .input-field {
           width: 100%;
@@ -582,7 +485,7 @@ export default function AddressPage() {
         }
         .delivery-address-continue {
           width: 100%;
-          display: block; /* Always show inline button */
+          display: block;
         }
         .delivery-address-continue-btn {
           width: 100%;
@@ -598,12 +501,12 @@ export default function AddressPage() {
           color: #fff;
           border: none;
           cursor: pointer;
-          box-shadow: 0 4px 14px rgba(249,115,22,0.3);
+          box-shadow: 0 4px 14px rgba(249, 115, 22, 0.3);
           transition: all 0.2s ease;
         }
         .delivery-address-continue-btn:hover {
           background: #ea580c;
-          box-shadow: 0 6px 20px rgba(249,115,22,0.35);
+          box-shadow: 0 6px 20px rgba(249, 115, 22, 0.35);
         }
         .delivery-address-continue-btn.is-busy {
           background: #fdba74;
@@ -618,10 +521,6 @@ export default function AddressPage() {
           gap: 12px;
           margin-top: 20px;
         }
-
-        /* Fixed CTA styles removed */
-
-        /* Desktop layout adjustments */
         @media (min-width: 640px) {
           .delivery-address-page {
             padding-bottom: 40px;

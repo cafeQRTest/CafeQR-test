@@ -14,19 +14,11 @@
     "clean": "rm -rf .next out",
     "dev:tunnel": "cross-env NODE_ENV=development localtunnel --port 3000",
     "build:analyze": "cross-env ANALYZE=true next build",
-<<<<<<< Updated upstream
-    "cap:pos:test": "cross-env CAFEQR_TARGET=pos-test node scripts/use-android-target.js android-pos-test && (if not exist android\\ npx cap add android) && (if not exist android\\app\\src\\main\\assets\\ mkdir android\\app\\src\\main\\assets) && (if not exist android\\app\\src\\main\\assets\\public\\ mkdir android\\app\\src\\main\\assets\\public) && npx cap sync android",
-    "cap:delivery:test": "cross-env CAFEQR_TARGET=delivery-test node scripts/use-android-target.js android-delivery-test && (if not exist android\\ npx cap add android) && (if not exist android\\app\\src\\main\\assets\\ mkdir android\\app\\src\\main\\assets) && (if not exist android\\app\\src\\main\\assets\\public\\ mkdir android\\app\\src\\main\\assets\\public) && npx cap sync android",
+    "cap:add:delivery:test": "cross-env CAFEQR_TARGET=delivery-test npx cap add android",
+    "cap:add:pos:test": "cross-env CAFEQR_TARGET=pos-test npx cap add android",
+    "cap:delivery:test": "node scripts/ensure-cap-assets.js android-delivery-test && cross-env CAFEQR_TARGET=delivery-test npx cap sync android",
+    "cap:pos:test": "node scripts/ensure-cap-assets.js android-pos-test && cross-env CAFEQR_TARGET=pos-test npx cap sync android",
     "cap:open:android": "npx cap open android"
-=======
-"cap:add:delivery:test": "cross-env CAFEQR_TARGET=delivery-test npx cap add android",
-"cap:add:pos:test": "cross-env CAFEQR_TARGET=pos-test npx cap add android",
-"cap:delivery:test": "node scripts/ensure-cap-assets.js android-delivery-test && cross-env CAFEQR_TARGET=delivery-test npx cap sync android",
-"cap:pos:test": "node scripts/ensure-cap-assets.js android-pos-test && cross-env CAFEQR_TARGET=pos-test npx cap sync android",
-"cap:open:android": "npx cap open android"
-
-
->>>>>>> Stashed changes
   },
   "dependencies": {
     "@capacitor/android": "6.0.0",
