@@ -21,6 +21,17 @@ export default function CustomerAuthPage() {
   const [loading, setLoading] = useState(false);
   const [showManual, setShowManual] = useState(false);
 
+useEffect(() => {
+  let cancelled = false;
+  (async () => {
+    const { data } = await supabase.auth.getSession();
+    if (!cancelled && data?.session) {
+      router.replace("/app/address");
+    }
+  })();
+  return () => { cancelled = true; };
+}, []);
+
   const sendOtp = async (e) => {
     e.preventDefault();
     setErr("");
@@ -55,7 +66,7 @@ export default function CustomerAuthPage() {
       return setErr(error.message);
     }
 
-    router.push("/app/address");
+    router.replace("/app/address");
   };
 
   return (

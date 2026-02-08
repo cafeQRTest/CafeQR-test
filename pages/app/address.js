@@ -4,6 +4,8 @@ import { getSupabase } from "../../services/supabase";
 import { getOrCreateCustomer } from "../../lib/customer/getOrCreateCustomer";
 import { motion, AnimatePresence } from "framer-motion";
 import { MapPin, Navigation, Loader2, ArrowRight, RefreshCw } from "lucide-react";
+import { Capacitor } from "@capacitor/core";
+import { Geolocation } from "@capacitor/geolocation";
 
 export default function AddressPage() {
   const supabase = getSupabase();
@@ -20,11 +22,65 @@ export default function AddressPage() {
   const [savingGeo, setSavingGeo] = useState(false);
 
   const fetchLocation = () => {
-    if (!navigator.geolocation) {
-      setError("Geolocation is not supported by your browser.");
+  setFetchingLoc(true);
+  setSavingGeo(true);
+  setAddress("");
+  setError("");
+  setShowRefresh(false);
+  setGeoSaved(false);
+
+  (async () => {
+    try {
+      // Native Android (APK) path
+      if (Capacitor.isNativePlatform()) {
+        await Geolocation.requestPermissions(); // runtime prompt [web:1453][web:1455]
+        const pos = await Geolocation.getCurrentPosition({
+          enableHighAccuracy: true,
+          timeout: 10000,
+        });
+
+        const { latitude, longitude } = pos.coords;
+        // continue with your existing flow using latitude/longitude...
+        // (keep your DB sync + reverse geocoding unchanged)
+        // IMPORTANT: remove the navigator.geolocation.getCurrentPosition usage in this branch
+        // so it doesn't double-trigger
+        // ...
+        return;
+      }
+
+      // Web/PWA path (unchanged)
+      if (!navigator.geolocation) {
+        setError("Geolocation is not supported by your browser.");
+        setFetchingLoc(false);
+        setSavingGeo(false);
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          const { latitude, longitude } = pos.coords;
+          // existing code continues...
+        },
+        (err) => {
+          console.error(err);
+          setError("Unable to retrieve your location. Check GPS settings.");
+          setFetchingLoc(false);
+          setSavingGeo(false);
+          setAddress("");
+          setShowRefresh(true);
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    } catch (e) {
+      console.error(e);
+      setError("Location permission denied or GPS is off.");
       setFetchingLoc(false);
-      return;
+      setSavingGeo(false);
+      setShowRefresh(true);
     }
+  })();
+};
+
 
     setFetchingLoc(true);
     setSavingGeo(true); // Start saving spinner for DB

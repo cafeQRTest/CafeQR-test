@@ -233,29 +233,112 @@ public void pickPrinter(PluginCall call) {
   }
 
   // Print raw ESC/POS (runs on a worker thread)
-  @PluginMethod()
-  public void printRaw(PluginCall call) {
-    String base64 = call.getString("base64");
-    String btAddress = call.getString("address");
-    String nameContains = call.getString("nameContains");
-    byte[] data = android.util.Base64.decode(base64, android.util.Base64.DEFAULT);
+@PluginMethod()
+public void printRaw(PluginCall call) {
+  final String base64 = call.getString("base64");
+  final String btAddress = call.getString("address");
+  final String nameContains = call.getString("nameContains");
 
-    new Thread(() -> {
-      try {
-        if (tryUsb(getContext(), data)) {
-          call.resolve(new JSObject().put("via", "usb"));
-          return;
+  if (base64 == null) { call.reject("base64 required"); return; }
+
+  call.setKeepAlive(true); // auto-saves call after return [web:1769]
+
+  final byte[] data = android.util.Base64.decode(base64, android.util.Base64.DEFAULT);
+
+  getBridge().execute(() -> { // <-- FIX: Capacitor background executor [web:1726]
+    try {
+      final boolean okUsb = tryUsb(getContext(), data);
+      final boolean okBt = !okUsb && tryBluetooth(getContext(), data, btAddress, nameContains);
+
+      final JSObject out = new JSObject();
+      out.put("via", okUsb ? "usb" : (okBt ? "bt" : "none"));
+
+      Handler main = new Handler(Looper.getMainLooper());
+      main.post(() -> {
+        try {
+          if (okUsb || okBt) call.resolve(out);
+          else call.reject("No USB/Bluetooth path");
+        } finally {
+          call.release(getBridge()); // releases saved call safely [web:1755]
         }
-        if (tryBluetooth(getContext(), data, btAddress, nameContains)) {
-          call.resolve(new JSObject().put("via", "bt"));
-          return;
+      });
+    } catch (Exception e) {
+      Handler main = new Handler(Looper.getMainLooper());
+      main.post(() -> {
+        try {
+          call.reject(e.getMessage() != null ? e.getMessage() : "PRINT_FAILED", e);
+        } finally {
+          call.release(getBridge()); // [web:1755]
         }
-        call.reject("No USB/Bluetooth path");
-      } catch (Exception e) {
-        call.reject(e.getMessage());
+      });
+    }
+  });
+}
+
+@PluginMethod()
+public void printTcpRaw(PluginCall call) {
+  final String base64 = call.getString("base64");
+  final String host = call.getString("host"); // printer IP or hostname
+  final Integer port = call.getInt("port", 9100);
+
+  if (base64 == null) { call.reject("base64 required"); return; }
+  if (host == null || host.trim().isEmpty()) { call.reject("host required"); return; }
+
+  call.setKeepAlive(true); // [web:1769]
+  final byte[] data = android.util.Base64.decode(base64, android.util.Base64.DEFAULT);
+
+  getBridge().execute(() -> { // [web:1726]
+    java.net.Socket socket = null;
+    java.io.OutputStream os = null;
+    try {
+      socket = new java.net.Socket();
+      socket.connect(new java.net.InetSocketAddress(host, port), 5000);
+      socket.setSoTimeout(5000);
+
+      os = socket.getOutputStream();
+
+      // Optional: ESC/POS initialize
+      os.write(new byte[]{ 0x1b, '@' });
+      os.flush();
+
+      // Chunked write (keeps old printers happy)
+      final int CHUNK = 512;
+      int offset = 0;
+      while (offset < data.length) {
+        int len = Math.min(CHUNK, data.length - offset);
+        os.write(data, offset, len);
+        os.flush();
+        offset += len;
+        try { Thread.sleep(5); } catch (InterruptedException ignored) {}
       }
-    }).start();
-  }
+
+      // Feed
+      os.write(new byte[]{ 0x0a, 0x0a });
+      os.flush();
+
+      final JSObject out = new JSObject();
+      out.put("via", "tcp");
+      out.put("host", host);
+      out.put("port", port);
+
+      Handler main = new Handler(Looper.getMainLooper());
+      main.post(() -> {
+        try { call.resolve(out); }
+        finally { call.release(getBridge()); } // [web:1755]
+      });
+
+    } catch (Exception e) {
+      Handler main = new Handler(Looper.getMainLooper());
+      main.post(() -> {
+        try { call.reject(e.getMessage() != null ? e.getMessage() : "TCP_PRINT_FAILED", e); }
+        finally { call.release(getBridge()); } // [web:1755]
+      });
+    } finally {
+      try { if (os != null) os.close(); } catch (Exception ignored) {}
+      try { if (socket != null) socket.close(); } catch (Exception ignored) {}
+    }
+  });
+}
 
   private boolean tryUsb(Context ctx, byte[] data) throws Exception {
     UsbManager mgr = (UsbManager) ctx.getSystemService(Context.USB_SERVICE);

@@ -1,4 +1,4 @@
-//android/app/src/main/java/com/cafeqr/app/DevicePrinterPlugin.java
+//android/app/src/main/java/com/cafeqr/delivery/test/DevicePrinterPlugin.java
 
 package com.cafeqr.delivery.test;
 

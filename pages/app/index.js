@@ -1,88 +1,50 @@
 // pages/app/index.js
-
-import { useEffect, useMemo, useState } from "react";
-import { motion } from "framer-motion";
-import Link from "next/link";
-import { getSupabase } from "../../services/supabase";
-import { getOrCreateCustomer } from "../../lib/customer/getOrCreateCustomer";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/router";
 import LandingPage from "../../components/LandingPage";
 import CafeQRLoader from "../../components/CafeQRLoader";
+import { getSupabase } from "../../services/supabase";
 
 export default function DeliveryAppHome() {
   const supabase = getSupabase();
+  const router = useRouter();
 
-  const [restaurants, setRestaurants] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [q, setQ] = useState("");
-
-  const [addrLoading, setAddrLoading] = useState(true);
-  const [defaultAddress, setDefaultAddress] = useState(null);
+  const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from("restaurants")
-        .select("id, name, restaurant_profiles(brand_color)")
-        .order("name", { ascending: true });
+    let unsub;
 
-      if (!error) setRestaurants(data || []);
-      setLoading(false);
-    };
+    const run = async () => {
+      // 1) On cold start / relaunch: check existing session
+      const { data } = await supabase.auth.getSession(); // [web:1867]
+      const session = data?.session;
 
-    load();
-  }, [supabase]);
-
-  useEffect(() => {
-    const loadDefaultAddress = async () => {
-      setAddrLoading(true);
-      try {
-        const customer = await getOrCreateCustomer();
-        const { data } = await supabase
-          .from("customer_addresses")
-          .select("*")
-          .eq("customer_id", customer.id)
-          .order("is_default", { ascending: false })
-          .order("created_at", { ascending: false });
-
-        const def = (data || []).find((a) => a.is_default) || (data || [])[0] || null;
-        setDefaultAddress(def);
-      } catch {
-        setDefaultAddress(null);
-      } finally {
-        setAddrLoading(false);
+      if (session) {
+        router.replace("/app/address"); // don’t keep /app/ in back stack [web:1866]
+        return;
       }
+
+      setChecking(false);
+
+      // 2) If user signs in later, redirect immediately
+      const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
+        if (newSession) router.replace("/app/address"); // [web:1866]
+      });
+      unsub = sub?.subscription;
     };
 
-    loadDefaultAddress();
-  }, [supabase]);
+    run();
 
-  const filtered = useMemo(() => {
-    const term = q.trim().toLowerCase();
-    return (restaurants || []).filter((r) =>
-      (r?.name || "").toLowerCase().includes(term)
-    );
-  }, [restaurants, q]);
+    return () => {
+      try { unsub?.unsubscribe?.(); } catch {}
+    };
+  }, [supabase, router]);
 
-  const topAddressText = useMemo(() => {
-    if (addrLoading) return "Loading address…";
-    if (!defaultAddress) return "Add delivery address";
-    const parts = [
-      defaultAddress.label,
-      defaultAddress.line1,
-      defaultAddress.city,
-      defaultAddress.state,
-    ].filter(Boolean);
-    return parts.join(" • ");
-  }, [addrLoading, defaultAddress]);
+  if (checking) return <CafeQRLoader message="Checking session..." />;
 
-  if (addrLoading) {
-    return <CafeQRLoader message="Loading restaurants..." />;
-  }
+  return <LandingPage />;
+}
 
-  if (defaultAddress) {
-    return <LandingPage />;
-  }
 
   return (
     // <div style={{ minHeight: "100vh", background: "#f8f9fa", paddingBottom: 84 }}>

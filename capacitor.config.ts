@@ -6,11 +6,12 @@ const POS_TEST: CapacitorConfig = {
   appId: 'com.cafeqr.test',
   appName: 'Cafe QR Test (POS)',
   webDir: 'out',
+  android: { path: 'android-pos-test' },       // ✅ use this folder
   plugins: {
     PushNotifications: { presentationOptions: ['badge', 'sound', 'alert'] },
   },
   server: {
-    url: 'https://test-cafeqr.vercel.app',           // POS
+    url: 'https://test-cafeqr.vercel.app',
     androidScheme: 'https',
     allowNavigation: ['test-cafeqr.vercel.app'],
   },
@@ -20,11 +21,12 @@ const DELIVERY_TEST: CapacitorConfig = {
   appId: 'com.cafeqr.delivery.test',
   appName: 'Cafe QR Delivery Test',
   webDir: 'out',
+  android: { path: 'android-delivery-test' },  // ✅ use this folder
   plugins: {
     PushNotifications: { presentationOptions: ['badge', 'sound', 'alert'] },
   },
   server: {
-    url: 'https://test-cafeqr.vercel.app/app',       // Delivery route
+    url: 'https://test-cafeqr.vercel.app/app',
     androidScheme: 'https',
     allowNavigation: ['test-cafeqr.vercel.app'],
   },

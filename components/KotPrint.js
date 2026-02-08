@@ -9,6 +9,11 @@ import { Capacitor } from '@capacitor/core';
 const PRINT_DEDUP_KEY = 'KOTPRINT_PRINTED_V1';
 const PRINT_DEDUP_TTL_MS = 15_000; // 15 seconds
 
+const closeAfterPrint = useCallback(() => {
+  // For auto-print, KotPrint is a controller (often no UI); don't auto-close/navigate.
+  if (!autoPrint) onClose?.();
+}, [autoPrint, onClose]);
+
 function readJson(key, fallback) {
   try {
     const raw = localStorage.getItem(key);
@@ -153,6 +158,13 @@ export default function KotPrint({ order, onClose, onPrint, autoPrint = true, ki
   const ranRef = useRef(false);
   const lockRef = useRef(false);
 
+useEffect(() => {
+  ranRef.current = false;
+  lockRef.current = false;
+  setStatus('');
+}, [order?.id, kind]);
+
+
   // Load bill + restaurant profile + FULL ORDER ITEMS on mount
   useEffect(() => {
     let alive = true;
@@ -289,7 +301,7 @@ const doPrint = useCallback(async () => {
       });
 
       onPrint?.();
-      onClose?.();
+      closeAfterPrint();
       return;
     }
 
@@ -317,7 +329,7 @@ const doPrint = useCallback(async () => {
       });
 
       onPrint?.();
-      onClose?.();
+      closeAfterPrint();
       return;
     }
 
@@ -368,7 +380,7 @@ if (routeNet.relayUrl && routeNet.targets.length) {
     }
 
     onPrint?.();
-    onClose?.();
+    closeAfterPrint();
   } catch (e) {
     // Last resort: download/share
     try {
