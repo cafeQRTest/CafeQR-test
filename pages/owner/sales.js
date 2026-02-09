@@ -34,32 +34,71 @@ function computeOrderTotalDisplay(order) {
   return 0;
 }
 
+// ---- helpers for variants (additive, safe) ----
+function pick(obj, keys, fallback = null) {
+  for (const k of keys) {
+    if (obj && obj[k] != null && obj[k] !== '') return obj[k];
+  }
+  return fallback;
+}
+
+function baseNameWithoutVariantSuffix(name) {
+  // Remove a trailing " (Variant)" if present so category mapping works
+  return String(name || '').replace(/\s*\([^)]*\)\s*$/, '').trim();
+}
+
 function toDisplayItems(order) {
+  // IMPORTANT: Prefer normalized order_items if present (it has variant fields reliably).
+  if (Array.isArray(order.order_items) && order.order_items.length > 0) {
+    return order.order_items.map((oi) => {
+      const itemName = pick(oi, ['item_name', 'name'], oi?.menu_items?.name || 'Item');
+      const variantName = pick(oi, ['variant_name', 'variantName', 'variantname'], null);
+
+      const displayName =
+        variantName && !String(itemName || '').includes(variantName)
+          ? `${itemName} (${variantName})`
+          : (itemName || oi?.menu_items?.name || 'Item');
+
+      return {
+        menu_item_id: oi.menu_item_id,
+        name: displayName,
+        quantity: oi.quantity,
+        price: oi.price,
+        is_packaged_good: oi.is_packaged_good,
+        variant_id: oi.variant_option_id || null,
+        variant_name: variantName || null,
+        line_discount_amount: oi.line_discount_amount,
+        order_discount_share: oi.order_discount_share,
+        discount_amount: oi.discount_amount,
+        // pass through embedded menu item if present (for category lookup)
+        menu_items: oi.menu_items || null,
+      };
+    });
+  }
+
+  // Fallback: legacy JSON items on orders
   if (Array.isArray(order.items) && order.items.length > 0) {
-    return order.items.map((item) => ({
-      ...item,
-      name: item.variant_name && !item.name.includes(item.variant_name) 
-        ? `${item.name} (${item.variant_name})` 
-        : (item.name || 'Unknown Item'),
-      menu_item_id: item.menu_item_id || item.id,
-    }));
+    return order.items.map((item) => {
+      const itemName = pick(item, ['name', 'item_name', 'itemName'], 'Unknown Item');
+      const variantName = pick(item, ['variant_name', 'variantName', 'variantname'], null);
+
+      const displayName =
+        variantName && !String(itemName || '').includes(variantName)
+          ? `${itemName} (${variantName})`
+          : (itemName || 'Unknown Item');
+
+      return {
+        ...item,
+        name: displayName,
+        menu_item_id: item.menu_item_id || item.menuitemid || item.id,
+        quantity: item.quantity,
+        price: item.price,
+        variant_id: item.variant_option_id || item.variantid || null,
+        variant_name: variantName || null,
+      };
+    });
   }
-  if (Array.isArray(order.order_items)) {
-    return order.order_items.map((oi) => ({
-      menu_item_id: oi.menu_item_id,
-      name: oi.variant_name && !(oi.item_name || '').includes(oi.variant_name)
-        ? `${oi.item_name} (${oi.variant_name})`
-        : (oi.item_name || oi.menu_items?.name || 'Item'),
-      quantity: oi.quantity,
-      price: oi.price,
-      is_packaged_good: oi.is_packaged_good,
-      variant_id: oi.variant_option_id || null,
-      variant_name: oi.variant_name || null,
-      line_discount_amount: oi.line_discount_amount,
-      order_discount_share: oi.order_discount_share,
-      discount_amount: oi.discount_amount,
-    }));
-  }
+
   return [];
 }
 
@@ -118,34 +157,34 @@ export default function SalesPage() {
     if (!restaurantId || !supabase) return
     
     const fetchData = async () => {
-    // Fetch restaurant data from 'restaurants' table
-    const { data: restaurantData } = await supabase
-      .from('restaurants')
-      .select('name')
-      .eq('id', restaurantId)
-      .single()
-    
-    if (restaurantData) {
-      setRestaurantProfile(prev => ({
-        ...prev,
-        restaurant_name: restaurantData.name
-      }))
-    }
+      // Fetch restaurant data from 'restaurants' table
+      const { data: restaurantData } = await supabase
+        .from('restaurants')
+        .select('name')
+        .eq('id', restaurantId)
+        .single()
+      
+      if (restaurantData) {
+        setRestaurantProfile(prev => ({
+          ...prev,
+          restaurant_name: restaurantData.name
+        }))
+      }
 
-    const { data: items } = await supabase
-      .from('menu_items')
-      .select('category')
-      .eq('restaurant_id', restaurantId)
-      .neq('category', null)
-    
-    if (items) {
-      const uniqueCats = [...new Set(items.map(m => m.category))]
-      setMenuCategories(uniqueCats.filter(c => c && c.trim() !== ''))
+      const { data: items } = await supabase
+        .from('menu_items')
+        .select('category')
+        .eq('restaurant_id', restaurantId)
+        .neq('category', null)
+      
+      if (items) {
+        const uniqueCats = [...new Set(items.map(m => m.category))]
+        setMenuCategories(uniqueCats.filter(c => c && c.trim() !== ''))
+      }
     }
-  }
-  
-  fetchData()
-}, [restaurantId, supabase])
+    
+    fetchData()
+  }, [restaurantId, supabase])
 
   useEffect(() => {
     if (checking || restLoading || !restaurantId || !supabase) return
@@ -181,6 +220,8 @@ export default function SalesPage() {
       }
    
       const { startUtc, endUtc } = istSpanFromDatesUtcISO(range.start, range.end)
+
+      // ✅ KEY CHANGE: fetch order_items too (so variants are available reliably)
       const { data: orders, error: ordersError } = await supabase
         .from('orders')
         .select(`
@@ -193,6 +234,19 @@ export default function SalesPage() {
           status,
           customer_name,
           items,
+          order_items(
+            menu_item_id,
+            item_name,
+            quantity,
+            price,
+            is_packaged_good,
+            variant_option_id,
+            variant_name,
+            line_discount_amount,
+            order_discount_share,
+            discount_amount,
+            menu_items(name, category)
+          ),
           payment_method,
           mixed_payment_details,
           order_type,
@@ -208,7 +262,9 @@ export default function SalesPage() {
         .neq('status', 'cancelled')
 
       if (ordersError) throw ordersError
+
       const orderData = Array.isArray(orders) ? orders : []
+
       // Sort orders by date_ordered desc initially if not already
       orderData.sort((a,b) => new Date(b.date_ordered || b.created_at) - new Date(a.date_ordered || a.created_at))
       setOrdersList(orderData)
@@ -218,8 +274,13 @@ export default function SalesPage() {
       let totalRevenue = 0
       let totalTax = 0
       let totalQuantity = 0
-      const itemCounts = {}
-      const itemRevenue = {}
+
+      // Use stable internal keys but keep the display name as your table "Item"
+      const itemCounts = {}           // key -> qty
+      const itemRevenue = {}          // key -> revenue
+      const itemDisplayName = {}      // key -> displayName
+      const itemDisplayCategory = {}  // key -> category
+
       const categoryMap = {}
 
       orderData.forEach(o => {
@@ -228,27 +289,41 @@ export default function SalesPage() {
         totalRevenue += revenue
         totalTax += tax
 
-        if (Array.isArray(o.items)) {
-          o.items.forEach(item => {
-            const baseName = item.name || 'Unknown Item';
-            const variantName = item.variant_name || null;
-            // Key identification for grouping: merge name and variant if present
-            const displayName = variantName && !baseName.includes(variantName)
-              ? `${baseName} (${variantName})`
-              : baseName;
+        // ✅ KEY CHANGE: use toDisplayItems(o), not just o.items
+        const lines = toDisplayItems(o)
 
-            const itemCategory = itemCategoryMap[displayName] || itemCategoryMap[baseName] || item.category || 'Uncategorized';
-            const quantity = Number(item.quantity) || 1
-            const price = Number(item.price) || 0
-            const itemTotal = quantity * price
+        lines.forEach((item) => {
+          const displayName = String(item?.name || 'Unknown Item').trim()
 
-            itemCounts[displayName] = (itemCounts[displayName] || 0) + quantity
-            itemRevenue[displayName] = (itemRevenue[displayName] || 0) + itemTotal
-            totalQuantity += quantity
+          // Build an internal key that separates variants even if names collide
+          const mi = item?.menu_item_id || ''
+          const vid = item?.variant_id || item?.variant_option_id || ''
+          const vnm = item?.variant_name || ''
+          const key = `${mi}::${vid || vnm || displayName}`
 
-            categoryMap[itemCategory] = (categoryMap[itemCategory] || 0) + itemTotal
-          })
-        }
+          // Category resolution: prefer embedded menu_items.category, fallback to base name map
+          const embeddedCat = item?.menu_items?.category || null
+          const baseName = baseNameWithoutVariantSuffix(displayName)
+          const cat =
+            embeddedCat ||
+            itemCategoryMap[baseName] ||
+            itemCategoryMap[displayName] ||
+            item?.category ||
+            'Uncategorized'
+
+          const quantity = Number(item.quantity) || 1
+          const price = Number(item.price) || 0
+          const itemTotal = quantity * price
+
+          itemDisplayName[key] = displayName
+          itemDisplayCategory[key] = cat
+
+          itemCounts[key] = (itemCounts[key] || 0) + quantity
+          itemRevenue[key] = (itemRevenue[key] || 0) + itemTotal
+          totalQuantity += quantity
+
+          categoryMap[cat] = (categoryMap[cat] || 0) + itemTotal
+        })
       })
 
       const cgst = totalTax / 2
@@ -264,90 +339,85 @@ export default function SalesPage() {
         sgst: Math.round(sgst * 100) / 100
       })
 
-      const itemsArray = Object.entries(itemCounts)
-        .map(([name, quantity]) => ({
-          item_name: name,
-          quantity_sold: quantity,
-          revenue: itemRevenue[name] || 0,
-          category: itemCategoryMap[name] || 'Uncategorized'
+      const itemsArray = Object.keys(itemCounts)
+        .map((k) => ({
+          item_name: itemDisplayName[k] || k,
+          quantity_sold: itemCounts[k],
+          revenue: itemRevenue[k] || 0,
+          category: itemDisplayCategory[k] || 'Uncategorized'
         }))
         .sort((a, b) => b.revenue - a.revenue)
       
       setAllSalesData(itemsArray)
       setSalesData(itemsArray)
 
-      // In loadAllReportsData function, update payment breakdown logic:
+      // Payment breakdown logic (unchanged)
+      const paymentMap = {};
+      orderData.forEach(o => {
+        let method = o.actual_payment_method || o.payment_method || 'unknown';
+        const amount = Number(o.total_inc_tax ?? o.total_amount ?? 0);
+        
+        // Handle mixed payments - show separately
+        if (method === 'mixed' && o.mixed_payment_details) {
+          const { cash_amount, online_amount, online_method } = o.mixed_payment_details;
+          
+          // Add cash portion
+          const cashKey = 'cash';
+          if (!paymentMap[cashKey]) paymentMap[cashKey] = { count: 0, amount: 0 };
+          paymentMap[cashKey].count += 1;
+          paymentMap[cashKey].amount += Number(cash_amount);
+          
+          // Add online portion
+          const onlineKey = online_method || 'online';
+          if (!paymentMap[onlineKey]) paymentMap[onlineKey] = { count: 0, amount: 0 };
+          paymentMap[onlineKey].count += 1;
+          paymentMap[onlineKey].amount += Number(online_amount);
+        } else {
+          if (!paymentMap[method]) paymentMap[method] = { count: 0, amount: 0 };
+          paymentMap[method].count += 1;
+          paymentMap[method].amount += amount;
+        }
+      });
 
-const paymentMap = {};
-orderData.forEach(o => {
-  let method = o.actual_payment_method || o.payment_method || 'unknown';
-  const amount = Number(o.total_inc_tax ?? o.total_amount ?? 0);
-  
-  // Handle mixed payments - show separately
-  if (method === 'mixed' && o.mixed_payment_details) {
-    const { cash_amount, online_amount, online_method } = o.mixed_payment_details;
-    
-    // Add cash portion
-    const cashKey = 'cash';
-    if (!paymentMap[cashKey]) paymentMap[cashKey] = { count: 0, amount: 0 };
-    paymentMap[cashKey].count += 1;
-    paymentMap[cashKey].amount += Number(cash_amount);
-    
-    // Add online portion
-    const onlineKey = online_method || 'online';
-    if (!paymentMap[onlineKey]) paymentMap[onlineKey] = { count: 0, amount: 0 };
-    paymentMap[onlineKey].count += 1;
-    paymentMap[onlineKey].amount += Number(online_amount);
-  } else {
-    if (!paymentMap[method]) paymentMap[method] = { count: 0, amount: 0 };
-    paymentMap[method].count += 1;
-    paymentMap[method].amount += amount;
-  }
-});
+      setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
+        payment_method: method,
+        order_count: data.count,
+        total_amount: data.amount,
+        percentage: totalRevenue > 0 ? ((data.amount / totalRevenue) * 100).toFixed(1) : '0.0'
+      })));
 
-setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
-  payment_method: method,
-  order_count: data.count,
-  total_amount: data.amount,
-  percentage: totalRevenue > 0 ? ((data.amount / totalRevenue) * 100).toFixed(1) : '0.0'
-})));
+      // Hourly in IST (unchanged)
+      const fmtHour = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Kolkata', hour: '2-digit', hour12: false
+      })
+      const hourlyMap = {}
+      orderData.forEach(o => {
+        const key = fmtHour.format(new Date(o.date_ordered || o.created_at)) // "06", "17", etc.
+        const amount = Number(o.total_inc_tax ?? o.total_amount ?? 0)
+        if (!hourlyMap[key]) hourlyMap[key] = { count: 0, amount: 0 }
+        hourlyMap[key].count += 1
+        hourlyMap[key].amount += amount
+      })
+      setHourlyBreakdown(
+        Object.keys(hourlyMap).sort().map(h => ({
+          hour: `${h}:00`,
+          order_count: hourlyMap[h].count,
+          total_amount: hourlyMap[h].amount
+        }))
+      )
 
-// Hourly in IST
-     const fmtHour = new Intl.DateTimeFormat('en-GB', {
-       timeZone: 'Asia/Kolkata', hour: '2-digit', hour12: false
-     })
-     const hourlyMap = {}
-     orderData.forEach(o => {
-       const key = fmtHour.format(new Date(o.date_ordered || o.created_at)) // "06", "17", etc.
-       const amount = Number(o.total_inc_tax ?? o.total_amount ?? 0)
-       if (!hourlyMap[key]) hourlyMap[key] = { count: 0, amount: 0 }
-       hourlyMap[key].count += 1
-       hourlyMap[key].amount += amount
-     })
-     setHourlyBreakdown(
-       Object.keys(hourlyMap).sort().map(h => ({
-         hour: `${h}:00`,
-         order_count: hourlyMap[h].count,
-         total_amount: hourlyMap[h].amount
-       }))
-     )
-
+      // Order types (unchanged)
       const orderTypeMap = {}
       orderData.forEach(o => {
         let type = o.order_type || 'counter'
         const table = o.table_number ? String(o.table_number).trim() : null
         
-        // Logic:
-        // 1. If it's parcel/takeaway, keep as is (ignore table if any, usually 0)
-        // 2. If it has a VALID table number (and not parcel), categorize as Table X
-        // 3. Else fallback to original type (counter/dashboard/etc.)
-        
         const isParcel = type.toLowerCase().includes('parcel') || type.toLowerCase().includes('takeaway')
 
         if (!isParcel && table && table !== '0') {
-           type = `Table ${table}`
+          type = `Table ${table}`
         } else if (type === 'dashboard') {
-           type = 'QR (No Table)'
+          type = 'QR (No Table)'
         }
         
         const amount = Number(o.total_inc_tax ?? o.total_amount ?? 0)
@@ -363,10 +433,7 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
         percentage: totalRevenue > 0 ? ((data.amount / totalRevenue) * 100).toFixed(1) : '0.0'
       }))
       
-      // Sort: maybe group Tables together if possible, or just amount desc
-      // Let's sort by amount descending
       typeArray.sort((a,b) => b.total_amount - a.total_amount)
-      
       setOrderTypeBreakdown(typeArray)
 
       setTaxBreakdown([
@@ -375,7 +442,6 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
         { tax_type: 'Total Tax', amount: Math.round(totalTax * 100) / 100 }
       ])
 
-      
       setCategoryBreakdown(Object.entries(categoryMap)
         .map(([cat, amount]) => ({
           category: cat || 'Uncategorized',
@@ -444,7 +510,6 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
       console.error('Excel export error:', error)
     }
   }
-
 
   if (checking || restLoading) return <div style={{ padding: 16 }}>Loading…</div>
   if (!restaurantId) return <div style={{ padding: 16 }}>No restaurant selected</div>
@@ -550,7 +615,6 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
               border-top-width: 4px;
             }
           `}</style>
-
 
           <div className="sales-carousel">
             {reports.map((name, idx) => (
@@ -689,7 +753,7 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
                   ]}
                   data={ordersList.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)}
                 />
-
+                
                 {ordersList.length > itemsPerPage && (
                   <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16, marginTop: 16 }}>
                     <Button 
@@ -832,36 +896,36 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
       )}
 
       {/* Global "Show All Items" Modal */}
-    {itemsModalOrder && (
-      <div 
-        style={{
-          position:'fixed', inset: 0,
-          background:'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(5px)', 
-          display:'flex', alignItems:'center', justifyContent:'center', zIndex:10000,
-          padding: 12
-        }}
-        onClick={(e) => { e.stopPropagation(); setItemsModalOrder(null); }}
-      >
-        <div 
+      {itemsModalOrder && (
+        <div
           style={{
-            background:'white', width:'100%', maxWidth:400, borderRadius:12, padding: 24,
-            boxShadow:'0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-            maxHeight:'90vh', display:'flex', flexDirection:'column', position: 'relative'
+            position:'fixed', inset: 0,
+            background:'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(5px)',
+            display:'flex', alignItems:'center', justifyContent:'center', zIndex:10000,
+            padding: 12
           }}
-          onClick={e => e.stopPropagation()}
+          onClick={(e) => { e.stopPropagation(); setItemsModalOrder(null); }}
         >
+          <div
+            style={{
+              background:'white', width:'100%', maxWidth:400, borderRadius:12, padding: 24,
+              boxShadow:'0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+              maxHeight:'90vh', display:'flex', flexDirection:'column', position: 'relative'
+            }}
+            onClick={e => e.stopPropagation()}
+          >
             {/* Header */}
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20}}>
               <h3 style={{fontSize: 18, fontWeight: 700, color:'#0f172a', margin:0}}>
                 Order Details #{itemsModalOrder.id.slice(0,8)}
               </h3>
-              <div 
+              <div
                 onClick={() => setItemsModalOrder(null)}
                 onMouseEnter={(e) => e.currentTarget.style.opacity = '0.7'}
                 onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
                 style={{
-                    cursor:'pointer', color: BRAND.orange, fontSize: 18, fontWeight: 900,
-                    lineHeight: 1, transition: 'opacity 0.2s'
+                  cursor:'pointer', color: BRAND.orange, fontSize: 18, fontWeight: 900,
+                  lineHeight: 1, transition: 'opacity 0.2s'
                 }}
               >X</div>
             </div>
@@ -896,8 +960,8 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
                   <div>
                     <div style={{ fontSize: 14, fontWeight: 700, color: '#1e293b' }}>{it.name}</div>
                     <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
-                       ₹{Number(it.price).toFixed(2)} x {it.quantity}
-                       {it.variant_name && <span style={{ marginLeft: 8, fontStyle: 'italic' }}>({it.variant_name})</span>}
+                      ₹{Number(it.price).toFixed(2)} x {it.quantity}
+                      {it.variant_name && <span style={{ marginLeft: 8, fontStyle: 'italic' }}>({it.variant_name})</span>}
                     </div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
@@ -905,13 +969,13 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
                       ₹{((it.quantity || 1) * (it.price || 0)).toFixed(2)}
                     </div>
                     {(() => {
-                        const lDisc = Number(it.line_discount_amount || 0);
-                        const displayDisc = lDisc > 0 ? lDisc : Math.max(0, Number(it.discount_amount || 0) - Number(it.order_discount_share || 0));
-                        return displayDisc > 0 ? (
-                          <div style={{ fontSize: 10, color: '#ef4444', fontWeight: 600, marginTop: 2 }}>
-                            - ₹{displayDisc.toFixed(2)}
-                          </div>
-                        ) : null;
+                      const lDisc = Number(it.line_discount_amount || 0);
+                      const displayDisc = lDisc > 0 ? lDisc : Math.max(0, Number(it.discount_amount || 0) - Number(it.order_discount_share || 0));
+                      return displayDisc > 0 ? (
+                        <div style={{ fontSize: 10, color: '#ef4444', fontWeight: 600, marginTop: 2 }}>
+                          - ₹{displayDisc.toFixed(2)}
+                        </div>
+                      ) : null;
                     })()}
                   </div>
                 </div>
@@ -935,19 +999,19 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
               )}
 
               {Number(itemsModalOrder.round_off_amount || 0) !== 0 && (
-                <div style={{ 
-                  display: 'flex', 
-                  justifyContent: 'space-between', 
-                  marginBottom: 8, 
-                  fontSize: 13, 
-                  fontWeight: 600, 
-                  color: Number(itemsModalOrder.round_off_amount) > 0 ? '#10b981' : '#ef4444' 
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  marginBottom: 8,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: Number(itemsModalOrder.round_off_amount) > 0 ? '#10b981' : '#ef4444'
                 }}>
                   <span>Round-off</span>
                   <span>{Number(itemsModalOrder.round_off_amount) > 0 ? '+' : ''}₹{Number(itemsModalOrder.round_off_amount).toFixed(2)}</span>
                 </div>
               )}
-              
+
               <div style={{ borderTop: '1px dashed #fdba74', margin: '8px 0 12px 0' }}></div>
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -957,9 +1021,9 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
                 </span>
               </div>
             </div>
+          </div>
         </div>
-      </div>
-    )}
+      )}
 
     </div>
   )

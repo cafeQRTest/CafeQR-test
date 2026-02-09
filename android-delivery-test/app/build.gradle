@@ -1,10 +1,17 @@
 apply plugin: 'com.android.application'
 
 android {
+<<<<<<< Updated upstream:android-delivery-test/app/build.gradle
     namespace "com.cafeqr.delivery.test"
     compileSdk rootProject.ext.compileSdkVersion
     defaultConfig {
         applicationId "com.cafeqr.delivery.test"
+=======
+    namespace "com.cafeqr.app"
+    compileSdk rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "com.cafeqr.app"
+>>>>>>> Stashed changes:android/app/build.gradle
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
