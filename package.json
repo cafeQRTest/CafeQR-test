@@ -17,7 +17,7 @@
     "cap:add:delivery:test": "cross-env CAFEQR_TARGET=delivery-test npx cap add android",
     "cap:add:pos:test": "cross-env CAFEQR_TARGET=pos-test npx cap add android",
     "cap:delivery:test": "node scripts/ensure-cap-assets.js android-delivery-test && cross-env CAFEQR_TARGET=delivery-test npx cap sync android",
-    "cap:pos:test": "node scripts/ensure-cap-assets.js android-pos-test && cross-env CAFEQR_TARGET=pos-test npx cap sync android",
+    "cap:pos:test": "node scripts/ensure-cap-assets.js android-pos-test && cross-env CAFEQR_TARGET=pos-test npx cap sync android"
 
   },
   "dependencies": {
