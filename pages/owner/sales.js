@@ -38,13 +38,18 @@ function toDisplayItems(order) {
   if (Array.isArray(order.items) && order.items.length > 0) {
     return order.items.map((item) => ({
       ...item,
+      name: item.variant_name && !item.name.includes(item.variant_name) 
+        ? `${item.name} (${item.variant_name})` 
+        : (item.name || 'Unknown Item'),
       menu_item_id: item.menu_item_id || item.id,
     }));
   }
   if (Array.isArray(order.order_items)) {
     return order.order_items.map((oi) => ({
       menu_item_id: oi.menu_item_id,
-      name: oi.item_name || oi.menu_items?.name || 'Item',
+      name: oi.variant_name && !(oi.item_name || '').includes(oi.variant_name)
+        ? `${oi.item_name} (${oi.variant_name})`
+        : (oi.item_name || oi.menu_items?.name || 'Item'),
       quantity: oi.quantity,
       price: oi.price,
       is_packaged_good: oi.is_packaged_good,
@@ -225,14 +230,20 @@ export default function SalesPage() {
 
         if (Array.isArray(o.items)) {
           o.items.forEach(item => {
-            const name = item.name || 'Unknown Item'
-            const itemCategory = itemCategoryMap[name] || item.category || 'Uncategorized'
+            const baseName = item.name || 'Unknown Item';
+            const variantName = item.variant_name || null;
+            // Key identification for grouping: merge name and variant if present
+            const displayName = variantName && !baseName.includes(variantName)
+              ? `${baseName} (${variantName})`
+              : baseName;
+
+            const itemCategory = itemCategoryMap[displayName] || itemCategoryMap[baseName] || item.category || 'Uncategorized';
             const quantity = Number(item.quantity) || 1
             const price = Number(item.price) || 0
             const itemTotal = quantity * price
 
-            itemCounts[name] = (itemCounts[name] || 0) + quantity
-            itemRevenue[name] = (itemRevenue[name] || 0) + itemTotal
+            itemCounts[displayName] = (itemCounts[displayName] || 0) + quantity
+            itemRevenue[displayName] = (itemRevenue[displayName] || 0) + itemTotal
             totalQuantity += quantity
 
             categoryMap[itemCategory] = (categoryMap[itemCategory] || 0) + itemTotal
