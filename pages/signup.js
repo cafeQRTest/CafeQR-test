@@ -14,11 +14,13 @@ export default function SignupPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
+  const [msgType, setMsgType] = useState(""); // 'success', 'error'
   const [showPassword, setShowPassword] = useState(false)
   
   const handleSignup = async (e) => {
     e.preventDefault()
     if (password !== confirmPassword) {
+      setMsgType("error");
       setMessage('Passwords do not match')
       return
     }
@@ -35,10 +37,11 @@ export default function SignupPage() {
       console.error('Signup Error:', error);
       // Try to show more details if available
       const detailedMsg = error.details || error.hint || error.message;
+      setMsgType("error");
       setMessage(detailedMsg);
       return
     }
-
+    setMsgType("success");
     setMessage('Account created! Please verify your email.')
   }
 
@@ -114,7 +117,7 @@ export default function SignupPage() {
               </div>
             </div>
 
-            {message && <div className="alert">{message}</div>}
+            {message && <div className={`alert ${msgType}`}>{message}</div>}
 
             <button type="submit" disabled={loading} className="submit-btn">
               {loading ? 'WAIT...' : 'SIGN UP'}
@@ -211,6 +214,7 @@ export default function SignupPage() {
            background: transparent !important;
            border-radius: 0; color: #1e293b;
            outline: none; transition: all 0.2s;
+           box-shadow: none !important;
         }
         .input-group input:focus { border-bottom-color: #115e59; }
 
@@ -296,6 +300,8 @@ export default function SignupPage() {
            font-size: 13px; color: #ef4444; border-radius: 8px; 
            background: #fef2f2; padding: 10px; margin-bottom: 20px;
         }
+        .alert.error { background: #fef2f2; color: #ef4444; border: 1px solid #fee2e2; }
+        .alert.success { background: #f0fdf4; color: #15803d; border: 1px solid #dcfce7; }
 
         .copyright-footer {
           text-align: center;

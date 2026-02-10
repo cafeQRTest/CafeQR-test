@@ -190,6 +190,7 @@ export default function LoginPage() {
            background: transparent !important;
            border-radius: 0; color: #1e293b;
            outline: none; transition: all 0.2s;
+           box-shadow: none !important;
         }
         .input-group input:focus { border-bottom-color: #f97316; }
 
