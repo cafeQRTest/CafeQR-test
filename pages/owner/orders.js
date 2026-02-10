@@ -784,7 +784,8 @@ export default function OrdersPage() {
   const supabase = getSupabase();
   const router = useRouter(); // <-- Add this inside the component!
   const { user, checking } = useRequireAuth(supabase);
-  const { restaurant, loading: restLoading } = useRestaurant();
+  const { restaurant, role, loading: restLoading } = useRestaurant();
+  const canCancel = role !== 'staff'; // staff cannot cancel
   const restaurantId = restaurant?.id;
 
   // NEW: state for showing the print modal
@@ -1017,7 +1018,14 @@ export default function OrdersPage() {
     return () => clearInterval(interval);
   }, []);
 
-const onCancelOrderOpen = (order) => setCancelOrderDialog(order);
+const onCancelOrderOpen = (order) => {
+  if (!canCancel) {
+    setError('Staff accounts cannot cancel orders.');
+    return;
+  }
+  setCancelOrderDialog(order);
+};
+
 const handleCancelConfirm = async (reason) => {
   if (!cancelOrderDialog) return;
   console.log('[CANCEL ORDER] Starting cancellation for order:', cancelOrderDialog.id);
@@ -1746,6 +1754,7 @@ if (ordersByStatus.mobileFilter === 'inprogress') {
     mobileOrders.map((order) => (
       <OrderCard
         key={order.id}
+        canCancel={canCancel}
         order={order}
         statusColor={COLORS[order.status]}
         onChangeStatus={updateStatus}
@@ -1882,6 +1891,7 @@ colOrders =
             colOrders.map((order) => (
               <OrderCard
                 key={order.id}
+                canCancel={canCancel}
                 order={order}
                 statusColor={COLORS[order.status]}
                 onChangeStatus={updateStatus}
@@ -2001,7 +2011,7 @@ colOrders =
         />
       )}
 
-      {cancelOrderDialog && (
+        {cancelOrderDialog && canCancel && (
         <CancelConfirmDialog
           order={cancelOrderDialog}
           onConfirm={handleCancelConfirm}
@@ -2106,7 +2116,8 @@ function OrderCard({
   onEditOrder,
   onEditPax,
   onEditTable,
-  onShowItems // New prop to trigger global modal
+  onShowItems, 
+  canCancel = true
 }) {
   const items = toDisplayItems(order);
   const total = computeOrderTotalDisplay(order);
@@ -2210,7 +2221,11 @@ function OrderCard({
               <>
                 <Button size="sm" onClick={() => onChangeStatus(order.id, 'in_progress')}>Start</Button>
                 <Button size="sm" variant="outline" onClick={() => onEditOrder(order)}>Edit</Button>
-                <Button size="sm" variant="danger" onClick={() => onCancelOrderOpen(order)}>Cancel</Button>
+{canCancel && (
+  <Button size="sm" variant="danger" onClick={() => onCancelOrderOpen(order)}>
+    Cancel
+  </Button>
+)}
                 <Button size="sm" style={{background: '#10b981', borderColor: '#10b981', color:'white'}} onClick={() => onPrintKot && onPrintKot(order)}>KOT</Button>
               </>
             )}
@@ -2221,7 +2236,11 @@ function OrderCard({
                  <Button size="sm" onClick={() => onComplete(order)} disabled={generatingInvoice === order.id}>Done</Button>
                  <Button size="sm" variant="outline" onClick={() => onEditOrder(order)}>Edit</Button>
                  {/* Allow cancel if mistake */}
-                 <Button size="sm" variant="danger" onClick={() => onCancelOrderOpen(order)}>Cancel</Button>
+{canCancel && (
+  <Button size="sm" variant="danger" onClick={() => onCancelOrderOpen(order)}>
+    Cancel
+  </Button>
+)}
                  <Button size="sm" style={{background: '#10b981', borderColor: '#10b981', color:'white'}} onClick={() => onPrintBill && onPrintBill(order)}>Print Bill</Button>
               </>
             )}
@@ -2233,7 +2252,11 @@ function OrderCard({
                    {generatingInvoice === order.id ? '...' : 'Done'}
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => onEditOrder(order)}>Edit</Button>
-                <Button size="sm" variant="danger" onClick={() => onCancelOrderOpen(order)}>Cancel</Button>
+{canCancel && (
+  <Button size="sm" variant="danger" onClick={() => onCancelOrderOpen(order)}>
+    Cancel
+  </Button>
+)}
                 <Button size="sm" style={{background: '#10b981', borderColor: '#10b981', color:'white'}} onClick={() => onPrintBill && onPrintBill(order)}>Print Bill</Button>
               </>
             )}
@@ -2245,7 +2268,11 @@ function OrderCard({
                    try { await downloadInvoicePdf(order.id) } catch (e) { alert(e.message) }
                 }} disabled={generatingInvoice === order.id}>Invoice</Button>
                 <Button size="sm" style={{background: '#10b981', borderColor: '#10b981', color:'white'}} onClick={() => onPrintBill && onPrintBill(order)}>Print Bill</Button>
-                <Button size="sm" variant="danger" onClick={() => onCancelOrderOpen(order)}>Cancel</Button>
+{canCancel && (
+  <Button size="sm" variant="danger" onClick={() => onCancelOrderOpen(order)}>
+    Cancel
+  </Button>
+)}
               </>
             )}
 
