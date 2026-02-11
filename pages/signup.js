@@ -41,6 +41,13 @@ export default function SignupPage() {
       setMessage(detailedMsg);
       return
     }
+    
+    if (data.user?.identities?.length === 0) {
+      setMsgType("error");
+      setMessage("Email already registered. Please sign in.");
+      return;
+    }
+    
     setMsgType("success");
     setMessage('Account created! Please verify your email.')
   }
