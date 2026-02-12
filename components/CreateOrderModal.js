@@ -1568,10 +1568,7 @@ export default function CreateOrderModal({
     }
   };
 
-  // Load credit customers when modal opens
-  useEffect(() => {
-    if (isOpen && isCreditMode) loadCreditCustomers();
-  }, [isOpen, isCreditMode, restaurantId]);
+
 
   // Fetch upsells effect
   useEffect(() => {
