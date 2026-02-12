@@ -1740,9 +1740,10 @@ export default function TableManagement() {
   const { data: tables = [], isLoading: loading, error, refetch } = useTables(restaurant?.id);
   const { data: sections = [] } = useSections(restaurant?.id);
   const { data: floors = [] } = useFloors(restaurant?.id, tables);
+  // Consolidate order fetching to 'all' so we have everything for filtering in JS
   const { data: orders = [], isLoading: loadingOrders } = useOrders(
     restaurant?.id, 
-    serviceMode === 'dine-in' ? 'all' : (serviceMode === 'takeaway' ? 'parcel' : 'delivery')
+    'all'
   );
   
   // React Query mutations
@@ -2352,14 +2353,29 @@ const handleModalResend = async (table) => {
   }, [tables, searchQuery, filterSection, filterStatus, filterFloor]);
 
   // Filtered orders for non-dine-in modes
-  const filteredOrders = useMemo(() => {
+   const filteredOrders = useMemo(() => {
     if (serviceMode === 'dine-in') return [];
+    
     return orders.filter(order => {
+      // 1. Filter by order_type based on serviceMode
+      const type = (order.order_type || '').toLowerCase();
+      
+      if (serviceMode === 'takeaway') {
+        // Takeaway orders are usually 'parcel' or 'takeaway'
+        if (type !== 'parcel' && type !== 'takeaway' && type !== 'parcel_service') return false;
+      } else if (serviceMode === 'delivery') {
+        // Delivery orders are 'delivery' OR any order with a delivery address linked
+        const isDelivery = type === 'delivery' || !!order.delivery_address_id || type === 'home_delivery';
+        if (!isDelivery) return false;
+      }
+
+      // 2. Search filter
       const matchesSearch = !searchQuery || 
         (order.customer_name?.toLowerCase().includes(searchQuery.toLowerCase()) || 
          order.customer_phone?.includes(searchQuery) ||
          order.id.toLowerCase().includes(searchQuery.toLowerCase()));
       
+      // 3. Status filter
       const matchesStatus = filterStatus === 'all' || order.status === filterStatus;
       
       return matchesSearch && matchesStatus;
