@@ -1,3 +1,5 @@
+//pages/owner/billing
+
 import React, { useEffect, useState } from 'react';
 import { getSupabase } from '../../services/supabase';
 import { useRequireAuth } from '../../lib/useRequireAuth';
@@ -476,7 +478,21 @@ const exportHsnSummary = async () => {
                       </button>
                     ) 
                   },
-                  { header: 'Date', accessor: 'date_ordered', cell: (r) => new Date(r.date_ordered || r.invoice_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) },
+                  {
+  header: 'Date & Time',
+  accessor: 'date_ordered',
+  cell: (r) =>
+    new Date(r.date_ordered || r.invoice_date).toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    }),
+},
+
                   { header: 'Customer', accessor: 'customer_name', cell: (r) => r.customer_name || '' },
                   { header: 'Taxable', accessor: 'taxable_amount', cell: (r) => formatMoney(r.taxable_amount) },
                   { header: 'Tax', accessor: 'total_tax', cell: (r) => <span style={{ color: '#dc2626', fontWeight: 600 }}>{formatMoney(r.total_tax)}</span> },
@@ -555,7 +571,17 @@ const exportHsnSummary = async () => {
                     )}
                     <div className="detail-item">
                       <div className="d-label"><FaCalendarDay /> Date</div>
-                      <div className="d-value">{new Date(selectedInvoice.date_ordered || selectedInvoice.invoice_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}</div>
+                      <div className="d-value">{new Date(selectedInvoice.date_ordered || selectedInvoice.invoice_date)
+  .toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  })
+}</div>
                     </div>
                     {prettyMethod(selectedInvoice.payment_method) && (
                       <div className="detail-item">
