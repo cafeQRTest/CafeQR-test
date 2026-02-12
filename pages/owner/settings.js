@@ -82,7 +82,7 @@ const SectionCard = styled.section`
   border-radius: 24px;
   border: 1px solid rgba(255, 237, 213, 0.5); /* Very subtle orange tint border */
   box-shadow: 0 10px 40px -10px rgba(0,0,0,0.05);
-  overflow: hidden;
+  /* overflow: hidden; Removed to allow dropdowns to overflow */
   transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
   opacity: 0;
   animation: ${fadeInUp} 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
@@ -98,11 +98,17 @@ const SectionCard = styled.section`
     box-shadow: 0 20px 40px -10px rgba(0,0,0,0.08);
     border-color: #fed7aa; /* Orange-200 */
   }
+
+  &:focus-within {
+    z-index: 10;
+  }
 `;
 
 const SectionHeader = styled.div`
   padding: clamp(16px, 2.5vw, 28px) clamp(16px, 3vw, 36px);
   border-bottom: 1px solid #fff7ed;
+  border-top-left-radius: 24px;
+  border-top-right-radius: 24px;
   display: flex;
   align-items: center;
   gap: 20px;

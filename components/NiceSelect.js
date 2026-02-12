@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 
-export default function NiceSelect({ value, onChange, options, placeholder = "Select...", disabled = false, maxHeight = 300 }) {
+export default function NiceSelect({ value, onChange, options, placeholder = "Select...", disabled = false, maxHeight = 300, style = {} }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -19,22 +19,23 @@ export default function NiceSelect({ value, onChange, options, placeholder = "Se
   }, [open]);
 
   return (
-    <div style={selectWrapper} ref={ref}>
+    <div style={{ ...selectWrapper, ...style, zIndex: open ? 1000 : 1 }} ref={ref}>
       <button
         type="button"
         disabled={disabled}
         onClick={() => !disabled && setOpen((o) => !o)}
         style={{
           ...selectInput,
+          ...style,
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
           cursor: disabled ? "not-allowed" : "pointer",
           opacity: disabled ? 0.7 : 1,
-          borderColor: open ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.2)',
-          background: open ? 'white' : 'rgba(255,255,255,0.1)',
-          color: open ? '#1e293b' : 'white',
-          boxShadow: open ? '0 10px 25px -5px rgba(0,0,0,0.2)' : 'none',
+          borderColor: open ? '#cbd5e1' : (style?.borderColor || '#e2e8f0'),
+          background: open ? 'white' : (style?.background || '#f8fafc'),
+          color: open ? '#1e293b' : (style?.color || '#1e293b'),
+          boxShadow: open ? '0 10px 25px -5px rgba(0,0,0,0.1)' : 'none',
         }}
       >
         <span style={{ 
@@ -43,13 +44,14 @@ export default function NiceSelect({ value, onChange, options, placeholder = "Se
           whiteSpace: 'nowrap',
           overflow: 'hidden',
           textOverflow: 'ellipsis',
-          marginRight: 20
+          marginRight: 20,
+          color: open ? '#1e293b' : (style?.color || '#1e293b')
         }}>
           {current?.label || placeholder}
         </span>
         <span style={{
           ...selectChevron,
-          color: open ? '#f97316' : 'white',
+          color: open ? '#f97316' : (style?.color || '#94a3b8'),
           transform: open ? 'translateY(-50%) rotate(180deg)' : 'translateY(-50%)',
           transition: 'all 0.3s ease'
         }}>▾</span>
@@ -58,7 +60,7 @@ export default function NiceSelect({ value, onChange, options, placeholder = "Se
         <div
           style={{
             position: "absolute",
-            zIndex: 9999,
+            zIndex: 10001,
             top: 'calc(100% + 8px)',
             left: 0,
             width: "100%",
@@ -66,7 +68,7 @@ export default function NiceSelect({ value, onChange, options, placeholder = "Se
             background: "#fff",
             borderRadius: 16,
             border: "1.5px solid #e2e8f0",
-            boxShadow: "0 20px 40px -10px rgba(0,0,0,0.25)",
+            boxShadow: "0 20px 40px -10px rgba(0,0,0,0.15)",
             maxHeight: maxHeight,
             overflowY: "auto",
             animation: 'fadeIn 0.2s ease-out'
@@ -142,4 +144,3 @@ const selectChevron = {
   pointerEvents: "none",
   fontSize: 16,
 };
-

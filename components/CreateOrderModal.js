@@ -919,7 +919,7 @@ const QuickAddContainer = styled.div`
   border-radius: 24px;
   width: 90%;
   max-width: 440px;
-  overflow: hidden;
+  overflow: visible;
   box-shadow: 0 30px 60px -12px rgba(0,0,0,0.4);
   animation: ${fadeIn} 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   border: 1px solid rgba(255,255,255,0.1);
@@ -1024,27 +1024,51 @@ const FormattedRoundOffInput = ({ mode, value, base, limit, onChange, theme }) =
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
-      <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontWeight: 700, color: '#64748b', pointerEvents: 'none' }}>₹</span>
+      <span style={{ 
+        position: 'absolute', 
+        left: 14, 
+        top: '50%', 
+        transform: 'translateY(-50%)', 
+        fontWeight: 800, 
+        color: '#94a3b8', 
+        pointerEvents: 'none',
+        fontSize: 16
+      }}>₹</span>
       <input
-        type="number"
+        type="text"
+        inputMode="decimal"
         value={localValue}
         onChange={handleChange}
         onFocus={handleFocus}
         onBlur={handleBlur}
         disabled={mode === 'automatic'}
-        step="0.01"
         style={{
-          padding: '8px 12px 8px 24px',
-          width: 100,
-          borderRadius: 8,
-          border: `1px solid ${mode === 'manual' ? theme.main : '#e2e8f0'}`,
-          fontWeight: 700,
+          padding: '12px 16px 12px 32px',
+          width: 140,
+          borderRadius: 14,
+          border: `2px solid ${mode === 'manual' ? theme.main : '#f1f5f9'}`,
+          fontWeight: 800,
           textAlign: 'right',
-          fontSize: 14,
+          fontSize: 18,
           outline: 'none',
           background: mode === 'manual' ? '#fff' : '#f8fafc',
           color: mode === 'manual' ? '#1e293b' : '#94a3b8',
-          cursor: mode === 'manual' ? 'text' : 'not-allowed'
+          cursor: mode === 'manual' ? 'text' : 'not-allowed',
+          transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+          boxShadow: mode === 'manual' ? `0 4px 12px ${theme.main}15` : 'none',
+          letterSpacing: '-0.5px'
+        }}
+        onMouseEnter={(e) => {
+          if (mode === 'manual') {
+            e.target.style.borderColor = theme.main;
+            e.target.style.boxShadow = `0 6px 16px ${theme.main}20`;
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (mode === 'manual' && !isFocused) {
+            e.target.style.borderColor = theme.main;
+            e.target.style.boxShadow = `0 4px 12px ${theme.main}15`;
+          }
         }}
       />
     </div>
@@ -1098,6 +1122,7 @@ export default function CreateOrderModal({
   const [quickAddLoading, setQuickAddLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerSearch, setCustomerSearch] = useState('');
@@ -1238,9 +1263,10 @@ export default function CreateOrderModal({
       
       const matchesVeg = !vegOnly || item.veg === true;
       const matchesPackaged = !packagedOnly || item.is_packaged_good === true;
-      return matchesSearch && matchesVeg && matchesPackaged;
+      const matchesCategory = categoryFilter === 'all' || item.category === categoryFilter;
+      return matchesSearch && matchesVeg && matchesPackaged && matchesCategory;
     });
-  }, [menuItems, searchQuery, vegOnly, packagedOnly]);
+  }, [menuItems, searchQuery, vegOnly, packagedOnly, categoryFilter]);
 
   const categories = useMemo(() => {
     const cats = Array.from(new Set(menuItems.map(i => i.category))).filter(Boolean);
@@ -1607,28 +1633,7 @@ export default function CreateOrderModal({
     fetchUpsells();
   }, [cart]);
 
-  // Sync Round Off from Restaurant Profile
-  useEffect(() => {
-    const fetchProfile = async () => {
-      if (!restaurantId) return;
-      const { data } = await supabase
-        .from('restaurant_profiles')
-        .select('round_off_enabled, round_off_mode, round_off_auto_factor, round_off_manual_limit')
-        .eq('restaurant_id', restaurantId)
-        .maybeSingle();
-      
-      if (data) {
-        setRoundOffConfig({
-          round_off_enabled: !!data.round_off_enabled,
-          round_off_mode: data.round_off_mode || 'automatic',
-          round_off_auto_factor: Number(data.round_off_auto_factor || 1),
-          round_off_manual_value: 0,
-          round_off_manual_limit: Number(data.round_off_manual_limit || 10)
-        });
-      }
-    };
-    if (isOpen) fetchProfile();
-  }, [isOpen, restaurantId]);
+
 
   // Calculate totals using central utility
   const cartTotals = useMemo(() => {
@@ -1986,6 +1991,11 @@ export default function CreateOrderModal({
                     label: `${c.name} (${c.phone}) - ₹${c.current_balance.toFixed(2)}`
                   }))}
                   placeholder="Select Credit Customer"
+                  style={{ 
+                    background: 'rgba(255,255,255,0.1)', 
+                    color: 'white', 
+                    borderColor: 'rgba(255,255,255,0.2)' 
+                  }}
                 />
               </div>
             ) : (
@@ -2100,6 +2110,42 @@ export default function CreateOrderModal({
                   }}
                 />
               </SearchBox>
+
+              <div style={{ width: 220, flexShrink: 0 }}>
+                <NiceSelect 
+                  value={categoryFilter}
+                  onChange={setCategoryFilter}
+                  options={categories}
+                  placeholder="All Categories"
+                  style={{ background: 'white', border: '1.5px solid #e2e8f0', height: 52, borderRadius: 18 }}
+                />
+              </div>
+
+              {(searchQuery || categoryFilter !== 'all' || vegOnly || packagedOnly) && (
+                <button
+                  onClick={() => {
+                    setSearchQuery('');
+                    setCategoryFilter('all');
+                    setVegOnly(false);
+                    setPackagedOnly(false);
+                  }}
+                  style={{
+                    padding: '0 16px',
+                    height: 52,
+                    borderRadius: 18,
+                    border: '1.5px solid #fee2e2',
+                    background: '#fef2f2',
+                    color: '#ef4444',
+                    fontSize: 12,
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  Clear Filters
+                </button>
+              )}
             </SearchFilterBar>
 
             {/* Product Suggestions Section - Only visible while searching */}
@@ -2997,7 +3043,9 @@ export default function CreateOrderModal({
               color: 'white',
               display: 'flex', 
               justifyContent: 'space-between', 
-              alignItems: 'center' 
+              alignItems: 'center',
+              borderTopLeftRadius: 24,
+              borderTopRightRadius: 24
             }}>
               <div>
                 <h3 style={{ margin: 0, fontSize: 20, fontWeight: 900, letterSpacing: '-0.5px' }}>
