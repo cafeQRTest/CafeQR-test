@@ -55,57 +55,57 @@ export default function MenuExcelImport({
   const [parsingError, setParsingError] = useState("");
   const [busy, setBusy] = useState(false);
   const [resultMsg, setResultMsg] = useState("");
-  
+
   const [existingNameSet, setExistingNameSet] = useState(new Set());
   const [loadingExisting, setLoadingExisting] = useState(false);
- 
-useEffect(() => {
-  if (!restaurantId || !supabase) return;
 
-  let cancelled = false;
+  useEffect(() => {
+    if (!restaurantId || !supabase) return;
 
-  (async () => {
-    setLoadingExisting(true);
-    try {
-      const set = new Set();
-      const pageSize = 1000;
-      let from = 0;
+    let cancelled = false;
 
-      while (true) {
-        const { data, error } = await supabase
-          .from("menu_items")
-          .select("name")
-          .eq("restaurant_id", restaurantId)
-          .range(from, from + pageSize - 1);
+    (async () => {
+      setLoadingExisting(true);
+      try {
+        const set = new Set();
+        const pageSize = 1000;
+        let from = 0;
 
-        if (error) throw error;
+        while (true) {
+          const { data, error } = await supabase
+            .from("menu_items")
+            .select("name")
+            .eq("restaurant_id", restaurantId)
+            .range(from, from + pageSize - 1);
 
-        (data || []).forEach((r) => {
-          const k = normKey(r?.name);
-          if (k) set.add(k);
-        });
+          if (error) throw error;
 
-        if (!data || data.length < pageSize) break;
-        from += pageSize;
+          (data || []).forEach((r) => {
+            const k = normKey(r?.name);
+            if (k) set.add(k);
+          });
+
+          if (!data || data.length < pageSize) break;
+          from += pageSize;
+        }
+
+        if (!cancelled) setExistingNameSet(set);
+      } catch (e) {
+        // If this fails, we still allow import, but dupes might error again.
+        console.error(e);
+      } finally {
+        if (!cancelled) setLoadingExisting(false);
       }
+    })();
 
-      if (!cancelled) setExistingNameSet(set);
-    } catch (e) {
-      // If this fails, we still allow import, but dupes might error again.
-      console.error(e);
-    } finally {
-      if (!cancelled) setLoadingExisting(false);
-    }
-  })();
-
-  return () => {
-    cancelled = true;
-  };
-}, [restaurantId, supabase]);
+    return () => {
+      cancelled = true;
+    };
+  }, [restaurantId, supabase]);
 
 
 
-const existingByNormName = existingNameSet;
+  const existingByNormName = existingNameSet;
 
   const parsed = useMemo(() => {
     const drafts = (rows || []).map((r, idx) => {
@@ -123,20 +123,20 @@ const existingByNormName = existingNameSet;
       const taxrate = taxrateFromFile ?? (defaults.taxrate ?? 0);
 
 
-// Read MRP separately (if present)
-const mrp = toNumber(pick(r, ["mrp", "MRP"]));
+      // Read MRP separately (if present)
+      const mrp = toNumber(pick(r, ["mrp", "MRP"]));
 
-// Read selling price separately (if present)
-const sellRate =
-  toNumber(pick(r, ["price", "sell_rate", "SELL_RATE", "rate", "RATE", "amount"])) ?? null;
+      // Read selling price separately (if present)
+      const sellRate =
+        toNumber(pick(r, ["price", "sell_rate", "SELL_RATE", "rate", "RATE", "amount"])) ?? null;
 
-// Packaged rule: if MRP exists => packaged item
-const ispackagedgood = mrp !== null;
+      // Packaged rule: if MRP exists => packaged item
+      const ispackagedgood = mrp !== null;
 
-// IMPORTANT:
-// If packaged: store price as MRP (so you can’t exceed it)
-// Else: store the normal selling price
-const price = ispackagedgood ? mrp : sellRate;
+      // IMPORTANT:
+      // If packaged: store price as MRP (so you can’t exceed it)
+      // Else: store the normal selling price
+      const price = ispackagedgood ? mrp : sellRate;
 
 
 
@@ -169,22 +169,22 @@ const price = ispackagedgood ? mrp : sellRate;
     });
 
     const withNewFlag = drafts.map((d) => {
-  const key = normKey(d.name);
-  const exists = !!key && existingByNormName.has(key);
-  return { ...d, __isNew: !exists };
-});
+      const key = normKey(d.name);
+      const exists = !!key && existingByNormName.has(key);
+      return { ...d, __isNew: !exists };
+    });
 
-let newOnes = withNewFlag.filter((d) => d.__isNew);
+    let newOnes = withNewFlag.filter((d) => d.__isNew);
 
-// de-dupe within file by name only
-const seenInFile = new Set();
-newOnes = newOnes.filter((d) => {
-  const key = normKey(d.name);
-  if (!key) return true;
-  if (seenInFile.has(key)) return false;
-  seenInFile.add(key);
-  return true;
-});
+    // de-dupe within file by name only
+    const seenInFile = new Set();
+    newOnes = newOnes.filter((d) => {
+      const key = normKey(d.name);
+      if (!key) return true;
+      if (seenInFile.has(key)) return false;
+      seenInFile.add(key);
+      return true;
+    });
 
 
     // Validate only new ones
@@ -228,7 +228,7 @@ newOnes = newOnes.filter((d) => {
       const hasRowError = errors.some((e) => e.startsWith(rowTag + ":"));
       if (!hasRowError) validNew.push(d);
 
-if (d.__sellAboveMrp) warnings.push(`${rowTag}: SELL_RATE is higher than MRP; using MRP as price.`);
+      if (d.__sellAboveMrp) warnings.push(`${rowTag}: SELL_RATE is higher than MRP; using MRP as price.`);
 
     }
 
@@ -244,7 +244,7 @@ if (d.__sellAboveMrp) warnings.push(`${rowTag}: SELL_RATE is higher than MRP; us
         existingSkipped: withNewFlag.length - newOnes.length,
       },
     };
-  }, [rows, defaults, existingByNormName ]);
+  }, [rows, defaults, existingByNormName]);
 
   async function onFile(e) {
     setParsingError("");
@@ -278,37 +278,37 @@ if (d.__sellAboveMrp) warnings.push(`${rowTag}: SELL_RATE is higher than MRP; us
 
     setBusy(true);
     try {
-// IMPORTANT: menu_items (not menuitems) + snake_case columns
-const payload = parsed.validNew.map((d) => ({
-  restaurant_id: restaurantId,
-  name: d.name,
-  category: d.category,
-  price: Number(d.price),
+      // IMPORTANT: menu_items (not menuitems) + snake_case columns
+      const payload = parsed.validNew.map((d) => ({
+        restaurant_id: restaurantId,
+        name: d.name,
+        category: d.category,
+        price: Number(Number(d.price).toFixed(2)),
 
-  code_number: d.codenumber,          // was codenumber
-  hsn: d.hsn || null,
-  tax_rate: Number(d.taxrate ?? 0),   // was taxrate
+        code_number: d.codenumber,          // was codenumber
+        hsn: d.hsn || null,
+        tax_rate: Number(Number(d.taxrate ?? 0).toFixed(2)),   // was taxrate
 
-  status: defaults.status ?? "available", // NOTE: must be one of: available/out_of_stock/paused/draft
-  veg: !!d.veg,
+        status: defaults.status ?? "available", // NOTE: must be one of: available/out_of_stock/paused/draft
+        veg: !!d.veg,
 
-  is_packaged_good: !!d.ispackagedgood,                 // was ispackagedgood
-  compensation_cess_rate: Number(d.compensationcessrate ?? 0), // was compensationcessrate
+        is_packaged_good: !!d.ispackagedgood,                 // was ispackagedgood
+        compensation_cess_rate: Number(Number(d.compensationcessrate ?? 0).toFixed(2)), // was compensationcessrate
 
-  ispopular: false,
-  image_url: null,     // was imageurl
-  has_variants: false, // was hasvariants
-  uom_id: null,        // was uomid
-}));
+        ispopular: false,
+        image_url: null,     // was imageurl
+        has_variants: false, // was hasvariants
+        uom_id: null,        // was uomid
+      }));
 
-const { data, error } = await supabase
-  .from("menu_items")
-  .insert(payload)
-  .select(
-    "id, name, category, price, code_number, hsn, tax_rate, status, veg, is_packaged_good, compensation_cess_rate, image_url, has_variants, uom_id"
-  );
+      const { data, error } = await supabase
+        .from("menu_items")
+        .insert(payload)
+        .select(
+          "id, name, category, price, code_number, hsn, tax_rate, status, veg, is_packaged_good, compensation_cess_rate, image_url, has_variants, uom_id"
+        );
 
-if (error) throw error;
+      if (error) throw error;
 
       setResultMsg(`Imported ${data?.length || 0} new items.`);
       onImported?.(data || []);
@@ -325,7 +325,7 @@ if (error) throw error;
       <h3 style={{ marginTop: 0 }}>Excel Import (New items only: name + category match)</h3>
 
       <div style={{ fontSize: 13, color: "#374151", marginBottom: 8 }}>
-           Tip: Tax%/HSN are optional. If MRP is present, the item is treated as Packaged; missing HSN becomes a warning (you                can fill it later).
+        Tip: Tax%/HSN are optional. If MRP is present, the item is treated as Packaged; missing HSN becomes a warning (you                can fill it later).
       </div>
 
       <input type="file" accept=".xlsx,.xls" onChange={onFile} disabled={busy} />

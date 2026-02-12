@@ -500,7 +500,7 @@ export default function ItemEditor({
       return {
         menu_item_id: menuItemId,
         option_id: option.id,
-        price: existing?.price || Number(Number(price).toFixed(2)), // Use variant price or base price
+        price: Number(Number(existing?.price || price || 0).toFixed(2)), // Use variant price or base price
         is_available: existing?.is_available ?? true
       };
     });
@@ -590,9 +590,9 @@ if (code.trim()) {
         veg,
         ispopular: isPopular,
         hsn: hsn.trim() || null,
-        tax_rate: Number(taxRate),
+        tax_rate: Number(Number(taxRate || 0).toFixed(2)),
         is_packaged_good: isPackaged,
-        compensation_cess_rate: Number(cessRate),
+        compensation_cess_rate: Number(Number(cessRate || 0).toFixed(2)),
         image_url: imageUrl || null,
         has_variants: hasVariants,
         uom_id: uomId,
@@ -1012,7 +1012,7 @@ if (code.trim()) {
                                     const newPrices = variantPrices.filter(vp => vp.option_id !== option.id);
                                     newPrices.push({
                                       option_id: option.id,
-                                      price: valStr === '' ? 0 : (parseFloat(valStr) || 0),
+                                      price: valStr === '' ? 0 : Number(Number(parseFloat(valStr) || 0).toFixed(2)),
                                       is_available: variantPrice?.is_available ?? true
                                     });
                                     setVariantPrices(newPrices);

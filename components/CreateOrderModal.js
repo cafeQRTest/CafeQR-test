@@ -1359,6 +1359,7 @@ export default function CreateOrderModal({
       return [...prev, { 
         ...itemWithVariant, 
         cartId, 
+        price: Number(Number(itemWithVariant.price || 0).toFixed(2)),
         quantity: itemWithVariant.quantity || 1,
         // Ensure flattened properties exist for UI controls
         uom_precision: uomPrecision,
@@ -1550,12 +1551,12 @@ export default function CreateOrderModal({
         .insert({
           restaurant_id: restaurantId,
           name: quickProduct.name,
-          price: parseFloat(quickProduct.price),
+          price: Number(Number(quickProduct.price).toFixed(2)),
           code_number: quickProduct.code || null,
           is_packaged_good: quickProduct.packaged,
           veg: quickProduct.veg,
           category: quickProduct.category || 'Quick Add',
-          tax_rate: quickProduct.packaged ? parseFloat(quickProduct.tax_rate || 0) : null,
+          tax_rate: quickProduct.packaged ? Number(Number(quickProduct.tax_rate || 0).toFixed(2)) : null,
           has_variants: quickProduct.has_variants,
           status: 'available'
         })
@@ -1685,14 +1686,16 @@ export default function CreateOrderModal({
       const items = cart.map(item => ({
         id: item.id,
         name: item.name,
-        price: item.price,
+        price: Number(Number(item.price).toFixed(2)),
         quantity: item.quantity,
-        tax_rate: item.tax_rate || 0,
+        tax_rate: Number(Number(item.tax_rate || 0).toFixed(2)),
         is_packaged_good: item.is_packaged_good || false,
         variant_id: item.variant_id || null,
         variant_name: item.variant_name || null,
         discount: item.discount || null,
-        discount_amount: (item.price * item.quantity) * (item.discount?.type === 'percent' ? (item.discount.value/100) : 0) || (item.discount?.type === 'amount' ? item.discount.value : 0)
+        discount_amount: Number(
+          ((item.price * item.quantity) * (item.discount?.type === 'percent' ? (item.discount.value/100) : 0) || (item.discount?.type === 'amount' ? item.discount.value : 0)).toFixed(2)
+        )
       }));
 
       const finalOrderType = orderType; // 'dine-in', 'parcel', 'delivery'
@@ -1839,7 +1842,7 @@ export default function CreateOrderModal({
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
               <div style={{ fontSize: 22, fontWeight: 1000, color: 'white', lineHeight: 1 }}>
-                ₹{total.toFixed(0)}
+                ₹{total.toFixed(2)}
               </div>
               <span style={{ fontSize: 9, fontWeight: 800, color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Amount</span>
             </div>
@@ -2444,7 +2447,7 @@ export default function CreateOrderModal({
                             style={{ fontSize: 16, fontWeight: 1000, color: '#0f172a', cursor: 'default', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', letterSpacing: '-0.5px' }}
                           >
                              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                               ₹{(item.price * item.quantity).toFixed(0)}
+                               ₹{(item.price * item.quantity).toFixed(2)}
                                {(!!restaurant?.gst_enabled && !restaurant?.prices_include_tax) && (
                                  <span style={{ 
                                    fontSize: 8, 
@@ -2842,7 +2845,7 @@ export default function CreateOrderModal({
                  {creating ? 'PROCESSING...' : (
                    <>
                      <span style={{ fontSize: 13 }}>{orderMode === 'settle' ? 'SETTLE & PRINT BILL' : 'SEND TO KITCHEN (KOT)'}</span>
-                     <span style={{ fontSize: 20, fontWeight: 950 }}>₹{total.toFixed(0)}</span>
+                     <span style={{ fontSize: 20, fontWeight: 950 }}>₹{total.toFixed(2)}</span>
                    </>
                  )}
                </button>
