@@ -643,6 +643,7 @@ const CreditBadge = styled.div`
   margin-top: 6px;
 `;
 
+
 const CartHeader = styled.div`
   padding: 20px 28px;
   background: white;
@@ -1991,11 +1992,14 @@ export default function CreateOrderModal({
           {/* Credit Toggle in Header */}
           <button
             onClick={() => {
-              setIsCreditMode(!isCreditMode);
-              if (!isCreditMode) {
-                // Data is auto-loaded by hook
+              const nextCreditMode = !isCreditMode;
+              setIsCreditMode(nextCreditMode);
+              if (nextCreditMode) {
+                setSelectedPaymentMethod('credit');
                 setSelectedCreditCustomerId('');
                 setCreditCustomerBalance(0);
+              } else if (selectedPaymentMethod === 'credit') {
+                setSelectedPaymentMethod('cash');
               }
             }}
             style={{
@@ -2214,15 +2218,6 @@ export default function CreateOrderModal({
                 />
               </SearchBox>
 
-              <div style={{ width: 220, flexShrink: 0 }}>
-                <NiceSelect 
-                  value={categoryFilter}
-                  onChange={setCategoryFilter}
-                  options={categories}
-                  placeholder="All Categories"
-                  style={{ background: 'white', border: '1.5px solid #e2e8f0', height: 52, borderRadius: 18 }}
-                />
-              </div>
 
               {(searchQuery || categoryFilter !== 'all' || vegOnly || packagedOnly) && (
                 <button
@@ -2295,7 +2290,7 @@ export default function CreateOrderModal({
               </div>
             )}
 
-            {/* New Main Area: Cart & Order Breakdown */}
+            {/* Main Area: Cart & Order Breakdown */}
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
               <CartHeader orderMode={orderMode}>
                 <div className="header-left">
@@ -2610,8 +2605,6 @@ export default function CreateOrderModal({
                   ))
                 )}
               </CartItems>
-
-
             </div>
 
             <KeyboardInfo style={{ padding: '12px 24px', borderTop: 'none', background: '#f8fafc' }}>
@@ -2778,18 +2771,18 @@ export default function CreateOrderModal({
                                onClick={() => setShowDiscountModal('bill')}
                                style={{ 
                                  width: '100%', 
-                                 padding: '12px 16px',
+                                 padding: '8px 14px',
                                  background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)', 
                                  color: '#166534',
                                  border: '1px solid #bbf7d0',
-                                 borderRadius: 12,
-                                 fontSize: 13,
+                                 borderRadius: 10,
+                                 fontSize: 12,
                                  fontWeight: 800,
                                  cursor: 'pointer',
                                  display: 'flex',
                                  alignItems: 'center',
                                  justifyContent: 'center',
-                                 gap: 8,
+                                 gap: 6,
                                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
                                  boxShadow: '0 2px 4px rgba(22, 163, 74, 0.05)',
                                  letterSpacing: '0.3px'
@@ -2805,7 +2798,7 @@ export default function CreateOrderModal({
                                  e.currentTarget.style.borderColor = '#bbf7d0';
                                }}
                              >
-                               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                                  <path d="M12.4498 2.65063C12.1932 2.39401 11.7774 2.394 11.5208 2.6506L2.65064 11.5208C2.394 11.7774 2.39401 12.1932 2.65063 12.4498L11.5208 21.32C11.7774 21.5766 12.1932 21.5766 12.4498 21.32L21.32 12.4498C21.5766 12.1932 21.5766 11.7774 21.32 11.5208L12.4498 2.65063Z" fill="#22c55e" fillOpacity="0.2" stroke="#16a34a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                                  <circle cx="12" cy="12" r="1.5" fill="#166534"/>
                                </svg>
@@ -2816,12 +2809,12 @@ export default function CreateOrderModal({
                                onClick={() => setShowDiscountModal('bill')}
                                style={{ 
                                  width: '100%', 
-                                 padding: '12px 16px',
+                                 padding: '8px 14px',
                                  background: 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)', 
                                  color: '#991b1b',
                                  border: '1.5px solid #fecaca',
-                                 borderRadius: 14,
-                                 fontSize: 13,
+                                 borderRadius: 12,
+                                 fontSize: 12,
                                  fontWeight: 900,
                                  cursor: 'pointer',
                                  display: 'flex',
@@ -2842,11 +2835,11 @@ export default function CreateOrderModal({
                                  e.currentTarget.style.borderColor = '#fecaca';
                                }}
                              >
-                                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                                   <div style={{ background: '#ef4444', color: 'white', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 900 }}>%</div>
+                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                   <div style={{ background: '#ef4444', color: 'white', borderRadius: '50%', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 900 }}>%</div>
                                    <span>Bill Discount Applied</span>
                                  </div>
-                                 <span style={{ background: 'white', padding: '4px 10px', borderRadius: 8, border: '1px solid #fca5a5', color: '#dc2626', fontSize: 12, fontWeight: 1000, boxShadow: '0 2px 4px rgba(220, 38, 38, 0.05)' }}>
+                                 <span style={{ background: 'white', padding: '3px 8px', borderRadius: 6, border: '1px solid #fca5a5', color: '#dc2626', fontSize: 11, fontWeight: 1000, boxShadow: '0 2px 4px rgba(220, 38, 38, 0.05)' }}>
                                    {discount.type === 'percent' ? `${discount.value}%` : `₹${discount.value}`}
                                  </span>
                              </button>
