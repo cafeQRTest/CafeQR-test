@@ -15,6 +15,7 @@ import { round2, roundP, normalizeQty, formatQty2, formatQtyP } from '../lib/qty
 import VariantSelector from './VariantSelector';
 import DiscountModal from './DiscountModal';
 import NiceSelect from './NiceSelect';
+import PremiumTimeSelect from './PremiumTimeSelect';
 
 const supabase = getSupabase();
 
@@ -64,7 +65,6 @@ const Container = styled.div`
     0 0 100px -20px rgba(0, 0, 0, 0.1);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
   position: relative;
   animation: ${fadeIn} 0.5s cubic-bezier(0.16, 1, 0.3, 1);
 
@@ -83,6 +83,9 @@ const Header = styled.div`
   background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
   flex-shrink: 0;
   position: relative;
+  z-index: 100;
+  border-top-left-radius: 32px;
+  border-top-right-radius: 32px;
 
   @media (max-width: 640px) {
     padding: 14px 18px;
@@ -532,6 +535,44 @@ const CustomerSection = styled.div`
     align-items: center;
     gap: 6px;
   }
+`;
+
+const DateTimeContainer = styled.div`
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 4px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(10px);
+  position: relative;
+  z-index: 1000;
+  margin-right: 4px;
+`;
+
+const DateInputWrapper = styled.div`
+  input[type="date"] {
+    background: transparent;
+    border: none;
+    color: white;
+    font-size: 12px;
+    font-weight: 800;
+    outline: none;
+    cursor: pointer;
+    padding: 6px 8px;
+    font-family: inherit;
+
+    &::-webkit-calendar-picker-indicator {
+      filter: invert(1);
+      cursor: pointer;
+    }
+  }
+`;
+
+const TimeInputWrapper = styled.div`
+  border-left: 1px solid rgba(255, 255, 255, 0.2);
+  padding-left: 4px;
 `;
 
 const CustomerSelectButton = styled.button`
@@ -1190,6 +1231,19 @@ export default function CreateOrderModal({
   const allCustomers = allCustomersData || [];
   const [filteredSuggestions, setFilteredSuggestions] = useState([]);
 
+  // Date and Time states for backdating
+  const [orderDate, setOrderDate] = useState(() => {
+    const d = new Date();
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 10);
+  });
+  const [orderTime, setOrderTime] = useState(() => {
+    const d = new Date();
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    return `${hh}:${mm}`;
+  });
+
   // Upsells for cart
   const [cartUpsells, setCartUpsells] = useState([]);
   
@@ -1665,6 +1719,13 @@ export default function CreateOrderModal({
     setVegOnly(false);
     setPackagedOnly(false);
     setDiscount({ type: 'amount', value: 0 });
+    // Reset date/time to current
+    const d = new Date();
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    setOrderDate(d.toISOString().slice(0, 10));
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    setOrderTime(`${hh}:${mm}`);
   };
 
   // Handle close
@@ -1731,7 +1792,15 @@ export default function CreateOrderModal({
             total_inc_tax: cartTotals.total_inc_tax,
             total_tax: cartTotals.total_tax,
             subtotal_ex: cartTotals.taxable_amount
-        }
+        },
+        custom_created_at: new Date(
+            Number(orderDate.split('-')[0]),
+            Number(orderDate.split('-')[1]) - 1,
+            Number(orderDate.split('-')[2]),
+            Number(orderTime.split(':')[0]),
+            Number(orderTime.split(':')[1]),
+            0
+        ).toISOString()
       };
 
       const res = await fetch('/api/orders/create', {
@@ -1888,6 +1957,37 @@ export default function CreateOrderModal({
 
           <div style={{ flex: 1 }} />
 
+          {/* Date & Time Picker */}
+          <DateTimeContainer>
+            <DateInputWrapper>
+              <input
+                type="date"
+                max={new Date().toLocaleDateString('en-CA')}
+                value={orderDate}
+                onChange={(e) => setOrderDate(e.target.value)}
+              />
+            </DateInputWrapper>
+            <TimeInputWrapper>
+              <PremiumTimeSelect
+                value={orderTime}
+                onChange={(e) => setOrderTime(e.target.value)}
+                themeColor={orderMode === 'settle' ? '#16a34a' : '#f97316'}
+                triggerTextColor="white"
+                overrideStyle={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'white',
+                  fontSize: '12px',
+                  fontWeight: '800',
+                  padding: '6px 8px',
+                  height: 'auto',
+                  width: 'auto',
+                  boxShadow: 'none'
+                }}
+              />
+            </TimeInputWrapper>
+          </DateTimeContainer>
+
           {/* Credit Toggle in Header */}
           <button
             onClick={() => {
@@ -2034,8 +2134,8 @@ export default function CreateOrderModal({
                     right: 0, 
                     background: 'white', 
                     borderRadius: 12, 
-                    boxShadow: '0 10px 30px rgba(0,0,0,0.15)', 
-                    zIndex: 100, 
+                    boxShadow: '0 10px 30px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.02)', 
+                    zIndex: 9999, 
                     overflow: 'hidden',
                     border: '1px solid #e2e8f0'
                   }}>
@@ -2678,37 +2778,77 @@ export default function CreateOrderModal({
                                onClick={() => setShowDiscountModal('bill')}
                                style={{ 
                                  width: '100%', 
-                                 padding: '8px',
-                                 background: '#f0f9ff', 
-                                 color: '#0284c7',
-                                 border: '1px dashed #bae6fd',
-                                 borderRadius: 8,
-                                 fontSize: 12,
-                                 fontWeight: 700,
-                                 cursor: 'pointer'
+                                 padding: '12px 16px',
+                                 background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)', 
+                                 color: '#166534',
+                                 border: '1px solid #bbf7d0',
+                                 borderRadius: 12,
+                                 fontSize: 13,
+                                 fontWeight: 800,
+                                 cursor: 'pointer',
+                                 display: 'flex',
+                                 alignItems: 'center',
+                                 justifyContent: 'center',
+                                 gap: 8,
+                                 transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                                 boxShadow: '0 2px 4px rgba(22, 163, 74, 0.05)',
+                                 letterSpacing: '0.3px'
+                               }}
+                               onMouseEnter={(e) => {
+                                 e.currentTarget.style.transform = 'translateY(-1px)';
+                                 e.currentTarget.style.boxShadow = '0 4px 12px rgba(22, 163, 74, 0.12)';
+                                 e.currentTarget.style.borderColor = '#86efac';
+                               }}
+                               onMouseLeave={(e) => {
+                                 e.currentTarget.style.transform = 'translateY(0)';
+                                 e.currentTarget.style.boxShadow = '0 2px 4px rgba(22, 163, 74, 0.05)';
+                                 e.currentTarget.style.borderColor = '#bbf7d0';
                                }}
                              >
-                               + Add Bill Discount
+                               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                 <path d="M12.4498 2.65063C12.1932 2.39401 11.7774 2.394 11.5208 2.6506L2.65064 11.5208C2.394 11.7774 2.39401 12.1932 2.65063 12.4498L11.5208 21.32C11.7774 21.5766 12.1932 21.5766 12.4498 21.32L21.32 12.4498C21.5766 12.1932 21.5766 11.7774 21.32 11.5208L12.4498 2.65063Z" fill="#22c55e" fillOpacity="0.2" stroke="#16a34a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                 <circle cx="12" cy="12" r="1.5" fill="#166534"/>
+                               </svg>
+                               Add Bill Discount
                              </button>
                            ) : (
                              <button 
                                onClick={() => setShowDiscountModal('bill')}
                                style={{ 
                                  width: '100%', 
-                                 padding: '8px',
-                                 background: '#fef2f2', 
-                                 color: '#ef4444',
-                                 border: '1px dashed #fecaca',
-                                 borderRadius: 8,
-                                 fontSize: 12,
-                                 fontWeight: 700,
+                                 padding: '12px 16px',
+                                 background: 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)', 
+                                 color: '#991b1b',
+                                 border: '1.5px solid #fecaca',
+                                 borderRadius: 14,
+                                 fontSize: 13,
+                                 fontWeight: 900,
                                  cursor: 'pointer',
                                  display: 'flex',
-                                 justifyContent: 'space-between'
+                                 justifyContent: 'space-between',
+                                 alignItems: 'center',
+                                 transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                                 boxShadow: '0 4px 6px -1px rgba(220, 38, 38, 0.08)',
+                                 letterSpacing: '-0.2px'
+                               }}
+                               onMouseEnter={(e) => {
+                                 e.currentTarget.style.transform = 'translateY(-1px)';
+                                 e.currentTarget.style.boxShadow = '0 6px 15px rgba(220, 38, 38, 0.15)';
+                                 e.currentTarget.style.borderColor = '#fca5a5';
+                               }}
+                               onMouseLeave={(e) => {
+                                 e.currentTarget.style.transform = 'translateY(0)';
+                                 e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(220, 38, 38, 0.08)';
+                                 e.currentTarget.style.borderColor = '#fecaca';
                                }}
                              >
-                                 <span>Bill Discount Applied</span>
-                                 <span>{discount.type === 'percent' ? `${discount.value}%` : `₹${discount.value}`}</span>
+                                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                   <div style={{ background: '#ef4444', color: 'white', borderRadius: '50%', width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 900 }}>%</div>
+                                   <span>Bill Discount Applied</span>
+                                 </div>
+                                 <span style={{ background: 'white', padding: '4px 10px', borderRadius: 8, border: '1px solid #fca5a5', color: '#dc2626', fontSize: 12, fontWeight: 1000, boxShadow: '0 2px 4px rgba(220, 38, 38, 0.05)' }}>
+                                   {discount.type === 'percent' ? `${discount.value}%` : `₹${discount.value}`}
+                                 </span>
                              </button>
                            )}
                          </div>
@@ -2795,17 +2935,6 @@ export default function CreateOrderModal({
                               ₹{onlinePart || '0.00'}
                             </div>
                           </div>
-                        </div>
-                        <div style={{ display: 'flex', gap: 5 }}>
-                           {['upi', 'card', 'net'].map(t => (
-                             <button 
-                               key={t}
-                               onClick={() => setOnlineType(t)}
-                               style={{ flex: 1, padding: '6px', borderRadius: 6, border: onlineType === t ? '2px solid #2563eb' : '1px solid #e2e8f0', background: onlineType === t ? 'white' : 'transparent', color: onlineType === t ? '#2563eb' : '#64748b', fontSize: 9, fontWeight: 800, textTransform: 'uppercase', cursor: 'pointer' }}
-                             >
-                               {t === 'upi' ? 'UPI' : t === 'card' ? 'Card' : 'Net'}
-                             </button>
-                           ))}
                         </div>
                      </div>
                    )}

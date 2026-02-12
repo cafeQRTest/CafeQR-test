@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { FaChevronDown, FaClock } from 'react-icons/fa';
 
-export default function PremiumTimeSelect({ value, onChange, disabled, themeColor = '#f97316', overrideStyle = {} }) {
+export default function PremiumTimeSelect({ value, onChange, disabled, themeColor = '#f97316', overrideStyle = {}, triggerTextColor = null }) {
   const [isOpen, setIsOpen] = useState(false);
   const wrapperRef = useRef(null);
   
@@ -48,9 +48,6 @@ export default function PremiumTimeSelect({ value, onChange, disabled, themeColo
         style={overrideStyle}
       >
         <div className="trigger-content">
-           <div className="icon-badge">
-             <FaClock size={12} />
-           </div>
            <span className="time-display">{value || '00:00'}</span>
         </div>
         {!disabled && (
@@ -131,6 +128,7 @@ export default function PremiumTimeSelect({ value, onChange, disabled, themeColo
           display: flex;
           align-items: center;
           justify-content: space-between;
+          gap: 8px;
           background: #ffffff;
           padding: 10px 12px;
           border-radius: 12px;
@@ -159,7 +157,7 @@ export default function PremiumTimeSelect({ value, onChange, disabled, themeColo
         .trigger-content {
           display: flex;
           align-items: center;
-          gap: 10px;
+          gap: 0px;
         }
 
         .icon-badge {
@@ -176,15 +174,16 @@ export default function PremiumTimeSelect({ value, onChange, disabled, themeColo
         .time-display {
           font-size: 15px;
           font-weight: 700;
-          color: #0f172a;
+          color: ${triggerTextColor || '#0f172a'};
           letter-spacing: 0.5px;
           font-variant-numeric: tabular-nums;
         }
 
         .chevron {
           font-size: 10px;
-          color: #94a3b8;
+          color: ${triggerTextColor || '#94a3b8'};
           transition: transform 0.2s;
+          margin-left: 2px;
         }
 
         /* --- Dropdown --- */
@@ -200,7 +199,7 @@ export default function PremiumTimeSelect({ value, onChange, disabled, themeColo
             0 10px 15px -3px rgba(0, 0, 0, 0.1),
             0 4px 6px -2px rgba(0, 0, 0, 0.05),
             0 0 0 1px rgba(0,0,0,0.02);
-          z-index: 100;
+          z-index: 9999;
           overflow: hidden;
           animation: slideDown 0.2s cubic-bezier(0.16, 1, 0.3, 1);
           min-width: 180px;

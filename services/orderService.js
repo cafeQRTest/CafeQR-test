@@ -94,7 +94,7 @@ export class OrderService {
       }
 
       if (created_at) orderPayload.created_at = created_at;
-      if (status === 'completed') orderPayload.date_ordered = created_at || new Date().toISOString();
+      orderPayload.date_ordered = created_at || new Date().toISOString();
 
       let finalOrderId = orderId;
 
