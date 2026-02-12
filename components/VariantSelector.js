@@ -2,55 +2,54 @@
 // Modal for customers to select product variants when ordering
 
 import React, { useState } from 'react';
-import styled from 'styled-components';
+import styled, { ThemeProvider } from 'styled-components';
 
-export default function VariantSelector({ item, onSelect, onClose, gstEnabled = false, pricesIncludeTax = true, onCartOpen, showImage = true, zIndex }) {
+export default function VariantSelector({ item, onSelect, onClose, visible, gstEnabled = false, pricesIncludeTax = true, onCartOpen, showImage = true, zIndex, theme = { main: '#ea580c', soft: '#fff7ed', border: '#ffedd5', dark: '#c2410c' } }) {
   // Track quantity for each variant (key: variant_id, value: quantity)
   const [variantQuantities, setVariantQuantities] = useState({});
   const [addonQuantities, setAddonQuantities] = useState({});
   const [variantQtyDrafts, setVariantQtyDrafts] = useState({}); // variantId -> string
   const [mainQty, setMainQty] = useState(1); // Only used if !hasVariants
 
-  if (!item) return null;
+  if (!visible || !item) return null;
 
-const quantityStep = (item?.uom?.precision || 0) > 0 ? (1 / Math.pow(10, item.uom.precision)) : 1;
-const minQuantity = 0;
-const maxQuantity = 99;
-const decimalPlaces = item?.uom?.precision ?? 0;
+  const quantityStep = (item?.uom?.precision || 0) > 0 ? (1 / Math.pow(10, item.uom.precision)) : 1;
+  const minQuantity = 0;
+  const maxQuantity = 99;
+  const decimalPlaces = item?.uom?.precision ?? 0;
 
-
-const clampQty = (n) => {
-  if (!Number.isFinite(n)) return minQuantity;
-  let v = Math.max(minQuantity, Math.min(maxQuantity, n));
-  // Round to nearest step if precision > 0
-  if (quantityStep > 0 && quantityStep < 1) {
-       const factor = 1 / quantityStep;
-       return Math.round(v * factor) / factor;
-  }
-  return Number(v.toFixed(decimalPlaces));
-};
-
-const getDisplayQty = (variantId) => {
-  if (variantQtyDrafts[variantId] !== undefined) return variantQtyDrafts[variantId];
-  const q = variantQuantities[variantId] || 0;
-  return q > 0 ? String(q) : '';
-};
-
-const setQtyNumber = (variantId, qty) => {
-  const q = clampQty(qty);
-  setVariantQuantities(prev => {
-    if (q <= 0) {
-      const { [variantId]: _, ...rest } = prev;
-      return rest;
+  const clampQty = (n) => {
+    if (!Number.isFinite(n)) return minQuantity;
+    let v = Math.max(minQuantity, Math.min(maxQuantity, n));
+    // Round to nearest step if precision > 0
+    if (quantityStep > 0 && quantityStep < 1) {
+         const factor = 1 / quantityStep;
+         return Math.round(v * factor) / factor;
     }
-    return { ...prev, [variantId]: q };
-  });
-};
+    return Number(v.toFixed(decimalPlaces));
+  };
 
-const bumpQty = (variantId, dir) => {
-  const current = variantQuantities[variantId] || 0;
-  setQtyNumber(variantId, current + dir * quantityStep);
-};
+  const getDisplayQty = (variantId) => {
+    if (variantQtyDrafts[variantId] !== undefined) return variantQtyDrafts[variantId];
+    const q = variantQuantities[variantId] || 0;
+    return q > 0 ? String(q) : '';
+  };
+
+  const setQtyNumber = (variantId, qty) => {
+    const q = clampQty(qty);
+    setVariantQuantities(prev => {
+      if (q <= 0) {
+        const { [variantId]: _, ...rest } = prev;
+        return rest;
+      }
+      return { ...prev, [variantId]: q };
+    });
+  };
+
+  const bumpQty = (variantId, dir) => {
+    const current = variantQuantities[variantId] || 0;
+    setQtyNumber(variantId, current + dir * quantityStep);
+  };
 
   const variants = item.variants || [];
   const hasVariants = variants.length > 0;
@@ -61,24 +60,6 @@ const bumpQty = (variantId, dir) => {
   const selectedVariants = Object.entries(variantQuantities);
   const selectedAddons = Object.entries(addonQuantities);
 
-  // Total items = variants + base item (if no variants) + addons?
-  // Logic: 
-  // If hasVariants: user selects variants.
-  // If NO hasVariants: user buys base item (quantity?) -> VariantSelector usually implies selecting options. 
-  // If NO variants but hasAddons: We need a way to select Base Item Quantity.
-  // Current VariantSelector is designed for "One entry per variant".
-  // If we have only Upsells, we are essentially adding "Main Item + Upsell A + Upsell B".
-  // Let's stick to the pattern:
-  // If variants exist: Sum of variants.
-  // If NO variants: We need a "Base Item" stepper? 
-  //   - Current VariantSelector returns NULL if no variants. 
-  //   - We need to enable it for "Just Addons" case.
-  //   - For "Just Addons", we act as if the Main Item is selected (qty 1 usually, or we add a main qty stepper).
-  //   - Let's simplify: If no variants, we assume 1 Main Item (conceptually) OR we hide main item qty and just let them pick upsells?
-  //   - No, if I click "Burger" (no variants) and it has "Fries" upsell. I want "1 Burger + 1 Fries". 
-  //   - So I need a main quantity state if no variants.
-  
-  
   const totalItems = (hasVariants 
     ? selectedVariants.reduce((sum, [_, qty]) => sum + qty, 0)
     : mainQty) + selectedAddons.reduce((sum, [_, qty]) => sum + qty, 0);
@@ -144,10 +125,10 @@ const bumpQty = (variantId, dir) => {
            name: addonOpt.name,
            price: addonOpt.price,
            quantity: qty,
-           veg: addonOpt.veg, // Assumes passed from OrderPage
+           veg: addonOpt.veg,
            status: 'available',
            is_upsell: true,
-           image_url: addonOpt.image_url // Flag to maybe style differently in cart?
+           image_url: addonOpt.image_url
          });
        }
     });
@@ -171,14 +152,12 @@ const bumpQty = (variantId, dir) => {
     </svg>
   );
 
-  // GST Label Logic:
-  // 1. If Packaged Good -> NEVER show +GST (always inclusive/hidden).
-  // 2. If Not Packaged -> Show ONLY if GST enabled AND Prices Exclude Tax.
   const showGstIndicator = !item.is_packaged_good && gstEnabled && !pricesIncludeTax;
   const gstSuffix = showGstIndicator ? ' +GST' : '';
 
   return (
-    <Overlay onClick={onClose} zIndex={zIndex}>
+    <ThemeProvider theme={theme}>
+      <Overlay onClick={onClose} zIndex={zIndex}>
       <Modal onClick={(e) => e.stopPropagation()}>
         {/* Enhanced Header with Item Details */}
         <Header>
@@ -372,7 +351,6 @@ const bumpQty = (variantId, dir) => {
             )}
           </FooterInfo>
           <FooterButtons>
-            <CancelButton onClick={onClose}>Cancel</CancelButton>
             <AddToCartButton 
               onClick={handleAddToCart} 
               disabled={totalItems === 0}
@@ -386,6 +364,7 @@ const bumpQty = (variantId, dir) => {
         </Footer>
       </Modal>
     </Overlay>
+    </ThemeProvider>
   );
 }
 
@@ -494,11 +473,11 @@ const ItemNameRow = styled.div`
 
 const ItemName = styled.h2`
   margin: 0;
-  font-size: 24px;
-  font-weight: 800;
+  font-size: 26px;
+  font-weight: 1000;
   color: #0f172a;
-  line-height: 1.2;
-  letter-spacing: -0.5px;
+  line-height: 1.1;
+  letter-spacing: -0.8px;
 `;
 
 const ItemDescription = styled.p`
@@ -557,11 +536,11 @@ const TemplateTitle = styled.h3`
 const SelectionBadge = styled.span`
   font-size: 14px;
   font-weight: 700;
-  color: var(--brand);
-  background: var(--brand-50, #eff6ff);
+  color: ${props => props.theme.main || 'var(--brand)'};
+  background: ${props => props.theme.soft || 'var(--brand-50, #eff6ff)'};
   padding: 6px 14px;
   border-radius: 999px;
-  border: 2px solid var(--brand-200, #bfdbfe);
+  border: 2px solid ${props => props.theme.border || 'var(--brand-200, #bfdbfe)'};
   animation: pulse 0.3s ease;
   
   @keyframes pulse {
@@ -627,23 +606,23 @@ const VariantOption = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 18px;
-  border: 2px solid ${props => props.selected ? 'var(--brand)' : '#e2e8f0'};
-  border-radius: 14px;
+  padding: 16px 20px;
+  border: 2px solid ${props => props.selected ? (props.theme.main || 'var(--brand)') : '#eef2f6'};
+  border-radius: 18px;
   background: ${props => {
     if (props.disabled) return '#fafafa';
-    if (props.selected) return 'linear-gradient(135deg, var(--brand-50, #eff6ff) 0%, #ffffff 100%)';
+    if (props.selected) return `linear-gradient(135deg, ${props.theme.soft || 'var(--brand-50, #eff6ff)'} 0%, #ffffff 100%)`;
     return 'white';
   }};
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   opacity: ${props => props.disabled ? 0.5 : 1};
-  box-shadow: ${props => props.selected ? '0 8px 16px rgba(0,0,0,0.08)' : '0 2px 4px rgba(0,0,0,0.04)'};
+  box-shadow: ${props => props.selected ? `0 15px 30px -10px ${props.theme.main}30` : '0 4px 6px -1px rgba(0,0,0,0.05)'};
   
   &:hover {
     ${props => !props.disabled && !props.selected && `
       border-color: #cbd5e1;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-      transform: translateY(-2px);
+      box-shadow: 0 8px 16px rgba(0,0,0,0.08);
+      transform: translateX(4px);
     `}
   }
 `;
@@ -672,22 +651,31 @@ const SelectedSummary = styled.div`
 const TotalPrice = styled.div`
   font-size: 28px;
   font-weight: 800;
-  color: var(--brand);
+  color: ${props => props.theme.main || 'var(--brand)'};
   letter-spacing: -0.5px;
 `;
 
 const AddToCartButton = styled.button`
   width: 100%;
-  padding: 12px;
-  background: ${props => props.disabled ? '#e2e8f0' : 'var(--brand)'};
+  padding: 16px;
+  background: ${props => props.disabled ? '#e2e8f0' : (props.theme.main || 'var(--brand)')};
   color: white;
   border: none;
-  border-radius: 10px;
-  font-size: 14px;
-  font-weight: 700;
+  border-radius: 14px;
+  font-size: 15px;
+  font-weight: 800;
   cursor: ${props => props.disabled ? 'not-allowed' : 'pointer'};
   text-transform: uppercase;
-  letter-spacing: 0.3px;
+  letter-spacing: 0.5px;
+  transition: all 0.2s;
+  box-shadow: ${props => props.disabled ? 'none' : `0 10px 20px -5px ${props.theme.main}40`};
+
+  &:hover {
+    ${props => !props.disabled && `
+       transform: translateY(-2px);
+       box-shadow: 0 15px 25px -5px ${props.theme.main}60;
+    `}
+  }
 `;
 
 const VariantLeftSection = styled.div`
@@ -701,14 +689,14 @@ const SelectionCircle = styled.div`
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  border: 2.5px solid ${props => props.selected ? 'var(--brand)' : '#d1d5db'};
-  background: ${props => props.selected ? 'var(--brand)' : 'white'};
+  border: 2.5px solid ${props => props.selected ? (props.theme.main || 'var(--brand)') : '#d1d5db'};
+  background: ${props => props.selected ? (props.theme.main || 'var(--brand)') : 'white'};
   display: flex;
   align-items: center;
-  justifyContent: center;
+  justify-content: center;
   flex-shrink: 0;
   transition: all 0.2s;
-  box-shadow: ${props => props.selected ? '0 2px 8px rgba(0,0,0,0.15)' : 'none'};
+  box-shadow: ${props => props.selected ? `0 2px 8px ${props.theme.main}30` : 'none'};
 `;
 
 const CheckMark = styled.span`
@@ -730,7 +718,7 @@ const VariantRightSection = styled.div`
 
 const QuickAddButton = styled.button`
   padding: 8px 20px;
-  background: linear-gradient(135deg, var(--brand) 0%, var(--brand-600, #2563eb) 100%);
+  background: linear-gradient(135deg, ${props => props.theme.main || 'var(--brand)'} 0%, ${props => props.theme.dark || '#2563eb'} 100%);
   color: white;
   border: none;
   border-radius: 999px;
@@ -738,12 +726,12 @@ const QuickAddButton = styled.button`
   font-weight: 700;
   cursor: pointer;
   transition: all 0.2s;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  box-shadow: 0 4px 12px ${props => (props.theme.main || 'var(--brand)')}40;
   min-width: 70px;
   
   &:hover {
     transform: translateY(-2px);
-    box-shadow: 0 6px 16px rgba(0,0,0,0.2);
+    box-shadow: 0 6px 16px ${props => (props.theme.main || 'var(--brand)')}60;
   }
   
   &:active {
@@ -765,10 +753,11 @@ const VariantNameRow = styled.div`
 `;
 
 const VariantName = styled.div`
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 16px;
+  font-weight: 1000;
   color: #111827;
-  `;
+  letter-spacing: -0.3px;
+`;
 
 const PriceRow = styled.div`
   display: flex;
@@ -796,18 +785,18 @@ const VariantPrice = styled.div`
 const GstLabel = styled.span`
   font-size: 10px;
   font-weight: 700;
-  color: #f97316;
-  background: #fff7ed;
+  color: ${props => props.theme.main || '#f97316'};
+  background: ${props => props.theme.soft || '#fff7ed'};
   padding: 2px 6px;
   border-radius: 4px;
-  border: 1px solid #fed7aa;
+  border: 1px solid ${props => props.theme.border || '#fed7aa'};
 `;
 
 const QuantityControls = styled.div`
   display: flex;
   align-items: center;
   gap: 0;
-  border: 2px solid var(--brand);
+  border: 2px solid ${props => props.theme.main || 'var(--brand)'};
   border-radius: 8px;
   overflow: hidden;
   background: white;
@@ -821,7 +810,7 @@ const QuantityButton = styled.button`
   justify-content: center;
   border: none;
   background: ${props => props.disabled ? '#f9fafb' : 'white'};
-  color: ${props => props.disabled ? '#d1d5db' : 'var(--brand)'};
+  color: ${props => props.disabled ? '#d1d5db' : (props.theme.main || 'var(--brand)')};
   font-size: 18px;
   font-weight: 600;
   cursor: ${props => props.disabled ? 'not-allowed' : 'pointer'};
@@ -829,7 +818,7 @@ const QuantityButton = styled.button`
   
   &:hover {
     ${props => !props.disabled && `
-      background: var(--brand-50, #eff6ff);
+      background: ${props.theme.soft || 'var(--brand-50, #eff6ff)'};
     `}
   }
   
@@ -877,11 +866,11 @@ const SelectedList = styled.div`
 const SelectedItem = styled.span`
   font-size: 13px;
   font-weight: 600;
-  color: var(--brand);
-  background: var(--brand-50, #eff6ff);
+  color: ${props => props.theme.main || 'var(--brand)'};
+  background: ${props => props.theme.soft || 'var(--brand-50, #eff6ff)'};
   padding: 4px 10px;
   border-radius: 6px;
-  border: 1px solid var(--brand-200, #bfdbfe);
+  border: 1px solid ${props => props.theme.border || 'var(--brand-200, #bfdbfe)'};
 `;
 
 const PriceWithGst = styled.div`
@@ -894,11 +883,11 @@ const PriceWithGst = styled.div`
 const GstNote = styled.span`
   font-size: 11px;
   font-weight: 700;
-  color: var(--brand);
-  background: var(--brand-50, #eff6ff);
+  color: ${props => props.theme.main || 'var(--brand)'};
+  background: ${props => props.theme.soft || 'var(--brand-50, #eff6ff)'};
   padding: 3px 8px;
   border-radius: 4px;
-  border: 1px solid var(--brand-200, #bfdbfe);
+  border: 1px solid ${props => props.theme.border || 'var(--brand-200, #bfdbfe)'};
 `;
 
 const PlaceholderText = styled.div`
@@ -909,24 +898,4 @@ const PlaceholderText = styled.div`
 
 const FooterButtons = styled.div`
   display: flex;
-  gap: 12px;
-`;
-
-const CancelButton = styled.button`
-  flex: 1;
-  padding: 12px;
-  background: white;
-  color: #6b7280;
-  border: 2px solid #e5e7eb;
-  border-radius: 10px;
-  font-size: 14px;
-  fontWeight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-
-  &:hover {
-    background: #ecfdf5;
-    border-color: #a7f3d0;
-    color: #059669;
-  }
 `;

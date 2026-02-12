@@ -1148,6 +1148,96 @@ export default function CreateOrderModal({
   const [showVariantSelector, setShowVariantSelector] = useState(false);
   const [showDiscountModal, setShowDiscountModal] = useState(null); // null | cartId | 'bill'
   const [selectedItem, setSelectedItem] = useState(null);
+  const [augmentedMenu, setAugmentedMenu] = useState([]);
+
+  // Augment menu items with variants and addons pre-emptively for popups
+  useEffect(() => {
+    if (!menuItems?.length || !restaurantId) return;
+
+    const augmentMenu = async () => {
+      try {
+        const itemIds = menuItems.map(i => i.id);
+        const variantItemIds = menuItems.filter(i => i.has_variants).map(i => i.id);
+
+        let variantMap = new Map();
+        if (variantItemIds.length > 0) {
+          const { data: vpData } = await supabase
+            .from('variant_pricing')
+            .select(`
+              menu_item_id, price, is_available,
+              variant_options (id, name, display_order, template_id)
+            `)
+            .in('menu_item_id', variantItemIds);
+
+          (vpData || []).forEach(vp => {
+            if (!vp.menu_item_id || !vp.variant_options) return;
+            if (!variantMap.has(vp.menu_item_id)) variantMap.set(vp.menu_item_id, []);
+            variantMap.get(vp.menu_item_id).push({
+              variant_id: vp.variant_options.id,
+              variant_name: vp.variant_options.name,
+              price: vp.price,
+              is_available: vp.is_available,
+              display_order: vp.variant_options.display_order
+            });
+          });
+        }
+
+        // Fetch Upsells/Add-ons from view
+        const { data: upsellsData } = await supabase
+          .from('menu_items_with_upsells')
+          .select('menu_item_id, upsells')
+          .in('menu_item_id', itemIds);
+        
+        const upsellMap = new Map();
+        (upsellsData || []).forEach(row => {
+          upsellMap.set(row.menu_item_id, row.upsells);
+        });
+
+        const augmented = menuItems.map(item => {
+          const newItem = { ...item };
+          
+          // Attach Variants
+          if (variantMap.has(item.id)) {
+            newItem.variants = variantMap.get(item.id).sort((a,b) => (a.display_order || 0) - (b.display_order || 0));
+          } else {
+            newItem.variants = [];
+          }
+
+          // Attach Addons mapped as addon_groups for VariantSelector compatibility
+          const rawUpsells = upsellMap.get(item.id) || [];
+          if (rawUpsells.length > 0) {
+            newItem.addon_groups = [{
+              id: 'upsells-group',
+              name: 'Suggested Extras',
+              min_selections: 0,
+              max_selections: null,
+              options: rawUpsells.map(u => ({
+                id: u.id,
+                name: u.name,
+                price: u.price,
+                is_active: u.status === 'available',
+                veg: u.veg,
+                image_url: u.image_url
+              }))
+            }];
+            newItem.has_addons = true;
+          } else {
+            newItem.addon_groups = [];
+            newItem.has_addons = false;
+          }
+          
+          return newItem;
+        });
+
+        setAugmentedMenu(augmented);
+      } catch (err) {
+        console.error('[CreateOrderModal] Augmentation failed:', err);
+        setAugmentedMenu(menuItems); // Fallback to raw menu
+      }
+    };
+
+    augmentMenu();
+  }, [menuItems, restaurantId, supabase]);
   
   // Quick Add Product State
   const [showQuickAddModal, setShowQuickAddModal] = useState(false);
@@ -1257,6 +1347,22 @@ export default function CreateOrderModal({
   const [page, setPage] = useState(1);
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(0);
   const searchInputRef = useRef(null);
+  const suggestionContainerRef = useRef(null);
+
+  // Auto-scroll logic for keyboard navigation in product suggestions
+  useEffect(() => {
+    if (activeSuggestionIndex >= 0 && suggestionContainerRef.current) {
+      const container = suggestionContainerRef.current;
+      // Index matches the map order in JSX
+      const activeItem = container.children[activeSuggestionIndex];
+      if (activeItem) {
+        activeItem.scrollIntoView({
+          behavior: 'smooth',
+          block: 'nearest'
+        });
+      }
+    }
+  }, [activeSuggestionIndex]);
 
   // Auto-focus search input when modal opens
   useEffect(() => {
@@ -1312,9 +1418,10 @@ export default function CreateOrderModal({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, showDiscountModal, showNewCreditCustomerModal, onClose]); // Add showQuickAddModal to deps if I can (but lint might complain if it thinks it's missing)
 
-  // Filter menu items
+  // Filter menu items using augmented data if available
   const filteredMenuItems = useMemo(() => {
-    return menuItems.filter(item => {
+    const dataSource = augmentedMenu.length > 0 ? augmentedMenu : menuItems;
+    return dataSource.filter(item => {
       const q = searchQuery.toLowerCase();
       const matchesSearch = !searchQuery || 
         item.name.toLowerCase().includes(q) ||
@@ -1325,7 +1432,7 @@ export default function CreateOrderModal({
       const matchesCategory = categoryFilter === 'all' || item.category === categoryFilter;
       return matchesSearch && matchesVeg && matchesPackaged && matchesCategory;
     });
-  }, [menuItems, searchQuery, vegOnly, packagedOnly, categoryFilter]);
+  }, [augmentedMenu, menuItems, searchQuery, vegOnly, packagedOnly, categoryFilter]);
 
   const categories = useMemo(() => {
     const cats = Array.from(new Set(menuItems.map(i => i.category))).filter(Boolean);
@@ -1343,7 +1450,7 @@ export default function CreateOrderModal({
     if (selectedCustomerId) {
       return allCustomers.find(c => c.customer_id === selectedCustomerId) || { name: customerName, phone: customerPhone };
     }
-    return customerName ? { name: customerName, phone: customerPhone } : null;
+    return null;
   }, [isCreditMode, selectedCreditCustomerId, creditCustomers, selectedCustomerId, allCustomers, customerName, customerPhone]);
 
   const THEME = useMemo(() => {
@@ -1699,7 +1806,7 @@ export default function CreateOrderModal({
           is_packaged_good: quickProduct.packaged,
           veg: quickProduct.veg,
           category: quickProduct.category || 'Quick Add',
-          tax_rate: quickProduct.packaged ? Number(Number(quickProduct.tax_rate || 0).toFixed(2)) : null,
+          tax_rate: (!!restaurant?.gst_enabled) ? Number(Number(quickProduct.tax_rate || 0).toFixed(2)) : null,
           has_variants: quickProduct.has_variants,
           status: 'available'
         })
@@ -2082,28 +2189,44 @@ export default function CreateOrderModal({
           {/* Credit Toggle in Header */}
           <button
             onClick={() => {
-              const nextCreditMode = !isCreditMode;
-              setIsCreditMode(nextCreditMode);
-              if (nextCreditMode) {
-                setSelectedPaymentMethod('credit');
+              const newMode = !isCreditMode;
+              setIsCreditMode(newMode);
+              if (newMode) {
+                setCustomerName('');
+                setCustomerPhone('');
+                setSelectedCustomerId(null);
                 setSelectedCreditCustomerId('');
                 setCreditCustomerBalance(0);
+                setSelectedPaymentMethod('credit');
               } else if (selectedPaymentMethod === 'credit') {
                 setSelectedPaymentMethod('cash');
               }
             }}
             style={{
-              padding: '8px 16px',
-              borderRadius: 12,
-              border: '1px solid rgba(255,255,255,0.3)',
-              background: isCreditMode ? 'white' : 'rgba(255,255,255,0.1)',
+              padding: '6px 14px',
+              borderRadius: 14,
+              border: `1.5px solid ${isCreditMode ? 'white' : 'rgba(255,255,255,0.25)'}`,
+              background: isCreditMode ? 'white' : 'rgba(255,255,255,0.08)',
               color: isCreditMode ? (orderMode === 'settle' ? '#16a34a' : '#f97316') : 'white',
-              fontWeight: 800,
-              fontSize: 12,
+              fontWeight: 900,
+              fontSize: 11,
               cursor: 'pointer',
-              transition: 'all 0.2s'
+              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              textTransform: 'uppercase',
+              letterSpacing: '0.8px',
+              boxShadow: isCreditMode ? `0 4px 15px rgba(255,255,255,0.2)` : 'none'
             }}
           >
+            <div style={{ 
+              width: 6, 
+              height: 6, 
+              borderRadius: '50%', 
+              background: isCreditMode ? (orderMode === 'settle' ? '#16a34a' : '#f97316') : 'white',
+              boxShadow: `0 0 8px ${isCreditMode ? 'currentColor' : '#fff'}`
+            }} />
             Credit: {isCreditMode ? 'ON' : 'OFF'}
           </button>
           
@@ -2112,35 +2235,81 @@ export default function CreateOrderModal({
             {selectedCustomerObj ? (
               /* Detailed Selected Customer Card */
               <SlideInContainer style={{ 
-                padding: '6px 14px', 
-                background: 'rgba(255,255,255,0.22)', 
-                backdropFilter: 'blur(12px)',
-                borderRadius: 14, 
+                padding: '10px 18px', 
+                background: 'rgba(255,255,255,0.14)', 
+                backdropFilter: 'blur(24px) saturate(180%)',
+                borderRadius: 20, 
                 border: '1px solid rgba(255,255,255,0.3)',
                 display: 'flex',
                 alignItems: 'center',
-                gap: 14,
+                gap: 16,
                 color: 'white',
-                minWidth: 200,
-                position: 'relative'
+                minWidth: 260,
+                position: 'relative',
+                boxShadow: '0 12px 40px rgba(0,0,0,0.15), inset 0 0 0 1px rgba(255,255,255,0.1)',
+                overflow: 'hidden'
               }}>
-                <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff', boxShadow: '0 0 10px #fff' }} />
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: 900, lineHeight: 1.2, letterSpacing: '0.2px' }}>{selectedCustomerObj.name}</div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontSize: 10, opacity: 0.9, fontWeight: 800, letterSpacing: '0.3px' }}>{selectedCustomerObj.phone}</span>
+                {/* Glossy Reflection Overlay */}
+                <div style={{ position: 'absolute', top: '-50%', left: '-50%', width: '200%', height: '200%', background: 'linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 40%)', transform: 'rotate(-25deg)', pointerEvents: 'none' }} />
+                
+                <div style={{ position: 'relative' }}>
+                  <div style={{ 
+                    width: 46, 
+                    height: 46, 
+                    borderRadius: 16, 
+                    background: 'linear-gradient(135deg, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0.1) 100%)', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center',
+                    fontSize: 20,
+                    fontWeight: 1000,
+                    color: 'white',
+                    boxShadow: '0 8px 16px rgba(0,0,0,0.1)',
+                    border: '1px solid rgba(255,255,255,0.4)'
+                  }}>
+                    {selectedCustomerObj.name?.charAt(0).toUpperCase()}
+                  </div>
+                  {/* Active Status Pulse */}
+                  <div style={{ position: 'absolute', bottom: -2, right: -2, width: 12, height: 12, borderRadius: '50%', background: '#22c55e', border: '2.5px solid rgba(255,255,255,0.2)', boxShadow: '0 0 8px #22c55e' }} />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, position: 'relative', zIndex: 1 }}>
+                    <div style={{ fontSize: 16, fontWeight: 1000, lineHeight: 1, letterSpacing: '-0.3px', textShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>{selectedCustomerObj.name}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                        <span style={{ fontSize: 11, opacity: 0.9, fontWeight: 800, letterSpacing: '0.4px', background: 'rgba(255,255,255,0.15)', padding: '2px 6px', borderRadius: 6 }}>{selectedCustomerObj.phone}</span>
                         {(selectedCustomerObj.loyalty_points !== undefined && selectedCustomerObj.loyalty_points > 0) && (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 3, padding: '1px 6px', background: 'rgba(255,255,255,0.2)', borderRadius: 6, fontSize: 9, fontWeight: 900, color: 'white' }}>
-                                <span style={{ opacity: 0.7 }}>★</span> {selectedCustomerObj.loyalty_points}
+                            <div style={{ 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              gap: 3,
+                              padding: '2px 8px', 
+                              background: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)', 
+                              borderRadius: 8, 
+                              fontSize: 10, 
+                              fontWeight: 1000, 
+                              color: 'white',
+                              boxShadow: '0 4px 10px rgba(217,119,6,0.3)'
+                            }}>
+                                ★ {selectedCustomerObj.loyalty_points}
                             </div>
                         )}
                         {isCreditMode && (
-                             <div style={{ padding: '1px 6px', background: 'rgba(255,255,255,0.15)', borderRadius: 6, fontSize: 9, fontWeight: 900, color: '#fde68a' }}>
+                             <div style={{ 
+                               padding: '2px 8px', 
+                               background: 'rgba(255,255,255,0.2)', 
+                               backdropFilter: 'blur(4px)',
+                               borderRadius: 8, 
+                               fontSize: 10, 
+                               fontWeight: 1000, 
+                               color: '#fef3c7',
+                               border: '1px solid rgba(251,191,36,0.3)'
+                             }}>
                                 ₹{selectedCustomerObj.current_balance?.toFixed(2)}
                             </div>
                         )}
                     </div>
                 </div>
+
                 <button 
                   onClick={() => {
                       if (isCreditMode) {
@@ -2153,25 +2322,27 @@ export default function CreateOrderModal({
                       }
                   }}
                   style={{ 
-                    marginLeft: 'auto',
-                    width: 22, 
-                    height: 22, 
-                    borderRadius: 7, 
-                    background: 'rgba(255,255,255,0.15)', 
-                    border: '1px solid rgba(255,255,255,0.1)', 
+                    width: 28, 
+                    height: 28, 
+                    borderRadius: 10, 
+                    background: 'rgba(255,255,255,0.12)', 
+                    border: '1px solid rgba(255,255,255,0.2)', 
                     color: 'white', 
-                    fontSize: 16, 
+                    fontSize: 18, 
                     cursor: 'pointer', 
                     display: 'flex', 
                     alignItems: 'center', 
                     justifyContent: 'center',
-                    transition: 'all 0.2s'
+                    transition: 'all 0.2s ease',
+                    boxShadow: '0 4px 10px rgba(0,0,0,0.05)'
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'rgba(0,0,0,0.1)';
+                    e.currentTarget.style.background = 'rgba(239,68,68,0.2)';
+                    e.currentTarget.style.borderColor = 'rgba(239,68,68,0.4)';
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'rgba(255,255,255,0.15)';
+                    e.currentTarget.style.background = 'rgba(255,255,255,0.12)';
+                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)';
                   }}
                 >
                   ×
@@ -2224,27 +2395,67 @@ export default function CreateOrderModal({
             ) : (
               /* Normal Customer Search */
               <div style={{ flex: 1, position: 'relative' }}>
-                <input 
-                  type="text"
-                  placeholder="Search Customer / Mobile..."
-                  value={customerName}
-                  onChange={(e) => handleNameChange(e.target.value)}
-                  onFocus={() => customerName && setShowNameSuggestions(true)}
-                  style={{ 
-                    width: '100%', 
-                    padding: '10px 40px 10px 18px', 
-                    borderRadius: 12, 
-                    border: '1.5px solid rgba(255,255,255,0.2)', 
-                    background: 'rgba(255,255,255,0.15)',
-                    backdropFilter: 'blur(10px)',
-                    fontSize: 14, 
-                    fontWeight: 600, 
-                    color: 'white',
-                    outline: 'none',
-                    transition: 'all 0.25s ease'
-                  }}
-                  className="customer-search-input"
-                />
+                <div style={{ position: 'relative', width: '100%' }}>
+                  <span style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', opacity: 0.6, fontSize: 18 }}>👤</span>
+                  <input 
+                    type="text"
+                    placeholder="Search Customer / Mobile..."
+                    value={customerName}
+                    onChange={(e) => handleNameChange(e.target.value)}
+                    onFocus={(e) => {
+                      customerName && setShowNameSuggestions(true);
+                      e.target.style.background = 'rgba(255,255,255,0.25)';
+                      e.target.style.boxShadow = '0 0 0 4px rgba(255,255,255,0.1)';
+                    }}
+                    onBlur={(e) => {
+                      e.target.style.background = 'rgba(255,255,255,0.15)';
+                      e.target.style.boxShadow = 'none';
+                    }}
+                    style={{ 
+                      width: '100%', 
+                      padding: '12px 45px 12px 48px', 
+                      borderRadius: 16, 
+                      border: '1.5px solid rgba(255,255,255,0.25)', 
+                      background: 'rgba(255,255,255,0.15)',
+                      backdropFilter: 'blur(12px)',
+                      fontSize: 14, 
+                      fontWeight: 800, 
+                      color: 'white',
+                      outline: 'none',
+                      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                      letterSpacing: '0.2px'
+                    }}
+                    className="customer-search-input"
+                  />
+                  {customerName && (
+                    <button 
+                      onClick={() => {
+                        setCustomerName('');
+                        setCustomerPhone('');
+                        setShowNameSuggestions(false);
+                      }}
+                      style={{
+                        position: 'absolute',
+                        right: 12,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'rgba(255,255,255,0.2)',
+                        border: 'none',
+                        color: 'white',
+                        borderRadius: '50%',
+                        width: 20,
+                        height: 20,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 12,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
 
                 {showNameSuggestions && filteredSuggestions.length > 0 && (
                   <div style={{ 
@@ -2264,16 +2475,44 @@ export default function CreateOrderModal({
                         key={c.customer_id}
                         onClick={() => selectCustomer(c)}
                         style={{ 
-                          padding: '12px 18px', 
+                          padding: '14px 20px', 
                           borderBottom: '1px solid #f1f5f9',
                           cursor: 'pointer',
-                          transition: 'background 0.2s'
+                          transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 12
                         }}
-                        onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
-                        onMouseLeave={e => e.currentTarget.style.background = 'white'}
+                        onMouseEnter={e => {
+                          e.currentTarget.style.background = orderMode === 'settle' ? '#f0fdf4' : '#fff7ed';
+                          e.currentTarget.style.paddingLeft = '24px';
+                        }}
+                        onMouseLeave={e => {
+                          e.currentTarget.style.background = 'white';
+                          e.currentTarget.style.paddingLeft = '20px';
+                        }}
                       >
-                        <div style={{ fontWeight: 800, fontSize: 13, color: '#1e293b' }}>{c.name}</div>
-                        <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>{c.phone}</div>
+                        <div style={{ 
+                          width: 32, 
+                          height: 32, 
+                          borderRadius: 10, 
+                          background: '#f1f5f9', 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          justifyContent: 'center',
+                          fontSize: 12,
+                          fontWeight: 900,
+                          color: '#475569'
+                        }}>
+                          {c.name?.charAt(0).toUpperCase()}
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                          <div style={{ fontWeight: 900, fontSize: 13, color: '#1e293b', letterSpacing: '-0.2px' }}>{c.name}</div>
+                          <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700 }}>{c.phone}</div>
+                        </div>
+                        <div style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 900, color: orderMode === 'settle' ? '#16a34a' : '#f97316', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          Select
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -2389,48 +2628,94 @@ export default function CreateOrderModal({
             </SearchFilterBar>
 
             {/* Product Suggestions Section - Only visible while searching */}
-            {searchQuery.length > 0 && (
-              <div style={{ maxHeight: '280px', overflowY: 'auto', background: '#f8fafc', borderBottom: '2px solid #e2e8f0', boxShadow: 'inset 0 -2px 10px rgba(0,0,0,0.05)', zIndex: 10 }}>
-                {loadingMenu ? (
-                  <div style={{ padding: 20, textAlign: 'center', color: '#94a3b8', fontWeight: 700 }}>Loading products...</div>
-                ) : filteredMenuItems.length === 0 ? (
-                  <div style={{ padding: 20, textAlign: 'center', color: '#94a3b8', fontWeight: 700 }}>No products found</div>
-                ) : (
-                  filteredMenuItems.slice(0, 10).map((item, index) => {
-                    const totalQty = cart
-                      .filter(c => c.id === item.id)
-                      .reduce((sum, c) => sum + (c.quantity || 0), 0);
-                    
-                    return (
-                      <SuggestionItem 
-                        key={item.id}
-                        active={index === activeSuggestionIndex}
-                        orderMode={orderMode}
-                        onClick={() => {
-                          addToCart(item);
-                          setSearchQuery('');
-                          searchInputRef.current?.focus();
-                        }}
-                        style={{ padding: '12px 24px' }}
-                      >
-                        <div className="name-info">
-                          <div className="name" style={{ fontSize: 14 }}>{item.name}</div>
-                          <div className="meta">
-                            {item.veg ? <span style={{ color: '#22c55e' }}>● Veg</span> : <span style={{ color: '#ef4444' }}>● Non-Veg</span>}
-                            {item.code && <span>• Code: {item.code}</span>}
-                            <span>• {item.category}</span>
+            <div style={{ position: 'relative', zIndex: 2000 }}>
+              {searchQuery.length > 0 && (
+                <div 
+                  ref={suggestionContainerRef}
+                  style={{ 
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    maxHeight: '380px', 
+                    overflowY: 'auto', 
+                    background: 'rgba(255, 255, 255, 0.98)', 
+                    backdropFilter: 'blur(20px)',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '0 0 20px 20px',
+                    boxShadow: '0 20px 40px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.05)', 
+                    zIndex: 2000 
+                  }}
+                >
+                  {loadingMenu ? (
+                    <div style={{ padding: '32px 20px', textAlign: 'center', color: '#94a3b8', fontWeight: 800, fontSize: 13 }}>
+                      <div style={{ marginBottom: 12, fontSize: 24 }}>🔍</div>
+                      Searching Menu...
+                    </div>
+                  ) : filteredMenuItems.length === 0 ? (
+                    <div style={{ padding: '32px 20px', textAlign: 'center', color: '#94a3b8', fontWeight: 800, fontSize: 13 }}>
+                      <div style={{ marginBottom: 12, fontSize: 24 }}>🤔</div>
+                      No products found
+                    </div>
+                  ) : (
+                    filteredMenuItems.slice(0, 10).map((item, index) => {
+                      const totalQty = cart
+                        .filter(c => c.id === item.id)
+                        .reduce((sum, c) => sum + (c.quantity || 0), 0);
+                      
+                      return (
+                        <SuggestionItem 
+                          key={item.id}
+                          active={index === activeSuggestionIndex}
+                          orderMode={orderMode}
+                          onClick={() => {
+                            addToCart(item);
+                            setSearchQuery('');
+                            searchInputRef.current?.focus();
+                          }}
+                        >
+                          <div className="name-info">
+                            <div className="name" style={{ fontSize: 15, fontWeight: 950 }}>{item.name}</div>
+                            <div className="meta" style={{ marginTop: 2 }}>
+                              <span style={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: 4,
+                                color: item.veg ? '#16a34a' : '#ef4444',
+                                background: item.veg ? '#f0fdf4' : '#fef2f2',
+                                padding: '1px 6px',
+                                borderRadius: 6,
+                                fontSize: 9
+                              }}>
+                                {item.veg ? '🟢 VEG' : '🔴 NON-VEG'}
+                              </span>
+                              {item.code && <span style={{ opacity: 0.6 }}>• #{item.code}</span>}
+                              <span style={{ opacity: 0.6 }}>• {item.category}</span>
+                            </div>
                           </div>
-                        </div>
-                        <div className="price-info">
-                          {totalQty > 0 && <span className="cart-count">+{formatQtyP(totalQty, item.uom_precision ?? 2)}</span>}
-                          <div className="price" style={{ fontSize: 16 }}>₹{item.price.toFixed(2)}</div>
-                        </div>
-                      </SuggestionItem>
-                    );
-                  })
-                )}
-              </div>
-            )}
+                          <div className="price-info" style={{ marginLeft: 'auto' }}>
+                            {totalQty > 0 && (
+                              <div style={{ 
+                                padding: '2px 10px', 
+                                background: orderMode === 'settle' ? '#16a34a' : '#f97316', 
+                                color: 'white', 
+                                borderRadius: 8, 
+                                fontSize: 11, 
+                                fontWeight: 900,
+                                boxShadow: '0 4px 10px rgba(0,0,0,0.1)'
+                              }}>
+                                {formatQtyP(totalQty, item.uom_precision ?? 2)} in cart
+                              </div>
+                            )}
+                            <div className="price" style={{ fontSize: 18, fontWeight: 1000 }}>₹{item.price.toFixed(2)}</div>
+                          </div>
+                        </SuggestionItem>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+            </div>
 
             {/* Main Area: Cart & Order Breakdown */}
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -2653,39 +2938,13 @@ export default function CreateOrderModal({
                       </div>
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <button 
-                          onClick={() => !showDiscountModal && setShowDiscountModal(item.cartId)}
-                          style={{
-                            width: 32,
-                            height: 32,
-                            borderRadius: 10,
-                            border: item.discount?.value > 0 ? `1.5px solid ${orderMode === 'settle' ? '#16a34a' : '#f97316'}` : '1.5px solid #e2e8f0',
-                            background: item.discount?.value > 0 ? (orderMode === 'settle' ? '#f0fdf4' : '#fff7ed') : 'white',
-                            color: item.discount?.value > 0 ? (orderMode === 'settle' ? '#16a34a' : '#f97316') : '#94a3b8',
-                            fontSize: 14,
-                            cursor: showDiscountModal ? 'not-allowed' : 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            transition: 'all 0.2s',
-                            opacity: showDiscountModal ? 0.5 : 1,
-                            boxShadow: '0 2px 4px rgba(0,0,0,0.04)'
-                          }}
-                          title="Apply Item Discount"
-                        >
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M12.4498 2.65063C12.1932 2.39401 11.7774 2.394 11.5208 2.6506L2.65064 11.5208C2.394 11.7774 2.39401 12.1932 2.65063 12.4498L11.5208 21.32C11.7774 21.5766 12.1932 21.5766 12.4498 21.32L21.32 12.4498C21.5766 12.1932 21.5766 11.7774 21.32 11.5208L12.4498 2.65063Z" fill="#FBBF24" stroke="#D97706" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                            <circle cx="7" cy="17" r="2" fill="white" transform="rotate(-45 7 17)" />
-                          </svg>
-                        </button>
-
                         <div style={{ textAlign: 'right', minWidth: '95px', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
                           <div 
                             style={{ fontSize: 16, fontWeight: 1000, color: '#0f172a', cursor: 'default', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', letterSpacing: '-0.5px' }}
                           >
                              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                                ₹{(item.price * item.quantity).toFixed(2)}
-                               {(!!restaurant?.gst_enabled && !restaurant?.prices_include_tax) && (
+                               {(!!restaurant?.gst_enabled && !restaurant?.prices_include_tax && !item.is_packaged_good) && (
                                  <span style={{ 
                                    fontSize: 8, 
                                    color: orderMode === 'settle' ? '#166534' : '#9a3412', 
@@ -2767,8 +3026,17 @@ export default function CreateOrderModal({
                        <span style={{ fontSize: 10, fontWeight: 900, color: '#94a3b8' }}>GUESTS:</span>
                        <input 
                          type="number"
+                         min="0"
                          value={numberOfCustomers}
-                         onChange={(e) => setNumberOfCustomers(e.target.value)}
+                         onChange={(e) => {
+                           const val = e.target.value;
+                           if (val === '') {
+                             setNumberOfCustomers('');
+                           } else {
+                             const num = parseInt(val);
+                             setNumberOfCustomers(Math.max(0, isNaN(num) ? 0 : num));
+                           }
+                         }}
                          style={{ width: '100%', background: 'transparent', border: 'none', fontSize: 14, fontWeight: 900, outline: 'none', padding: 0 }}
                        />
                     </div>
@@ -2823,15 +3091,17 @@ export default function CreateOrderModal({
                     )}
 
                     {/* Taxable Value */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#64748b' }}>
-                        <span>Taxable Value</span>
-                        <span style={{ fontWeight: 600, color: '#1e293b' }}>
-                            ₹{cartTotals.taxable_amount.toFixed(2)}
-                        </span>
-                    </div>
+                    {!!restaurant?.gst_enabled && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#64748b' }}>
+                          <span>Taxable Value</span>
+                          <span style={{ fontWeight: 600, color: '#1e293b' }}>
+                              ₹{cartTotals.taxable_amount.toFixed(2)}
+                          </span>
+                      </div>
+                    )}
 
                     {/* Tax Breakdown */}
-                    {cartTotals.total_tax_included > 0.01 && (
+                    {(!!restaurant?.gst_enabled && cartTotals.total_tax_included > 0.01) && (
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#64748b' }}>
                         <span>GST (incl)</span>
                         <span style={{ fontWeight: 600, color: '#1e293b' }}>
@@ -2840,7 +3110,7 @@ export default function CreateOrderModal({
                       </div>
                     )}
                     
-                    {cartTotals.total_tax_added > 0.01 && (
+                    {(!!restaurant?.gst_enabled && cartTotals.total_tax_added > 0.01) && (
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#64748b' }}>
                         <span>GST (+)</span>
                         <span style={{ fontWeight: 600, color: '#1e293b' }}>
@@ -3124,6 +3394,8 @@ export default function CreateOrderModal({
         onClose={() => setShowVariantSelector(false)}
         onSelect={handleVariantSelect}
         theme={THEME}
+        gstEnabled={!!restaurant?.gst_enabled}
+        pricesIncludeTax={!!restaurant?.prices_include_tax}
       />
 
       {showDiscountModal === 'bill' && (
@@ -3588,7 +3860,7 @@ export default function CreateOrderModal({
                     style={{ background: '#f8fafc', borderRadius: 14, height: 50 }}
                   />
                 </div>
-                {quickProduct.packaged && (
+                {!!restaurant?.gst_enabled && (
                   <SlideInContainer style={{ flex: 1 }}>
                     <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 800, color: '#64748b', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.8px' }}>
                       <span>🧾</span> Tax Rate (%)

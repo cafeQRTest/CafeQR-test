@@ -17,7 +17,20 @@ async function fetchAvailableMenuItems(restaurantId) {
   
   const { data, error } = await supabase
     .from('menu_items')
-    .select('id, name, price, category, veg, tax_rate, is_packaged_good, status, uom:unit_of_measures(short_code, precision)')
+    .select(`
+      id, 
+      name, 
+      price, 
+      category, 
+      description,
+      image_url,
+      veg, 
+      tax_rate, 
+      is_packaged_good, 
+      status, 
+      has_variants,
+      uom:unit_of_measures(short_code, precision)
+    `)
     .eq('restaurant_id', restaurantId)
     .eq('status', 'available')
     .order('category')
