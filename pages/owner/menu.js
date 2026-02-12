@@ -322,6 +322,8 @@ const deleteIdsInChunks = useCallback(async (ids, chunkSize = 200) => {
   const [error, setError] = useState("");
   const [filterText, setFilterText] = useState("");
   const [filterCategory, setFilterCategory] = useState("all");
+  const [filterVeg, setFilterVeg] = useState(false);
+  const [filterPackaged, setFilterPackaged] = useState(false);
   const [selected, setSelected] = useState(new Set());
   const [editorItem, setEditorItem] = useState(null);
   const [showLibrary, setShowLibrary] = useState(false);
@@ -341,7 +343,7 @@ const totalPages = Math.max(1, Math.ceil((totalCount || 0) / PAGE_SIZE));
 useEffect(() => {
   setPage(1);
   setSelected(new Set());
-}, [filterText, filterCategory]);
+}, [filterText, filterCategory, filterVeg, filterPackaged]);
 
 
 const loadMenuItems = useCallback(async () => {
@@ -369,6 +371,8 @@ const loadMenuItems = useCallback(async () => {
       .eq("restaurant_id", restaurantId);
 
     if (filterCategory !== "all") q = q.eq("category", filterCategory);
+    if (filterVeg) q = q.eq("veg", true);
+    if (filterPackaged) q = q.eq("is_packaged_good", true);
 
     const search = filterText.trim();
     if (search) {
@@ -394,7 +398,7 @@ const loadMenuItems = useCallback(async () => {
   } finally {
     setLoading(false);
   }
-}, [supabase, restaurantId, page, PAGE_SIZE, filterCategory, filterText]);
+}, [supabase, restaurantId, page, PAGE_SIZE, filterCategory, filterText, filterVeg, filterPackaged]);
 
   // Check scroll position to toggle arrows
   const checkScroll = () => {
@@ -605,6 +609,8 @@ useEffect(() => {
     return items.filter((i) => {
       if (filterCategory !== "all" && i.category !== filterCategory)
         return false;
+      if (filterVeg && !i.veg) return false;
+      if (filterPackaged && !i.is_packaged_good) return false;
       if (!q) return true;
       return (
         i.name.toLowerCase().includes(q) ||
@@ -612,7 +618,7 @@ useEffect(() => {
         (i.code_number || "").toLowerCase().includes(q)
       );
     });
-  }, [items, filterText, filterCategory]);
+  }, [items, filterText, filterCategory, filterVeg, filterPackaged]);
 
   const toggleSelect = useCallback((id) => {
     setSelected((prev) => {
@@ -765,6 +771,20 @@ useEffect(() => {
             )}
           </div>
           
+          <div className="filter-chips" style={{ marginBottom: 0 }}>
+            <button 
+              className={`filter-chip ${filterVeg ? 'filter-chip-veg-active' : ''}`}
+              onClick={() => setFilterVeg(!filterVeg)}
+            >
+              {filterVeg ? '✓ Veg' : 'Veg Only'}
+            </button>
+            <button 
+              className={`filter-chip ${filterPackaged ? 'filter-chip-pkg-active' : ''}`}
+              onClick={() => setFilterPackaged(!filterPackaged)}
+            >
+              {filterPackaged ? '✓ Packaged' : 'Packaged Only'}
+            </button>
+          </div>
         </div>
         
         {/* Category Carousel */}
@@ -959,7 +979,6 @@ useEffect(() => {
                 <th className="hide-sm" style={{ width: '120px' }}>Type</th>
                 <th className="hide-sm" style={{ width: '115px' }}>Status</th>
                 <th className="hide-sm" style={{ width: '90px' }}>Variants</th>
-                {enableMenuImages && <th className="hide-sm" style={{ width: '75px' }}>Image</th>}
                 <th className="hide-mobile col-actions" style={{ width: '185px' }}>Actions</th>
               </tr>
             </thead>
@@ -1173,33 +1192,6 @@ useEffect(() => {
                           {item.has_variants ? "✓" : "✕"}
                         </span>
                       </td>
-                      {enableMenuImages && (
-                        <td className="hide-sm" style={{ width: '75px' }}>
-                          {item.image_url ? (
-                            <div 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setViewImage(item.image_url);
-                              }}
-                              style={{ 
-                                width: 40, height: 40, 
-                                overflow: 'hidden', borderRadius: 6, 
-                                cursor: 'pointer', border: '1px solid #ddd',
-                                background: '#fff'
-                              }}
-                              title="Click to view"
-                            >
-                              <img 
-                                src={item.image_url} 
-                                alt="" 
-                                style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-                              />
-                            </div>
-                          ) : (
-                            <div style={{ width: 40, height: 40, background: '#f9fafb', borderRadius: 6, border: '1px dashed #e5e7eb' }} />
-                          )}
-                        </td>
-                      )} 
                       <td className="hide-mobile col-actions" style={{ width: '185px' }}>
                         <div
                           style={{
