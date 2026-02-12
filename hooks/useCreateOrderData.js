@@ -17,9 +17,10 @@ export const orderKeys = {
 async function fetchAllCustomers(restaurantId) {
   if (!restaurantId) return [];
   const { data, error } = await supabase
-    .from('v_owner_customers')
-    .select('customer_id, name, phone, loyalty_points')
-    .eq('restaurant_id', restaurantId);
+    .from('restaurant_customers')
+    .select('customer_id, name, phone') 
+    .eq('restaurant_id', restaurantId)
+    .eq('is_active', true);
   
   if (error) throw error;
   return data || [];

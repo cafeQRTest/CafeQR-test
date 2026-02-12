@@ -5,12 +5,14 @@ const AlertContext = createContext();
 export function AlertProvider({ children }) {
   const [dialog, setDialog] = useState(null); // { type: 'alert'|'confirm', message, title, onConfirm, onCancel }
 
-  const showAlert = useCallback((message, title = 'Notice') => {
+  const showAlert = useCallback((message, title = 'Notice', options = {}) => {
     return new Promise((resolve) => {
       setDialog({
         type: 'alert',
         title,
         message,
+        confirmColor: options.confirmColor,
+        confirmText: options.confirmText,
         onConfirm: () => {
           setDialog(null);
           resolve(true);
@@ -19,12 +21,14 @@ export function AlertProvider({ children }) {
     });
   }, []);
 
-  const showConfirm = useCallback((message, title = 'Confirm') => {
+  const showConfirm = useCallback((message, title = 'Confirm', options = {}) => {
     return new Promise((resolve) => {
       setDialog({
         type: 'confirm',
         title,
         message,
+        confirmColor: options.confirmColor,
+        confirmText: options.confirmText,
         onConfirm: () => {
           setDialog(null);
           resolve(true);
@@ -70,11 +74,12 @@ export function AlertProvider({ children }) {
                 onClick={dialog.onConfirm}
                 style={{
                   padding: '10px 16px', borderRadius: 8, border: 'none',
-                  background: '#f97316', color: 'white', cursor: 'pointer', fontWeight: 600,
+                  background: dialog?.confirmColor || '#f97316', 
+                  color: 'white', cursor: 'pointer', fontWeight: 600,
                   fontSize: 14
                 }}
               >
-                {dialog.type === 'confirm' ? 'Confirm' : 'OK'}
+                {dialog.confirmText || (dialog.type === 'confirm' ? 'Confirm' : 'OK')}
               </button>
             </div>
           </div>

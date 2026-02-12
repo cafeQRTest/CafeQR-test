@@ -1161,7 +1161,11 @@ export default function CreateOrderModal({
     tax_rate: '',
     has_variants: false
   });
-  const [quickAddLoading, setQuickAddLoading] = useState(false);
+  /* New Customer Creation State (Non-Credit) */
+  const [showNewCustomerModal, setShowNewCustomerModal] = useState(false);
+  const [newCustomerProcessing, setNewCustomerProcessing] = useState(false);
+  const [newCustomerError, setNewCustomerError] = useState('');
+
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
@@ -1533,12 +1537,14 @@ export default function CreateOrderModal({
     try {
       setCreditProcessing(true);
       setCreditError('');
+      // Check for existing customer
       const { data: existing } = await supabase
         .from('credit_customers')
         .select('id, name, phone')
         .eq('restaurant_id', restaurantId)
         .eq('phone', trimmedPhone)
         .maybeSingle();
+
       if (existing) {
         if (existing.name.toLowerCase() === trimmedName.toLowerCase()) {
           setCreditError('A customer with this name and phone number already exists.');
@@ -1560,6 +1566,7 @@ export default function CreateOrderModal({
         })
         .select()
         .single();
+
       if (err) {
         setCreditError(`Failed to create customer: ${err.message}`);
         setCreditProcessing(false);
@@ -1577,7 +1584,7 @@ export default function CreateOrderModal({
              current_balance: 0 
          }] : []
       );
-      // Also potentially invalidate customers list if needed
+      // Invalidate main customer list too as they are related
       queryClient.invalidateQueries(orderKeys.customers(restaurantId));
 
       setSelectedCreditCustomerId(data.id);
@@ -1586,13 +1593,94 @@ export default function CreateOrderModal({
       setCustomerName(data.name);
       setCustomerPhone(data.phone);
       setCreditError('');
-      showAlert(`Customer "${data.name}" created successfully`);
+      setCreditError('');
+      const confirmColor = orderMode === 'settle' ? '#16a34a' : '#f97316';
+      showAlert(`Customer "${data.name}" created successfully`, 'Success', { confirmColor });
     } catch (err) {
       setCreditError(`Error: ${err.message || 'Failed to create customer'}`);
     } finally {
       setCreditProcessing(false);
     }
   };
+
+  const handleCreateRegularCustomer = async () => {
+    const trimmedName = customerName.trim();
+    const trimmedPhone = customerPhone.trim();
+    
+    if (trimmedName.length < 2) {
+         setNewCustomerError('Name is required (min 2 chars)');
+         return;
+    }
+    // Phone validation if provided
+    if (trimmedPhone && (trimmedPhone.length < 10 || !/^\d{10}$/.test(trimmedPhone))) {
+         setNewCustomerError('Phone must be 10 digits');
+         return;
+    }
+    
+    // Check duplicates locally
+    const existing = (allCustomers || []).find(c => c.phone === trimmedPhone && trimmedPhone);
+    if (existing) {
+         setNewCustomerError(`Customer "${existing.name}" with this phone already exists`);
+         return;
+    }
+    
+    setNewCustomerProcessing(true);
+    setNewCustomerError('');
+    
+    try {
+        const customer_id = crypto.randomUUID();
+        // Generate customer_no
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        let customer_no = '';
+        for (let i = 0; i < 8; i++) {
+          customer_no += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+
+        const { data, error } = await supabase.from('restaurant_customers').insert({
+            restaurant_id: restaurantId,
+            customer_id,
+            customer_no,
+            name: trimmedName,
+            phone: trimmedPhone || null,
+            total_spent: 0,
+            visit_count: 0,
+            is_active: true,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+        }).select().single();
+
+        if (error) throw error;
+        
+        // Optimistic Update cache
+        queryClient.setQueryData(orderKeys.customers(restaurantId), (old) => {
+            const newC = {
+                 customer_id: data.customer_id,
+                 customer_no: data.customer_no,
+                 name: data.name,
+                 phone: data.phone,
+                 order_count: 0, 
+                 total_spent: 0,
+                 last_order_at: null,
+                 loyalty_points: 0
+            };
+            return old ? [...old, newC] : [newC];
+        });
+        
+        // Select
+        setSelectedCustomerId(data.customer_id);
+        setCustomerName(data.name);
+        setCustomerPhone(data.phone || '');
+        setShowNewCustomerModal(false);
+        const confirmColor = orderMode === 'settle' ? '#16a34a' : '#f97316';
+        showAlert(`Customer "${data.name}" created`, 'Success', { confirmColor });
+        
+    } catch(e) {
+        setNewCustomerError(e.message || 'Failed to create customer');
+    } finally {
+        setNewCustomerProcessing(false);
+    }
+  };
+
 
   const handleQuickAddProduct = async () => {
     if (!quickProduct.name || !quickProduct.price) {
@@ -1624,7 +1712,8 @@ export default function CreateOrderModal({
       if (!data.has_variants) {
         addItemToCart(data);
       } else {
-        showAlert('Product created. Please add variants from Menu to use it in cart.');
+        const confirmColor = orderMode === 'settle' ? '#16a34a' : '#f97316';
+        showAlert('Product created. Please add variants from Menu to use it in cart.', 'Success', { confirmColor });
       }
       
       // Reset and close
@@ -1639,7 +1728,8 @@ export default function CreateOrderModal({
         tax_rate: '',
         has_variants: false
       });
-      showAlert('Product added successfully');
+      const confirmColor = orderMode === 'settle' ? '#16a34a' : '#f97316';
+      showAlert('Product added successfully', 'Success', { confirmColor });
       
       // Invalidate menu query
       queryClient.invalidateQueries(['availableMenuItems', restaurantId]);
@@ -2089,21 +2179,47 @@ export default function CreateOrderModal({
               </SlideInContainer>
             ) : isCreditMode ? (
               /* Credit Customer NiceSelect */
-              <div style={{ flex: 1 }}>
-                <NiceSelect
-                  value={selectedCreditCustomerId}
-                  onChange={(val) => handleSelectCreditCustomer(val)}
-                  options={creditCustomers.map(c => ({
-                    value: c.id,
-                    label: `${c.name} (${c.phone}) - ₹${c.current_balance.toFixed(2)}`
-                  }))}
-                  placeholder="Select Credit Customer"
-                  style={{ 
-                    background: 'rgba(255,255,255,0.1)', 
-                    color: 'white', 
-                    borderColor: 'rgba(255,255,255,0.2)' 
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ flex: 1 }}>
+                  <NiceSelect
+                    value={selectedCreditCustomerId}
+                    onChange={(val) => handleSelectCreditCustomer(val)}
+                    options={creditCustomers.map(c => ({
+                      value: c.id,
+                      label: `${c.name} (${c.phone}) - ₹${c.current_balance.toFixed(2)}`
+                    }))}
+                    placeholder="Select Credit Customer"
+                    style={{ 
+                      background: 'rgba(255,255,255,0.1)', 
+                      color: 'white', 
+                      borderColor: 'rgba(255,255,255,0.2)' 
+                    }}
+                  />
+                </div>
+                <button
+                  onClick={() => setShowNewCreditCustomerModal(true)}
+                  style={{
+                    width: 38, // Match NiceSelect height approx or sufficient size
+                    height: 38,
+                    borderRadius: 10,
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    background: 'rgba(255,255,255,0.15)',
+                    color: 'white',
+                    fontSize: 20,
+                    fontWeight: 600,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
+                    transition: 'all 0.2s'
                   }}
-                />
+                  title="Create New Credit Customer"
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.25)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.15)'}
+                >
+                  +
+                </button>
               </div>
             ) : (
               /* Normal Customer Search */
@@ -2116,7 +2232,7 @@ export default function CreateOrderModal({
                   onFocus={() => customerName && setShowNameSuggestions(true)}
                   style={{ 
                     width: '100%', 
-                    padding: '10px 18px', 
+                    padding: '10px 40px 10px 18px', 
                     borderRadius: 12, 
                     border: '1.5px solid rgba(255,255,255,0.2)', 
                     background: 'rgba(255,255,255,0.15)',
@@ -2162,6 +2278,32 @@ export default function CreateOrderModal({
                     ))}
                   </div>
                 )}
+                {/* Add New Customer Button */}
+                <button
+                  onClick={() => setShowNewCustomerModal(true)}
+                  style={{
+                    position: 'absolute',
+                    right: 8,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    width: 28,
+                    height: 28,
+                    borderRadius: 8,
+                    border: 'none',
+                    background: orderMode === 'settle' ? '#16a34a' : '#f97316',
+                    color: 'white',
+                    fontSize: 18,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 5px rgba(0,0,0,0.1)'
+                  }}
+                  title="Create New Customer"
+                >
+                  +
+                </button>
+
                 <style jsx>{`
                   .customer-search-input::placeholder { color: rgba(255,255,255,0.7); }
                   .customer-search-input:focus { 
@@ -3049,7 +3191,7 @@ export default function CreateOrderModal({
             }} 
             onClick={e => e.stopPropagation()}
           >
-            <h3 style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 800, color: '#1e293b' }}>
+            <h3 style={{ margin: '0 0 20px', fontSize: 22, fontWeight: 900, color: orderMode === 'settle' ? '#16a34a' : '#f97316' }}>
               New Credit Customer
             </h3>
             
@@ -3126,13 +3268,14 @@ export default function CreateOrderModal({
                 style={{ 
                   flex: 1, 
                   padding: '12px', 
-                  borderRadius: 10, 
+                  borderRadius: 12, 
                   border: 'none', 
-                  background: (creditProcessing || customerName.trim().length < 2 || customerPhone.length < 10) ? '#cbd5e1' : '#f59e0b',
+                  background: (creditProcessing || customerName.trim().length < 2 || customerPhone.length < 10) ? '#cbd5e1' : (orderMode === 'settle' ? '#16a34a' : '#f97316'),
                   color: 'white', 
                   fontSize: 14, 
-                  fontWeight: 700, 
-                  cursor: (creditProcessing || customerName.trim().length < 2 || customerPhone.length < 10) ? 'not-allowed' : 'pointer' 
+                  fontWeight: 800, 
+                  cursor: (creditProcessing || customerName.trim().length < 2 || customerPhone.length < 10) ? 'not-allowed' : 'pointer',
+                  boxShadow: (creditProcessing || customerName.trim().length < 2 || customerPhone.length < 10) ? 'none' : `0 4px 12px ${orderMode === 'settle' ? 'rgba(22, 163, 74, 0.4)' : 'rgba(249, 115, 22, 0.4)'}` 
                 }}
               >
                 {creditProcessing ? 'Saving...' : 'Create Account'}
@@ -3141,6 +3284,127 @@ export default function CreateOrderModal({
           </div>
         </div>
       )}
+
+      {/* New Regular Customer Modal */}
+      {showNewCustomerModal && (
+        <div 
+          style={{ 
+            position: 'fixed', 
+            inset: 0, 
+            background: 'rgba(0,0,0,0.5)', 
+            backdropFilter: 'blur(4px)',
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center', 
+            zIndex: 10000 
+          }} 
+          onClick={() => setShowNewCustomerModal(false)}
+        >
+          <div 
+            style={{ 
+              background: 'white', 
+              borderRadius: 16, 
+              width: '100%', 
+              maxWidth: 400, 
+              padding: 24,
+              boxShadow: '0 20px 40px -12px rgba(0,0,0,0.25)'
+            }} 
+            onClick={e => e.stopPropagation()}
+          >
+            <h3 style={{ margin: '0 0 20px', fontSize: 22, fontWeight: 900, color: orderMode === 'settle' ? '#16a34a' : '#f97316' }}>
+              New Customer
+            </h3>
+            
+            {newCustomerError && (
+              <div style={{ padding: '10px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, color: '#dc2626', fontSize: 13, fontWeight: 600, marginBottom: 16 }}>
+                {newCustomerError}
+              </div>
+            )}
+            
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#64748b', marginBottom: 6, textTransform: 'uppercase' }}>Full Name <span style={{color: '#ef4444'}}>*</span></label>
+              <input
+                type="text"
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+                placeholder="Enter customer name"
+                style={{ 
+                  width: '100%', 
+                  padding: '12px 14px', 
+                  borderRadius: 10, 
+                  border: '1.5px solid #e5e7eb', 
+                  fontSize: 14, 
+                  fontWeight: 500, 
+                  outline: 'none' 
+                }}
+              />
+            </div>
+            
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#64748b', marginBottom: 6, textTransform: 'uppercase' }}>Phone Number (Optional)</label>
+              <input
+                type="tel"
+                value={customerPhone}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                  setCustomerPhone(val);
+                }}
+                placeholder="10-digit phone number"
+                style={{ 
+                  width: '100%', 
+                  padding: '12px 14px', 
+                  borderRadius: 10, 
+                  border: '1.5px solid #e5e7eb', 
+                  fontSize: 14, 
+                  fontWeight: 500, 
+                  outline: 'none' 
+                }}
+              />
+               {customerPhone.length > 0 && customerPhone.length < 10 && (
+                <div style={{ fontSize: 11, color: '#ef4444', marginTop: 4 }}>Phone must be 10 digits if provided</div>
+              )}
+            </div>
+            
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button
+                onClick={() => { setShowNewCustomerModal(false); setNewCustomerError(''); }}
+                style={{ 
+                  flex: 1, 
+                  padding: '12px', 
+                  borderRadius: 10, 
+                  border: '1px solid #e5e7eb', 
+                  background: 'white', 
+                  color: '#64748b', 
+                  fontSize: 14, 
+                  fontWeight: 700, 
+                  cursor: 'pointer' 
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateRegularCustomer}
+                disabled={newCustomerProcessing || customerName.trim().length < 2 || (customerPhone.length > 0 && customerPhone.length < 10)}
+                style={{ 
+                  flex: 1, 
+                  padding: '12px', 
+                  borderRadius: 12, 
+                  border: 'none', 
+                  background: (newCustomerProcessing || customerName.trim().length < 2 || (customerPhone.length > 0 && customerPhone.length < 10)) ? '#cbd5e1' : (orderMode === 'settle' ? '#16a34a' : '#f97316'),
+                  color: 'white', 
+                  fontSize: 14, 
+                  fontWeight: 800, 
+                  cursor: (newCustomerProcessing || customerName.trim().length < 2 || (customerPhone.length > 0 && customerPhone.length < 10)) ? 'not-allowed' : 'pointer',
+                  boxShadow: (newCustomerProcessing || customerName.trim().length < 2 || (customerPhone.length > 0 && customerPhone.length < 10)) ? 'none' : `0 4px 12px ${orderMode === 'settle' ? 'rgba(22, 163, 74, 0.4)' : 'rgba(249, 115, 22, 0.4)'}` 
+                }}
+              >
+                {newCustomerProcessing ? 'Saving...' : 'Create Customer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Quick Add Product Modal */}
       {showQuickAddModal && (
         <div 

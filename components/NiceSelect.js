@@ -2,9 +2,27 @@ import { useState, useEffect, useRef } from "react";
 
 export default function NiceSelect({ value, onChange, options, placeholder = "Select...", disabled = false, maxHeight = 300, style = {} }) {
   const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
   const ref = useRef(null);
 
   const current = options.find((o) => o.value === value);
+
+  // Filter options based on search
+  const filteredOptions = options.filter(o => 
+    o.label.toLowerCase().includes(search.toLowerCase())
+  );
+
+  // Reset search when opening and focus input
+  useEffect(() => {
+    if (open) {
+      setSearch("");
+      // Little delay to ensure render
+      setTimeout(() => {
+        const input = ref.current?.querySelector('input');
+        if (input) input.focus();
+      }, 50);
+    }
+  }, [open]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -70,49 +88,76 @@ export default function NiceSelect({ value, onChange, options, placeholder = "Se
             border: "1.5px solid #e2e8f0",
             boxShadow: "0 20px 40px -10px rgba(0,0,0,0.15)",
             maxHeight: maxHeight,
-            overflowY: "auto",
+            overflow: "hidden", 
+            display: 'flex',
+            flexDirection: 'column',
             animation: 'fadeIn 0.2s ease-out'
           }}
         >
-          {options.length === 0 ? (
-            <div style={{ padding: '16px', textAlign: 'center', color: '#94a3b8', fontSize: 13, fontWeight: 600 }}>
-              No options available
-            </div>
-          ) : options.map((opt) => {
-            const active = opt.value === value;
-            return (
-              <div
-                key={opt.value}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  onChange(opt.value);
-                  setOpen(false);
-                }}
-                style={{
-                  padding: "12px 16px",
-                  fontSize: 13,
-                  fontWeight: 700,
-                  cursor: "pointer",
-                  background: active ? "#fff7ed" : "#fff",
-                  color: active ? "#f97316" : "#1e293b",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  transition: 'all 0.2s',
-                  borderBottom: '1px solid #f1f5f9'
-                }}
-                onMouseEnter={(e) => {
-                  if (!active) e.currentTarget.style.background = '#f8fafc';
-                }}
-                onMouseLeave={(e) => {
-                  if (!active) e.currentTarget.style.background = '#fff';
-                }}
-              >
-                <span>{opt.label}</span>
-                {active && <span style={{ color: '#f97316' }}>✓</span>}
+          <div style={{ padding: '8px' }}>
+            <input
+              autoFocus
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => setSearch(e.target.value)}
+              value={search}
+              placeholder="Search..."
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                borderRadius: 8,
+                border: '1px solid #e2e8f0',
+                outline: 'none',
+                fontSize: 13,
+                color: '#334155'
+              }}
+            />
+          </div>
+          <div style={{ overflowY: 'auto', flex: 1 }}>
+            {filteredOptions.length === 0 ? (
+              <div style={{ padding: '16px', textAlign: 'center', color: '#94a3b8', fontSize: 13, fontWeight: 600 }}>
+                No options found
               </div>
-            );
-          })}
+            ) : filteredOptions.map((opt) => {
+              const active = opt.value === value;
+              return (
+                <div
+                  key={opt.value}
+                  onMouseDown={(e) => {
+                    e.preventDefault(); // Prevent blur
+                    onChange(opt.value);
+                    setOpen(false);
+                  }}
+                  // use onClick as fallback
+                  onClick={() => {
+                     onChange(opt.value);
+                     setOpen(false);
+                  }}
+                  style={{
+                    padding: "12px 16px",
+                    fontSize: 13,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    background: active ? "#fff7ed" : "#fff",
+                    color: active ? "#f97316" : "#1e293b",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    transition: 'all 0.2s',
+                    borderBottom: '1px solid #f1f5f9'
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!active) e.currentTarget.style.background = '#f8fafc';
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!active) e.currentTarget.style.background = '#fff';
+                  }}
+                >
+                  <span>{opt.label}</span>
+                  {active && <span style={{ color: '#f97316' }}>✓</span>}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>
