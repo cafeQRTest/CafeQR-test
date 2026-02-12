@@ -12,6 +12,8 @@ import Layout from '../../components/Layout';
 import UiButton from '../../components/ui/Button'; // Renamed to avoid conflict with styled-component Button
 import OrderItemsModal from '../../components/OrderItemsModal';
 import EditOrderPanel from '../../components/EditOrderPanel';
+import { round2, roundP, formatQtyP } from '../../lib/qty';
+import { LoyaltyService } from '../../services/loyaltyService';
 
 
 import PaymentConfirmDialog from '../../components/PaymentConfirmDialog';
@@ -1362,6 +1364,144 @@ const InfoText = styled.span`
   color: #334155;
 `;
 
+// Helper: Restore stock for a set of order_items (imported/copied from orders.js)
+async function restoreStockForOrder(supabase, restaurantId, orderItems) {
+  console.log('[STOCK RESTORE] Starting restoration for', orderItems?.length, 'items');
+  if (!Array.isArray(orderItems) || !orderItems.length) {
+    console.log('[STOCK RESTORE] No order items to restore');
+    return;
+  }
+
+  for (const oi of orderItems) {
+    console.log('[STOCK RESTORE] Processing item:', { menu_item_id: oi.menu_item_id, quantity: oi.quantity, is_packaged: oi.is_packaged_good });
+    
+    if (!oi.menu_item_id || !oi.quantity) {
+      console.log('[STOCK RESTORE] Skipping - no menu_item_id or quantity');
+      continue;
+    }
+
+    let recipeQuery = supabase
+      .from('recipes')
+      .select('id, variant_option_id, recipe_items(ingredient_id, quantity)')
+      .eq('menu_item_id', oi.menu_item_id)
+      .eq('restaurant_id', restaurantId);
+
+    const { data: potentialRecipes, error: recipeErr } = await recipeQuery;
+    
+    if (recipeErr || !potentialRecipes?.length) {
+      console.log('[STOCK RESTORE] No recipes found or error');
+      continue;
+    }
+
+    let targetVariantId = oi.variant_option_id || oi.variant_id || null;
+
+    if (!targetVariantId && oi.variant_name) {
+      const { data: vpData, error: vpErr } = await supabase
+        .from('variant_pricing')
+        .select('variant_options!inner(id, name)')
+        .eq('menu_item_id', oi.menu_item_id);
+      
+      if (vpData) {
+        const normName = oi.variant_name.trim().toLowerCase();
+        const match = vpData.find(v => v.variant_options?.name?.trim().toLowerCase() === normName);
+        if (match && match.variant_options?.id) {
+            targetVariantId = match.variant_options.id;
+        }
+      }
+    }
+
+    let recipe = potentialRecipes.find(r => {
+      const rId = r.variant_option_id;
+      if (!rId && !targetVariantId) return true;
+      if (!rId || !targetVariantId) return false;
+      return String(rId) === String(targetVariantId);
+    });
+    
+    if (!recipe && targetVariantId) {
+      recipe = potentialRecipes.find(r => r.variant_option_id === null);
+    }
+
+    if (!recipe && !targetVariantId && potentialRecipes.length > 0) {
+        recipe = potentialRecipes.find(r => r.variant_option_id === null);
+    }
+
+    if (!recipe?.recipe_items?.length) continue;
+
+    for (const ri of recipe.recipe_items) {
+      const { data: ing, error: ingErr } = await supabase
+        .from('ingredients')
+        .select('id, current_stock, name, uom:unit_of_measures(precision)')
+        .eq('id', ri.ingredient_id)
+        .eq('restaurant_id', restaurantId)
+        .single();
+      
+      if (ingErr || !ing) continue;
+
+      const precision = ing.uom?.precision ?? 2;
+      const addBack = roundP(Number(ri.quantity) * Number(oi.quantity), precision);
+
+      const oldStock = Number(ing.current_stock || 0);
+      const newStock = roundP(oldStock + addBack, precision);
+      
+      await supabase
+        .from('ingredients')
+        .update({ current_stock: newStock, updated_at: new Date().toISOString() })
+        .eq('id', ing.id);
+    }
+  }
+}
+
+function CancelConfirmDialog({ order, onConfirm, onCancel }) {
+  const [reason, setReason] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleConfirm = async () => {
+    if (submitting) return;
+    setSubmitting(true);
+    await onConfirm(reason);
+    setSubmitting(false);
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0,
+      backgroundColor: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(5px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: 12
+    }}>
+      <div style={{ 
+        backgroundColor: 'white', padding: 20, borderRadius: 16, maxWidth: 320, width: '100%',
+        boxShadow: '0 12px 24px -10px rgba(0, 0, 0, 0.15)',
+      }}>
+        <h3 style={{ fontSize: 17, fontWeight: 800, color: '#0f172a', margin: '0 0 8px 0' }}>Cancel Order</h3>
+        <p style={{ fontSize: 12, color: '#64748b', lineHeight: 1.4, marginBottom: 16 }}>
+          Are you sure you want to cancel order <strong>#{order.id.slice(0, 8)}</strong>? This will release the table and restore stock.
+        </p>
+        
+        <label style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Reason</label>
+        <textarea
+          value={reason}
+          onChange={e => setReason(e.target.value)}
+          rows={2}
+          style={{ 
+            width: '100%', padding: '10px', fontSize: 12, borderRadius: 10, border: '1.5px solid #e2e8f0',
+            outline: 'none', background: '#f8fafc', color: '#1e293b', marginBottom: 20
+          }}
+          placeholder="e.g. Guest changed mind"
+        />
+        
+        <div style={{ display: 'flex', gap: 8 }}>
+          <UiButton onClick={onCancel} variant="outline" style={{ flex: 1, padding: '8px', fontSize: 13 }} disabled={submitting}>
+            Keep
+          </UiButton>
+          <UiButton onClick={handleConfirm} variant="danger" style={{ flex: 1.5, padding: '8px', fontSize: 13, background: '#ef4444', color: 'white', border: 'none', borderRadius: '8px' }} disabled={!reason.trim() || submitting}>
+            {submitting ? '...' : 'Confirm'}
+          </UiButton>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const Modal = styled.div`
   position: fixed;
   inset: 0;
@@ -1594,6 +1734,7 @@ export default function TableManagement() {
   const [showFloorsModal, setShowFloorsModal] = useState(false);
   const [editingTable, setEditingTable] = useState(null);
   const [viewOrder, setViewOrder] = useState(null);
+  const [cancelOrderDialog, setCancelOrderDialog] = useState(null);
   
   // React Query hooks for data fetching
   const { data: tables = [], isLoading: loading, error, refetch } = useTables(restaurant?.id);
@@ -2031,6 +2172,130 @@ const handleModalResend = async (table) => {
           console.error('Error updating order status:', err);
           showAlert('Failed to update order status');
       }
+  };
+
+  const handleCancelConfirm = async (reason) => {
+    if (!cancelOrderDialog) return;
+    const orderId = cancelOrderDialog.id;
+    const tableId = cancelOrderDialog.table_id;
+    console.log('[CANCEL ORDER] Starting cancellation for order:', orderId);
+    
+    try {
+        // 1. Get full order with items (to restore stock)
+        const { data: fullOrder, error: fetchErr } = await supabase
+            .from('orders')
+            .select('*, order_items(*, menu_items(name, uom:unit_of_measures(precision)))')
+            .eq('id', orderId)
+            .single();
+        
+        if (fetchErr || !fullOrder) throw new Error('Order not found');
+
+        // 2. Mark order as cancelled
+        const { error: cancelErr } = await supabase
+            .from('orders')
+            .update({ 
+                status: 'cancelled', 
+                description: reason,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', orderId);
+        
+        if (cancelErr) throw cancelErr;
+
+        // 3. Void invoice if it exists
+        const { data: invoice } = await supabase
+            .from('invoices')
+            .select('id')
+            .eq('order_id', orderId)
+            .maybeSingle();
+
+        if (invoice) {
+            console.log('[CANCEL ORDER] Voiding invoice:', invoice.id);
+            const res = await fetch('/api/invoices/void', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    invoice_id: invoice.id,
+                    restaurant_id: restaurant.id,
+                    reason: reason,
+                }),
+            });
+            if (!res.ok) {
+                const j = await res.json().catch(() => ({}));
+                console.warn('[CANCEL ORDER] Invoice void failed:', j?.error);
+            }
+        } else if (restaurant?.loyalty_enabled) {
+            // Reversal for non-invoiced orders
+            try {
+                await LoyaltyService.handleOrderReversal(supabase, {
+                    restaurant_id: restaurant.id,
+                    order_id: orderId
+                });
+            } catch (lErr) {
+                console.error('[CANCEL ORDER] Loyalty reversal failed:', lErr);
+            }
+        }
+
+        // 4. Restore stock
+        let itemsToRestore = fullOrder.order_items;
+        if ((!itemsToRestore || itemsToRestore.length === 0) && fullOrder.items && Array.isArray(fullOrder.items)) {
+            // Convert JSONB items if necessary
+            const itemsToConvert = [];
+            for (const item of fullOrder.items) {
+                let menuItemId = item.id || item.menu_item_id || null;
+                if (!menuItemId && item.name) {
+                    const { data: menuItem } = await supabase
+                        .from('menu_items')
+                        .select('id')
+                        .eq('restaurant_id', restaurant.id)
+                        .ilike('name', item.name)
+                        .maybeSingle();
+                    if (menuItem) menuItemId = menuItem.id;
+                }
+                itemsToConvert.push({
+                    menu_item_id: menuItemId,
+                    quantity: item.quantity || item.qty || 1,
+                    variant_option_id: item.variant_id || item.variant_option_id || null,
+                    variant_name: item.variant_name || null
+                });
+            }
+            itemsToRestore = itemsToConvert;
+        }
+
+        if (itemsToRestore && itemsToRestore.length > 0) {
+            await restoreStockForOrder(supabase, restaurant.id, itemsToRestore);
+        }
+
+        // 5. Release table if it was a dine-in order
+        if (fullOrder.table_id) {
+            await supabase
+                .from('tables')
+                .update({ status: 'available', current_order_id: null })
+                .eq('id', fullOrder.table_id);
+        } else if (fullOrder.table_number) {
+            // Find table by identifier if table_id is missing
+            const { data: tableObj } = await supabase
+                .from('tables')
+                .select('id')
+                .eq('restaurant_id', restaurant.id)
+                .eq('identifier', fullOrder.table_number)
+                .maybeSingle();
+            
+            if (tableObj) {
+                await supabase
+                    .from('tables')
+                    .update({ status: 'available', current_order_id: null })
+                    .eq('id', tableObj.id);
+            }
+        }
+
+        showAlert('Order cancelled and table released successfully');
+        setCancelOrderDialog(null);
+        refetch(); // Refresh tables and orders
+    } catch (err) {
+        console.error('[CANCEL ORDER] Error:', err);
+        showAlert(`Failed to cancel order: ${err.message}`);
+    }
   };
   
   // Real-time subscription - refetch when tables change
@@ -2721,6 +2986,7 @@ const handleModalResend = async (table) => {
                       <ActionButton variant="warning" onClick={(e) => { e.stopPropagation(); handlePrintBill(order.id); }} style={{ fontSize: '11px', minWidth: '0' }}>Bill</ActionButton>
                       <ActionButton variant="success" onClick={(e) => { e.stopPropagation(); handlePaymentClick(e, { current_order: { id: order.id } }); }} style={{ fontSize: '11px', minWidth: '0' }}>Pay</ActionButton>
                       <ActionButton variant="primary" onClick={(e) => { e.stopPropagation(); setEditingOrder(order); }} style={{ fontSize: '11px', minWidth: '0', background: '#e0f2fe', color: '#0369a1' }}>Edit</ActionButton>
+                      <ActionButton variant="danger" onClick={(e) => { e.stopPropagation(); setCancelOrderDialog(order); }} style={{ fontSize: '11px', minWidth: '0' }}>Cancel</ActionButton>
                     </div>
                   </TableCard>
                 ))}
@@ -2750,6 +3016,7 @@ const handleModalResend = async (table) => {
                       <ActionButton variant="warning" onClick={() => handlePrintBill(order.id)} style={{ fontSize: '11px', padding: '6px 10px' }}>Bill</ActionButton>
                       <ActionButton variant="success" onClick={(e) => handlePaymentClick(e, { current_order: { id: order.id } })} style={{ fontSize: '11px', padding: '6px 10px' }}>Pay</ActionButton>
                       <ActionButton variant="primary" onClick={() => setEditingOrder(order)} style={{ fontSize: '11px', padding: '6px 10px', background: '#e0f2fe', color: '#0369a1' }}>Edit</ActionButton>
+                      <ActionButton variant="danger" onClick={() => setCancelOrderDialog(order)} style={{ fontSize: '11px', padding: '6px 10px' }}>Cancel</ActionButton>
                     </div>
                   </TableListRow>
                 ))}
@@ -2944,21 +3211,35 @@ const handleModalResend = async (table) => {
                             </ActionButton>
                           </div>
                           
-                          <ActionButton 
-                            variant="success"
-                            fullWidth
-                            onClick={async () => {
-                              const full = await fetchFullOrder(activeVisualTable.current_order.id);
-                              if(full) setEditingOrder(full);
-                              setActiveVisualTable(null);
-                            }}
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                            </svg>
-                            Edit Order
-                          </ActionButton>
+                          <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
+                            <ActionButton 
+                              variant="success"
+                              style={{ flex: 1, height: '48px' }}
+                              onClick={async () => {
+                                const full = await fetchFullOrder(activeVisualTable.current_order.id);
+                                if(full) setEditingOrder(full);
+                                setActiveVisualTable(null);
+                              }}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                              </svg>
+                              Edit
+                            </ActionButton>
+
+                            <ActionButton 
+                              variant="danger"
+                              style={{ flex: 1, height: '48px' }}
+                              onClick={async () => {
+                                const full = await fetchFullOrder(activeVisualTable.current_order.id);
+                                if(full) setCancelOrderDialog(full);
+                                setActiveVisualTable(null);
+                              }}
+                            >
+                              Cancel
+                            </ActionButton>
+                          </div>
                           
 
                           <ActionButton 
@@ -3191,20 +3472,32 @@ const handleModalResend = async (table) => {
                        KOT
                     </ActionButton>
 
-                    <ActionButton 
-                      variant="success"
-                      fullWidth
-                      onClick={async () => {
-                        const full = await fetchFullOrder(table.current_order.id);
-                        if(full) setEditingOrder(full);
-                      }}
-                    >
-                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                       </svg>
-                       Edit Order
-                    </ActionButton>
+                    <div style={{ display: 'flex', gap: 8, width: '100%' }}>
+                      <ActionButton 
+                        variant="success"
+                        style={{ flex: 1.5, height: 48 }}
+                        onClick={async () => {
+                          const full = await fetchFullOrder(table.current_order.id);
+                          if(full) setEditingOrder(full);
+                        }}
+                      >
+                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                           <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                           <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                         </svg>
+                         Edit
+                      </ActionButton>
+                      <ActionButton 
+                        variant="danger"
+                        style={{ flex: 1, height: 48 }}
+                        onClick={async () => {
+                          const full = await fetchFullOrder(table.current_order.id);
+                          if(full) setCancelOrderDialog(full);
+                        }}
+                      >
+                         Cancel
+                      </ActionButton>
+                    </div>
                   </>
                 )}
                 
@@ -3343,19 +3636,30 @@ const handleModalResend = async (table) => {
 
                 {/* Edit Order */}
                 {table.current_order && (
-                   <ActionButton 
-                      variant="success"
-                      onClick={async () => {
-                         const full = await fetchFullOrder(table.current_order.id);
-                         if(full) setEditingOrder(full);
-                      }}
-                   >
-                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                       <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                       <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                     </svg>
-                     Edit
-                   </ActionButton>
+                   <>
+                    <ActionButton 
+                       variant="success"
+                       onClick={async () => {
+                          const full = await fetchFullOrder(table.current_order.id);
+                          if(full) setEditingOrder(full);
+                       }}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                      </svg>
+                      Edit
+                    </ActionButton>
+                    <ActionButton 
+                       variant="danger"
+                       onClick={async () => {
+                          const full = await fetchFullOrder(table.current_order.id);
+                          if(full) setCancelOrderDialog(full);
+                       }}
+                    >
+                      Cancel
+                    </ActionButton>
+                   </>
                 )}
 
                 {table.status === 'available' && (
@@ -3826,6 +4130,13 @@ const handleModalResend = async (table) => {
         }}
         orderType={serviceMode === 'dine-in' ? 'dine-in' : (serviceMode === 'takeaway' ? 'parcel' : 'delivery')}
       />
+      {cancelOrderDialog && (
+        <CancelConfirmDialog 
+          order={cancelOrderDialog} 
+          onConfirm={handleCancelConfirm} 
+          onCancel={() => setCancelOrderDialog(null)} 
+        />
+      )}
     </PageContainer>
   );
 }
