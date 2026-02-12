@@ -19,6 +19,7 @@ export default async function handler(req, res) {
       .select(`
         id,
         invoice_no,
+        date_ordered,
         invoice_date,
         customer_name,
         customer_gstin,
@@ -101,7 +102,15 @@ export default async function handler(req, res) {
 
       const common = {
         'Invoice No': inv.invoice_no,
-        'Date': new Date(inv.date_ordered || inv.invoice_date).toLocaleDateString('en-IN'),
+  'Date & Time': new Date(inv.date_ordered || inv.invoice_date).toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  }),
         'Customer Name': inv.customer_name || 'Walk-in',
         'Customer GSTIN': inv.customer_gstin || '',
         'Place of Supply': inv.place_of_supply || '',
@@ -178,7 +187,7 @@ export default async function handler(req, res) {
     // 5) CSV headers (must match keys above)
     const fields = [
       'Invoice No',
-      'Date',
+      'Date & Time',
       'Customer Name',
       'Customer GSTIN',
       'Place of Supply',
