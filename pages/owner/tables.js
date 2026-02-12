@@ -15,6 +15,7 @@ import EditOrderPanel from '../../components/EditOrderPanel';
 
 
 import PaymentConfirmDialog from '../../components/PaymentConfirmDialog';
+import CreateOrderModal from '../../components/CreateOrderModal';
 import { calculateOrderTotals } from '../../utils/orderCalculations';
 import { useAlert } from '../../context/AlertContext';
 import { 
@@ -29,6 +30,7 @@ import {
   useAddFloor,
   useDeleteFloor
 } from '../../hooks/useTables';
+import { useOrders } from '../../hooks/useOrders';
 
 // Animations
 const fadeIn = keyframes`
@@ -359,6 +361,49 @@ const FilterPill = styled.button`
 
   @media (max-width: 1200px) {
     width: auto;
+  }
+`;
+
+const AddOrderButton = styled.button`
+  width: 100%;
+  padding: 14px;
+  background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+  color: white;
+  border: none;
+  border-radius: 16px;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 4px;
+  box-shadow: 0 10px 20px -5px rgba(249, 115, 22, 0.3);
+
+  &:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 15px 30px -8px rgba(249, 115, 22, 0.4);
+    background: linear-gradient(135deg, #ea580c 0%, #d97706 100%);
+  }
+
+  &:active {
+    transform: translateY(-1px);
+    box-shadow: 0 5px 10px -2px rgba(249, 115, 22, 0.4);
+  }
+
+  svg {
+    width: 20px;
+    height: 20px;
+    stroke-width: 3;
+  }
+
+  @media (max-width: 1200px) {
+    width: auto;
+    margin-top: 0;
+    padding: 10px 18px;
+    border-radius: 14px;
   }
 `;
 
@@ -721,7 +766,7 @@ const ViewButton = styled.button`
 // Dynamic Grid
 const TableGrid = styled.div`
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 24px;
   max-width: 1600px;
   margin: 0 auto;
@@ -1524,8 +1569,9 @@ const EmptyTitle = styled.h3`
 `;
 
 const EmptyText = styled.p`
-  font-size: 16px;
+  font-size: 15px;
   color: #64748b;
+  line-height: 1.6;
   margin: 0 0 24px;
 `;
 
@@ -1536,10 +1582,27 @@ export default function TableManagement() {
   const router = useRouter();
   const { showAlert, showConfirm } = useAlert();
   
+  // Component State
+  const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list' or 'visual'
+  const [serviceMode, setServiceMode] = useState('dine-in'); // 'dine-in' or 'takeaway' or 'delivery'
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterSection, setFilterSection] = useState('all');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterFloor, setFilterFloor] = useState('all');
+  const [showModal, setShowModal] = useState(false);
+  const [showSectionsModal, setShowSectionsModal] = useState(false);
+  const [showFloorsModal, setShowFloorsModal] = useState(false);
+  const [editingTable, setEditingTable] = useState(null);
+  const [viewOrder, setViewOrder] = useState(null);
+  
   // React Query hooks for data fetching
   const { data: tables = [], isLoading: loading, error, refetch } = useTables(restaurant?.id);
   const { data: sections = [] } = useSections(restaurant?.id);
   const { data: floors = [] } = useFloors(restaurant?.id, tables);
+  const { data: orders = [], isLoading: loadingOrders } = useOrders(
+    restaurant?.id, 
+    serviceMode === 'dine-in' ? 'all' : (serviceMode === 'takeaway' ? 'parcel' : 'delivery')
+  );
   
   // React Query mutations
   const tableMutation = useTableMutation();
@@ -1550,17 +1613,6 @@ export default function TableManagement() {
   const deleteSectionMutation = useDeleteSection();
   const addFloorMutation = useAddFloor();
   const deleteFloorMutation = useDeleteFloor();
-  
-  const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list' or 'visual'
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterSection, setFilterSection] = useState('all');
-  const [filterStatus, setFilterStatus] = useState('all');
-  const [filterFloor, setFilterFloor] = useState('all');
-  const [showModal, setShowModal] = useState(false);
-  const [showSectionsModal, setShowSectionsModal] = useState(false);
-  const [showFloorsModal, setShowFloorsModal] = useState(false);
-  const [editingTable, setEditingTable] = useState(null);
-  const [viewOrder, setViewOrder] = useState(null);
   
   // Status Note Modal State
   const [showNoteModal, setShowNoteModal] = useState(false);
@@ -1578,6 +1630,10 @@ export default function TableManagement() {
   const [activeVisualTable, setActiveVisualTable] = useState(null);
   const [popoverPosition, setPopoverPosition] = useState({ x: 0, y: 0 });
   
+  // Create Order Modal State
+  const [showCreateOrderModal, setShowCreateOrderModal] = useState(false);
+  const [createOrderTable, setCreateOrderTable] = useState(null);
+  
   // Form state
   const [formData, setFormData] = useState({
     identifier: '',
@@ -1592,6 +1648,34 @@ export default function TableManagement() {
     tableCount: 1,
     sendEmail: false
   });
+  
+  // Dynamic Page Info
+  const pageInfo = useMemo(() => {
+    switch(serviceMode) {
+      case 'takeaway':
+        return {
+          title: 'Takeaway',
+          accent: 'Orders',
+          subtitle: 'Manage active parcel and takeaway orders',
+          primaryStat: 'Takeaway Pending',
+          secondaryStat: 'Ready for Pickup'
+        };
+      case 'delivery':
+        return {
+          title: 'Delivery',
+          accent: 'Management',
+          subtitle: 'Track home deliveries and logistics in real-time',
+          primaryStat: 'Active Deliveries',
+          secondaryStat: 'Pending Dispatch'
+        };
+      default:
+        return {
+          title: 'Table',
+          accent: 'Management',
+          subtitle: 'Real-time floor plan and order management system'
+        };
+    }
+  }, [serviceMode]);
   
   const handleSendQrCode = async (table) => {
     try {
@@ -2001,6 +2085,21 @@ const handleModalResend = async (table) => {
       return matchesSearch && matchesSection && matchesStatus && matchesFloor;
     });
   }, [tables, searchQuery, filterSection, filterStatus, filterFloor]);
+
+  // Filtered orders for non-dine-in modes
+  const filteredOrders = useMemo(() => {
+    if (serviceMode === 'dine-in') return [];
+    return orders.filter(order => {
+      const matchesSearch = !searchQuery || 
+        (order.customer_name?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+         order.customer_phone?.includes(searchQuery) ||
+         order.id.toLowerCase().includes(searchQuery.toLowerCase()));
+      
+      const matchesStatus = filterStatus === 'all' || order.status === filterStatus;
+      
+      return matchesSearch && matchesStatus;
+    });
+  }, [orders, searchQuery, filterStatus, serviceMode]);
   
   const handleAddTable = () => {
     setEditingTable(null);
@@ -2253,6 +2352,39 @@ const handleModalResend = async (table) => {
     }
   };
 
+  const handleKotClick = async (orderId) => {
+    if (!orderId) return;
+    try {
+      const full = await fetchFullOrder(orderId);
+      if (!full) throw new Error("Order not found");
+
+      const { data: profile } = await supabase
+        .from('restaurant_profiles')
+        .select('*')
+        .eq('restaurant_id', restaurant.id)
+        .maybeSingle();
+
+      const orderForPrint = {
+        ...full,
+        restaurant_name: restaurant.name,
+        _profile: profile
+      };
+
+      window.dispatchEvent(
+        new CustomEvent('auto-print-order', {
+          detail: {
+            ...orderForPrint,
+            autoPrint: true,
+            kind: 'kot',
+          },
+        })
+      );
+    } catch (err) {
+      console.error('KOT print error:', err);
+      showAlert('Failed to trigger KOT print');
+    }
+  };
+
   const handlePrintBill = async (orderId) => {
     if (!orderId) return;
     try {
@@ -2322,132 +2454,181 @@ const handleModalResend = async (table) => {
       <MainLayout>
         <Sidebar>
           <SidebarGroup>
-            <SidebarLabel>Status</SidebarLabel>
+            <SidebarLabel>Order Type</SidebarLabel>
             <SidebarFilterList>
-              {['all', 'available', 'occupied', 'reserved', 'cleaning', 'maintenance'].map(status => (
+              {[
+                { id: 'dine-in', label: 'Dine In', icon: '🪑' },
+                { id: 'takeaway', label: 'Takeaway', icon: '🥡' },
+                { id: 'delivery', label: 'Delivery', icon: '🚲' }
+              ].map(mode => (
                 <FilterPill 
-                  key={status} 
-                  active={filterStatus === status}
-                  onClick={() => setFilterStatus(status)}
+                  key={mode.id} 
+                  active={serviceMode === mode.id}
+                  onClick={() => setServiceMode(mode.id)}
                 >
-                  <div style={{ 
-                    width: '8px', 
-                    height: '8px', 
-                    borderRadius: '50%', 
-                    background: status === 'available' ? '#10b981' : 
-                               status === 'occupied' ? '#ef4444' : 
-                               status === 'reserved' ? '#3b82f6' : 
-                               status === 'cleaning' ? '#f59e0b' : 
-                               status === 'maintenance' ? '#6366f1' : '#cbd5e1'
-                  }} />
-                  {status.charAt(0).toUpperCase() + status.slice(1)}
+                  <span style={{ fontSize: '16px' }}>{mode.icon}</span>
+                  {mode.label}
                 </FilterPill>
               ))}
             </SidebarFilterList>
+            {(serviceMode === 'takeaway' || serviceMode === 'delivery') && (
+              <AddOrderButton 
+                onClick={() => {
+                  setCreateOrderTable(null);
+                  setShowCreateOrderModal(true);
+                }}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19"></line>
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                {serviceMode === 'takeaway' ? 'New Takeaway' : 'New Delivery'}
+              </AddOrderButton>
+            )}
           </SidebarGroup>
 
-          <SidebarGroup>
-            <SidebarLabel>Section</SidebarLabel>
-            <SidebarFilterList>
-              <FilterPill 
-                active={filterSection === 'all'} 
-                onClick={() => setFilterSection('all')}
-              >
-                All Sections
-              </FilterPill>
-              {sections.map(s => (
-                <FilterPill 
-                  key={s.id} 
-                  active={filterSection === s.section_name}
-                  onClick={() => setFilterSection(s.section_name)}
-                >
-                  {s.section_name}
-                </FilterPill>
-              ))}
-            </SidebarFilterList>
-          </SidebarGroup>
+          {serviceMode === 'dine-in' && (
+            <>
+              <SidebarGroup>
+                <SidebarLabel>Status</SidebarLabel>
+                <SidebarFilterList>
+                  {['all', 'available', 'occupied', 'reserved', 'cleaning', 'maintenance'].map(status => (
+                    <FilterPill 
+                      key={status} 
+                      active={filterStatus === status}
+                      onClick={() => setFilterStatus(status)}
+                    >
+                      <div style={{ 
+                        width: '8px', 
+                        height: '8px', 
+                        borderRadius: '50%', 
+                        background: status === 'available' ? '#10b981' : 
+                                  status === 'occupied' ? '#ef4444' : 
+                                  status === 'reserved' ? '#3b82f6' : 
+                                  status === 'cleaning' ? '#f59e0b' : 
+                                  status === 'maintenance' ? '#6366f1' : '#cbd5e1'
+                      }} />
+                      {status.charAt(0).toUpperCase() + status.slice(1)}
+                    </FilterPill>
+                  ))}
+                </SidebarFilterList>
+              </SidebarGroup>
 
-          <SidebarGroup>
-            <SidebarLabel>Floor</SidebarLabel>
-            <SidebarFilterList>
-              <FilterPill 
-                active={filterFloor === 'all'} 
-                onClick={() => setFilterFloor('all')}
-              >
-                All Floors
-              </FilterPill>
-              {floors.map(f => (
-                <FilterPill 
-                  key={f.id} 
-                  active={filterFloor === f.floor_name}
-                  onClick={() => setFilterFloor(f.floor_name)}
-                >
-                  {f.floor_name}
-                </FilterPill>
-              ))}
-            </SidebarFilterList>
-          </SidebarGroup>
+              <SidebarGroup>
+                <SidebarLabel>Section</SidebarLabel>
+                <SidebarFilterList>
+                  <FilterPill 
+                    active={filterSection === 'all'} 
+                    onClick={() => setFilterSection('all')}
+                  >
+                    All Sections
+                  </FilterPill>
+                  {sections.map(s => (
+                    <FilterPill 
+                      key={s.id} 
+                      active={filterSection === s.section_name}
+                      onClick={() => setFilterSection(s.section_name)}
+                    >
+                      {s.section_name}
+                    </FilterPill>
+                  ))}
+                </SidebarFilterList>
+              </SidebarGroup>
+
+              <SidebarGroup>
+                <SidebarLabel>Floor</SidebarLabel>
+                <SidebarFilterList>
+                  <FilterPill 
+                    active={filterFloor === 'all'} 
+                    onClick={() => setFilterFloor('all')}
+                  >
+                    All Floors
+                  </FilterPill>
+                  {floors.map(f => (
+                    <FilterPill 
+                      key={f.id} 
+                      active={filterFloor === f.floor_name}
+                      onClick={() => setFilterFloor(f.floor_name)}
+                    >
+                      {f.floor_name}
+                    </FilterPill>
+                  ))}
+                </SidebarFilterList>
+              </SidebarGroup>
+            </>
+          )}
         </Sidebar>
 
         <MainContent>
           <Header>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '20px' }}>
               <TitleBlock>
-                <Title>Table <span>Management</span></Title>
-                <Subtitle>Real-time floor plan and order management system</Subtitle>
+                <Title>{pageInfo.title} <span>{pageInfo.accent}</span></Title>
+                <Subtitle>{pageInfo.subtitle}</Subtitle>
               </TitleBlock>
               
-              <HeaderActions>
-                <ConfigButton onClick={() => setShowSectionsModal(true)}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 3H3v18h18V12"></path>
-                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                  </svg>
-                  Manage Sections
-                </ConfigButton>
-                <ConfigButton onClick={() => setShowFloorsModal(true)}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M3 9h18"></path>
-                    <path d="M3 15h18"></path>
-                    <path d="M3 3v18"></path>
-                    <path d="M21 3v18"></path>
-                  </svg>
-                  Manage Floors
-                </ConfigButton>
-              </HeaderActions>
+              {serviceMode === 'dine-in' && (
+                <HeaderActions>
+                  <ConfigButton onClick={() => setShowSectionsModal(true)}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 3H3v18h18V12"></path>
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                    </svg>
+                    Manage Sections
+                  </ConfigButton>
+                  <ConfigButton onClick={() => setShowFloorsModal(true)}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M3 9h18"></path>
+                      <path d="M3 15h18"></path>
+                      <path d="M3 3v18"></path>
+                      <path d="M21 3v18"></path>
+                    </svg>
+                    Manage Floors
+                  </ConfigButton>
+                </HeaderActions>
+              )}
             </div>
             
-            <StatsScroll>
-              <StatCard accent="linear-gradient(135deg, #f97316 0%, #ea580c 100%)">
-                <StatLabel>
-                  Total Tables
-                </StatLabel>
-                <StatValue>{stats.total}</StatValue>
-              </StatCard>
-              <StatCard accent="linear-gradient(135deg, #10b981 0%, #059669 100%)">
-                <StatLabel>
-                  Available
-                </StatLabel>
-                <StatValue style={{color: '#059669'}}>{stats.available}</StatValue>
-              </StatCard>
-              <StatCard accent="linear-gradient(135deg, #ef4444 0%, #dc2626 100%)">
-                <StatLabel>
-                  Occupied
-                </StatLabel>
-                <StatValue style={{color: '#dc2626'}}>{stats.occupied}</StatValue>
-              </StatCard>
-              <StatCard accent="linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)">
-                <StatLabel>
-                  Reserved
-                </StatLabel>
-                <StatValue style={{color: '#2563eb'}}>{stats.reserved}</StatValue>
-              </StatCard>
-            </StatsScroll>
+            {serviceMode === 'dine-in' ? (
+              <StatsScroll>
+                <StatCard accent="linear-gradient(135deg, #f97316 0%, #ea580c 100%)">
+                  <StatLabel>Total Tables</StatLabel>
+                  <StatValue>{stats.total}</StatValue>
+                </StatCard>
+                <StatCard accent="linear-gradient(135deg, #10b981 0%, #059669 100%)">
+                  <StatLabel>Available</StatLabel>
+                  <StatValue style={{color: '#059669'}}>{stats.available}</StatValue>
+                </StatCard>
+                <StatCard accent="linear-gradient(135deg, #ef4444 0%, #dc2626 100%)">
+                  <StatLabel>Occupied</StatLabel>
+                  <StatValue style={{color: '#dc2626'}}>{stats.occupied}</StatValue>
+                </StatCard>
+                <StatCard accent="linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)">
+                  <StatLabel>Reserved</StatLabel>
+                  <StatValue style={{color: '#2563eb'}}>{stats.reserved}</StatValue>
+                </StatCard>
+              </StatsScroll>
+            ) : (
+              <StatsScroll>
+                <StatCard accent="linear-gradient(135deg, #f97316 0%, #ea580c 100%)">
+                  <StatLabel>{pageInfo.primaryStat}</StatLabel>
+                  <StatValue>
+                    {filteredOrders.filter(o => ['new', 'pending', 'in_progress'].includes(o.status)).length}
+                  </StatValue>
+                </StatCard>
+                <StatCard accent="linear-gradient(135deg, #10b981 0%, #059669 100%)">
+                  <StatLabel>{pageInfo.secondaryStat}</StatLabel>
+                  <StatValue style={{color: '#059669'}}>
+                    {filteredOrders.filter(o => o.status === 'ready').length}
+                  </StatValue>
+                </StatCard>
+              </StatsScroll>
+            )}
             
             <Toolbar>
               <ToolbarLeft>
                 <SearchInput 
-                  placeholder="Search tables..." 
+                  placeholder={serviceMode === 'dine-in' ? "Search tables..." : `Search ${serviceMode} orders...`}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
@@ -2460,18 +2641,121 @@ const handleModalResend = async (table) => {
                   <ViewButton active={viewMode === 'list'} onClick={() => setViewMode('list')}>
                     List
                   </ViewButton>
-                  <ViewButton active={viewMode === 'visual'} onClick={() => setViewMode('visual')}>
-                    Visual
-                  </ViewButton>
+                  {serviceMode === 'dine-in' && (
+                    <ViewButton active={viewMode === 'visual'} onClick={() => setViewMode('visual')}>
+                      Visual
+                    </ViewButton>
+                  )}
                 </ViewToggle>
-                <Button primary onClick={handleAddTable}>
-                  <span style={{fontSize: '18px', fontWeight: 300}}>+</span> Add Table
-                </Button>
+                {serviceMode === 'dine-in' && (
+                  <UiButton primary onClick={handleAddTable}>
+                    <span style={{fontSize: '18px', fontWeight: 300}}>+</span> Add Table
+                  </UiButton>
+                )}
               </ToolbarRight>
             </Toolbar>
           </Header>
           
-          {filteredTables.length === 0 ? (
+          {serviceMode !== 'dine-in' ? (
+            filteredOrders.length === 0 ? (
+              <EmptyState>
+                <EmptyIcon>{serviceMode === 'takeaway' ? '🥡' : '🚲'}</EmptyIcon>
+                <EmptyTitle>No {serviceMode === 'takeaway' ? 'Takeaway' : 'Delivery'} Orders Found</EmptyTitle>
+                <EmptyText>
+                  {searchQuery || filterStatus !== 'all' 
+                    ? 'Try adjusting your search or filters' 
+                    : `Active ${serviceMode} orders will appear here`}
+                </EmptyText>
+              </EmptyState>
+            ) : viewMode === 'grid' ? (
+              <TableGrid>
+                {filteredOrders.map(order => (
+                  <TableCard 
+                    key={order.id} 
+                    status={order.status === 'ready' ? 'available' : (order.status === 'in_progress' ? 'cleaning' : 'occupied')}
+                    onClick={() => handleViewOrder(order.id)}
+                    style={{ borderRadius: '24px', padding: '0' }}
+                  >
+                    <TableCardHeader style={{ padding: '16px 20px 12px' }}>
+                      <TableNumber style={{ fontSize: '20px' }}>
+                        #{order.id.slice(-6).toUpperCase()}
+                        <span style={{ fontSize: '12px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '140px' }}>
+                          {order.customer_name || 'Guest'}
+                        </span>
+                      </TableNumber>
+                      <StatusBadge status={order.status === 'ready' ? 'available' : (order.status === 'in_progress' ? 'cleaning' : 'occupied')} style={{ padding: '4px 10px', fontSize: '10px' }}>
+                        {order.status}
+                      </StatusBadge>
+                    </TableCardHeader>
+                    
+                    <div style={{ padding: '0 20px 12px' }}>
+                      <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"></path>
+                          <path d="M3 6h18"></path>
+                          <path d="M16 10a4 4 0 0 1-8 0"></path>
+                        </svg>
+                        {order.order_items?.length || 0} Items • ₹{(order.total_amount || 0).toFixed(2)}
+                      </div>
+                      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', minHeight: '44px' }}>
+                        {order.order_items?.slice(0, 2).map((item, i) => (
+                          <div key={i} style={{ fontSize: '10px', background: '#f8fafc', padding: '3px 8px', borderRadius: '6px', color: '#475569', border: '1px solid #f1f5f9', fontWeight: 600 }}>
+                            {item.quantity}x {item.menu_items?.name}
+                          </div>
+                        ))}
+                        {(order.order_items?.length > 2) && (
+                          <div style={{ fontSize: '10px', color: '#94a3b8', padding: '3px 4px', fontWeight: 600 }}>+{order.order_items.length - 2} more</div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div style={{ 
+                      padding: '12px 16px 16px', 
+                      display: 'grid', 
+                      gridTemplateColumns: 'repeat(2, 1fr)', 
+                      gap: '8px', 
+                      background: '#fcfcfc',
+                      borderTop: '1px solid #f5f5f5' 
+                    }}>
+                      <ActionButton variant="primary" onClick={(e) => { e.stopPropagation(); handleKotClick(order.id); }} style={{ fontSize: '11px', minWidth: '0' }}>KOT</ActionButton>
+                      <ActionButton variant="warning" onClick={(e) => { e.stopPropagation(); handlePrintBill(order.id); }} style={{ fontSize: '11px', minWidth: '0' }}>Bill</ActionButton>
+                      <ActionButton variant="success" onClick={(e) => { e.stopPropagation(); handlePaymentClick(e, { current_order: { id: order.id } }); }} style={{ fontSize: '11px', minWidth: '0' }}>Pay</ActionButton>
+                      <ActionButton variant="primary" onClick={(e) => { e.stopPropagation(); setEditingOrder(order); }} style={{ fontSize: '11px', minWidth: '0', background: '#e0f2fe', color: '#0369a1' }}>Edit</ActionButton>
+                    </div>
+                  </TableCard>
+                ))}
+              </TableGrid>
+            ) : (
+              <TableList>
+                <TableListHeader>
+                  <div>Order ID</div>
+                  <div>Customer</div>
+                  <div>Status</div>
+                  <div>Items</div>
+                  <div>Total</div>
+                  <div>Actions</div>
+                </TableListHeader>
+                {filteredOrders.map(order => (
+                  <TableListRow key={order.id} onClick={() => handleViewOrder(order.id)}>
+                    <div style={{ fontWeight: 700, fontSize: '15px' }}>#{order.id.slice(-8).toUpperCase()}</div>
+                    <div>
+                      <div style={{ fontWeight: 600 }}>{order.customer_name || 'Guest'}</div>
+                      <div style={{ fontSize: '12px', color: '#64748b' }}>{order.customer_phone || '-'}</div>
+                    </div>
+                    <div><StatusBadge status={order.status === 'ready' ? 'available' : (order.status === 'in_progress' ? 'cleaning' : 'occupied')} minimal>{order.status}</StatusBadge></div>
+                    <div style={{ fontSize: '13px' }}>{order.order_items?.length || 0} items</div>
+                    <div style={{ fontWeight: 700 }}>₹{(order.total_amount || 0).toFixed(2)}</div>
+                    <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', gap: '6px' }}>
+                      <ActionButton variant="primary" onClick={() => handleKotClick(order.id)} style={{ fontSize: '11px', padding: '6px 10px' }}>KOT</ActionButton>
+                      <ActionButton variant="warning" onClick={() => handlePrintBill(order.id)} style={{ fontSize: '11px', padding: '6px 10px' }}>Bill</ActionButton>
+                      <ActionButton variant="success" onClick={(e) => handlePaymentClick(e, { current_order: { id: order.id } })} style={{ fontSize: '11px', padding: '6px 10px' }}>Pay</ActionButton>
+                      <ActionButton variant="primary" onClick={() => setEditingOrder(order)} style={{ fontSize: '11px', padding: '6px 10px', background: '#e0f2fe', color: '#0369a1' }}>Edit</ActionButton>
+                    </div>
+                  </TableListRow>
+                ))}
+              </TableList>
+            )
+          ) : filteredTables.length === 0 ? (
             <EmptyState>
               <EmptyTitle>No Tables Found</EmptyTitle>
               <EmptyText>
@@ -2693,6 +2977,21 @@ const handleModalResend = async (table) => {
                       {/* Available table actions */}
                       {activeVisualTable.status === 'available' && (
                         <>
+                          <ActionButton 
+                            variant="success"
+                            fullWidth
+                            style={{ marginBottom: '8px', background: '#0f172a', border: 'none' }}
+                            onClick={() => {
+                              setCreateOrderTable(activeVisualTable);
+                              setShowCreateOrderModal(true);
+                              setActiveVisualTable(null);
+                            }}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
+                              <path d="M12 5v14M5 12h14"></path>
+                            </svg>
+                            Create Order
+                          </ActionButton>
                           <div style={{ display: 'flex', gap: '8px' }}>
                             <ActionButton 
                               variant="primary"
@@ -2793,11 +3092,14 @@ const handleModalResend = async (table) => {
               key={table.id} 
               status={table.status}
               onClick={() => {
-                 if (table.status === 'occupied' && table.current_order?.id) {
-                    handleViewOrder(table.current_order.id);
-                 }
+                if (table.current_order?.id) {
+                   handleViewOrder(table.current_order.id);
+                } else if (table.status === 'available') {
+                   setCreateOrderTable(table);
+                   setShowCreateOrderModal(true);
+                }
               }}
-              style={{ cursor: table.status === 'occupied' ? 'pointer' : 'default' }}
+              style={{ cursor: (table.current_order || table.status === 'available') ? 'pointer' : 'default' }}
             >
                 <TableCardHeader>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -2977,7 +3279,18 @@ const handleModalResend = async (table) => {
             <div>Actions</div>
           </TableListHeader>
           {filteredTables.map(table => (
-            <TableListRow key={table.id}>
+            <TableListRow 
+              key={table.id}
+              onClick={() => {
+                if (table.current_order?.id) {
+                   handleViewOrder(table.current_order.id);
+                } else if (table.status === 'available') {
+                   setCreateOrderTable(table);
+                   setShowCreateOrderModal(true);
+                }
+              }}
+              style={{ cursor: (table.current_order || table.status === 'available') ? 'pointer' : 'default' }}
+            >
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <EditIcon onClick={(e) => { e.stopPropagation(); handleEditTable(table); }} title="Edit Table Settings">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -3498,6 +3811,21 @@ const handleModalResend = async (table) => {
           </ModalContent>
         </Modal>
       )}
+
+      {/* Create Order Modal - Reusable Component */}
+      <CreateOrderModal
+        isOpen={showCreateOrderModal}
+        onClose={() => {
+          setShowCreateOrderModal(false);
+          setCreateOrderTable(null);
+        }}
+        table={createOrderTable}
+        restaurantId={restaurant?.id}
+        onSuccess={() => {
+          refetch(); // Refresh tables list
+        }}
+        orderType={serviceMode === 'dine-in' ? 'dine-in' : (serviceMode === 'takeaway' ? 'parcel' : 'delivery')}
+      />
     </PageContainer>
   );
 }

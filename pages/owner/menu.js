@@ -1,4 +1,4 @@
-//pages/owner/menu
+﻿//pages/owner/menu
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useRequireAuth } from "../../lib/useRequireAuth";
@@ -162,6 +162,108 @@ const AIBadge = styled.span`
 
 import { useRouter } from "next/router";
 
+const MenuLayoutContainer = styled.div`
+  display: flex;
+  gap: 24px;
+  margin-top: 24px;
+  align-items: flex-start;
+
+  @media (max-width: 768px) {
+    display: block;
+    margin-top: 16px;
+  }
+`;
+
+const MenuSidebar = styled.aside`
+  width: 240px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 20px;
+  background: white;
+  border-radius: 16px;
+  border: 1px solid #e5e7eb;
+  padding: 20px;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+
+  .sidebar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #f3f4f6;
+
+    h3 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 700;
+      color: #111827;
+    }
+
+    .sidebar-count {
+      background: #f3f4f6;
+      padding: 2px 8px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #4b5563;
+    }
+  }
+
+
+  .sidebar-categories {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .sidebar-category-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: left;
+    color: #4b5563;
+    width: 100%;
+
+    &:hover {
+      background: #f3f4f6;
+      color: #111827;
+    }
+
+    &.active {
+      background: #fff7ed !important;
+      color: #ea580c !important;
+      font-weight: 600;
+    }
+
+    .category-count {
+      font-size: 12px;
+      color: #9ca3af;
+    }
+
+    &.active .category-count {
+      color: #fdba74;
+    }
+  }
+
+  @media (max-width: 768px) {
+    display: none;
+  }
+`;
+
+const MenuContentArea = styled.div`
+  flex: 1;
+  min-width: 0;
+`;
+
 export default function MenuPage() {
   const router = useRouter();
   const supabase = getSupabase();
@@ -176,12 +278,6 @@ export default function MenuPage() {
   });
 
   const restaurantId = restaurant?.id || cachedRestId;
-
-
-
-
-
-
 
 
 const deleteIdsInChunks = useCallback(async (ids, chunkSize = 200) => {
@@ -226,8 +322,6 @@ const deleteIdsInChunks = useCallback(async (ids, chunkSize = 200) => {
   const [error, setError] = useState("");
   const [filterText, setFilterText] = useState("");
   const [filterCategory, setFilterCategory] = useState("all");
-  const [vegOnly, setVegOnly] = useState(false);
-  const [pkgOnly, setPkgOnly] = useState(false);
   const [selected, setSelected] = useState(new Set());
   const [editorItem, setEditorItem] = useState(null);
   const [showLibrary, setShowLibrary] = useState(false);
@@ -238,7 +332,7 @@ const deleteIdsInChunks = useCallback(async (ids, chunkSize = 200) => {
   const [showRightArrow, setShowRightArrow] = useState(false);
 
 // 2) pagination state
-const PAGE_SIZE = 100;
+const PAGE_SIZE = 15;
 const [page, setPage] = useState(1);
 const [totalCount, setTotalCount] = useState(0);
 const totalPages = Math.max(1, Math.ceil((totalCount || 0) / PAGE_SIZE));
@@ -247,7 +341,7 @@ const totalPages = Math.max(1, Math.ceil((totalCount || 0) / PAGE_SIZE));
 useEffect(() => {
   setPage(1);
   setSelected(new Set());
-}, [filterText, filterCategory, vegOnly, pkgOnly]);
+}, [filterText, filterCategory]);
 
 
 const loadMenuItems = useCallback(async () => {
@@ -274,8 +368,6 @@ const loadMenuItems = useCallback(async () => {
       )
       .eq("restaurant_id", restaurantId);
 
-    if (vegOnly) q = q.eq("veg", true);
-    if (pkgOnly) q = q.eq("is_packaged_good", true);
     if (filterCategory !== "all") q = q.eq("category", filterCategory);
 
     const search = filterText.trim();
@@ -302,7 +394,7 @@ const loadMenuItems = useCallback(async () => {
   } finally {
     setLoading(false);
   }
-}, [supabase, restaurantId, page, PAGE_SIZE, vegOnly, pkgOnly, filterCategory, filterText]);
+}, [supabase, restaurantId, page, PAGE_SIZE, filterCategory, filterText]);
 
   // Check scroll position to toggle arrows
   const checkScroll = () => {
@@ -511,8 +603,6 @@ useEffect(() => {
   const visible = useMemo(() => {
     const q = filterText.trim().toLowerCase();
     return items.filter((i) => {
-      if (vegOnly && !i.veg) return false;
-      if (pkgOnly && !i.is_packaged_good) return false;
       if (filterCategory !== "all" && i.category !== filterCategory)
         return false;
       if (!q) return true;
@@ -522,7 +612,7 @@ useEffect(() => {
         (i.code_number || "").toLowerCase().includes(q)
       );
     });
-  }, [items, filterText, filterCategory, vegOnly, pkgOnly]);
+  }, [items, filterText, filterCategory]);
 
   const toggleSelect = useCallback((id) => {
     setSelected((prev) => {
@@ -596,16 +686,61 @@ useEffect(() => {
     });
   }, []);
 
+  // Compute category counts for sidebar
+  const categoryCounts = useMemo(() => {
+    const counts = {};
+    items.forEach(item => {
+      const cat = item.category || 'Uncategorized';
+      counts[cat] = (counts[cat] || 0) + 1;
+    });
+    return counts;
+  }, [items]);
+
   const isInitialLoad = (checking || loadingRestaurant || !restaurantId) && items.length === 0;
   if (isInitialLoad)
-    return <p style={{ padding: 24 }}>Loading…</p>;
+    return <p style={{ padding: 24 }}>Loading...</p>;
 
   return (
     <div className="menu-page">
+      <div style={{ maxWidth: '1800px', margin: '0 auto', width: '100%', padding: '0 16px' }}>
       <h1 className="h1">Menu Management</h1>
       {error && <Alert type="error">{error}</Alert>}
 
-      <ToolBar>
+      {/* Main Flex Container with Sidebar + Content */}
+      <MenuLayoutContainer>
+        {/* Left Sidebar - Categories (Desktop Only) */}
+        <MenuSidebar>
+          <div className="sidebar-header">
+            <h3>Categories</h3>
+            <span className="sidebar-count">{categories.length}</span>
+          </div>
+          
+
+          {/* Category List */}
+          <div className="sidebar-categories">
+            <button
+              className={`sidebar-category-item ${filterCategory === 'all' ? 'sidebar-category-active' : ''}`}
+              onClick={() => setFilterCategory('all')}
+            >
+              <span className="category-name">All Categories</span>
+              <span className="category-count">{items.length}</span>
+            </button>
+            {categories.map((cat) => (
+              <button
+                key={cat.name}
+                className={`sidebar-category-item ${filterCategory === cat.name ? 'sidebar-category-active' : ''}`}
+                onClick={() => setFilterCategory(cat.name)}
+              >
+                <span className="category-name">{cat.name}</span>
+                <span className="category-count">{categoryCounts[cat.name] || 0}</span>
+              </button>
+            ))}
+          </div>
+        </MenuSidebar>
+
+        {/* Right Content Area */}
+        <MenuContentArea>
+          <ToolBar>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center', width: '100%' }}>
           <div className="search-row search-bar-premium" style={{ flex: 1 }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="search-icon-svg">
@@ -630,51 +765,11 @@ useEffect(() => {
             )}
           </div>
           
-          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-            <button
-              onClick={() => setVegOnly(!vegOnly)}
-              style={{
-                padding: '6px 12px',
-                borderRadius: '8px',
-                border: vegOnly ? '1px solid #16a34a' : '1px solid #e5e7eb',
-                background: vegOnly ? '#15803d' : '#f9fafb',
-                color: vegOnly ? '#ffffff' : '#374151',
-                fontSize: '13px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4
-              }}
-            >
-              {vegOnly ? '✓ Veg' : 'Veg'}
-            </button>
-            <button
-              onClick={() => setPkgOnly(!pkgOnly)}
-              style={{
-                padding: '6px 12px',
-                borderRadius: '8px',
-                border: pkgOnly ? '1px solid #fde68a' : '1px solid #e5e7eb',
-                background: pkgOnly ? '#fef3c7' : '#f9fafb',
-                color: pkgOnly ? '#92400e' : '#374151',
-                fontSize: '13px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4
-              }}
-            >
-              {pkgOnly ? '✓ Packaged' : 'Packaged'}
-            </button>
-          </div>
         </div>
         
         {/* Category Carousel */}
         {/* Category Carousel with Filters */}
-        <div className="carousel-container">
+        <div className="carousel-container only-mobile">
           {showLeftArrow && (
             <button className="carousel-btn left" onClick={() => scrollCarousel('left')}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -770,7 +865,7 @@ useEffect(() => {
         </div>
       </ToolBar>
 
-      <div className="card" style={{ padding: 0, width: '100%', maxWidth: '100%' }}>
+      <div className="card" style={{ padding: 0 }}>
         
         {/* Mobile List View */}
         <div className="only-mobile">
@@ -872,7 +967,7 @@ useEffect(() => {
               {loading ? (
                 <tr>
                   <td colSpan={enableMenuImages ? 10 : 9} style={{ padding: 12 }}>
-                    Loading…
+                    Loading...
                   </td>
                 </tr>
               ) : visible.length === 0 ? (
@@ -1075,7 +1170,7 @@ useEffect(() => {
                       </td>
                       <td className="hide-sm" style={{ width: '90px', textAlign: 'center' }}>
                         <span className={`badge-variant ${item.has_variants ? 'badge-variant-yes' : 'badge-variant-no'}`}>
-                          {item.has_variants ? "✓" : "✗"}
+                          {item.has_variants ? "✓" : "✕"}
                         </span>
                       </td>
                       {enableMenuImages && (
@@ -1161,27 +1256,59 @@ useEffect(() => {
             </tbody>
           </table>
         </div>
-<div style={{ display: "flex", justifyContent: "center", gap: 12, padding: "14px 0" }}>
-  <Button
-    variant="outline"
-    disabled={page <= 1 || loading}
-    onClick={() => setPage((p) => Math.max(1, p - 1))}
-  >
-    Previous
-  </Button>
+        {/* Pagination */}
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'center', 
+          alignItems: 'center',
+          gap: 12, 
+          padding: '20px 0'
+        }}>
+          <button
+            disabled={page <= 1 || loading}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '8px',
+              border: '1px solid #d1d5db',
+              background: '#ffffff',
+              color: page <= 1 || loading ? '#9ca3af' : '#374151',
+              fontSize: '14px',
+              fontWeight: 500,
+              cursor: page <= 1 || loading ? 'not-allowed' : 'pointer',
+              opacity: page <= 1 || loading ? 0.5 : 1
+            }}
+          >
+            Previous
+          </button>
 
-  <div style={{ paddingTop: 6, fontWeight: 600 }}>
-    Page {page} of {totalPages}
-  </div>
+          <span style={{ 
+            fontSize: '14px',
+            fontWeight: 600,
+            color: '#374151',
+            padding: '0 12px'
+          }}>
+            Page {page} of {totalPages}
+          </span>
 
-  <Button
-    variant="outline"
-    disabled={page >= totalPages || loading}
-    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-  >
-    Next
-  </Button>
-</div>
+          <button
+            disabled={page >= totalPages || loading}
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '8px',
+              border: '1px solid #d1d5db',
+              background: '#ffffff',
+              color: page >= totalPages || loading ? '#9ca3af' : '#374151',
+              fontSize: '14px',
+              fontWeight: 500,
+              cursor: page >= totalPages || loading ? 'not-allowed' : 'pointer',
+              opacity: page >= totalPages || loading ? 0.5 : 1
+            }}
+          >
+            Next
+          </button>
+        </div>
 
       </div>
 
@@ -1289,7 +1416,7 @@ useEffect(() => {
       )}
 
 
-      <style jsx>{`
+      <style jsx global>{`
         .table-scroll {
           max-height: calc(100vh - 200px);
           overflow-y: auto;
@@ -2304,13 +2431,170 @@ useEffect(() => {
           }
         }
 
+        .menu-layout-container {
+          display: flex;
+          gap: 24px;
+          margin-top: 24px;
+          align-items: flex-start;
+        }
+
+        @media (max-width: 768px) {
+          .hide-mobile {
+            display: none !important;
+          }
+          
+          .only-mobile {
+            display: flex !important;
+          }
+        }
+        .menu-content-area {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .sidebar-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 20px;
+          padding-bottom: 12px;
+          border-bottom: 1px solid #f3f4f6;
+        }
+
+        .sidebar-header h3 {
+          margin: 0;
+          font-size: 16px;
+          font-weight: 700;
+          color: #111827;
+        }
+
+        .sidebar-count {
+          background: #f3f4f6;
+          padding: 2px 8px;
+          border-radius: 9999px;
+          font-size: 12px;
+          font-weight: 600;
+          color: #4b5563;
+        }
+
+        .sidebar-filters {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          margin-bottom: 24px;
+        }
+
+        .sidebar-filter-btn {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 10px 12px;
+          border-radius: 12px;
+          border: 1px solid #e5e7eb;
+          background: white;
+          color: #374151;
+          font-size: 14px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.2s;
+          width: 100%;
+        }
+
+        .sidebar-filter-btn:hover {
+          background: #f9fafb;
+          border-color: #d1d5db;
+        }
+
+        .sidebar-filter-btn span {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .sidebar-filter-active-veg {
+          background: #f0fdf4 !important;
+          border-color: #16a34a !important;
+          color: #15803d !important;
+          font-weight: 600;
+        }
+
+        .sidebar-filter-active-pkg {
+          background: #fffbeb !important;
+          border-color: #f59e0b !important;
+          color: #b45309 !important;
+          font-weight: 600;
+        }
+
+        .sidebar-categories {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+
+        .sidebar-category-item {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 10px 12px;
+          background: transparent;
+          border: none;
+          border-radius: 8px;
+          cursor: pointer;
+          transition: all 0.2s;
+          text-align: left;
+          color: #4b5563;
+          width: 100%;
+        }
+
+        .sidebar-category-item:hover {
+          background: #f3f4f6;
+          color: #111827;
+        }
+
+        .sidebar-category-active {
+          background: #fff7ed !important;
+          color: #ea580c !important;
+          font-weight: 600;
+        }
+
+        .sidebar-category-active:hover {
+          background: #ffedd5 !important;
+        }
+
+        .category-count {
+          font-size: 12px;
+          color: #9ca3af;
+        }
+
+        .sidebar-category-active .category-count {
+          color: #fdba74;
+        }
+
+        .hide-mobile {
+          display: block;
+        }
+
         .only-mobile {
           display: none;
         }
 
-        @media (max-width: 640px) {
+        /* Mobile Adjustments */
+        @media (max-width: 768px) {
+          .hide-mobile {
+            display: none !important;
+          }
+          
           .only-mobile {
-            display: flex;
+            display: flex !important;
+          }
+
+          .menu-layout-container {
+            display: block;
+            margin-top: 16px;
+          }
+
+          .menu-sidebar {
+            display: none;
           }
         }
       `}</style>
@@ -2349,58 +2633,58 @@ useEffect(() => {
           onClose={() => setShowVariantManager(false)}
         />
       )}
-{showExcelImport && (
-  <div
-    onClick={() => setShowExcelImport(false)}
-    style={{
-      position: "fixed",
-      inset: 0,
-      zIndex: 9999,
-      background: "rgba(0,0,0,0.6)",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      padding: 16,
-    }}
-  >
-    <div
-      onClick={(e) => e.stopPropagation()}
-      style={{
-        width: "min(820px, 100%)",
-        maxHeight: "90vh",
-        overflow: "auto",
-        background: "#fff",
-        borderRadius: 12,
-        boxShadow: "0 20px 50px rgba(0,0,0,0.35)",
-      }}
-    >
-      <MenuExcelImport
-        restaurantId={restaurantId}
-        supabase={supabase}
-        existingItems={items}
-        defaults={{
-          category: "General",
-          veg: false,
-          ispackagedgood: false,
-          status: "available",
-          compensationcessrate: 0,
-        }}
-        onImported={(newItems) => {
-          if (newItems?.length) setItems((prev) => [...newItems, ...prev]);
-          setShowExcelImport(false);
-        }}
-        onClose={() => setShowExcelImport(false)}
-      />
-    </div>
-  </div>
-)}
+
+      {showExcelImport && (
+        <div
+          onClick={() => setShowExcelImport(false)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            background: "rgba(0,0,0,0.6)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "min(820px, 100%)",
+              maxHeight: "90vh",
+              overflow: "auto",
+              background: "#fff",
+              borderRadius: 12,
+              boxShadow: "0 20px 50px rgba(0,0,0,0.35)",
+            }}
+          >
+            <MenuExcelImport
+              restaurantId={restaurantId}
+              supabase={supabase}
+              existingItems={items}
+              defaults={{
+                category: "General",
+                veg: false,
+                ispackagedgood: false,
+                status: "available",
+                compensationcessrate: 0,
+              }}
+              onImported={(newItems) => {
+                if (newItems?.length) setItems((prev) => [...newItems, ...prev]);
+                setShowExcelImport(false);
+              }}
+              onClose={() => setShowExcelImport(false)}
+            />
+          </div>
+        </div>
+      )}
 
       {showImageImport && (
         <MenuImageImport
           onClose={() => setShowImageImport(false)}
           onImported={(newItems) => {
              refreshCategories();
-             // Maybe show a success toast here
           }}
           restaurantId={restaurantId}
           existingItems={items}
@@ -2440,241 +2724,9 @@ useEffect(() => {
           </div>
         </div>
       )}
-      <style jsx>{`
-        .table-scroll {
-          max-height: calc(100vh - 200px);
-          overflow-y: auto;
-          overflow-x: auto;
-          border-radius: 10px;
-          -webkit-overflow-scrolling: touch;
-          touch-action: pan-x pan-y;
-          position: relative;
-          background: white;
-          border: 1px solid #e5e7eb;
-        }
-
-        .table {
-          width: 100%;
-          min-width: 1000px;
-          border-collapse: collapse;
-          table-layout: auto;
-        }
-
-        .table th {
-          position: sticky;
-          top: 0;
-          background: linear-gradient(to bottom, #fafafa 0%, #f5f5f5 100%);
-          z-index: 10;
-          box-shadow: 0 1px 0 #e5e7eb;
-          white-space: nowrap;
-          padding: 16px 14px;
-          border-bottom: 2px solid #e5e7eb;
-          color: #6b7280;
-          font-weight: 700;
-          text-align: left;
-          font-size: 12px;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-        }
-
-        .table td {
-          vertical-align: middle;
-          padding: 16px 14px;
-          border-bottom: 1px solid #f3f4f6;
-          color: #374151;
-          font-size: 14px;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          transition: background 0.15s ease;
-        }
-        
-        .table tbody tr {
-          transition: all 0.15s ease;
-        }
-
-        .table tbody tr:hover {
-          background: #fafafa;
-        }
-
-        .table tbody tr:last-child td {
-          border-bottom: none;
-        }
-        
-        .col-name { 
-          width: 200px;
-          max-width: 250px;
-        }
-        
-        .col-cat { 
-          width: 120px; 
-        }
-        
-        .col-actions { 
-          width: 200px; 
-          text-align: right; 
-        }
-
-        /* Premium chip styling */
-        .chip {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          padding: 6px 12px;
-          border-radius: 20px;
-          font-size: 12px;
-          font-weight: 600;
-          letter-spacing: 0.3px;
-          transition: all 0.2s ease;
-        }
-
-        .chip--avail {
-          background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
-          color: #065f46;
-          border: 1px solid #6ee7b7;
-        }
-
-        .chip--out {
-          background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
-          color: #991b1b;
-          border: 1px solid #fca5a5;
-        }
-
-        .pill {
-          display: inline-flex;
-          align-items: center;
-          padding: 4px 10px;
-          border-radius: 12px;
-          font-size: 11px;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-        }
-
-        .pill--menu {
-          background: #dbeafe;
-          color: #1e40af;
-        }
-
-        .pill--pkg {
-          background: #fef3c7;
-          color: #92400e;
-        }
-
-        /* Enhanced scrollbar */
-        .table-scroll::-webkit-scrollbar {
-          width: 10px;
-          height: 10px;
-        }
-
-        .table-scroll::-webkit-scrollbar-track {
-          background: #f9fafb;
-        }
-
-        .table-scroll::-webkit-scrollbar-thumb {
-          background: linear-gradient(135deg, #d1d5db 0%, #9ca3af 100%);
-          border-radius: 5px;
-          border: 2px solid #f9fafb;
-        }
-
-        .table-scroll::-webkit-scrollbar-thumb:hover {
-          background: linear-gradient(135deg, #9ca3af 0%, #6b7280 100%);
-        }
-
-        .table-scroll::-webkit-scrollbar-corner {
-          background: #f9fafb;
-        }
-
-        /* Responsive visibility classes */
-        @media (max-width: 768px) {
-          .table {
-            min-width: 900px;
-          }
-          
-          .hide-sm {
-            display: none;
-          }
-          
-          .table th, .table td {
-            padding: 12px 10px;
-            font-size: 13px;
-          }
-        }
-
-        @media (max-width: 640px) {
-          .table {
-            min-width: 800px;
-          }
-          
-          .hide-mobile {
-            display: none;
-          }
-          
-          .hide-extra {
-            display: none;
-          }
-          
-          .table th, .table td {
-            padding: 10px 8px;
-            font-size: 12px;
-          }
-          
-          .col-name { 
-            width: 150px;
-            max-width: 180px;
-          }
-        }
-
-        /* Mobile action buttons */
-        .mobile-actions {
-          display: none;
-        }
-
-        @media (max-width: 640px) {
-          .mobile-actions {
-            display: flex;
-            gap: 6px;
-            margin-top: 8px;
-          }
-        }
-
-        .only-mobile {
-          display: none;
-        }
-
-        @media (max-width: 640px) {
-          .only-mobile {
-            display: flex;
-          }
-        }
-      /* Mobile Toolbar Horizontal Scroll & Tweaks */
-@media (max-width: 640px) {
-  .toolbar-cta {
-    display: flex;
-    flex-wrap: nowrap !important;
-    overflow-x: auto;
-    padding-bottom: 8px;
-    width: 100%;
-    gap: 8px;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-  }
-  .toolbar-cta::-webkit-scrollbar {
-    display: none;
-  }
-  /* Ensure buttons don't shrink */
-  .toolbar-cta > * {
-    flex-shrink: 0;
-    white-space: nowrap;
-  }
-  
-  /* Ensure mobile-only view is actually visible */
-  .only-mobile {
-    display: block !important;
-  }
-}
-      `}</style>
+        </MenuContentArea>
+      </MenuLayoutContainer>
     </div>
+  </div>
   );
 }
-

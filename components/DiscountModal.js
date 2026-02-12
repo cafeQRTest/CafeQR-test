@@ -38,6 +38,7 @@ const DiscountModal = ({ visible, onClose, onSaveTotal, cart = [], onUpdateCartI
       animation: 'fadeIn 0.2s ease-out'
     }} onClick={onClose}>
       <div style={{
+        position: 'relative',
         background: '#fff',
         padding: '0',
         borderRadius: 16,
@@ -49,6 +50,34 @@ const DiscountModal = ({ visible, onClose, onSaveTotal, cart = [], onUpdateCartI
         display: 'flex', flexDirection: 'column',
         maxHeight: '90vh'
       }} onClick={e => e.stopPropagation()}>
+         
+         {/* Close Button */}
+         <button 
+           onClick={onClose}
+           style={{
+             position: 'absolute',
+             top: 8,
+             right: 8,
+             width: 28,
+             height: 28,
+             borderRadius: '50%',
+             background: '#f1f5f9',
+             border: 'none',
+             color: '#64748b',
+             fontSize: 18,
+             fontWeight: 700,
+             cursor: 'pointer',
+             display: 'flex',
+             alignItems: 'center',
+             justifyContent: 'center',
+             zIndex: 10,
+             transition: 'all 0.2s'
+           }}
+           onMouseEnter={e => { e.target.style.background = '#e2e8f0'; e.target.style.color = '#0f172a'; }}
+           onMouseLeave={e => { e.target.style.background = '#f1f5f9'; e.target.style.color = '#64748b'; }}
+         >
+           ×
+         </button>
          
          {/* Tabs */}
          <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0' }}>

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 
-export default function NiceSelect({ value, onChange, options, placeholder = "Select...", disabled = false, maxHeight = 220 }) {
+export default function NiceSelect({ value, onChange, options, placeholder = "Select...", disabled = false, maxHeight = 300 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -29,33 +29,54 @@ export default function NiceSelect({ value, onChange, options, placeholder = "Se
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          cursor: disabled ? "not-allowed" : selectInput.cursor,
+          cursor: disabled ? "not-allowed" : "pointer",
           opacity: disabled ? 0.7 : 1,
-          borderColor: open ? '#f97316' : '#d1d5db',
-          boxShadow: open ? '0 0 0 3px rgba(249, 115, 22, 0.1)' : '0 0 0 1px transparent',
+          borderColor: open ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.2)',
+          background: open ? 'white' : 'rgba(255,255,255,0.1)',
+          color: open ? '#1e293b' : 'white',
+          boxShadow: open ? '0 10px 25px -5px rgba(0,0,0,0.2)' : 'none',
         }}
       >
-        <span style={{ color: current ? "#111827" : "#9ca3af" }}>
+        <span style={{ 
+          fontSize: 14, 
+          fontWeight: 700,
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          marginRight: 20
+        }}>
           {current?.label || placeholder}
         </span>
-        <span style={selectChevron}>▾</span>
+        <span style={{
+          ...selectChevron,
+          color: open ? '#f97316' : 'white',
+          transform: open ? 'translateY(-50%) rotate(180deg)' : 'translateY(-50%)',
+          transition: 'all 0.3s ease'
+        }}>▾</span>
       </button>
       {open && (
         <div
           style={{
             position: "absolute",
-            zIndex: 20,
-            marginTop: 4,
+            zIndex: 9999,
+            top: 'calc(100% + 8px)',
+            left: 0,
             width: "100%",
+            minWidth: 280,
             background: "#fff",
-            borderRadius: 10,
-            border: "1px solid #e5e7eb",
-            boxShadow: "0 12px 30px rgba(15, 23, 42, 0.18)",
+            borderRadius: 16,
+            border: "1.5px solid #e2e8f0",
+            boxShadow: "0 20px 40px -10px rgba(0,0,0,0.25)",
             maxHeight: maxHeight,
             overflowY: "auto",
+            animation: 'fadeIn 0.2s ease-out'
           }}
         >
-          {options.map((opt) => {
+          {options.length === 0 ? (
+            <div style={{ padding: '16px', textAlign: 'center', color: '#94a3b8', fontSize: 13, fontWeight: 600 }}>
+              No options available
+            </div>
+          ) : options.map((opt) => {
             const active = opt.value === value;
             return (
               <div
@@ -66,17 +87,27 @@ export default function NiceSelect({ value, onChange, options, placeholder = "Se
                   setOpen(false);
                 }}
                 style={{
-                  padding: "8px 10px",
-                  fontSize: 14,
+                  padding: "12px 16px",
+                  fontSize: 13,
+                  fontWeight: 700,
                   cursor: "pointer",
                   background: active ? "#fff7ed" : "#fff",
-                  color: active ? "#9a3412" : "#111827",
+                  color: active ? "#f97316" : "#1e293b",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "space-between",
+                  transition: 'all 0.2s',
+                  borderBottom: '1px solid #f1f5f9'
+                }}
+                onMouseEnter={(e) => {
+                  if (!active) e.currentTarget.style.background = '#f8fafc';
+                }}
+                onMouseLeave={(e) => {
+                  if (!active) e.currentTarget.style.background = '#fff';
                 }}
               >
                 <span>{opt.label}</span>
+                {active && <span style={{ color: '#f97316' }}>✓</span>}
               </div>
             );
           })}
@@ -93,28 +124,22 @@ const selectWrapper = {
 
 const selectInput = {
   width: "100%",
-  padding: "9px 11px",
-  border: "1px solid #d1d5db",
-  borderRadius: 8,
-  height: "40px",
+  padding: "10px 16px",
+  borderRadius: 12,
+  height: "44px",
   fontSize: 14,
   outline: "none",
-  transition: "border-color 0.15s ease, box-shadow 0.15s ease",
-  boxShadow: "0 0 0 1px transparent",
-  backgroundColor: "#f9fafb",
-  appearance: "none",
-  WebkitAppearance: "none",
-  MozAppearance: "none",
-  paddingRight: 32,
-  cursor: "pointer",
+  transition: "all 0.25s ease",
+  border: "1.5px solid rgba(255,255,255,0.2)",
+  backdropFilter: 'blur(10px)',
 };
 
 const selectChevron = {
   position: "absolute",
-  right: 10,
+  right: 14,
   top: "50%",
   transform: "translateY(-50%)",
   pointerEvents: "none",
-  fontSize: 12,
-  color: "#6b7280",
+  fontSize: 16,
 };
+

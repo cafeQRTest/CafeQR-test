@@ -7,15 +7,17 @@ import styled from 'styled-components';
 export default function VariantSelector({ item, onSelect, onClose, gstEnabled = false, pricesIncludeTax = true, onCartOpen, showImage = true, zIndex }) {
   // Track quantity for each variant (key: variant_id, value: quantity)
   const [variantQuantities, setVariantQuantities] = useState({});
-  // Track quantity for each add-on (key: addon_id, value: quantity)
   const [addonQuantities, setAddonQuantities] = useState({});
+  const [variantQtyDrafts, setVariantQtyDrafts] = useState({}); // variantId -> string
+  const [mainQty, setMainQty] = useState(1); // Only used if !hasVariants
 
-const quantityStep = (item.uom?.precision || 0) > 0 ? (1 / Math.pow(10, item.uom.precision)) : 1;
+  if (!item) return null;
+
+const quantityStep = (item?.uom?.precision || 0) > 0 ? (1 / Math.pow(10, item.uom.precision)) : 1;
 const minQuantity = 0;
 const maxQuantity = 99;
-const decimalPlaces = item.uom?.precision ?? 0;
+const decimalPlaces = item?.uom?.precision ?? 0;
 
-const [variantQtyDrafts, setVariantQtyDrafts] = useState({}); // variantId -> string
 
 const clampQty = (n) => {
   if (!Number.isFinite(n)) return minQuantity;
@@ -76,7 +78,6 @@ const bumpQty = (variantId, dir) => {
   //   - No, if I click "Burger" (no variants) and it has "Fries" upsell. I want "1 Burger + 1 Fries". 
   //   - So I need a main quantity state if no variants.
   
-  const [mainQty, setMainQty] = useState(1); // Only used if !hasVariants
   
   const totalItems = (hasVariants 
     ? selectedVariants.reduce((sum, [_, qty]) => sum + qty, 0)
