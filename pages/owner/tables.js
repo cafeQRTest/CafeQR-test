@@ -784,22 +784,39 @@ const TableCard = styled.div`
   border-radius: 32px;
   position: relative;
   transition: all 0.5s cubic-bezier(0.2, 1, 0.2, 1);
-  background: ${props => {
-     switch(props.status) {
-       case 'occupied': return 'rgba(255, 255, 255, 0.95)';
-       case 'reserved': return 'rgba(255, 255, 255, 0.95)';
-       default: return 'rgba(255, 255, 255, 0.85)';
-     }
-  }};
-  backdrop-filter: blur(10px);
-  border: 1px solid ${props => {
-     switch(props.status) {
-       case 'occupied': return 'rgba(239, 68, 68, 0.2)'; 
-       case 'reserved': return 'rgba(59, 130, 246, 0.2)';
-       case 'cleaning': return 'rgba(249, 115, 22, 0.2)';
-       default: return 'rgba(255, 255, 255, 0.5)';
-     }
-  }};
+  background: white;
+  color: #0f172a;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  box-shadow: 
+    0 4px 6px -1px rgba(0, 0, 0, 0.05),
+    0 10px 15px -3px rgba(0, 0, 0, 0.02);
+  
+  ${props => (props.billed || props.status === 'occupied') && css`
+    &::before {
+       content: '';
+       position: absolute;
+       top: 0; left: 0; right: 0; height: 10px;
+       background: ${props.billed ? 'linear-gradient(90deg, #10b981, #059669)' : 'linear-gradient(90deg, #f97316, #ea580c)'};
+       z-index: 2;
+       box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+  `}
+
+  ${props => props.billed && css`
+    background: #f0fdf4;
+    border-color: #86efac;
+    box-shadow: 
+      0 10px 30px -5px rgba(16, 185, 129, 0.12),
+      0 4px 12px -2px rgba(16, 185, 129, 0.06);
+  `}
+
+  ${props => props.status === 'occupied' && !props.billed && css`
+    background: #fffcf0;
+    border-color: #fdba74;
+    box-shadow: 
+      0 10px 30px -5px rgba(249, 115, 22, 0.12),
+      0 4px 12px -2px rgba(249, 115, 22, 0.06);
+  `}
   box-shadow: 
     0 10px 30px -5px rgba(0, 0, 0, 0.04),
     0 4px 6px -2px rgba(0, 0, 0, 0.02);
@@ -814,15 +831,8 @@ const TableCard = styled.div`
     z-index: 10;
   }
 
-  ${props => props.status === 'occupied' && css`
-    &::before {
-       content: '';
-       position: absolute;
-       top: 0; left: 0; right: 0; height: 6px;
-       background: linear-gradient(90deg, #ef4444, #f87171);
-       z-index: 1;
-    }
-  `}
+  // Removed old pseudo-element logic as it's now handled in the main component body
+
 `;
 
 const TableCardHeader = styled.div`
@@ -835,7 +845,7 @@ const TableCardHeader = styled.div`
 const TableNumber = styled.div`
   font-size: 24px;
   font-weight: 800;
-  color: #1e293b;
+  color: inherit;
   display: flex;
   flex-direction: column;
   line-height: 1;
@@ -843,7 +853,8 @@ const TableNumber = styled.div`
   span {
     font-size: 13px;
     font-weight: 600;
-    color: #64748b;
+    color: #475569;
+    opacity: 1;
     margin-top: 4px;
   }
 `;
@@ -864,10 +875,11 @@ const StatusBadge = styled.div`
     const minimal = props.minimal;
     switch(props.status) {
       case 'available': return `
-        background: ${minimal ? 'transparent' : 'rgba(16, 185, 129, 0.12)'}; color: #065f46;
+        background: ${minimal ? 'transparent' : 'rgba(16, 185, 129, 0.12)'}; color: ${minimal ? 'inherit' : '#065f46'};
       `;
       case 'occupied': return `
-        background: ${minimal ? 'transparent' : 'rgba(239, 68, 68, 0.12)'}; color: #991b1b;
+        background: ${minimal ? 'transparent' : 'rgba(234, 88, 12, 0.1)'}; color: #ea580c;
+        border: ${minimal ? 'none' : '1px solid rgba(234, 88, 12, 0.2)'};
       `;
       case 'reserved': return `
         background: ${minimal ? 'transparent' : 'rgba(59, 130, 246, 0.12)'}; color: #1e40af;
@@ -909,19 +921,20 @@ const TableInfo = styled.div`
 const InfoRow = styled.div`
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   font-size: 14px;
   color: #475569;
   font-weight: 500;
+  line-height: 1.5;
 `;
 
 const TableActions = styled.div`
-  padding: 16px 24px;
-  background: rgba(255,255,255,0.6);
-  border-top: 1px solid rgba(0,0,0,0.04);
+  padding: 20px 24px;
+  background: #f8fafc;
+  border-top: 1px solid rgba(0,0,0,0.05);
   display: flex;
   flex-wrap: wrap;
-  gap: 8px; 
+  gap: 12px; 
 `;
 
 const ActionButton = styled.button`
@@ -999,8 +1012,11 @@ const EditIcon = styled.button`
 
 const TableList = styled.div`
   background: white;
-  border-radius: 20px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  border-radius: 24px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 
+    0 4px 6px -1px rgba(0, 0, 0, 0.05),
+    0 10px 15px -3px rgba(0, 0, 0, 0.02);
   overflow: hidden;
   max-width: 1600px;
   margin: 0 auto;
@@ -1028,12 +1044,23 @@ const TableListRow = styled.div`
   grid-template-columns: 1.2fr 1fr 0.8fr 1.2fr 1.5fr 3fr;
   padding: 18px 24px;
   border-bottom: 1px solid #f1f5f9;
+  border-left: 5px solid ${props => {
+    if (props.billed) return '#10b981';
+    if (props.status === 'occupied') return '#f97316';
+    if (props.status === 'cleaning') return '#f59e0b';
+    return 'transparent';
+  }};
   align-items: center;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  background: white;
+  background: ${props => {
+    if (props.billed) return '#f0fdf4';
+    if (props.status === 'occupied') return '#fffcf0';
+    return 'white';
+  }};
+  color: #1e293b;
   
   &:hover {
-    background: #f8fafc;
+    background: ${props => props.billed ? '#16a34a' : (props.status === 'occupied' ? '#ea580c' : '#f8fafc')};
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
     z-index: 1;
   }
@@ -1107,19 +1134,26 @@ const VisualTable = styled.div`
   left: ${props => props.x || 0}px;
   top: ${props => props.y || 0}px;
   background: ${props => 
-    props.status === 'available' ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' :
-    props.status === 'occupied' ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)' :
+    props.billed ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' :
+    props.status === 'available' ? 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)' :
+    props.status === 'occupied' ? 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)' :
     props.status === 'reserved' ? 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)' :
     props.status === 'cleaning' ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' :
     'linear-gradient(135deg, #64748b 0%, #475569 100%)'
   };
   border-radius: ${props => props.shape === 'round' ? '50%' : '16px'};
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15), 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: ${props => props.status === 'available' ? '0 2px 10px rgba(0,0,0,0.04)' : '0 10px 25px -5px rgba(0, 0, 0, 0.2)'};
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: white;
+  color: ${props => props.status === 'available' ? '#475569' : 'white'};
+  border: 1px solid ${props => {
+    if (props.status === 'available') return '#e2e8f0';
+    if (props.status === 'occupied') return '#ea580c44';
+    if (props.billed) return '#05966944';
+    return 'transparent';
+  }};
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   user-select: none;
@@ -1361,7 +1395,7 @@ const InfoIcon = styled.div`
 `;
 
 const InfoText = styled.span`
-  color: #334155;
+  color: inherit;
 `;
 
 // Helper: Restore stock for a set of order_items (imported/copied from orders.js)
@@ -1735,6 +1769,29 @@ export default function TableManagement() {
   const [editingTable, setEditingTable] = useState(null);
   const [viewOrder, setViewOrder] = useState(null);
   const [cancelOrderDialog, setCancelOrderDialog] = useState(null);
+  const [billedOrders, setBilledOrders] = useState(new Set());
+
+  // Load billed orders from localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('cafeqr_billed_orders');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) setBilledOrders(new Set(parsed));
+        } catch (e) {
+          console.error('Error loading billed orders:', e);
+        }
+      }
+    }
+  }, []);
+
+  // Save billed orders to localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('cafeqr_billed_orders', JSON.stringify(Array.from(billedOrders)));
+    }
+  }, [billedOrders]);
   
   // React Query hooks for data fetching
   const { data: tables = [], isLoading: loading, error, refetch } = useTables(restaurant?.id);
@@ -2054,6 +2111,15 @@ const handleModalResend = async (table) => {
        setPaymentOrder(null);
        setPaymentTotals(null);
        refetch(); // Reload to see table as available
+       
+       // Clear billed status for this order
+       if (paymentOrder?.id) {
+         setBilledOrders(prev => {
+           const next = new Set(prev);
+           next.delete(paymentOrder.id);
+           return next;
+         });
+       }
        
        // Alert updated order? No, just finish.
      } catch (e) {
@@ -2712,6 +2778,13 @@ const handleModalResend = async (table) => {
                 },
             })
         );
+
+       // Mark as billed
+       setBilledOrders(prev => {
+          const next = new Set(prev);
+          next.add(orderId);
+          return next;
+       });
         
     } catch (err) {
         console.error('Print bill error:', err);
@@ -2954,56 +3027,77 @@ const handleModalResend = async (table) => {
                   <TableCard 
                     key={order.id} 
                     status={order.status === 'ready' ? 'available' : (order.status === 'in_progress' ? 'cleaning' : 'occupied')}
+                    billed={billedOrders.has(order.id)}
                     onClick={() => handleViewOrder(order.id)}
-                    style={{ borderRadius: '24px', padding: '0' }}
+                    style={{ cursor: 'pointer' }}
                   >
-                    <TableCardHeader style={{ padding: '16px 20px 12px' }}>
-                      <TableNumber style={{ fontSize: '20px' }}>
+                    <TableCardHeader>
+                      <TableNumber>
                         #{order.id.slice(-6).toUpperCase()}
-                        <span style={{ fontSize: '12px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '140px' }}>
-                          {order.customer_name || 'Guest'}
-                        </span>
+                        <span>{order.customer_name || 'Guest'}</span>
                       </TableNumber>
-                      <StatusBadge status={order.status === 'ready' ? 'available' : (order.status === 'in_progress' ? 'cleaning' : 'occupied')} style={{ padding: '4px 10px', fontSize: '10px' }}>
+                      <StatusBadge status={order.status === 'ready' ? 'available' : (order.status === 'in_progress' ? 'cleaning' : 'occupied')}>
                         {order.status}
                       </StatusBadge>
                     </TableCardHeader>
                     
-                    <div style={{ padding: '0 20px 12px' }}>
-                      <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <TableInfo>
+                      <InfoRow>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{color: '#94a3b8'}}>
                           <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"></path>
                           <path d="M3 6h18"></path>
                           <path d="M16 10a4 4 0 0 1-8 0"></path>
                         </svg>
-                        {order.order_items?.length || 0} Items • ₹{(order.total_amount || 0).toFixed(2)}
-                      </div>
-                      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', minHeight: '44px' }}>
-                        {order.order_items?.slice(0, 2).map((item, i) => (
-                          <div key={i} style={{ fontSize: '10px', background: '#f8fafc', padding: '3px 8px', borderRadius: '6px', color: '#475569', border: '1px solid #f1f5f9', fontWeight: 600 }}>
+                        <InfoText>{order.order_items?.length || 0} Items • ₹{(order.total_amount || 0).toFixed(2)}</InfoText>
+                      </InfoRow>
+                      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', minHeight: '44px', marginTop: '4px' }}>
+                        {order.order_items?.slice(0, 3).map((item, i) => (
+                          <div key={i} style={{ fontSize: '10px', background: '#f8fafc', padding: '4px 10px', borderRadius: '8px', color: '#475569', border: '1px solid #f1f5f9', fontWeight: 600 }}>
                             {item.quantity}x {item.menu_items?.name}
                           </div>
                         ))}
-                        {(order.order_items?.length > 2) && (
-                          <div style={{ fontSize: '10px', color: '#94a3b8', padding: '3px 4px', fontWeight: 600 }}>+{order.order_items.length - 2} more</div>
+                        {(order.order_items?.length > 3) && (
+                          <div style={{ fontSize: '10px', color: '#94a3b8', padding: '4px 4px', fontWeight: 600 }}>+{order.order_items.length - 3} more</div>
                         )}
                       </div>
-                    </div>
-
-                    <div style={{ 
-                      padding: '12px 16px 16px', 
-                      display: 'grid', 
-                      gridTemplateColumns: 'repeat(2, 1fr)', 
-                      gap: '8px', 
-                      background: '#fcfcfc',
-                      borderTop: '1px solid #f5f5f5' 
-                    }}>
-                      <ActionButton variant="primary" onClick={(e) => { e.stopPropagation(); handleKotClick(order.id); }} style={{ fontSize: '11px', minWidth: '0' }}>KOT</ActionButton>
-                      <ActionButton variant="warning" onClick={(e) => { e.stopPropagation(); handlePrintBill(order.id); }} style={{ fontSize: '11px', minWidth: '0' }}>Bill</ActionButton>
-                      <ActionButton variant="success" onClick={(e) => { e.stopPropagation(); handlePaymentClick(e, { current_order: { id: order.id } }); }} style={{ fontSize: '11px', minWidth: '0' }}>Pay</ActionButton>
-                      <ActionButton variant="primary" onClick={(e) => { e.stopPropagation(); setEditingOrder(order); }} style={{ fontSize: '11px', minWidth: '0', background: '#e0f2fe', color: '#0369a1' }}>Edit</ActionButton>
-                      <ActionButton variant="danger" onClick={(e) => { e.stopPropagation(); setCancelOrderDialog(order); }} style={{ fontSize: '11px', minWidth: '0' }}>Cancel</ActionButton>
-                    </div>
+                    </TableInfo>
+                    
+                    <TableActions onClick={(e) => e.stopPropagation()}>
+                      <ActionButton variant="primary" onClick={() => handlePrintBill(order.id)}>Bill</ActionButton>
+                      <ActionButton variant="warning" onClick={async () => {
+                         const full = await fetchFullOrder(order.id);
+                         if(full) {
+                           window.dispatchEvent(
+                             new CustomEvent('auto-print-order', {
+                               detail: { ...full, autoPrint: true, kind: 'kot' }
+                             })
+                           );
+                         }
+                      }}>KOT</ActionButton>
+                      <div style={{ display: 'flex', gap: 8, width: '100%' }}>
+                        <ActionButton 
+                          variant="success" 
+                          style={{ flex: 1.5, height: 48 }} 
+                          onClick={async () => {
+                            const full = await fetchFullOrder(order.id);
+                            if(full) setEditingOrder(full);
+                          }}
+                        >Edit</ActionButton>
+                        <ActionButton 
+                          variant="danger" 
+                          style={{ flex: 1, height: 48 }} 
+                          onClick={async () => {
+                            const full = await fetchFullOrder(order.id);
+                            if(full) setCancelOrderDialog(full);
+                          }}
+                        >Cancel</ActionButton>
+                      </div>
+                      <ActionButton 
+                        variant="danger" 
+                        fullWidth 
+                        onClick={(e) => handlePaymentClick(e, { current_order: { id: order.id } })}
+                      >Pay & Finish</ActionButton>
+                    </TableActions>
                   </TableCard>
                 ))}
               </TableGrid>
@@ -3018,7 +3112,13 @@ const handleModalResend = async (table) => {
                   <div>Actions</div>
                 </TableListHeader>
                 {filteredOrders.map(order => (
-                  <TableListRow key={order.id} onClick={() => handleViewOrder(order.id)}>
+                  <TableListRow 
+                    key={order.id} 
+                    status={order.status === 'ready' ? 'available' : (order.status === 'in_progress' ? 'cleaning' : 'occupied')}
+                    billed={billedOrders.has(order.id)}
+                    onClick={() => handleViewOrder(order.id)}
+                    style={{ cursor: 'pointer' }}
+                  >
                     <div style={{ fontWeight: 700, fontSize: '15px' }}>#{order.id.slice(-8).toUpperCase()}</div>
                     <div>
                       <div style={{ fontWeight: 600 }}>{order.customer_name || 'Guest'}</div>
@@ -3027,12 +3127,27 @@ const handleModalResend = async (table) => {
                     <div><StatusBadge status={order.status === 'ready' ? 'available' : (order.status === 'in_progress' ? 'cleaning' : 'occupied')} minimal>{order.status}</StatusBadge></div>
                     <div style={{ fontSize: '13px' }}>{order.order_items?.length || 0} items</div>
                     <div style={{ fontWeight: 700 }}>₹{(order.total_amount || 0).toFixed(2)}</div>
-                    <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', gap: '6px' }}>
-                      <ActionButton variant="primary" onClick={() => handleKotClick(order.id)} style={{ fontSize: '11px', padding: '6px 10px' }}>KOT</ActionButton>
-                      <ActionButton variant="warning" onClick={() => handlePrintBill(order.id)} style={{ fontSize: '11px', padding: '6px 10px' }}>Bill</ActionButton>
-                      <ActionButton variant="success" onClick={(e) => handlePaymentClick(e, { current_order: { id: order.id } })} style={{ fontSize: '11px', padding: '6px 10px' }}>Pay</ActionButton>
-                      <ActionButton variant="primary" onClick={() => setEditingOrder(order)} style={{ fontSize: '11px', padding: '6px 10px', background: '#e0f2fe', color: '#0369a1' }}>Edit</ActionButton>
-                      <ActionButton variant="danger" onClick={() => setCancelOrderDialog(order)} style={{ fontSize: '11px', padding: '6px 10px' }}>Cancel</ActionButton>
+                    <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      <ActionButton variant="primary" onClick={() => handlePrintBill(order.id)} style={{ padding: '6px 12px', height: '32px' }}>Bill</ActionButton>
+                      <ActionButton variant="warning" onClick={async () => {
+                         const full = await fetchFullOrder(order.id);
+                         if(full) {
+                           window.dispatchEvent(
+                             new CustomEvent('auto-print-order', {
+                               detail: { ...full, autoPrint: true, kind: 'kot' }
+                             })
+                           );
+                         }
+                      }} style={{ padding: '6px 12px', height: '32px' }}>KOT</ActionButton>
+                      <ActionButton variant="success" onClick={async () => {
+                         const full = await fetchFullOrder(order.id);
+                         if(full) setEditingOrder(full);
+                      }} style={{ padding: '6px 12px', height: '32px' }}>Edit</ActionButton>
+                      <ActionButton variant="danger" onClick={async () => {
+                         const full = await fetchFullOrder(order.id);
+                         if(full) setCancelOrderDialog(full);
+                      }} style={{ padding: '6px 12px', height: '32px' }}>Cancel</ActionButton>
+                      <ActionButton variant="danger" onClick={(e) => handlePaymentClick(e, { current_order: { id: order.id } })} style={{ padding: '6px 12px', height: '32px' }}>Pay</ActionButton>
                     </div>
                   </TableListRow>
                 ))}
@@ -3057,12 +3172,16 @@ const handleModalResend = async (table) => {
               <FloorPlanContainer>
                 <FloorPlanLegend>
                   <LegendItem>
-                    <LegendDot color="#10b981" />
+                    <LegendDot color="#ffffff" style={{ border: '1px solid #e2e8f0', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.06)' }} />
                     Available
                   </LegendItem>
                   <LegendItem>
-                    <LegendDot color="#ef4444" />
+                    <LegendDot color="#f97316" style={{ boxShadow: '0 2px 4px rgba(249, 115, 22, 0.2)' }} />
                     Occupied
+                  </LegendItem>
+                  <LegendItem>
+                    <LegendDot color="#10b981" style={{ boxShadow: '0 2px 4px rgba(16, 185, 129, 0.2)' }} />
+                    Billed
                   </LegendItem>
                   <LegendItem>
                     <LegendDot color="#3b82f6" />
@@ -3097,6 +3216,7 @@ const handleModalResend = async (table) => {
                       x={x}
                       y={y}
                       status={table.status}
+                      billed={table.current_order && billedOrders.has(table.current_order.id)}
                       shape={table.shape}
                       onClick={(e) => {
                         const rect = e.currentTarget.getBoundingClientRect();
@@ -3388,6 +3508,7 @@ const handleModalResend = async (table) => {
             <TableCard 
               key={table.id} 
               status={table.status}
+              billed={table.current_order && billedOrders.has(table.current_order.id)}
               onClick={() => {
                 if (table.current_order?.id) {
                    handleViewOrder(table.current_order.id);
@@ -3590,6 +3711,8 @@ const handleModalResend = async (table) => {
           {filteredTables.map(table => (
             <TableListRow 
               key={table.id}
+              status={table.status}
+              billed={table.current_order && billedOrders.has(table.current_order.id)}
               onClick={() => {
                 if (table.current_order?.id) {
                    handleViewOrder(table.current_order.id);
