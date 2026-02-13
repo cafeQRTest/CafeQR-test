@@ -14,6 +14,7 @@ import OrderItemsModal from '../../components/OrderItemsModal';
 import EditOrderPanel from '../../components/EditOrderPanel';
 import { round2, roundP, formatQtyP } from '../../lib/qty';
 import { LoyaltyService } from '../../services/loyaltyService';
+import { downloadInvoicePdf } from '../../lib/downloadInvoicePdf';
 
 
 import PaymentConfirmDialog from '../../components/PaymentConfirmDialog';
@@ -33,6 +34,7 @@ import {
   useDeleteFloor
 } from '../../hooks/useTables';
 import { useOrders } from '../../hooks/useOrders';
+import { useCompletedOrders } from '../../hooks/useCompletedOrders';
 
 // Animations
 const fadeIn = keyframes`
@@ -548,6 +550,18 @@ const ConfigButton = styled.button`
 
   svg {
     opacity: 1;
+  }
+`;
+
+const HistoryButton = styled(ConfigButton)`
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  border-color: #6366f1;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+
+  &:hover {
+    background: linear-gradient(135deg, #818cf8 0%, #6366f1 100%);
+    border-color: #818cf8;
+    box-shadow: 0 6px 16px rgba(99, 102, 241, 0.3);
   }
 `;
 
@@ -1749,6 +1763,442 @@ const EmptyText = styled.p`
   margin: 0 0 24px;
 `;
 
+const CloseButton = styled.button`
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+  transition: all 0.2s;
+
+  &:hover {
+    background: #f1f5f9;
+    color: #64748b;
+  }
+`;
+
+// --- Order History Modal Components ---
+const HistoryModalOverlay = styled.div`
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(8px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: ${fadeIn} 0.3s ease-out;
+`;
+
+const HistoryModalContent = styled.div`
+  background: white;
+  width: 100%;
+  max-width: 1100px;
+  max-height: 90vh;
+  border-radius: 24px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(15, 23, 42, 0.1);
+`;
+
+const HistoryHeader = styled.div`
+  padding: 24px 32px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+`;
+
+const HistoryTitle = styled.h2`
+  font-size: 22px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  span {
+    color: #6366f1;
+  }
+`;
+
+const HistoryBody = styled.div`
+  padding: 0;
+  overflow-y: auto;
+  flex: 1;
+
+  /* Custom Scrollbar */
+  &::-webkit-scrollbar { width: 8px; }
+  &::-webkit-scrollbar-track { background: #f8fafc; }
+  &::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+`;
+
+const HistoryFooter = styled.div`
+  padding: 24px 32px;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+`;
+
+const HistoryTable = styled.table`
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  text-align: left;
+
+  th {
+    padding: 16px 24px;
+    background: #ffffff;
+    font-size: 10px;
+    font-weight: 500;
+    color: #acc0d8;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    border-bottom: 1px solid #f8fafc;
+  }
+
+  td {
+    padding: 20px 24px;
+    border-bottom: 1px solid #fcfdfe;
+    font-size: 13px;
+    color: #475569;
+    vertical-align: middle;
+    transition: all 0.3s ease;
+  }
+
+  tr:last-child td {
+    border-bottom: none;
+  }
+
+  tr:hover td {
+    background: #fafbfc;
+    color: #0f172a;
+  }
+`;
+
+const ActionIcon = styled.button`
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1.5px solid transparent;
+  background: transparent;
+
+  ${props => props.variant === 'print' && css`
+    color: #ea580c;
+    background: #fff7ed;
+    border: 1.5px solid #fdba74;
+    &:hover { background: #ffedd5; border-color: #ea580c; }
+  `}
+
+  ${props => props.variant === 'download' && css`
+    color: #6366f1;
+    background: #eef2ff;
+    &:hover { background: #e0e7ff; border-color: #c7d2fe; }
+  `}
+`;
+
+const HistoryViewContainer = styled.div`
+  animation: ${fadeIn} 0.5s ease-out;
+`;
+
+const PaginationContainer = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24px 32px;
+  background: #fdfdfd;
+  border-top: 1px solid #f8fafc;
+`;
+
+const PaginationButton = styled.button`
+  padding: 8px 16px;
+  min-width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  border: 1.5px solid ${props => props.active ? '#ea580c' : '#e2e8f0'};
+  background: ${props => props.active ? '#ea580c' : 'white'};
+  color: ${props => props.active ? 'white' : '#475569'};
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+
+  &:hover:not(:disabled) {
+    border-color: #ea580c;
+    color: ${props => props.active ? 'white' : '#ea580c'};
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+`;
+
+const OrderHistoryView = ({ onBack, orders, onPrint, loading }) => {
+  const [filterType, setFilterType] = useState('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterType]);
+
+  const filteredOrders = useMemo(() => {
+    if (filterType === 'all') return orders;
+    return orders.filter(o => o.order_type === filterType);
+  }, [orders, filterType]);
+
+  const totalRevenue = filteredOrders.reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
+  const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
+  const paginatedOrders = filteredOrders.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  const orderTypes = [
+    { id: 'all', label: 'All Orders' },
+    { id: 'dine-in', label: 'Dine-In' },
+    { id: 'takeaway', label: 'Takeaway' },
+    { id: 'delivery', label: 'Delivery' }
+  ];
+
+  return (
+    <HistoryViewContainer>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <button 
+            onClick={onBack}
+            style={{ 
+              background: 'white', 
+              border: '1px solid #e2e8f0', 
+              borderRadius: '14px', 
+              padding: '12px', 
+              marginRight: '20px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              color: '#64748b',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
+              transition: 'all 0.2s'
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.borderColor = '#cbd5e1'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
+          >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path d="M19 12H5M12 19l-7-7 7-7"></path>
+            </svg>
+          </button>
+          <TitleBlock>
+            <Title>Today's <span>Sales Report</span></Title>
+            <Subtitle>Secure historical ledger of all completed transactions</Subtitle>
+          </TitleBlock>
+        </div>
+
+        <div style={{ width: '400px' }}>
+          <FilterCarousel>
+            {orderTypes.map(type => (
+              <FilterPill 
+                key={type.id}
+                active={filterType === type.id}
+                onClick={() => setFilterType(type.id)}
+                style={{ width: 'auto' }}
+              >
+                {type.label}
+              </FilterPill>
+            ))}
+          </FilterCarousel>
+        </div>
+      </div>
+
+      <StatsScroll style={{ marginBottom: '40px', display: 'flex', gap: '20px' }}>
+        <StatCard accent="linear-gradient(135deg, #0f172a 0%, #334155 100%)" style={{ flex: 1 }}>
+          <StatLabel>Transaction Volume</StatLabel>
+          <StatValue>{filteredOrders.length}</StatValue>
+        </StatCard>
+        <StatCard accent="linear-gradient(135deg, #10b981 0%, #059669 100%)" style={{ flex: 1 }}>
+          <StatLabel>Net {filterType !== 'all' ? filterType : ''} Revenue</StatLabel>
+          <StatValue style={{ color: '#059669' }}>
+            ₹{totalRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+          </StatValue>
+        </StatCard>
+      </StatsScroll>
+
+      <div style={{ background: 'white', borderRadius: '32px', border: '1px solid rgba(0, 0, 0, 0.05)', overflow: 'hidden', boxShadow: '0 20px 40px -20px rgba(0,0,0,0.05)' }}>
+        <HistoryBody style={{ maxHeight: 'calc(100vh - 450px)', overflowY: 'auto' }}>
+          {loading ? (
+            <div style={{ padding: 120, textAlign: 'center', color: '#94a3b8' }}>
+              <div style={{ fontSize: 14, fontWeight: 500, letterSpacing: '0.5px' }}>Accessing cloud archives...</div>
+            </div>
+          ) : filteredOrders.length === 0 ? (
+            <div style={{ padding: 120, textAlign: 'center' }}>
+              <div style={{ fontSize: 18, fontWeight: 600, color: '#0f172a', marginBottom: 12 }}>No records found</div>
+              <div style={{ fontSize: 14, color: '#94a3b8' }}>Try adjusting your filters or complete a new checkout.</div>
+            </div>
+          ) : (
+            <>
+              <TableList style={{ border: 'none', boxShadow: 'none', borderRadius: 0 }}>
+                <TableListHeader style={{ gridTemplateColumns: '0.8fr 1fr 1.2fr 1.2fr 1fr 1fr 1.8fr', background: '#fafbfc', borderBottom: '1px solid #f1f5f9' }}>
+                  <div>Order</div>
+                  <div>Invoice</div>
+                  <div>Timestamp</div>
+                  <div>Customer</div>
+                  <div>Details</div>
+                  <div>Amount</div>
+                  <div style={{ textAlign: 'right' }}>Actions</div>
+                </TableListHeader>
+                
+                <div>
+                  {paginatedOrders.map(order => (
+                    <TableListRow 
+                      key={order.id}
+                      style={{ 
+                        gridTemplateColumns: '0.8fr 1fr 1.2fr 1.2fr 1fr 1fr 1.8fr',
+                        borderLeft: 'none',
+                        padding: '16px 24px'
+                      }}
+                    >
+                      <div>
+                        <span style={{ fontWeight: 600, fontFamily: 'monospace', color: '#94a3b8', fontSize: '12px', letterSpacing: '0.5px' }}>
+                          #{order.id.slice(0, 8).toUpperCase()}
+                        </span>
+                      </div>
+                      <div>
+                        <span style={{ fontWeight: 500, color: '#1e293b', fontSize: '13px' }}>
+                          {(order.invoices?.[0]?.invoice_no || order.invoices?.invoice_no || order.invoices?.[0]?.bill_no || order.invoices?.bill_no || order.invoice_no || '—')}
+                        </span>
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 600, color: '#1e293b', fontSize: '13px' }}>{new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}</div>
+                        <div style={{ fontSize: '10px', color: '#acc0d8', marginTop: '1px' }}>{new Date(order.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 500, color: order.customer_name ? '#0f172a' : '#cbd5e1', fontSize: '13px' }}>{order.customer_name || 'Walk-in'}</div>
+                      </div>
+                      <div>
+                        <div style={{ 
+                          display: 'inline-flex', 
+                          alignItems: 'center', 
+                          padding: '3px 10px',
+                          borderRadius: '100px',
+                          background: '#f8fafc',
+                          border: '1px solid #f1f5f9',
+                          color: '#64748b',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          textTransform: 'capitalize'
+                        }}>
+                          {order.order_type === 'dine-in' 
+                            ? `Table ${order.tables?.identifier || order.table_number || '-'}` 
+                            : order.order_type}
+                        </div>
+                      </div>
+                      <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '14px' }}>
+                        ₹{Number(order.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      </div>
+                      <div>
+                        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                          <UiButton 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => onPrint(order.id)}
+                            style={{ 
+                              borderRadius: '10px', 
+                              fontSize: '11px', 
+                              fontWeight: 700,
+                              padding: '6px 12px',
+                              borderColor: '#e2e8f0',
+                              height: '32px'
+                            }}
+                          >
+                            Print Bill
+                          </UiButton>
+                          <UiButton 
+                            size="sm" 
+                            onClick={async () => {
+                              try { await downloadInvoicePdf(order.id) } catch (e) { alert(e.message) }
+                            }}
+                            style={{ 
+                              borderRadius: '10px', 
+                              fontSize: '11px', 
+                              fontWeight: 700,
+                              padding: '6px 12px',
+                              background: '#0f172a',
+                              color: 'white',
+                              height: '34px'
+                            }}
+                          >
+                            Invoice
+                          </UiButton>
+                        </div>
+                      </div>
+                    </TableListRow>
+                  ))}
+                </div>
+              </TableList>
+
+              <PaginationContainer>
+                <div style={{ fontSize: '13px', color: '#94a3b8', fontWeight: 600 }}>
+                  Showing {Math.min(filteredOrders.length, (currentPage - 1) * itemsPerPage + 1)}-{Math.min(filteredOrders.length, currentPage * itemsPerPage)} of {filteredOrders.length}
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <PaginationButton 
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <path d="M15 18l-6-6 6-6"></path>
+                    </svg>
+                  </PaginationButton>
+                  
+                  {[...Array(totalPages)].map((_, i) => (
+                    <PaginationButton 
+                      key={i + 1}
+                      active={currentPage === i + 1}
+                      onClick={() => setCurrentPage(i + 1)}
+                    >
+                      {i + 1}
+                    </PaginationButton>
+                  )).slice(Math.max(0, currentPage - 3), Math.min(totalPages, currentPage + 2))}
+
+                  <PaginationButton 
+                    disabled={currentPage === totalPages}
+                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <path d="M9 18l6-6-6-6"></path>
+                    </svg>
+                  </PaginationButton>
+                </div>
+              </PaginationContainer>
+            </>
+          )}
+        </HistoryBody>
+      </div>
+    </HistoryViewContainer>
+  );
+};
+
 export default function TableManagement() {
   const supabase = getSupabase();
   const { checking } = useRequireAuth(supabase);
@@ -1770,6 +2220,7 @@ export default function TableManagement() {
   const [viewOrder, setViewOrder] = useState(null);
   const [cancelOrderDialog, setCancelOrderDialog] = useState(null);
   const [billedOrders, setBilledOrders] = useState(new Set());
+  const [activeSubView, setActiveSubView] = useState('tables'); // 'tables' or 'history'
 
   // Load billed orders from localStorage
   useEffect(() => {
@@ -1802,6 +2253,8 @@ export default function TableManagement() {
     restaurant?.id, 
     'all'
   );
+
+  const { data: completedOrders = [], isLoading: loadingHistory } = useCompletedOrders(restaurant?.id);
   
   // React Query mutations
   const tableMutation = useTableMutation();
@@ -2806,116 +3259,127 @@ const handleModalResend = async (table) => {
   return (
     <PageContainer>
       <MainLayout>
-        <Sidebar>
-          <SidebarGroup>
-            <SidebarLabel>Order Type</SidebarLabel>
-            <SidebarFilterList>
-              {[
-                { id: 'dine-in', label: 'Dine In', icon: '🪑' },
-                { id: 'takeaway', label: 'Takeaway', icon: '🥡' },
-                { id: 'delivery', label: 'Delivery', icon: '🚲' }
-              ].map(mode => (
-                <FilterPill 
-                  key={mode.id} 
-                  active={serviceMode === mode.id}
-                  onClick={() => setServiceMode(mode.id)}
+        {activeSubView !== 'history' && (
+          <Sidebar>
+            <SidebarGroup>
+              <SidebarLabel>Order Type</SidebarLabel>
+              <SidebarFilterList>
+                {[
+                  { id: 'dine-in', label: 'Dine In', icon: '🪑' },
+                  { id: 'takeaway', label: 'Takeaway', icon: '🥡' },
+                  { id: 'delivery', label: 'Delivery', icon: '🚲' }
+                ].map(mode => (
+                  <FilterPill 
+                    key={mode.id} 
+                    active={serviceMode === mode.id}
+                    onClick={() => setServiceMode(mode.id)}
+                  >
+                    <span style={{ fontSize: '16px' }}>{mode.icon}</span>
+                    {mode.label}
+                  </FilterPill>
+                ))}
+              </SidebarFilterList>
+              {(serviceMode === 'takeaway' || serviceMode === 'delivery') && (
+                <AddOrderButton 
+                  onClick={() => {
+                    setCreateOrderTable(null);
+                    setShowCreateOrderModal(true);
+                  }}
                 >
-                  <span style={{ fontSize: '16px' }}>{mode.icon}</span>
-                  {mode.label}
-                </FilterPill>
-              ))}
-            </SidebarFilterList>
-            {(serviceMode === 'takeaway' || serviceMode === 'delivery') && (
-              <AddOrderButton 
-                onClick={() => {
-                  setCreateOrderTable(null);
-                  setShowCreateOrderModal(true);
-                }}
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="12" y1="5" x2="12" y2="19"></line>
-                  <line x1="5" y1="12" x2="19" y2="12"></line>
-                </svg>
-                {serviceMode === 'takeaway' ? 'New Takeaway' : 'New Delivery'}
-              </AddOrderButton>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                  </svg>
+                  {serviceMode === 'takeaway' ? 'New Takeaway' : 'New Delivery'}
+                </AddOrderButton>
+              )}
+            </SidebarGroup>
+
+            {serviceMode === 'dine-in' && (
+              <>
+                <SidebarGroup>
+                  <SidebarLabel>Status</SidebarLabel>
+                  <SidebarFilterList>
+                    {['all', 'available', 'occupied', 'reserved', 'cleaning', 'maintenance'].map(status => (
+                      <FilterPill 
+                        key={status} 
+                        active={filterStatus === status}
+                        onClick={() => setFilterStatus(status)}
+                      >
+                        <div style={{ 
+                          width: '8px', 
+                          height: '8px', 
+                          borderRadius: '50%', 
+                          background: status === 'available' ? '#10b981' : 
+                                    status === 'occupied' ? '#ef4444' : 
+                                    status === 'reserved' ? '#3b82f6' : 
+                                    status === 'cleaning' ? '#f59e0b' : 
+                                    status === 'maintenance' ? '#6366f1' : '#cbd5e1'
+                        }} />
+                        {status.charAt(0).toUpperCase() + status.slice(1)}
+                      </FilterPill>
+                    ))}
+                  </SidebarFilterList>
+                </SidebarGroup>
+
+                <SidebarGroup>
+                  <SidebarLabel>Section</SidebarLabel>
+                  <SidebarFilterList>
+                    <FilterPill 
+                      active={filterSection === 'all'} 
+                      onClick={() => setFilterSection('all')}
+                    >
+                      All Sections
+                    </FilterPill>
+                    {sections.map(s => (
+                      <FilterPill 
+                        key={s.id} 
+                        active={filterSection === s.section_name}
+                        onClick={() => setFilterSection(s.section_name)}
+                      >
+                        {s.section_name}
+                      </FilterPill>
+                    ))}
+                  </SidebarFilterList>
+                </SidebarGroup>
+
+                <SidebarGroup>
+                  <SidebarLabel>Floor</SidebarLabel>
+                  <SidebarFilterList>
+                    <FilterPill 
+                      active={filterFloor === 'all'} 
+                      onClick={() => setFilterFloor('all')}
+                    >
+                      All Floors
+                    </FilterPill>
+                    {floors.map(f => (
+                      <FilterPill 
+                        key={f.id} 
+                        active={filterFloor === f.floor_name}
+                        onClick={() => setFilterFloor(f.floor_name)}
+                      >
+                        {f.floor_name}
+                      </FilterPill>
+                    ))}
+                  </SidebarFilterList>
+                </SidebarGroup>
+              </>
             )}
-          </SidebarGroup>
-
-          {serviceMode === 'dine-in' && (
-            <>
-              <SidebarGroup>
-                <SidebarLabel>Status</SidebarLabel>
-                <SidebarFilterList>
-                  {['all', 'available', 'occupied', 'reserved', 'cleaning', 'maintenance'].map(status => (
-                    <FilterPill 
-                      key={status} 
-                      active={filterStatus === status}
-                      onClick={() => setFilterStatus(status)}
-                    >
-                      <div style={{ 
-                        width: '8px', 
-                        height: '8px', 
-                        borderRadius: '50%', 
-                        background: status === 'available' ? '#10b981' : 
-                                  status === 'occupied' ? '#ef4444' : 
-                                  status === 'reserved' ? '#3b82f6' : 
-                                  status === 'cleaning' ? '#f59e0b' : 
-                                  status === 'maintenance' ? '#6366f1' : '#cbd5e1'
-                      }} />
-                      {status.charAt(0).toUpperCase() + status.slice(1)}
-                    </FilterPill>
-                  ))}
-                </SidebarFilterList>
-              </SidebarGroup>
-
-              <SidebarGroup>
-                <SidebarLabel>Section</SidebarLabel>
-                <SidebarFilterList>
-                  <FilterPill 
-                    active={filterSection === 'all'} 
-                    onClick={() => setFilterSection('all')}
-                  >
-                    All Sections
-                  </FilterPill>
-                  {sections.map(s => (
-                    <FilterPill 
-                      key={s.id} 
-                      active={filterSection === s.section_name}
-                      onClick={() => setFilterSection(s.section_name)}
-                    >
-                      {s.section_name}
-                    </FilterPill>
-                  ))}
-                </SidebarFilterList>
-              </SidebarGroup>
-
-              <SidebarGroup>
-                <SidebarLabel>Floor</SidebarLabel>
-                <SidebarFilterList>
-                  <FilterPill 
-                    active={filterFloor === 'all'} 
-                    onClick={() => setFilterFloor('all')}
-                  >
-                    All Floors
-                  </FilterPill>
-                  {floors.map(f => (
-                    <FilterPill 
-                      key={f.id} 
-                      active={filterFloor === f.floor_name}
-                      onClick={() => setFilterFloor(f.floor_name)}
-                    >
-                      {f.floor_name}
-                    </FilterPill>
-                  ))}
-                </SidebarFilterList>
-              </SidebarGroup>
-            </>
-          )}
-        </Sidebar>
+          </Sidebar>
+        )}
 
         <MainContent>
-          <Header>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '20px' }}>
+          {activeSubView === 'history' ? (
+            <OrderHistoryView 
+              onBack={() => setActiveSubView('tables')}
+              orders={completedOrders}
+              onPrint={handlePrintBill}
+              loading={loadingHistory}
+            />
+          ) : (
+            <>
+              <Header>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '20px' }}>
               <TitleBlock>
                 <Title>{pageInfo.title} <span>{pageInfo.accent}</span></Title>
                 <Subtitle>{pageInfo.subtitle}</Subtitle>
@@ -2923,6 +3387,13 @@ const handleModalResend = async (table) => {
               
               {serviceMode === 'dine-in' && (
                 <HeaderActions>
+                  <HistoryButton onClick={() => setActiveSubView('history')}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"></path>
+                    </svg>
+                    Order History
+                  </HistoryButton>
+
                   <ConfigButton onClick={() => setShowSectionsModal(true)}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M12 3H3v18h18V12"></path>
@@ -3844,7 +4315,9 @@ const handleModalResend = async (table) => {
             </TableListRow>
           ))}
         </TableList>
-      )}
+      ) }
+            </>
+          ) }
         </MainContent>
       </MainLayout>
       
@@ -4276,6 +4749,7 @@ const handleModalResend = async (table) => {
           onCancel={() => setCancelOrderDialog(null)} 
         />
       )}
+
     </PageContainer>
   );
 }
