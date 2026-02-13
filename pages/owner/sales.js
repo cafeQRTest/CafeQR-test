@@ -101,7 +101,7 @@ function prettyMixed(method, mixedDetails) {
   const onlineAmt = Number(pick(mixedDetails, ['online_amount', 'onlineAmount'], 0) || 0).toFixed(2);
   const onlineMethod = String(pick(mixedDetails, ['online_method', 'onlineMethod'], 'online') || 'online').toUpperCase();
 
-  return `Mixed (Cash ₹${cash} + ₹${onlineAmt} ${onlineMethod})`;
+ return `Mixed (Cash ₹${cash} + ₹${onlineAmt} Online)`;
 }
 
 

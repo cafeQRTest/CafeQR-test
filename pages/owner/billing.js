@@ -89,7 +89,34 @@ export default function BillingPage() {
   const itemsPerPage = 10;
 
   const formatMoney = (n) => `₹${Number(n || 0).toFixed(2)}`;
-  const isMixed = (inv) => inv?.payment_method === 'mixed' && inv?.mixed_payment_details;
+
+const getPayMethod = (inv) =>
+  String(inv?.payment_method ?? inv?.paymentmethod ?? inv?.paymentMethod ?? '').toLowerCase();
+
+const getMixedDetails = (inv) =>
+  inv?.mixed_payment_details ?? inv?.mixedpaymentdetails ?? inv?.mixedPaymentDetails ?? null;
+
+const pickNum = (obj, keys, fallback = 0) => {
+  for (const k of keys) {
+    const v = obj?.[k];
+    if (v !== undefined && v !== null && v !== '') {
+      const n = Number(v);
+      if (Number.isFinite(n)) return n;
+    }
+  }
+  return fallback;
+};
+
+const getMixedSplit = (inv) => {
+  const d = getMixedDetails(inv);
+  return {
+    cash: pickNum(d, ['cash_amount', 'cashAmount', 'cashamount'], 0),
+    online: pickNum(d, ['online_amount', 'onlineAmount', 'onlineamount'], 0),
+  };
+};
+
+const isMixed = (inv) => getPayMethod(inv) === 'mixed' && !!getMixedDetails(inv);
+
 
   const prettyMethod = (m) => {
     if (m === 'none' || m === 'unassigned') return '';
@@ -159,15 +186,19 @@ export default function BillingPage() {
         total_sgst: list.reduce((s, inv) => s + (parseFloat(inv.sgst) || 0), 0),
         total_igst: list.reduce((s, inv) => s + (parseFloat(inv.igst) || 0), 0),
         cash_sales: list.reduce((sum, inv) => {
-          if (inv.payment_method === 'cash') return sum + getInvoiceTotal(inv);
-          if (isMixed(inv)) return sum + (parseFloat(inv.mixed_payment_details.cash_amount) || 0);
-          return sum;
-        }, 0),
-        online_sales: list.reduce((sum, inv) => {
-          if (['online', 'upi', 'card'].includes(inv.payment_method)) return sum + getInvoiceTotal(inv);
-          if (isMixed(inv)) return sum + (parseFloat(inv.mixed_payment_details.online_amount) || 0);
-          return sum;
-        }, 0),
+  const pm = getPayMethod(inv);
+  if (pm === 'cash') return sum + getInvoiceTotal(inv);
+  if (isMixed(inv)) return sum + getMixedSplit(inv).cash;
+  return sum;
+}, 0),
+
+online_sales: list.reduce((sum, inv) => {
+  const pm = getPayMethod(inv);
+  if (['online', 'upi', 'card'].includes(pm)) return sum + getInvoiceTotal(inv);
+  if (isMixed(inv)) return sum + getMixedSplit(inv).online;
+  return sum;
+}, 0),
+
         credit_sales: list
           .filter(inv => inv.payment_method === 'credit')
           .reduce((s, inv) => s + getInvoiceTotal(inv), 0),
