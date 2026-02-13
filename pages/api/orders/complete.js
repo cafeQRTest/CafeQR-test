@@ -160,7 +160,6 @@ if (finalPaymentMethod === 'mixed') {
         table_number: order.table_number,
         is_credit: payment_method === 'credit',
         credit_customer_id: order.credit_customer_id,
-        mixed_payment_details,
         created_at: order.created_at
       }
     });

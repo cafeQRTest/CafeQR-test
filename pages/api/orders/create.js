@@ -28,7 +28,7 @@ export default async function handler(req, res) {
       table_number,
       order_type = 'counter',
       items,
-      payment_method = 'cash',
+      payment_method = null,
       payment_status = 'pending',
       special_instructions = null,
       mixed_payment_details = null,
