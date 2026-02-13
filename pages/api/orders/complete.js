@@ -84,6 +84,7 @@ export default async function handler(req, res) {
         profile?.prices_include_tax === 1 ||
         profile?.prices_include_tax === '1');
 
+
     const calcResult = calculateOrderTotals(
       calculationItems,
       discount_obj || 
@@ -103,6 +104,44 @@ export default async function handler(req, res) {
       }
     );
 
+const normMethod = (m) => {
+  const x = String(m || '').toLowerCase();
+  if (x === 'upi' || x === 'card') return 'online';
+  if (!x) return 'cash';
+  return x;
+};
+
+let finalPaymentMethod = normMethod(payment_method);
+let finalMixed = mixed_payment_details;
+
+// Normalize mixed details keys + enforce only cash/online
+if (finalPaymentMethod === 'mixed') {
+  const cash = Number(
+    finalMixed?.cash_amount ?? finalMixed?.cashAmount ?? finalMixed?.cashamount ?? 0
+  );
+  const online = Number(
+    finalMixed?.online_amount ?? finalMixed?.onlineAmount ?? finalMixed?.onlineamount ?? 0
+  );
+
+  if (!Number.isFinite(cash) || !Number.isFinite(online) || cash < 0 || online < 0) {
+    return res.status(400).json({ error: 'Invalid mixed payment amounts' });
+  }
+
+  // Optional strict check (recommended)
+  const payable = Number(calcResult.total_amount ?? 0);
+  if (Math.abs((cash + online) - payable) > 0.01) {
+    return res.status(400).json({
+      error: `Mixed split mismatch: cash+online=${(cash + online).toFixed(2)} payable=${payable.toFixed(2)}`
+    });
+  }
+
+  finalMixed = { cash_amount: cash, online_amount: online };
+} else {
+  // Non-mixed orders should not carry mixed details
+  finalMixed = null;
+}
+
+
     // 4. Persist via Unified Service
     const result = await OrderService.persistCalculatedOrder(supabase, {
       orderId: order_id,
@@ -111,7 +150,8 @@ export default async function handler(req, res) {
       metadata: {
         status: 'completed',
         payment_status: 'paid', // Standardize to 'paid'
-        payment_method,
+  payment_method: finalPaymentMethod,
+  mixed_payment_details: finalMixed,
         customer_id: order.customer_id, // Persist customer link!
         customer_name: order.customer_name,
         customer_phone: order.customer_phone,
@@ -120,7 +160,6 @@ export default async function handler(req, res) {
         table_number: order.table_number,
         is_credit: payment_method === 'credit',
         credit_customer_id: order.credit_customer_id,
-        mixed_payment_details,
         created_at: order.created_at
       }
     });
