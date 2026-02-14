@@ -239,8 +239,8 @@ export const exportSalesReportToCSV = ({
 
       const paymentLabel = prettyMixed(method, mixedDetails);
 
-      const orderedRaw = o.dateordered || o.createdat;
-      const editedRaw = o.updatedat;
+      const orderedRaw = pick(o || {}, ['date_ordered', 'created_at', 'dateordered', 'createdat']);
+      const editedRaw  = pick(o || {}, ['updated_at', 'updatedat']);
 
       const orderedDate = orderedRaw
         ? new Date(orderedRaw).toLocaleString('en-IN', {
@@ -266,10 +266,13 @@ export const exportSalesReportToCSV = ({
 
       const status = o.status || '';
 
-      const grandTotal = fmtMoney(o.totalinctax ?? o.totalamount ?? 0);
-      const totalTax = fmtMoney(o.totaltax ?? 0);
+      const grandTotalNum = pick(o || {}, ['total_amount', 'total_inc_tax', 'total'], 0);
+      const totalTaxNum   = pick(o || {}, ['total_tax', 'totaltax'], 0);
+      const grandTotal = fmtMoney(grandTotalNum);
+      const totalTax   = fmtMoney(totalTaxNum);
 
-      const customer = o.customername || '';
+      const customer = pick(o || {}, ['customer_name', 'customername'], '');
+
 
       const invoiceNo =
         (inv && (inv.invoiceno || inv.invoice_no)) || '';
