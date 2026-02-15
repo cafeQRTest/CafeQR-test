@@ -672,7 +672,7 @@ export default function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
                 <SummaryPill>
                   Collection: <strong>₹{(Number(cashAmount||0) + Number(onlineAmount||0) + Number(loyaltyAmountUsed||0)).toFixed(2)}</strong> / ₹{settledAmount.toFixed(2)}
                 </SummaryPill>
-                <NiceSelect value={onlineMethod} onChange={setOnlineMethod} options={[{ value: 'upi', label: 'UPI' }, { value: 'card', label: 'Card' }]} />
+
               </MixedPanel>
             )}
 

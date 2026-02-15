@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { getSupabase } from '../services/supabase';
+import { istDayRangeUtcISO, istYmdFromDate } from '../utils/istTime';
 
 const supabase = getSupabase();
 
@@ -8,20 +9,20 @@ export const orderHistoryKeys = {
   today: (restaurantId) => [...orderHistoryKeys.all, 'today', restaurantId],
 };
 
-async function fetchTodayCompletedOrders(restaurantId) {
+async function fetchCompletedOrders(restaurantId) {
   if (!restaurantId) return [];
 
   // Get boundaries for today in Asia/Kolkata (IST)
-  const today = new Date();
-  const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
+  const todayIST = istYmdFromDate(new Date());
+  const { startUtc } = istDayRangeUtcISO(todayIST);
 
-  // Fetch completed orders for today
+  // Fetch completed orders for today IST
   const { data, error } = await supabase
     .from('orders')
     .select(`
       *,
-      tables (identifier),
-      invoices (invoice_no, bill_no),
+      tables:table_id (identifier),
+      invoices (invoice_no, bill_no, paid_amount, status),
       order_items (
         *,
         menu_items (name)
@@ -29,11 +30,12 @@ async function fetchTodayCompletedOrders(restaurantId) {
     `)
     .eq('restaurant_id', restaurantId)
     .eq('status', 'completed')
-    .gte('created_at', startOfDay)
-    .order('created_at', { ascending: false });
+    .gte('created_at', startUtc)
+    .order('created_at', { ascending: false })
+    .limit(200);
 
   if (error) {
-    console.error('Error fetching today completed orders:', error);
+    console.error('Error fetching completed orders:', error);
     throw error;
   }
 
@@ -43,7 +45,7 @@ async function fetchTodayCompletedOrders(restaurantId) {
 export function useCompletedOrders(restaurantId) {
   return useQuery({
     queryKey: orderHistoryKeys.today(restaurantId),
-    queryFn: () => fetchTodayCompletedOrders(restaurantId),
+    queryFn: () => fetchCompletedOrders(restaurantId),
     enabled: !!restaurantId,
     refetchInterval: 60000, // Refresh every minute
   });

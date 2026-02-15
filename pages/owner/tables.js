@@ -15,6 +15,7 @@ import EditOrderPanel from '../../components/EditOrderPanel';
 import { round2, roundP, formatQtyP } from '../../lib/qty';
 import { LoyaltyService } from '../../services/loyaltyService';
 import { downloadInvoicePdf } from '../../lib/downloadInvoicePdf';
+import Table from '../../components/ui/Table';
 
 
 import PaymentConfirmDialog from '../../components/PaymentConfirmDialog';
@@ -527,41 +528,48 @@ const DangerButton = styled.button`
 `;
 
 const ConfigButton = styled.button`
-  background: #ea580c;
-  border: 1px solid #ea580c;
+  background: white;
+  border: 1px solid #e2e8f0;
   padding: 10px 18px;
   border-radius: 14px;
   font-size: 14px;
   font-weight: 700;
-  color: white;
+  color: #475569;
   cursor: pointer;
   display: flex;
   align-items: center;
   gap: 8px;
   transition: all 0.2s;
-  box-shadow: 0 4px 12px rgba(234, 88, 12, 0.2);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
   
   &:hover {
-    background: #f97316;
-    border-color: #f97316;
+    background: #f8fafc;
+    border-color: #cbd5e1;
+    color: #0f172a;
     transform: translateY(-2px);
-    box-shadow: 0 6px 16px rgba(234, 88, 12, 0.3);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
   }
 
   svg {
-    opacity: 1;
+    color: #f97316;
   }
 `;
 
 const HistoryButton = styled(ConfigButton)`
-  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-  border-color: #6366f1;
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+  background: #f97316;
+  border-color: #f97316;
+  color: white;
+  box-shadow: 0 4px 12px rgba(249, 115, 22, 0.2);
 
   &:hover {
-    background: linear-gradient(135deg, #818cf8 0%, #6366f1 100%);
-    border-color: #818cf8;
-    box-shadow: 0 6px 16px rgba(99, 102, 241, 0.3);
+    background: #ea580c;
+    border-color: #ea580c;
+    color: white;
+    box-shadow: 0 8px 16px rgba(249, 115, 22, 0.3);
+  }
+
+  svg {
+    color: white;
   }
 `;
 
@@ -570,6 +578,114 @@ const HeaderActions = styled.div`
   gap: 12px;
   flex-wrap: wrap;
   align-self: center;
+`;
+
+const PaginationWrapper = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 24px;
+  background: white;
+  border-top: 1px solid #f1f5f9;
+`;
+
+const PaginationInfo = styled.div`
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+`;
+
+const PaginationActions = styled.div`
+  display: flex;
+  gap: 8px;
+  align-items: center;
+`;
+
+const PageButton = styled.button`
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid ${props => props.active ? '#f97316' : '#f1f5f9'};
+  background: ${props => props.active ? '#f97316' : 'white'};
+  color: ${props => props.active ? 'white' : '#64748b'};
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: ${props => props.active ? '0 4px 12px rgba(249, 115, 22, 0.2)' : 'none'};
+
+  &:hover:not(:disabled) {
+    border-color: #f97316;
+    color: ${props => props.active ? 'white' : '#f97316'};
+    transform: translateY(-1px);
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+`;
+
+const NavButton = styled(PageButton)`
+  border-radius: 10px;
+  width: 36px;
+  background: white;
+  
+  svg {
+    width: 16px;
+    height: 16px;
+  }
+`;
+
+const HistoryActionButton = styled.button`
+  padding: 8px 16px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid transparent;
+
+  &.print {
+    background: white;
+    color: #f97316;
+    border-color: #e2e8f0;
+    
+    &:hover {
+      background: #fff7ed;
+      border-color: #fed7aa;
+    }
+  }
+
+  &.invoice {
+    background: #f97316;
+    color: white;
+    
+    &:hover {
+      background: #ea580c;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(249, 115, 22, 0.2);
+    }
+  }
+
+  &.cancel {
+    background: #fef2f2;
+    color: #991b1b;
+    border-color: #fecaca;
+    
+    &:hover {
+      background: #991b1b;
+      color: white;
+      border-color: #991b1b;
+    }
+  }
 `;
 
 const SearchInput = styled.input`
@@ -825,7 +941,7 @@ const TableCard = styled.div`
   `}
 
   ${props => props.status === 'occupied' && !props.billed && css`
-    background: #fffcf0;
+    background: #fffcf5;
     border-color: #fdba74;
     box-shadow: 
       0 10px 30px -5px rgba(249, 115, 22, 0.12),
@@ -850,7 +966,7 @@ const TableCard = styled.div`
 `;
 
 const TableCardHeader = styled.div`
-  padding: 20px 24px 16px;
+  padding: 16px 20px 12px;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -926,20 +1042,20 @@ const StatusBadge = styled.div`
 `;
 
 const TableInfo = styled.div`
-  padding: 0 24px 20px;
+  padding: 0 24px 16px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
 `;
 
 const InfoRow = styled.div`
   display: flex;
   align-items: center;
-  gap: 12px;
-  font-size: 14px;
+  gap: 6px;
+  font-size: 13px;
   color: #475569;
   font-weight: 500;
-  line-height: 1.5;
+  line-height: 1.4;
 `;
 
 const TableActions = styled.div`
@@ -983,6 +1099,10 @@ const ActionButton = styled.button`
     background: #fef2f2; color: #991b1b;
     &:hover { background: #991b1b; color: white; transform: translateY(-2px); }
   `}
+  ${props => props.variant === 'move' && `
+    background: #f5f3ff; color: #5b21b6;
+    &:hover { background: #5b21b6; color: white; transform: translateY(-2px); }
+  `}
   
   ${props => props.fullWidth ? `
     width: 100%;
@@ -1021,6 +1141,32 @@ const EditIcon = styled.button`
   &:active {
     transform: translateY(0);
     background: #bae6fd;
+  }
+`;
+
+const MoveLink = styled.button`
+  background: transparent;
+  border: none;
+  color: #059669;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  transition: all 0.2s;
+
+  &:hover {
+    color: #047857;
+    transform: translateX(3px);
+  }
+
+  svg {
+    stroke-width: 3px;
   }
 `;
 
@@ -1067,14 +1213,18 @@ const TableListRow = styled.div`
   align-items: center;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   background: ${props => {
-    if (props.billed) return '#f0fdf4';
-    if (props.status === 'occupied') return '#fffcf0';
+    if (props.billed) return '#f5fff9';
+    if (props.status === 'occupied') return '#fffcf5';
     return 'white';
   }};
   color: #1e293b;
   
   &:hover {
-    background: ${props => props.billed ? '#16a34a' : (props.status === 'occupied' ? '#ea580c' : '#f8fafc')};
+    background: ${props => {
+      if (props.billed) return '#ebfff2';
+      if (props.status === 'occupied') return '#fff8f0';
+      return '#f8fafc';
+    }};
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
     z-index: 1;
   }
@@ -1283,8 +1433,8 @@ const VisualTablePopover = styled.div`
   top: 50%;
   transform: translate(-50%, -50%);
   background: linear-gradient(180deg, #ffffff 0%, #fafafa 100%);
-  border-radius: 24px;
-  padding: 24px;
+  border-radius: 20px;
+  padding: 16px 20px;
   box-shadow: 
     0 30px 80px rgba(0, 0, 0, 0.25), 
     0 10px 30px rgba(0, 0, 0, 0.15),
@@ -1549,6 +1699,152 @@ function CancelConfirmDialog({ order, onConfirm, onCancel }) {
     </div>
   );
 }
+
+function MoveOrderDialog({ order, sourceTable, tables, onConfirm, onCancel }) {
+  const [selectedTableId, setSelectedTableId] = useState('');
+  const [search, setSearch] = useState('');
+  
+  const availableTables = tables.filter(t => 
+    t.status === 'available' && 
+    (t.identifier.toLowerCase().includes(search.toLowerCase()) || 
+     t.section?.toLowerCase().includes(search.toLowerCase()))
+  );
+
+  return (
+    <Modal onClick={onCancel}>
+      <ModalContent onClick={e => e.stopPropagation()} style={{ maxWidth: '550px' }}>
+        <ModalHeader>
+          <Title style={{ fontSize: '24px' }}>Move Order <span>#{order.id.slice(0, 8).toUpperCase()}</span></Title>
+          <Subtitle>Transfer this order from Table <strong>{sourceTable?.identifier}</strong> to another available table.</Subtitle>
+        </ModalHeader>
+
+        <div style={{ margin: '20px 0' }}>
+          <div style={{ position: 'relative', marginBottom: '16px' }}>
+            <input 
+              type="text"
+              placeholder="Search table number or section..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '12px 16px',
+                paddingLeft: '40px',
+                borderRadius: '12px',
+                border: '1.5px solid #e2e8f0',
+                fontSize: '14px',
+                outline: 'none',
+                transition: 'all 0.2s'
+              }}
+              onFocus={e => e.target.style.borderColor = '#10b981'}
+              onBlur={e => e.target.style.borderColor = '#e2e8f0'}
+            />
+            <svg 
+              width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.5"
+              style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)' }}
+            >
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+          </div>
+
+          <TablePickerGrid>
+            {availableTables.map(t => (
+              <SelectableTable 
+                key={t.id} 
+                selected={selectedTableId === t.id}
+                onClick={() => setSelectedTableId(t.id)}
+              >
+                <div className="number">{t.identifier}</div>
+                <div className="info">{t.capacity} seats</div>
+                <div className="info" style={{fontSize: '8px', opacity: 0.7}}>{t.section}</div>
+              </SelectableTable>
+            ))}
+          </TablePickerGrid>
+          
+          {availableTables.length === 0 && (
+            <div style={{ padding: '32px', textAlign: 'center', color: '#64748b' }}>
+              <div style={{ fontSize: '40px', marginBottom: '12px' }}>🪑</div>
+              <div style={{ fontWeight: 700 }}>No Available Tables</div>
+              <div style={{ fontSize: '13px' }}>{search ? 'No tables match your search.' : 'All tables are currently occupied.'}</div>
+            </div>
+          )}
+        </div>
+
+        <ModalActions>
+          <UiButton onClick={onCancel} style={{ borderRadius: '12px', background: 'white', border: '1.5px solid #e2e8f0', color: '#64748b' }}>Cancel</UiButton>
+          <UiButton 
+            primary 
+            disabled={!selectedTableId}
+            onClick={() => onConfirm(selectedTableId)}
+            style={{ borderRadius: '12px', background: '#059669' }}
+          >
+            Confirm Transfer
+          </UiButton>
+        </ModalActions>
+      </ModalContent>
+    </Modal>
+  );
+}
+
+const TablePickerGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 12px;
+  max-height: 350px;
+  overflow-y: auto;
+  padding: 4px;
+  margin-top: 16px;
+
+  /* Custom Scrollbar */
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+  &::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 10px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 10px;
+  }
+`;
+
+const SelectableTable = styled.div`
+  background: ${props => props.selected ? '#ecfdf5' : 'white'};
+  border: 2px solid ${props => props.selected ? '#10b981' : '#e2e8f0'};
+  border-radius: 16px;
+  padding: 16px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: ${props => props.selected ? '0 4px 12px rgba(16, 185, 129, 0.15)' : 'none'};
+  
+  &:hover {
+    border-color: #10b981;
+    background: #f0fdf4;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  }
+
+  .number {
+    font-size: 18px;
+    font-weight: 900;
+    color: ${props => props.selected ? '#059669' : '#1e293b'};
+    line-height: 1;
+  }
+
+  .info {
+    font-size: 10px;
+    font-weight: 700;
+    color: #64748b;
+    margin-top: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+`;
 
 const Modal = styled.div`
   position: fixed;
@@ -1890,78 +2186,14 @@ const HistoryTable = styled.table`
   }
 `;
 
-const ActionIcon = styled.button`
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s;
-  border: 1.5px solid transparent;
-  background: transparent;
-
-  ${props => props.variant === 'print' && css`
-    color: #ea580c;
-    background: #fff7ed;
-    border: 1.5px solid #fdba74;
-    &:hover { background: #ffedd5; border-color: #ea580c; }
-  `}
-
-  ${props => props.variant === 'download' && css`
-    color: #6366f1;
-    background: #eef2ff;
-    &:hover { background: #e0e7ff; border-color: #c7d2fe; }
-  `}
-`;
-
 const HistoryViewContainer = styled.div`
   animation: ${fadeIn} 0.5s ease-out;
 `;
 
-const PaginationContainer = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 24px 32px;
-  background: #fdfdfd;
-  border-top: 1px solid #f8fafc;
-`;
-
-const PaginationButton = styled.button`
-  padding: 8px 16px;
-  min-width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 12px;
-  border: 1.5px solid ${props => props.active ? '#ea580c' : '#e2e8f0'};
-  background: ${props => props.active ? '#ea580c' : 'white'};
-  color: ${props => props.active ? 'white' : '#475569'};
-  font-size: 14px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-
-  &:hover:not(:disabled) {
-    border-color: #ea580c;
-    color: ${props => props.active ? 'white' : '#ea580c'};
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-  }
-
-  &:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
-`;
-
-const OrderHistoryView = ({ onBack, orders, onPrint, loading }) => {
+const OrderHistoryView = ({ onBack, orders, onPrint, onCancel, loading }) => {
   const [filterType, setFilterType] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
+  const itemsPerPage = 8;
 
   useEffect(() => {
     setCurrentPage(1);
@@ -2010,7 +2242,7 @@ const OrderHistoryView = ({ onBack, orders, onPrint, loading }) => {
             </svg>
           </button>
           <TitleBlock>
-            <Title>Today's <span>Sales Report</span></Title>
+            <Title>Order <span>History</span></Title>
             <Subtitle>Secure historical ledger of all completed transactions</Subtitle>
           </TitleBlock>
         </div>
@@ -2044,156 +2276,155 @@ const OrderHistoryView = ({ onBack, orders, onPrint, loading }) => {
         </StatCard>
       </StatsScroll>
 
-      <div style={{ background: 'white', borderRadius: '32px', border: '1px solid rgba(0, 0, 0, 0.05)', overflow: 'hidden', boxShadow: '0 20px 40px -20px rgba(0,0,0,0.05)' }}>
-        <HistoryBody style={{ maxHeight: 'calc(100vh - 450px)', overflowY: 'auto' }}>
-          {loading ? (
-            <div style={{ padding: 120, textAlign: 'center', color: '#94a3b8' }}>
-              <div style={{ fontSize: 14, fontWeight: 500, letterSpacing: '0.5px' }}>Accessing cloud archives...</div>
-            </div>
-          ) : filteredOrders.length === 0 ? (
-            <div style={{ padding: 120, textAlign: 'center' }}>
-              <div style={{ fontSize: 18, fontWeight: 600, color: '#0f172a', marginBottom: 12 }}>No records found</div>
-              <div style={{ fontSize: 14, color: '#94a3b8' }}>Try adjusting your filters or complete a new checkout.</div>
-            </div>
-          ) : (
-            <>
-              <TableList style={{ border: 'none', boxShadow: 'none', borderRadius: 0 }}>
-                <TableListHeader style={{ gridTemplateColumns: '0.8fr 1fr 1.2fr 1.2fr 1fr 1fr 1.8fr', background: '#fafbfc', borderBottom: '1px solid #f1f5f9' }}>
-                  <div>Order</div>
-                  <div>Invoice</div>
-                  <div>Timestamp</div>
-                  <div>Customer</div>
-                  <div>Details</div>
-                  <div>Amount</div>
-                  <div style={{ textAlign: 'right' }}>Actions</div>
-                </TableListHeader>
-                
-                <div>
-                  {paginatedOrders.map(order => (
-                    <TableListRow 
-                      key={order.id}
-                      style={{ 
-                        gridTemplateColumns: '0.8fr 1fr 1.2fr 1.2fr 1fr 1fr 1.8fr',
-                        borderLeft: 'none',
-                        padding: '16px 24px'
-                      }}
-                    >
-                      <div>
-                        <span style={{ fontWeight: 600, fontFamily: 'monospace', color: '#94a3b8', fontSize: '12px', letterSpacing: '0.5px' }}>
-                          #{order.id.slice(0, 8).toUpperCase()}
-                        </span>
-                      </div>
-                      <div>
-                        <span style={{ fontWeight: 500, color: '#1e293b', fontSize: '13px' }}>
-                          {(order.invoices?.[0]?.invoice_no || order.invoices?.invoice_no || order.invoices?.[0]?.bill_no || order.invoices?.bill_no || order.invoice_no || '—')}
-                        </span>
-                      </div>
-                      <div>
-                        <div style={{ fontWeight: 600, color: '#1e293b', fontSize: '13px' }}>{new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}</div>
-                        <div style={{ fontSize: '10px', color: '#acc0d8', marginTop: '1px' }}>{new Date(order.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
-                      </div>
-                      <div>
-                        <div style={{ fontWeight: 500, color: order.customer_name ? '#0f172a' : '#cbd5e1', fontSize: '13px' }}>{order.customer_name || 'Walk-in'}</div>
-                      </div>
-                      <div>
-                        <div style={{ 
-                          display: 'inline-flex', 
-                          alignItems: 'center', 
-                          padding: '3px 10px',
-                          borderRadius: '100px',
-                          background: '#f8fafc',
-                          border: '1px solid #f1f5f9',
-                          color: '#64748b',
-                          fontSize: '11px',
-                          fontWeight: 700,
-                          textTransform: 'capitalize'
-                        }}>
-                          {order.order_type === 'dine-in' 
-                            ? `Table ${order.tables?.identifier || order.table_number || '-'}` 
-                            : order.order_type}
-                        </div>
-                      </div>
-                      <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '14px' }}>
-                        ₹{Number(order.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                      </div>
-                      <div>
-                        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                          <UiButton 
-                            size="sm" 
-                            variant="outline"
-                            onClick={() => onPrint(order.id)}
-                            style={{ 
-                              borderRadius: '10px', 
-                              fontSize: '11px', 
-                              fontWeight: 700,
-                              padding: '6px 12px',
-                              borderColor: '#e2e8f0',
-                              height: '32px'
-                            }}
-                          >
-                            Print Bill
-                          </UiButton>
-                          <UiButton 
-                            size="sm" 
-                            onClick={async () => {
-                              try { await downloadInvoicePdf(order.id) } catch (e) { alert(e.message) }
-                            }}
-                            style={{ 
-                              borderRadius: '10px', 
-                              fontSize: '11px', 
-                              fontWeight: 700,
-                              padding: '6px 12px',
-                              background: '#0f172a',
-                              color: 'white',
-                              height: '34px'
-                            }}
-                          >
-                            Invoice
-                          </UiButton>
-                        </div>
-                      </div>
-                    </TableListRow>
-                  ))}
-                </div>
-              </TableList>
+      <div style={{ background: 'white', borderRadius: '24px', border: '1px solid #f1f5f9', overflow: 'hidden', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.05)' }}>
+        {loading ? (
+             <div style={{ padding: 120, textAlign: 'center', color: '#94a3b8' }}>
+               <div style={{ fontSize: 14, fontWeight: 500, letterSpacing: '0.5px' }}>Accessing cloud archives...</div>
+             </div>
+        ) : filteredOrders.length === 0 ? (
+             <div style={{ padding: 120, textAlign: 'center' }}>
+               <div style={{ fontSize: 18, fontWeight: 600, color: '#0f172a', marginBottom: 12 }}>No records found</div>
+               <div style={{ fontSize: 14, color: '#94a3b8' }}>Try adjusting your filters or complete a new checkout.</div>
+             </div>
+        ) : (
+          <>
+            <Table
+              columns={[
+                {
+                  header: 'Order ID',
+                  accessor: 'id',
+                  cell: (order) => (
+                    <span style={{ fontWeight: 700, color: '#94a3b8', fontSize: '11px', letterSpacing: '0.5px' }}>
+                      #{order.id.slice(0, 8).toUpperCase()}
+                    </span>
+                  )
+                },
+                {
+                  header: 'Invoice No',
+                  accessor: 'invoice_no',
+                  cell: (order) => (
+                    <span style={{ fontWeight: 600, color: '#1e293b', fontSize: '13px' }}>
+                      {(order.invoices?.invoice_no || order.invoices?.[0]?.invoice_no || order.invoices?.bill_no || order.invoices?.[0]?.bill_no || order.invoice_no || '—')}
+                    </span>
+                  )
+                },
+                {
+                  header: 'Date & Time',
+                  accessor: 'created_at',
+                  cell: (order) => (
+                    <span style={{ fontWeight: 600, color: '#334155', fontSize: '13px' }}>
+                      {new Date(order.created_at).toLocaleString('en-IN', { 
+                        timeZone: 'Asia/Kolkata', 
+                        day: '2-digit', 
+                        month: 'short', 
+                        year: 'numeric',
+                        hour: '2-digit', 
+                        minute: '2-digit', 
+                        hour12: true 
+                      })}
+                    </span>
+                  )
+                },
+                {
+                  header: 'Customer',
+                  accessor: 'customer_name',
+                  cell: (order) => (
+                    <span style={{ fontWeight: 600, color: '#334155', fontSize: '13px' }}>
+                      {order.customer_name || ''}
+                    </span>
+                  )
+                },
+                {
+                  header: 'Type / Table',
+                  accessor: 'order_type',
+                  cell: (order) => (
+                    <div style={{
+                      display: 'inline-flex',
+                      padding: '4px 12px',
+                      borderRadius: '100px',
+                      background: '#f8fafc',
+                      border: '1px solid #f1f5f9',
+                      color: '#64748b',
+                      fontSize: '11px',
+                      fontWeight: 800,
+                      textTransform: 'capitalize'
+                    }}>
+                      {order.order_type === 'dine-in'
+                        ? `Table ${order.tables?.identifier || order.tables?.[0]?.identifier || order.table_number || '-'}`
+                        : order.order_type}
+                    </div>
+                  )
+                },
+                {
+                  header: 'Total Amount',
+                  accessor: 'total_amount',
+                  cell: (order) => (
+                    <span style={{ fontWeight: 800, color: '#0f172a', fontSize: '14px' }}>
+                      ₹{Number(order.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </span>
+                  )
+                },
+                {
+                  header: 'Actions',
+                  accessor: 'actions',
+                  cell: (order) => (
+                    <div style={{ display: 'flex', gap: 10 }}>
+                       <HistoryActionButton className="print" onClick={() => onPrint(order.id)}>
+                         Print Bill
+                       </HistoryActionButton>
+                       <HistoryActionButton className="invoice" onClick={async () => {
+                          try { await downloadInvoicePdf(order.id) } catch (e) { alert(e.message) }
+                       }}>
+                         Invoice
+                       </HistoryActionButton>
+                       {order.status !== 'cancelled' && (
+                         <HistoryActionButton className="cancel" onClick={() => onCancel(order)}>
+                           Cancel
+                         </HistoryActionButton>
+                       )}
+                    </div>
+                  )
+                }
+              ]}
+              data={paginatedOrders}
+            />
 
-              <PaginationContainer>
-                <div style={{ fontSize: '13px', color: '#94a3b8', fontWeight: 600 }}>
-                  Showing {Math.min(filteredOrders.length, (currentPage - 1) * itemsPerPage + 1)}-{Math.min(filteredOrders.length, currentPage * itemsPerPage)} of {filteredOrders.length}
-                </div>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <PaginationButton 
-                    disabled={currentPage === 1}
-                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                  >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                      <path d="M15 18l-6-6 6-6"></path>
-                    </svg>
-                  </PaginationButton>
-                  
-                  {[...Array(totalPages)].map((_, i) => (
-                    <PaginationButton 
-                      key={i + 1}
-                      active={currentPage === i + 1}
-                      onClick={() => setCurrentPage(i + 1)}
-                    >
-                      {i + 1}
-                    </PaginationButton>
-                  )).slice(Math.max(0, currentPage - 3), Math.min(totalPages, currentPage + 2))}
+            <PaginationWrapper>
+              <PaginationInfo>
+                Showing {(currentPage - 1) * itemsPerPage + 1}-{Math.min(currentPage * itemsPerPage, filteredOrders.length)} of {filteredOrders.length}
+              </PaginationInfo>
+              <PaginationActions>
+                 <NavButton
+                   disabled={currentPage === 1}
+                   onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                 >
+                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                     <path d="M15 18l-6-6 6-6" />
+                   </svg>
+                 </NavButton>
 
-                  <PaginationButton 
-                    disabled={currentPage === totalPages}
-                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                  >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                      <path d="M9 18l6-6-6-6"></path>
-                    </svg>
-                  </PaginationButton>
-                </div>
-              </PaginationContainer>
-            </>
-          )}
-        </HistoryBody>
+                 {[...Array(totalPages)].map((_, i) => (
+                   <PageButton
+                     key={i}
+                     active={currentPage === i + 1}
+                     onClick={() => setCurrentPage(i + 1)}
+                   >
+                     {i + 1}
+                   </PageButton>
+                 ))}
+
+                 <NavButton
+                   disabled={currentPage === totalPages || totalPages === 0}
+                   onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                 >
+                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                     <path d="M9 18l6-6-6-6" />
+                   </svg>
+                 </NavButton>
+              </PaginationActions>
+            </PaginationWrapper>
+          </>
+        )}
       </div>
     </HistoryViewContainer>
   );
@@ -2219,25 +2450,25 @@ export default function TableManagement() {
   const [editingTable, setEditingTable] = useState(null);
   const [viewOrder, setViewOrder] = useState(null);
   const [cancelOrderDialog, setCancelOrderDialog] = useState(null);
-  const [billedOrders, setBilledOrders] = useState(new Set());
-  const [activeSubView, setActiveSubView] = useState('tables'); // 'tables' or 'history'
-
-  // Load billed orders from localStorage
-  useEffect(() => {
+   const [billedOrders, setBilledOrders] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('cafeqr_billed_orders');
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed)) setBilledOrders(new Set(parsed));
+          if (Array.isArray(parsed)) return new Set(parsed);
         } catch (e) {
-          console.error('Error loading billed orders:', e);
+          return new Set();
         }
       }
     }
-  }, []);
+    return new Set();
+  });
+  const [activeSubView, setActiveSubView] = useState('tables'); // 'tables' or 'history'
+  const [movingOrder, setMovingOrder] = useState(null);
+  const [sourceTable, setSourceTable] = useState(null);
 
-  // Save billed orders to localStorage
+  // Effect to sync billed orders to localStorage (state is initialized in useState)
   useEffect(() => {
     if (typeof window !== 'undefined') {
       localStorage.setItem('cafeqr_billed_orders', JSON.stringify(Array.from(billedOrders)));
@@ -2798,9 +3029,9 @@ const handleModalResend = async (table) => {
                 .from('tables')
                 .select('id')
                 .eq('restaurant_id', restaurant.id)
-                .eq('identifier', fullOrder.table_number)
+                .ilike('identifier', fullOrder.table_number)
                 .maybeSingle();
-            
+
             if (tableObj) {
                 await supabase
                     .from('tables')
@@ -2809,12 +3040,60 @@ const handleModalResend = async (table) => {
             }
         }
 
-        showAlert('Order cancelled and table released successfully');
+        showAlert('Order cancelled successfully');
         setCancelOrderDialog(null);
         refetch(); // Refresh tables and orders
     } catch (err) {
         console.error('[CANCEL ORDER] Error:', err);
         showAlert(`Failed to cancel order: ${err.message}`);
+    }
+  };
+
+  const handleMoveOrder = async (targetTableId) => {
+    if (!movingOrder || !targetTableId) return;
+    
+    const sourceTableId = movingOrder.table_id || (sourceTable?.id);
+    const targetTable = tables.find(t => t.id === targetTableId);
+    
+    if (!targetTable) return;
+
+    try {
+      // 1. Release source table if we have its ID
+      if (sourceTableId) {
+        const { error: err1 } = await supabase
+          .from('tables')
+          .update({ status: 'available', current_order_id: null })
+          .eq('id', sourceTableId);
+          
+        if (err1) throw err1;
+      }
+
+      // 2. Occupy target table
+      const { error: err2 } = await supabase
+        .from('tables')
+        .update({ status: 'occupied', current_order_id: movingOrder.id })
+        .eq('id', targetTableId);
+        
+      if (err2) throw err2;
+
+      // 3. Update order record
+      const { error: err3 } = await supabase
+        .from('orders')
+        .update({ 
+          table_id: targetTableId,
+          table_number: targetTable.identifier 
+        })
+        .eq('id', movingOrder.id);
+        
+      if (err3) throw err3;
+
+      showAlert(`Order successfully moved to Table ${targetTable.identifier}`);
+      setMovingOrder(null);
+      setSourceTable(null);
+      refetch();
+    } catch (err) {
+      console.error('[MOVE ORDER] Error:', err);
+      showAlert(`Failed to transfer order: ${err.message}`);
     }
   };
   
@@ -3374,6 +3653,7 @@ const handleModalResend = async (table) => {
               onBack={() => setActiveSubView('tables')}
               orders={completedOrders}
               onPrint={handlePrintBill}
+              onCancel={(order) => setCancelOrderDialog(order)}
               loading={loadingHistory}
             />
           ) : (
@@ -3504,7 +3784,7 @@ const handleModalResend = async (table) => {
                   >
                     <TableCardHeader>
                       <TableNumber>
-                        #{order.id.slice(-6).toUpperCase()}
+                        {serviceMode === 'takeaway' ? 'Takeaway' : (serviceMode === 'delivery' ? 'Delivery' : 'Counter Order')}
                         <span>{order.customer_name || 'Guest'}</span>
                       </TableNumber>
                       <StatusBadge status={order.status === 'ready' ? 'available' : (order.status === 'in_progress' ? 'cleaning' : 'occupied')}>
@@ -3514,6 +3794,16 @@ const handleModalResend = async (table) => {
                     
                     <TableInfo>
                       <InfoRow>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{color: '#1e293b'}}>
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                          <polyline points="14 2 14 8 20 8"></polyline>
+                          <line x1="16" y1="13" x2="8" y2="13"></line>
+                          <line x1="16" y1="17" x2="8" y2="17"></line>
+                          <polyline points="10 9 9 9 8 9"></polyline>
+                        </svg>
+                        <InfoText style={{fontWeight: 700, color: '#000000', fontSize: '12.5px'}}>Order #{order.id.slice(0, 8)}</InfoText>
+                      </InfoRow>
+                      <InfoRow>
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{color: '#94a3b8'}}>
                           <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"></path>
                           <path d="M3 6h18"></path>
@@ -3521,16 +3811,7 @@ const handleModalResend = async (table) => {
                         </svg>
                         <InfoText>{order.order_items?.length || 0} Items • ₹{(order.total_amount || 0).toFixed(2)}</InfoText>
                       </InfoRow>
-                      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', minHeight: '44px', marginTop: '4px' }}>
-                        {order.order_items?.slice(0, 3).map((item, i) => (
-                          <div key={i} style={{ fontSize: '10px', background: '#f8fafc', padding: '4px 10px', borderRadius: '8px', color: '#475569', border: '1px solid #f1f5f9', fontWeight: 600 }}>
-                            {item.quantity}x {item.menu_items?.name}
-                          </div>
-                        ))}
-                        {(order.order_items?.length > 3) && (
-                          <div style={{ fontSize: '10px', color: '#94a3b8', padding: '4px 4px', fontWeight: 600 }}>+{order.order_items.length - 3} more</div>
-                        )}
-                      </div>
+
                     </TableInfo>
                     
                     <TableActions onClick={(e) => e.stopPropagation()}>
@@ -3590,7 +3871,7 @@ const handleModalResend = async (table) => {
                     onClick={() => handleViewOrder(order.id)}
                     style={{ cursor: 'pointer' }}
                   >
-                    <div style={{ fontWeight: 700, fontSize: '15px' }}>#{order.id.slice(-8).toUpperCase()}</div>
+                    <div style={{ fontWeight: 700, fontSize: '12.5px', color: '#000000' }}>Order #{order.id.slice(0, 8)}</div>
                     <div>
                       <div style={{ fontWeight: 600 }}>{order.customer_name || 'Guest'}</div>
                       <div style={{ fontSize: '12px', color: '#64748b' }}>{order.customer_phone || '-'}</div>
@@ -3756,15 +4037,31 @@ const handleModalResend = async (table) => {
                             e.currentTarget.style.background = 'transparent';
                           }}
                         >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{color: '#ef4444'}}>
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{color: '#1e293b'}}>
                             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
                             <polyline points="14 2 14 8 20 8"></polyline>
                             <line x1="16" y1="13" x2="8" y2="13"></line>
                             <line x1="16" y1="17" x2="8" y2="17"></line>
                             <polyline points="10 9 9 9 8 9"></polyline>
                           </svg>
-                          <InfoText style={{fontWeight: 700, color: '#ef4444'}}>Order #{activeVisualTable.current_order.id.substr(0, 8)} →</InfoText>
-                        </InfoRow>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <InfoText style={{fontWeight: 700, color: '#000000', fontSize: '12.5px'}}>Order #{activeVisualTable.current_order.id.substr(0, 8)}</InfoText>
+                              <MoveLink onClick={async (e) => {
+                                e.stopPropagation();
+                                const full = await fetchFullOrder(activeVisualTable.current_order.id);
+                                if(full) {
+                                  setMovingOrder(full);
+                                  setSourceTable(activeVisualTable);
+                                }
+                                setActiveVisualTable(null);
+                              }}>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                  <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"></path>
+                                </svg>
+                                Change Table
+                              </MoveLink>
+                            </div>
+                          </InfoRow>
                       )}
                       
                       {activeVisualTable.notes && (activeVisualTable.status === 'reserved' || activeVisualTable.status === 'cleaning' || activeVisualTable.status === 'maintenance') && (
@@ -4016,14 +4313,29 @@ const handleModalResend = async (table) => {
                 </InfoRow>
                 {table.current_order && (
                   <InfoRow>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{color: '#ef4444'}}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{color: '#1e293b'}}>
                       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
                       <polyline points="14 2 14 8 20 8"></polyline>
                       <line x1="16" y1="13" x2="8" y2="13"></line>
                       <line x1="16" y1="17" x2="8" y2="17"></line>
                       <polyline points="10 9 9 9 8 9"></polyline>
                     </svg>
-                    <InfoText style={{fontWeight: 700}}>Order #{table.current_order.id.substr(0, 8)}</InfoText>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <InfoText style={{fontWeight: 700, color: '#000000', fontSize: '12.5px'}}>Order #{table.current_order.id.substr(0, 8)}</InfoText>
+                      <MoveLink onClick={async (e) => {
+                        e.stopPropagation();
+                        const full = await fetchFullOrder(table.current_order.id);
+                        if(full) {
+                          setMovingOrder(full);
+                          setSourceTable(table);
+                        }
+                      }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                           <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"></path>
+                        </svg>
+                        Change Table
+                      </MoveLink>
+                    </div>
                   </InfoRow>
                 )}
                 {table.status === 'available' && (
@@ -4198,7 +4510,7 @@ const handleModalResend = async (table) => {
                 <EditIcon onClick={(e) => { e.stopPropagation(); handleEditTable(table); }} title="Edit Table Settings">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="3"></circle>
-                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
                   </svg>
                 </EditIcon>
                 <div style={{ fontWeight: 700, fontSize: '15px' }}>
@@ -4213,7 +4525,26 @@ const handleModalResend = async (table) => {
               <div>{table.section}</div>
               <div>{table.capacity} seats</div>
               <div><StatusBadge status={table.status} minimal>{table.status}</StatusBadge></div>
-              <div>{table.current_order ? `ID: ${table.current_order.id.substr(0, 8)}` : '-'}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                {table.current_order ? (
+                  <>
+                    <span style={{ fontWeight: 700, color: '#000000', fontSize: '12.5px' }}>Order #{table.current_order.id.substr(0, 8)}</span>
+                    <MoveLink onClick={async (e) => {
+                      e.stopPropagation();
+                      const full = await fetchFullOrder(table.current_order.id);
+                      if(full) {
+                        setMovingOrder(full);
+                        setSourceTable(table);
+                      }
+                    }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"></path>
+                      </svg>
+                      Change Table
+                    </MoveLink>
+                  </>
+                ) : '-'}
+              </div>
               <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                 {/* Print Bill */}
                 {table.current_order && (
@@ -4747,6 +5078,19 @@ const handleModalResend = async (table) => {
           order={cancelOrderDialog} 
           onConfirm={handleCancelConfirm} 
           onCancel={() => setCancelOrderDialog(null)} 
+        />
+      )}
+
+      {movingOrder && (
+        <MoveOrderDialog
+          order={movingOrder}
+          sourceTable={sourceTable}
+          tables={tables}
+          onConfirm={handleMoveOrder}
+          onCancel={() => {
+            setMovingOrder(null);
+            setSourceTable(null);
+          }}
         />
       )}
 
