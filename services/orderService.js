@@ -94,7 +94,7 @@ export class OrderService {
       }
 
       if (created_at) orderPayload.created_at = created_at;
-      if (status === 'completed') orderPayload.date_ordered = created_at || new Date().toISOString();
+      orderPayload.date_ordered = created_at || new Date().toISOString();
 
       let finalOrderId = orderId;
 
@@ -165,33 +165,43 @@ export class OrderService {
         .eq('order_id', finalOrderId)
         .maybeSingle();
 
-      const invoiceData = {
-        restaurant_id: restaurantId,
-        order_id: finalOrderId,
-        prices_include_tax: prices_include_tax ?? false,
-        invoice_date: new Date(orderPayload.date_ordered || orderPayload.created_at || new Date()).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }),
-        date_ordered: orderPayload.date_ordered || orderPayload.created_at || new Date().toISOString(),
-        payment_method: payment_method,
-        paid_amount: status === 'completed' ? total_amount : 0,
-        status: status === 'completed' ? 'paid' : 'pending',
-        customer_name,
+const invoiceData = {
+  restaurant_id: restaurantId,
+  order_id: finalOrderId,
+  prices_include_tax: prices_include_tax ?? false,
+  invoice_date: new Date(
+    orderPayload.date_ordered || orderPayload.created_at || new Date()
+  ).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }),
+  date_ordered: orderPayload.date_ordered || orderPayload.created_at || new Date().toISOString(),
 
-        // Sync with Order Totals (Compliance Walk)
-        line_subtotal: calculationResult.subtotal_after_line_discounts || line_subtotal,
-        line_discount_total,
-        taxable_amount,
-        subtotal_ex_gst: taxable_amount,
-        discount_amount, // Face Value (Customer Payable Impact)
-        order_discount_total: discount_amount, // Face Value
-        order_discount_base: calculationResult.total_order_discount_base || 0,
-        order_discount_percent: order_discount_percent || 0,
-        total_tax,
-        total_inc_tax,
-        total_inc_gst: total_amount,
-        round_off_amount,
-        subtotal_ex_tax: calculationResult.subtotal_after_line_discounts || line_subtotal, // Strict Base
-        place_of_supply: 'intra_state'
-      };
+  payment_method: payment_method,
+
+  // ✅ THIS IS THE MAIN FIX (so billing page can read split from invoices)
+  mixed_payment_details: mixed_payment_details,
+
+  // ✅ Optional but recommended if your invoices table has this column
+  original_payment_method: payment_method,
+
+  paid_amount: status === 'completed' ? total_amount : 0,
+  status: status === 'completed' ? 'paid' : 'pending',
+  customer_name,
+
+  // Sync with Order Totals (Compliance Walk)
+  line_subtotal: calculationResult.subtotal_after_line_discounts || line_subtotal,
+  line_discount_total,
+  taxable_amount,
+  subtotal_ex_gst: taxable_amount,
+  discount_amount,
+  order_discount_total: discount_amount,
+  order_discount_base: calculationResult.total_order_discount_base || 0,
+  order_discount_percent: order_discount_percent || 0,
+  total_tax,
+  total_inc_tax,
+  total_inc_gst: total_amount,
+  round_off_amount,
+  subtotal_ex_tax: calculationResult.subtotal_after_line_discounts || line_subtotal,
+  place_of_supply: 'intra_state'
+};
 
       if (!existingInvoice) {
         // Use bill_no from Order (likely set by DB Trigger)
