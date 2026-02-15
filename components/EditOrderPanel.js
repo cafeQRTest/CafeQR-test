@@ -134,7 +134,7 @@ export default function EditOrderPanel({ order, onClose, onSave, tablesCount = 0
       const { data: menu, error } = await s
         .from('menu_items')
         .select(`
-          id, name, price, is_packaged_good, has_variants,
+          id, name, price, category, veg, status, image_url, description, is_packaged_good, has_variants,
           uom:unit_of_measures(short_code, precision),
           menu_item_variants (
             variant_templates (
@@ -143,7 +143,8 @@ export default function EditOrderPanel({ order, onClose, onSave, tablesCount = 0
             )
           )
         `)
-        .eq('restaurant_id', order.restaurant_id);
+        .eq('restaurant_id', order.restaurant_id)
+        .order('name');
 
       if (error) {
         console.error('menu_items fetch error', error);
@@ -193,15 +194,54 @@ export default function EditOrderPanel({ order, onClose, onSave, tablesCount = 0
          }
       }
 
-      // 3. Attach variants to items
+      // 3. Fetch Upsells (Add-ons)
+      const { data: upsellsData } = await s
+        .from('menu_items_with_upsells')
+        .select('menu_item_id, upsells')
+        .in('menu_item_id', (menu || []).map(i => i.id));
+      
+      const upsellMap = new Map();
+      (upsellsData || []).forEach(row => {
+          upsellMap.set(row.menu_item_id, row.upsells);
+      });
+
+      // 4. Fetch Restaurant Profile for Tax Settings
+      const { data: profile } = await s
+        .from('restaurant_profiles')
+        .select('gst_enabled, prices_include_tax')
+        .eq('restaurant_id', order.restaurant_id)
+        .maybeSingle();
+
+      // 5. Attach variants and addons to items
       const finalItems = (menu || []).map(item => {
           const variants = variantDataMap.get(item.id) || [];
           const templateName = item.menu_item_variants?.[0]?.variant_templates?.name || 'Options';
           
+          const rawUpsells = upsellMap.get(item.id) || [];
+          let addonGroups = [];
+          if (rawUpsells.length > 0) {
+              addonGroups = [{
+                id: 'upsells-group',
+                name: 'Suggested Extras',
+                options: rawUpsells.map(u => ({
+                   id: u.id,
+                   name: u.name,
+                   price: u.price,
+                   is_active: u.status === 'available',
+                   veg: u.veg,
+                   image_url: u.image_url
+                }))
+              }];
+          }
+
           return {
             ...item,
             variants: variants.sort((a, b) => a.display_order - b.display_order),
-            variant_template_name: item.has_variants ? templateName : null
+            variant_template_name: item.has_variants ? templateName : null,
+            addon_groups: addonGroups,
+            has_addons: addonGroups.length > 0,
+            restaurant_gst_enabled: !!profile?.gst_enabled,
+            restaurant_prices_include_tax: !!profile?.prices_include_tax
           };
       });
 
@@ -290,7 +330,10 @@ export default function EditOrderPanel({ order, onClose, onSave, tablesCount = 0
   };
 
   const handleItemClick = (item) => {
-      if (item.has_variants) {
+      const hasV = item.has_variants && (item.variants?.length > 0);
+      const hasA = item.has_addons;
+
+      if (hasV || hasA) {
           setSelectedItemForVariant(item);
           setShowVariantSelector(true);
       } else {
@@ -766,14 +809,15 @@ export default function EditOrderPanel({ order, onClose, onSave, tablesCount = 0
 
       {showVariantSelector && selectedItemForVariant && (
         <VariantSelector
+            visible={showVariantSelector}
             item={selectedItemForVariant}
             onSelect={handleVariantSelect}
             onClose={() => {
                 setShowVariantSelector(false);
                 setSelectedItemForVariant(null);
             }}
-            gstEnabled={true} // Defaults for admin
-            pricesIncludeTax={false} // Defaults for admin
+            gstEnabled={selectedItemForVariant.restaurant_gst_enabled}
+            pricesIncludeTax={selectedItemForVariant.restaurant_prices_include_tax}
             showImage={false}
             zIndex={1300}
         />

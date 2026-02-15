@@ -4030,20 +4030,21 @@ const isVariantItem = !!item.has_variants && (item.variants?.length || 0) > 0;
       )}
 
 {/* Variant Selector Modal */}
-{showVariantSelector && selectedItem && (
-  <VariantSelector
-    item={selectedItem}
-    onSelect={handleVariantSelect}
-    onClose={() => {
-      setShowVariantSelector(false);
-      setSelectedItem(null);
-    }}
-    gstEnabled={profileTax.gst_enabled}
-    pricesIncludeTax={profileTax.prices_include_tax}
-    onCartOpen={() => setDrawerOpen(true)}
-    showImage={enableMenuImages}
-  />
-)}{/* Clear Cart Confirmation Modal */}
+<VariantSelector
+  visible={showVariantSelector}
+  item={selectedItem}
+  onSelect={handleVariantSelect}
+  onClose={() => {
+    setShowVariantSelector(false);
+    setSelectedItem(null);
+  }}
+  gstEnabled={profileTax.gst_enabled}
+  pricesIncludeTax={profileTax.prices_include_tax}
+  onCartOpen={() => setDrawerOpen(true)}
+  showImage={enableMenuImages}
+  theme={THEME}
+/>
+{/* Clear Cart Confirmation Modal */}
 {showClearCartConfirm && (
   <div 
     style={{

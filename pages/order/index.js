@@ -1214,6 +1214,7 @@ export default function OrderPage() {
 
       {showVariantSelector && selectedItem && (
         <VariantSelector
+          visible={showVariantSelector}
           item={selectedItem}
           onSelect={handleVariantAdd}
           onClose={() => setShowVariantSelector(false)}
