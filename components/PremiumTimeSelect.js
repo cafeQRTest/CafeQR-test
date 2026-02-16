@@ -24,6 +24,7 @@ export default function PremiumTimeSelect({ value, onChange, disabled, themeColo
   useEffect(() => {
     if (isOpen && wrapperRef.current) {
       setTimeout(() => {
+        if (!wrapperRef.current) return;
         const hEl = wrapperRef.current.querySelector(`.hour-${hh}`);
         const mEl = wrapperRef.current.querySelector(`.minute-${mm}`);
         if (hEl) hEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -191,8 +192,8 @@ export default function PremiumTimeSelect({ value, onChange, disabled, themeColo
         .dropdown-panel {
           position: absolute;
           top: calc(100% + 8px);
-          left: 0;
           right: 0;
+          left: auto;
           background: #ffffff;
           border-radius: 16px;
           border: 1px solid #f1f5f9;
@@ -200,10 +201,31 @@ export default function PremiumTimeSelect({ value, onChange, disabled, themeColo
             0 10px 15px -3px rgba(0, 0, 0, 0.1),
             0 4px 6px -2px rgba(0, 0, 0, 0.05),
             0 0 0 1px rgba(0,0,0,0.02);
-          z-index: 100;
+          z-index: 1000;
           overflow: hidden;
           animation: slideDown 0.2s cubic-bezier(0.16, 1, 0.3, 1);
           min-width: 180px;
+          width: max-content;
+        }
+
+        @media (max-width: 480px) {
+          .dropdown-panel {
+            position: fixed;
+            top: auto;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            width: 100%;
+            min-width: unset;
+            border-radius: 16px 16px 0 0;
+            animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
+          }
+        }
+
+        @keyframes slideUp {
+          from { opacity: 0; transform: translateY(100%); }
+          to { opacity: 1; transform: translateY(0); }
         }
 
         @keyframes slideDown {

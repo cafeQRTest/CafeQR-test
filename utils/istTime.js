@@ -31,3 +31,17 @@ export function istSpanFromDatesUtcISO(startDate, endDate) {
   const toYmd   = istYmdFromDate(endDate);
   return istSpanUtcISO(fromYmd, toYmd);
 }
+
+// Convert a Date + "HH:mm" time string (IST) into a UTC ISO string
+export function istDateTimeToUtcISO(date, timeStr) {
+  const ymd = istYmdFromDate(date);
+  const t = timeStr || '00:00';
+  return new Date(`${ymd}T${t}:00${IST_OFFSET}`).toISOString();
+}
+
+// Build a UTC span from two Date objects + time strings (IST)
+export function istSpanFromDateTimesUtcISO(startDate, startTime, endDate, endTime) {
+  const startUtc = istDateTimeToUtcISO(startDate, startTime || '00:00');
+  const endUtc   = istDateTimeToUtcISO(endDate,   endTime   || '23:59');
+  return { startUtc, endUtc };
+}

@@ -5,9 +5,10 @@ import { useRequireAuth } from '../../lib/useRequireAuth'
 import { useRestaurant } from '../../context/RestaurantContext'
 import { getSupabase } from '../../services/supabase'
 import { istSpanUtcISO } from '../../utils/istTime';
+import { istSpanFromDateTimesUtcISO } from '../../utils/istTime';
 import Button from '../../components/ui/Button'
 import Card from '../../components/ui/Card'
-import DateRangePicker from '../../components/ui/DateRangePicker'
+import DateTimeRangePicker from '../../components/ui/DateTimeRangePicker'
 import { FaMoneyBillWave, FaHandHoldingUsd, FaExclamationTriangle, FaUserFriends, FaFileInvoiceDollar, FaExchangeAlt, FaClipboardList, FaTimes } from 'react-icons/fa'
 
 export default function CreditSalesReportPage() {
@@ -20,8 +21,12 @@ export default function CreditSalesReportPage() {
   const [reportData, setReportData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0])
-  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0])
+  const [range, setRange] = useState({
+    start: new Date(new Date().setHours(0, 0, 0, 0)),
+    end: new Date(),
+    startTime: '00:00',
+    endTime: '23:59'
+  })
   const [expandedOrderId, setExpandedOrderId] = useState(null)
   const [viewMode, setViewMode] = useState('orders'); // 'orders' | 'customers'
   const [ordersPage, setOrdersPage] = useState(1);
@@ -132,13 +137,13 @@ const customerTiles = useMemo(() => {
   useEffect(() => {
     if (checking || restLoading || !restaurantId) return
     loadReport()
-  }, [startDate, endDate, restaurantId, checking, restLoading])
+  }, [range, restaurantId, checking, restLoading])
 
   const loadReport = async () => {
   setLoading(true);
   setError('');
   try {
-    const { startUtc, endUtc } = istSpanUtcISO(startDate, endDate);
+    const { startUtc, endUtc } = istSpanFromDateTimesUtcISO(range.start, range.startTime || '00:00', range.end, range.endTime || '23:59');
     const { data: orders, error: ordersErr } = await supabase
       .from('orders')
       .select('id, credit_customer_id, customer_name, customer_phone, total_amount, total_tax, total_inc_tax, prices_include_tax, created_at, date_ordered, status, discount_amount, round_off_amount')
@@ -210,16 +215,13 @@ const customerTiles = useMemo(() => {
         <h1 className="cr-title">Credit Sales Report</h1>
         <p className="subtitle">Track credit orders and customer balances</p>
       </div>
-      <div className="time-filters" style={{ marginTop: '12px', width: '100%' }}>
-        <DateRangePicker 
-          start={new Date(startDate)} 
-          end={new Date(endDate)} 
-          onChange={({start, end}) => {
-            setStartDate(start.toISOString().split('T')[0]);
-            setEndDate(end.toISOString().split('T')[0]);
-          }} 
-        />
-      </div>
+      <DateTimeRangePicker
+        start={range.start}
+        end={range.end}
+        startTime={range.startTime}
+        endTime={range.endTime}
+        onChange={setRange}
+      />
     </div>
 
     {error && <div className="cr-error">{error}</div>}

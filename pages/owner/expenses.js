@@ -5,10 +5,10 @@ import { useRequireAuth } from '../../lib/useRequireAuth';
 import { useRestaurant } from '../../context/RestaurantContext';
 import Card from '../../components/ui/Card';
 import Table from '../../components/ui/Table';
-import DateRangePicker from '../../components/ui/DateRangePicker';
+import DateTimeRangePicker from '../../components/ui/DateTimeRangePicker';
 import Button from '../../components/ui/Button';
 import NiceSelect from '../../components/NiceSelect';
-import { istSpanFromDatesUtcISO } from '../../utils/istTime';
+import { istSpanFromDatesUtcISO, istSpanFromDateTimesUtcISO } from '../../utils/istTime';
 import { exportExpensesToCSV } from '../../utils/exportExpenses';
 
 
@@ -28,7 +28,9 @@ export default function ExpensesPage() {
 
   const [range, setRange] = useState({
     start: new Date(new Date().setHours(0, 0, 0, 0)),
-    end: new Date()
+    end: new Date(),
+    startTime: '00:00',
+    endTime: '23:59'
   });
 
 
@@ -214,9 +216,11 @@ const [paymentProfit, setPaymentProfit] = useState([]);
       setExpenses(expRows || []);
 
       // 3) Sales summary (same pattern as Sales page)
-      const { startUtc, endUtc } = istSpanFromDatesUtcISO(
+      const { startUtc, endUtc } = istSpanFromDateTimesUtcISO(
         range.start,
-        range.end
+        range.startTime || '00:00',
+        range.end,
+        range.endTime || '23:59'
       );
 
       const { data: orders, error: ordersErr } = await supabase
@@ -489,38 +493,41 @@ function openEditExpense(expense) {
   return (
     <div className="expenses-page page">
       <div className="expenses-header-row">
-        <div>
-          <h1 className="expenses-title">Expenses &amp; Profit</h1>
-          <p className="expenses-sub">
-            Track daily spend and see clear profit / loss for the selected dates.
-          </p>
+        <div className="expenses-header-top">
+          <div>
+            <h1 className="expenses-title">Expenses &amp; Profit</h1>
+            <p className="expenses-sub">
+              Track daily spend and see clear profit / loss for the selected dates.
+            </p>
+          </div>
+          <div className="expenses-header-btns">
+            <Button 
+              onClick={openAddExpense}
+              style={{ padding: '7px 16px', fontSize: '0.85rem', background: '#f97316', borderColor: '#f97316', color: 'white' }}
+            >
+              + Expense
+            </Button>
+            <Button
+              onClick={handleExportCSV}
+              style={{ background: '#fff7ed', border: '1px solid #fed7aa', color: '#ea580c', padding: '7px 14px', fontSize: '0.85rem' }}
+            >
+              CSV
+            </Button>
+            <Button
+              onClick={() => setShowCategoryManager(true)}
+              style={{ background: 'white', border: '1px solid #d1d5db', color: '#374151', padding: '7px 14px', fontSize: '0.85rem' }}
+            >
+              Categories
+            </Button>
+          </div>
         </div>
-        <div className="expenses-header-actions">
-          <DateRangePicker
-            start={range.start}
-            end={range.end}
-            onChange={setRange}
-          />
-          <Button 
-            onClick={openAddExpense}
-            style={{ padding: '6px 16px', fontSize: '0.9rem', background: '#f97316', borderColor: '#f97316', color: 'white' }}
-          >
-            + Expense
-          </Button>
-          <Button
-            onClick={handleExportCSV}
-            style={{ background: '#fff7ed', border: '1px solid #fed7aa', color: '#ea580c', padding: '6px 12px', fontSize: '0.9rem' }}
-          >
-            CSV
-          </Button>
-          <Button
-            onClick={() => setShowCategoryManager(true)}
-            style={{ background: 'white', border: '1px solid #d1d5db', color: '#374151', padding: '6px 12px', fontSize: '0.9rem' }}
-          >
-            Categories
-          </Button>
-
-        </div>
+        <DateTimeRangePicker
+          start={range.start}
+          end={range.end}
+          startTime={range.startTime}
+          endTime={range.endTime}
+          onChange={setRange}
+        />
       </div>
 
       {error && (
@@ -996,6 +1003,14 @@ function openEditExpense(expense) {
           margin-bottom: 24px;
         }
 
+        .expenses-header-top {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 12px;
+          flex-wrap: wrap;
+        }
+
         .expenses-title {
           margin: 0;
           font-size: 1.5rem;
@@ -1006,25 +1021,30 @@ function openEditExpense(expense) {
 
         .expenses-sub {
           margin: 4px 0 0;
-          font-size: 0.9rem;
+          font-size: 0.85rem;
           color: #6b7280;
         }
 
-        .expenses-header-actions {
+        .expenses-header-btns {
           display: flex;
-          flex-wrap: wrap;
-          gap: 12px;
-          margin-top: 6px;
+          gap: 6px;
+          align-items: center;
+          flex-shrink: 0;
         }
 
-        @media (min-width: 768px) {
-          .expenses-header-row {
-            flex-direction: row;
-            justify-content: space-between;
-            align-items: center;
+        @media (max-width: 600px) {
+          .expenses-header-top {
+            flex-direction: column;
+            align-items: stretch;
           }
-          .expenses-header-actions {
-            margin-top: 0;
+          .expenses-header-btns {
+            justify-content: flex-start;
+          }
+          .expenses-title {
+            font-size: 1.2rem;
+          }
+          .expenses-sub {
+            font-size: 0.8rem;
           }
         }
 
