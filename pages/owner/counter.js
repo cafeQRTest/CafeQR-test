@@ -488,19 +488,6 @@ function PaymentConfirmDialog({
                   disabled={disabled}
                 />
               </div>
-              <div>
-                <label style={{ display: 'block', marginBottom: 4, fontSize: '12px', fontWeight: 600, color: '#475569' }}>
-                  Online Method
-                </label>
-                <NiceSelect
-                  value={onlineMethod}
-                  onChange={setOnlineMethod}
-                  options={[
-                    { value: 'upi', label: 'UPI' },
-                    { value: 'card', label: 'Card' }
-                  ]}
-                />
-              </div>
               <div style={{
                 background: `linear-gradient(135deg, ${BRAND.bgSoft} 0%, #ffffff 100%)`,
                 padding: 10,
@@ -513,7 +500,7 @@ function PaymentConfirmDialog({
                 Total ₹{(settledTotal || 0).toFixed(2)} → 
                 {loyaltyRedeemAmount > 0 && ` ₹${Number(loyaltyRedeemAmount).toFixed(2)} (Pts) +`}
                 ₹{cashAmount || 0} (Cash) + 
-                ₹{onlineAmount || 0} ({onlineMethod?.toUpperCase() || ''})
+                ₹{onlineAmount || 0} (Online)
               </div>
             </div>
           </div>

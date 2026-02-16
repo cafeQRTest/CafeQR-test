@@ -320,6 +320,7 @@ const deleteIdsInChunks = useCallback(async (ids, chunkSize = 200) => {
   });
 
   const [error, setError] = useState("");
+  const [sidebarCounts, setSidebarCounts] = useState({ total: 0, byCategory: {} });
   const [filterText, setFilterText] = useState("");
   const [filterCategory, setFilterCategory] = useState("all");
   const [filterVeg, setFilterVeg] = useState(false);
@@ -462,6 +463,12 @@ const loadMenuItems = useCallback(async () => {
       .order("name", { ascending: true });
 
     if (itemData) {
+      const counts = {};
+      itemData.forEach(i => {
+        const c = i.category || 'Uncategorized';
+        counts[c] = (counts[c] || 0) + 1;
+      });
+      setSidebarCounts({ total: itemData.length, byCategory: counts });
       setItems(itemData);
       localStorage.setItem(`menu_items_${restaurantId}`, JSON.stringify(itemData));
     }
@@ -585,6 +592,14 @@ const loadMenuItems = useCallback(async () => {
 
         setCategories(newCats);
         
+        // Calculate sidebar counts from full menu fetch
+        const counts = {};
+        newItems.forEach(i => {
+          const c = i.category || 'Uncategorized';
+          counts[c] = (counts[c] || 0) + 1;
+        });
+        setSidebarCounts({ total: newItems.length, byCategory: counts });
+        
         // Cache to localStorage
         localStorage.setItem(`categories_${restaurantId}`, JSON.stringify(newCats));
 
@@ -683,14 +698,8 @@ useEffect(() => {
   );
 
   const handleSaved = useCallback((updated) => {
-    setItems((prev) => {
-      const idx = prev.findIndex((i) => i.id === updated.id);
-      if (idx === -1) return [updated, ...prev];
-      const copy = [...prev];
-      copy[idx] = { ...copy[idx], ...updated };
-      return copy;
-    });
-  }, []);
+    refreshCategories(); // Refresh both items and counts
+  }, [refreshCategories]);
 
   // Compute category counts for sidebar
   const categoryCounts = useMemo(() => {
@@ -718,27 +727,27 @@ useEffect(() => {
         <MenuSidebar>
           <div className="sidebar-header">
             <h3>Categories</h3>
-            <span className="sidebar-count">{categories.length}</span>
+            <span className="sidebar-count">{sidebarCounts.total}</span>
           </div>
           
 
           {/* Category List */}
           <div className="sidebar-categories">
             <button
-              className={`sidebar-category-item ${filterCategory === 'all' ? 'sidebar-category-active' : ''}`}
+              className={`sidebar-category-item ${filterCategory === 'all' ? 'active' : ''}`}
               onClick={() => setFilterCategory('all')}
             >
               <span className="category-name">All Categories</span>
-              <span className="category-count">{items.length}</span>
+              <span className="category-count">{sidebarCounts.total}</span>
             </button>
             {categories.map((cat) => (
               <button
-                key={cat.name}
-                className={`sidebar-category-item ${filterCategory === cat.name ? 'sidebar-category-active' : ''}`}
+                key={cat.id || cat.name}
+                className={`sidebar-category-item ${filterCategory === cat.name ? 'active' : ''}`}
                 onClick={() => setFilterCategory(cat.name)}
               >
                 <span className="category-name">{cat.name}</span>
-                <span className="category-count">{categoryCounts[cat.name] || 0}</span>
+                <span className="category-count">{sidebarCounts.byCategory[cat.name] || 0}</span>
               </button>
             ))}
           </div>
