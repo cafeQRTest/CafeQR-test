@@ -84,6 +84,7 @@ export default function DeliveryCheckout() {
             if (last?.houseNo) setHouseNo(last.houseNo);
             if (last?.street) setStreet(last.street);
             if (last?.mapLocation) setMapLocation(last.mapLocation);
+            if (last?.note) setNote(last.note); // ✅ move it here
           } catch {}
 
           // If you already store detected location somewhere, reuse it
@@ -206,6 +207,7 @@ export default function DeliveryCheckout() {
             houseNo: houseNo.trim(),
             street: street.trim(),
             mapLocation: mapLocation.trim(),
+            note: note.trim(),
           })
         );
       } catch {}
@@ -234,10 +236,10 @@ const orderData = {
         tax: totals.taxAmount,
         totalamount: totals.totalInc,
 
-        specialinstructions: buildDeliveryBlock(),
+        special_instructions: buildDeliveryBlock(),
 
-        paymentmethod: "none",
-        paymentstatus: "pending",
+        payment_method: "none",
+        payment_status: "pending",
       };
 
       const res = await fetch("/api/orders/create", {
