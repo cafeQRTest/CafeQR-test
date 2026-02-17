@@ -3,6 +3,8 @@ import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 
+import { istYmdFromDate } from './istTime';
+
 function toCsvValue(v) {
   if (v == null) return '';
   const s = String(v);
@@ -24,8 +26,8 @@ function prettyCsvMethod(m) {
 }
 
 function buildExpensesCsv({ range, summary, expenses, paymentProfit }) {
-  const startStr = range.start.toISOString().slice(0, 10);
-  const endStr = range.end.toISOString().slice(0, 10);
+  const startStr = istYmdFromDate(range.start);
+  const endStr = istYmdFromDate(range.end);
 
   const header = ['Date', 'Category', 'Description', 'Payment Method', 'Amount'];
   const rows = [header];
