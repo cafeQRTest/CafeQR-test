@@ -9,7 +9,7 @@ import DateTimeRangePicker from '../../components/ui/DateTimeRangePicker';
 import Button from '../../components/ui/Button';
 import NiceSelect from '../../components/NiceSelect';
 import PremiumTimeSelect from '../../components/PremiumTimeSelect';
-import { istSpanFromDatesUtcISO, istSpanFromDateTimesUtcISO, istYmdFromDate } from '../../utils/istTime';
+import { istSpanFromDatesUtcISO, istSpanFromDateTimesUtcISO, istYmdFromDate, istHmFromDate } from '../../utils/istTime';
 import { exportExpensesToCSV } from '../../utils/exportExpenses';
 
 
@@ -122,7 +122,7 @@ export default function ExpensesPage() {
     istYmdFromDate(new Date())
   );
   const [formTime, setFormTime] = useState(
-    new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' })
+    istHmFromDate(new Date())
   );
   const [formCategoryId, setFormCategoryId] = useState('');
   const [formNewCategory, setFormNewCategory] = useState('');
@@ -406,7 +406,7 @@ async function handleSubmitExpense(e) {
     const payload = {
       restaurant_id: restaurantId,
       category_id: categoryId,
-      expense_date: `${formDate}T${formTime}:00`,
+      expense_date: `${formDate}T${formTime}:00+05:30`,
       amount: amt,
       description: formDesc || null,
       payment_method: formMethod || null
@@ -433,8 +433,9 @@ async function handleSubmitExpense(e) {
     setFormMethod('');
     setFormNewCategory('');
     setFormCategoryId('');
-    setFormDate(istYmdFromDate(new Date()));
-    setFormTime(new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' }));
+    const now = new Date();
+    setFormDate(istYmdFromDate(now));
+    setFormTime(istHmFromDate(now));
     setShowForm(false);
 
     await loadData();
@@ -447,8 +448,9 @@ async function handleSubmitExpense(e) {
 
 function openAddExpense() {
   setEditingExpense(null);
-  setFormDate(istYmdFromDate(new Date()));
-  setFormTime(new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' }));
+  const now = new Date();
+  setFormDate(istYmdFromDate(now));
+  setFormTime(istHmFromDate(now));
   setFormCategoryId('');
   setFormNewCategory('');
   setFormAmount('');
@@ -460,11 +462,8 @@ function openAddExpense() {
 function openEditExpense(expense) {
   setEditingExpense(expense);
   const d = new Date(expense.expense_date);
-  setFormDate(expense.expense_date.split('T')[0]);
-  setFormTime(expense.expense_date.includes('T') 
-    ? expense.expense_date.split('T')[1].slice(0, 5) 
-    : '12:00'
-  );
+  setFormDate(istYmdFromDate(d));
+  setFormTime(istHmFromDate(d));
   setFormCategoryId(expense.category_id || '');
   setFormNewCategory(''); // not used when editing
   setFormAmount(String(expense.amount || ''));

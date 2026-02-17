@@ -45,3 +45,22 @@ export function istSpanFromDateTimesUtcISO(startDate, startTime, endDate, endTim
   const endUtc   = istDateTimeToUtcISO(endDate,   endTime   || '23:59');
   return { startUtc, endUtc };
 }
+
+export function istHmFromDate(d) {
+  if (!d) return '';
+  const date = typeof d === 'string' ? new Date(d) : d;
+  return new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).format(date);
+}
+
+export function istDateTimeStr(d) {
+  if (!d) return '';
+  const date = typeof d === 'string' ? new Date(d) : d;
+  const ymd = istYmdFromDate(date);
+  const hm = istHmFromDate(date);
+  return `${ymd} ${hm}`;
+}
