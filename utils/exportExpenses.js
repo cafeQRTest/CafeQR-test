@@ -33,11 +33,25 @@ function buildExpensesCsv({ range, summary, expenses, paymentProfit }) {
   const rows = [header];
 
   (expenses || []).forEach((e) => {
+    const d = new Date(e.expense_date);
+    const dateFormatted = d.toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      timeZone: 'Asia/Kolkata',
+    });
+    const timeFormatted = d.toLocaleTimeString('en-IN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+      timeZone: 'Asia/Kolkata',
+    });
+
     rows.push([
-      e.expense_date,
+      `${dateFormatted} ${timeFormatted}`,
       e.category?.name || 'Uncategorized',
       e.description || '',
-      e.payment_method || '',
+      prettyCsvMethod(e.payment_method),
       Number(e.amount || 0).toFixed(2),
     ]);
   });
@@ -83,9 +97,9 @@ export async function exportExpensesToCSV({
   paymentProfit,
 }) {
   const csv = buildExpensesCsv({ range, summary, expenses, paymentProfit });
-  const fileName = `EXPENSES_${range.start
-    .toISOString()
-    .slice(0, 10)}_${range.end.toISOString().slice(0, 10)}.csv`;
+  const startYmd = istYmdFromDate(range.start);
+  const endYmd = istYmdFromDate(range.end);
+  const fileName = `EXPENSES_${startYmd}_${endYmd}.csv`;
 
   const isNative =
     Capacitor.isNativePlatform && Capacitor.isNativePlatform();
