@@ -17,7 +17,6 @@ import PremiumTimeSelect from '../../components/PremiumTimeSelect';
 import { round2, roundP, normalizeQty, formatQty2, formatQtyP } from '../../lib/qty';
 import { markPrinted } from '../../lib/usePrintService';
 import { calculateOrderTotals } from '../../utils/orderCalculations';
-import OrderDetailsModal from '../../components/OrderDetailsModal';
 
 /**
  * PaymentConfirmDialog
@@ -779,102 +778,6 @@ import { useSubscription } from '../../context/SubscriptionContext';
 // -------------------------------
 // Counter Sale Page
 // -------------------------------
-const TableSelectionModal = ({ visible, tables, onSelect, onViewOrder, onClose }) => {
-  if (!visible) return null;
-
-  return (
-    <Modal onClick={onClose}>
-      <ModalContent onClick={e => e.stopPropagation()} style={{ maxWidth: '600px' }}>
-        <ModalHeader>
-          <ModalTitle>Select Table</ModalTitle>
-          <ModalSubtitle>Green = Available • Red = Occupied</ModalSubtitle>
-        </ModalHeader>
-        
-        <div style={{ 
-          display: 'grid', 
-          gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', 
-          gap: '12px',
-          maxHeight: '60vh',
-          overflowY: 'auto',
-          padding: '4px'
-        }}>
-          {tables.map((table) => {
-             const isOccupied = table.status === 'occupied';
-             const label = table.identifier;
-             
-             return (
-               <button
-                 key={table.id}
-                 onClick={() => {
-                    if (isOccupied) {
-                       onViewOrder(table.current_order_id);
-                    } else {
-                       onSelect(table.identifier);
-                    }
-                 }}
-                 style={{
-                   padding: '16px',
-                   borderRadius: '12px',
-                   border: isOccupied ? '2px solid #fee2e2' : '1px solid #e2e8f0',
-                   background: isOccupied ? '#fef2f2' : 'white',
-                   color: isOccupied ? '#b91c1c' : '#1e293b',
-                   fontWeight: 700,
-                   fontSize: '16px',
-                   cursor: 'pointer',
-                   transition: 'all 0.2s',
-                   display: 'flex',
-                   flexDirection: 'column',
-                   alignItems: 'center',
-                   gap: '8px',
-                   boxShadow: isOccupied ? 'none' : '0 2px 4px rgba(0,0,0,0.05)',
-                   position: 'relative'
-                 }}
-                 onMouseEnter={e => {
-                    if (!isOccupied) {
-                       e.currentTarget.style.borderColor = '#ea580c';
-                       e.currentTarget.style.background = '#fff7ed';
-                       e.currentTarget.style.transform = 'translateY(-2px)';
-                       e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(234, 88, 12, 0.1)';
-                    }
-                 }}
-                 onMouseLeave={e => {
-                    if (!isOccupied) {
-                       e.currentTarget.style.borderColor = '#e2e8f0';
-                       e.currentTarget.style.background = 'white';
-                       e.currentTarget.style.transform = 'none';
-                       e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.05)';
-                    }
-                 }}
-               >
-               <span style={{ fontSize: '24px', marginBottom: '4px' }}>{isOccupied ? '' : ''}</span> 
-               <span>{label.match(/^\d+$/) ? `Table ${label}` : label}</span>
-               {isOccupied && <span style={{ fontSize: '10px', color: '#ef4444', fontWeight: 600 }}>Occupied</span>}
-             </button>
-             );
-          })}
-        </div>
-
-        <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'flex-end' }}>
-          <button 
-             onClick={onClose}
-             style={{
-               padding: '10px 20px',
-               borderRadius: '8px',
-               border: '1px solid #cbd5e1',
-               background: 'white',
-               color: '#64748b',
-               fontWeight: 600,
-               cursor: 'pointer'
-             }}
-          >
-            Cancel
-          </button>
-        </div>
-      </ModalContent>
-    </Modal>
-  );
-};
-
 export default function CounterSale() {
   const supabase = getSupabase();
   const { checking } = useRequireAuth(supabase);
@@ -1016,31 +919,6 @@ const getDraftOrQtyNumber = (cartId, fallbackQty, precision = 2) => {
   const [loyaltyRedeemAmount, setLoyaltyRedeemAmount] = useState(0);
   const [pointsToRedeem, setPointsToRedeem] = useState(0);
   const [showLoyaltyRedeemModal, setShowLoyaltyRedeemModal] = useState(false);
-  
-  // Table Selection Modal
-  const [showTableModal, setShowTableModal] = useState(false);
-  const [viewingOrder, setViewingOrder] = useState(null);
-
-  const handleViewOrder = async (orderId) => {
-    if (!orderId) return;
-    try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('orders')
-        .select('*')
-        .eq('id', orderId)
-        .single();
-      
-      if (error) throw error;
-      setViewingOrder(data);
-      setShowTableModal(false); // Close table selection
-    } catch (err) {
-      console.error('Error fetching order:', err);
-      // alert('Failed to load order details');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // Watch selected customer for Loyalty
   useEffect(() => {
@@ -1408,20 +1286,8 @@ setRoundOffConfig({
 setCreditFeatureEnabled(!!profile?.features_credit_enabled);
 
 // Set tables from profile count
-      // Fetch actual tables from database
-      const { data: tablesData } = await supabase
-        .from('tables')
-        .select('*')
-        .eq('restaurant_id', restaurantId)
-        .eq('is_active', true)
-        .order('identifier'); // Sort by identifier
-      
-      if (tablesData) {
-        setTables(tablesData); // Store full table objects (id, identifier, status, current_order_id)
-      } else {
-        // Fallback if fetch fails or empty
-        setTables([]); 
-      }
+const tCount = profile?.tables_count || 0;
+setTables(Array.from({ length: tCount }, (_, i) => i + 1));
 setSendToKitchenEnabled(profile?.features_counter_send_to_kitchen_enabled !== false);
 setCustomerFeatureEnabled(!!profile?.featurescustomersenabled);
 setEnableMenuImages(!!profile?.features_menu_images_enabled);
@@ -2375,98 +2241,18 @@ const orderForPrint = {
             {/* Table/Type Selection */}
             <div>
               <SectionLabel>Table / Order Type</SectionLabel>
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
-                 {/* Takeaway Button */}
-                 <button
-                    onClick={() => setOrderSelect('parcel')}
-                    style={{
-                      flex: 1,
-                      padding: '10px',
-                      borderRadius: '10px',
-                      border: orderSelect === 'parcel' ? `2px solid ${THEME.main}` : '1px solid #e2e8f0',
-                      background: orderSelect === 'parcel' ? `${THEME.main}10` : '#fff',
-                      color: orderSelect === 'parcel' ? THEME.main : '#64748b',
-                      fontWeight: 700,
-                      fontSize: '13px',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s'
-                    }}
-                 >
-                   Takeaway
-                 </button>
-
-                 {/* Tables / Dine In Button */}
-                 <button
-                    onClick={() => {
-                       // Open Table Selection Modal
-                       if (!orderSelect?.startsWith('table:')) {
-                           setShowTableModal(true);
-                       } else {
-                           // If already selected, maybe allow changing it?
-                           setShowTableModal(true);
-                       }
-                    }}
-                    style={{
-                      flex: 1,
-                      padding: '10px',
-                      borderRadius: '10px',
-                      border: (orderSelect?.startsWith('table:')) ? `2px solid ${THEME.main}` : '1px solid #e2e8f0',
-                      background: (orderSelect?.startsWith('table:')) ? `${THEME.main}10` : '#fff',
-                      color: (orderSelect?.startsWith('table:')) ? THEME.main : '#64748b',
-                      fontWeight: 700,
-                      fontSize: '13px',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s'
-                    }}
-                 >
-                   Dine In {orderSelect?.startsWith('table:') ? `(${orderSelect.split(':')[1]})` : ''}
-                 </button>
-
-                 {/* Delivery Button */}
-                 <button
-                    onClick={() => setOrderSelect('delivery')}
-                    style={{
-                      flex: 1,
-                      padding: '10px',
-                      borderRadius: '10px',
-                      border: orderSelect === 'delivery' ? `2px solid ${THEME.main}` : '1px solid #e2e8f0',
-                      background: orderSelect === 'delivery' ? `${THEME.main}10` : '#fff',
-                      color: orderSelect === 'delivery' ? THEME.main : '#64748b',
-                      fontWeight: 700,
-
-                      fontSize: '13px',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s'
-                    }}
-                 >
-                   Delivery
-                 </button>
+              <div style={{ maxWidth: '240px' }}>
+                <NiceSelect
+                  value={orderSelect}
+                  onChange={setOrderSelect}
+                  placeholder="Select Type..."
+                  options={[
+                    { value: 'parcel', label: 'Parcel / Takeaway' },
+                    { value: 'delivery', label: 'Home Delivery 🏠' },
+                    ...tables.map(n => ({ value: `table:${n}`, label: `Table ${n}` }))
+                  ]}
+                />
               </div>
-
-              <TableSelectionModal 
-                visible={showTableModal}
-                tables={tables}
-                onSelect={(tableId) => {
-                    setOrderSelect(`table:${tableId}`);
-                    setShowTableModal(false);
-                }}
-                onViewOrder={handleViewOrder}
-                onClose={() => setShowTableModal(false)}
-              />
-
-              {/* Order Details Modal for Occupied Tables */}
-              {viewingOrder && (
-                 <OrderDetailsModal 
-                    order={viewingOrder}
-                    onClose={() => setViewingOrder(null)}
-                    onStatusChange={async (id, status) => {
-                        // Optional: Allow changing status from here if needed
-                        await supabase.from('orders').update({ status }).eq('id', id);
-                        setShowTableModal(false);
-                        setViewingOrder(null);
-                    }}
-                 />
-              )}
             </div>
             
              {/* Backdate Configuration (New) */}
@@ -4215,52 +4001,4 @@ const TimeInputWrapper = styled.div`
     flex: 1.2;
     width: auto;
   }
-`;
-
-// --- Shared Modal Styles ---
-const Modal = styled.div`
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.65);
-  backdrop-filter: blur(8px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  padding: 24px;
-`;
-
-const ModalContent = styled.div`
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(12px);
-  border-radius: 24px;
-  padding: 32px;
-  max-width: 600px;
-  width: 100%;
-  max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-  border: 1px solid rgba(255, 255, 255, 0.5);
-`;
-
-const ModalHeader = styled.div`
-  margin-bottom: 28px;
-  padding-bottom: 20px;
-  border-bottom: 2px solid #fff7ed;
-`;
-
-const ModalTitle = styled.h2`
-  font-size: 24px;
-  font-weight: 800;
-  color: #0f172a;
-  margin: 0 0 8px;
-  background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-`;
-
-const ModalSubtitle = styled.p`
-  font-size: 14px;
-  color: #64748b;
-  margin: 0;
 `;

@@ -672,22 +672,42 @@ body.kitchen-dashboard .main-content {
 
 .sales-header {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 12px;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
 }
 
 .sales-header h1 {
   margin: 0;
   font-size: 1.25rem;
   font-weight: 700;
+  white-space: nowrap;
 }
 
-.sales-controls {
+.sales-action-btns {
   display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
+  gap: 6px;
   align-items: center;
+  margin-left: auto;
+}
+
+/* Mobile: stack everything vertically */
+@media (max-width: 600px) {
+  .sales-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .sales-header h1 {
+    font-size: 1.1rem;
+  }
+
+  .sales-action-btns {
+    margin-left: 0;
+    justify-content: flex-end;
+  }
 }
 
 .sales-print-btn {
@@ -852,12 +872,6 @@ body.kitchen-dashboard .main-content {
 @media (min-width: 600px) {
   .sales-page-container {
     padding: 16px;
-  }
-
-  .sales-header {
-    flex-direction: row;
-    justify-content: space-between;
-    align-items: center;
   }
 
   .sales-header h1 {

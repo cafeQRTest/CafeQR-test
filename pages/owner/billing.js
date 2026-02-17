@@ -8,8 +8,8 @@ import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import Table from '../../components/ui/Table';
 import NiceSelect from '../../components/NiceSelect';
-import DateRangePicker from '../../components/ui/DateRangePicker';
-import { istSpanFromDatesUtcISO } from '../../utils/istTime';
+import DateTimeRangePicker from '../../components/ui/DateTimeRangePicker';
+import { istSpanFromDatesUtcISO, istSpanFromDateTimesUtcISO } from '../../utils/istTime';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
@@ -46,7 +46,9 @@ export default function BillingPage() {
   
   const [range, setRange] = useState({
     start: new Date(new Date().setHours(0, 0, 0, 0)),
-    end: new Date()
+    end: new Date(),
+    startTime: '00:00',
+    endTime: '23:59'
   });
 
   const icons = {
@@ -153,7 +155,7 @@ const isMixed = (inv) => getPayMethod(inv) === 'mixed' && !!getMixedDetails(inv)
     setError('');
     try {
       // Convert IST date range to UTC for database query
-      const { startUtc, endUtc } = istSpanFromDatesUtcISO(range.start, range.end);
+      const { startUtc, endUtc } = istSpanFromDateTimesUtcISO(range.start, range.startTime || '00:00', range.end, range.endTime || '23:59');
       
       const { data, error } = await supabase
         .from('invoices')
@@ -222,17 +224,22 @@ online_sales: list.reduce((sum, inv) => {
 
   const exportCSV = async (type) => {
   if (!restaurant?.id) return;
-
-  const from = range.start.toISOString().slice(0, 10);
-  const to = range.end.toISOString().slice(0, 10);
+  const { startUtc, endUtc } = istSpanFromDateTimesUtcISO(
+    range.start, 
+    range.startTime || '00:00', 
+    range.end, 
+    range.endTime || '23:59'
+  );
 
   const qs = new URLSearchParams({
-    from,
-    to,
+    from: startUtc,
+    to: endUtc,
     restaurant_id: restaurant.id,
     report_type: type,
   }).toString();
   const relUrl = `/api/reports/sales?${qs}`;
+
+  const dateTag = `${range.start.toISOString().slice(0, 10)}_to_${range.end.toISOString().slice(0, 10)}`;
 
   // Web: existing download behavior
   if (!Capacitor.isNativePlatform()) {
@@ -245,7 +252,7 @@ online_sales: list.reduce((sum, inv) => {
     if (!res.ok) throw new Error('Failed to generate CSV');
     const csv = await res.text();
 
-    const fileName = `Billing_${type}_${from}_to_${to}.csv`;
+    const fileName = `Invoices_${type}_${dateTag}.csv`;
 
     await Filesystem.writeFile({
       directory: Directory.Cache,
@@ -273,17 +280,22 @@ online_sales: list.reduce((sum, inv) => {
 
 const exportHsnSummary = async () => {
   if (!restaurant?.id) return;
-
-  const from = range.start.toISOString().slice(0, 10);
-  const to = range.end.toISOString().slice(0, 10);
+  const { startUtc, endUtc } = istSpanFromDateTimesUtcISO(
+    range.start, 
+    range.startTime || '00:00', 
+    range.end, 
+    range.endTime || '23:59'
+  );
 
   const qs = new URLSearchParams({
-    from,
-    to,
+    from: startUtc,
+    to: endUtc,
     restaurant_id: restaurant.id,
   }).toString();
 
   const relUrl = `/api/reports/gst-hsn-summary?${qs}`;
+
+  const dateTag = `${range.start.toISOString().slice(0, 10)}_to_${range.end.toISOString().slice(0, 10)}`;
 
   if (!Capacitor.isNativePlatform()) {
     window.location.href = relUrl;
@@ -295,7 +307,7 @@ const exportHsnSummary = async () => {
     if (!res.ok) throw new Error('Failed to generate HSN summary CSV');
     const csv = await res.text();
 
-    const fileName = `GST_HSN_Summary_${from}_to_${to}.csv`;
+    const fileName = `GST_HSN_Summary_${dateTag}.csv`;
 
     await Filesystem.writeFile({
       directory: Directory.Cache,
@@ -408,13 +420,13 @@ const exportHsnSummary = async () => {
             Track your invoices, GST collections and export period audits.
           </p>
         </div>
-        <div className="expenses-header-actions">
-          <DateRangePicker
-            start={range.start}
-            end={range.end}
-            onChange={setRange}
-          />
-        </div>
+        <DateTimeRangePicker
+          start={range.start}
+          end={range.end}
+          startTime={range.startTime}
+          endTime={range.endTime}
+          onChange={setRange}
+        />
       </div>
 
       {error && (
@@ -780,9 +792,11 @@ const exportHsnSummary = async () => {
 
         .expenses-header-row {
           display: flex;
-          flex-direction: column;
-          gap: 12px;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
           margin-bottom: 32px;
+          flex-wrap: wrap;
         }
 
         .expenses-title {
@@ -799,22 +813,16 @@ const exportHsnSummary = async () => {
           color: #64748b;
         }
 
-        .expenses-header-actions {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 12px;
-          margin-top: 6px;
-          align-items: center;
-        }
-
-        @media (min-width: 768px) {
+        @media (max-width: 600px) {
           .expenses-header-row {
-            flex-direction: row;
-            justify-content: space-between;
-            align-items: center;
+            flex-direction: column;
+            align-items: stretch;
           }
-          .expenses-header-actions {
-            margin-top: 0;
+          .expenses-title {
+            font-size: 1.2rem;
+          }
+          .expenses-sub {
+            font-size: 0.8rem;
           }
         }
 

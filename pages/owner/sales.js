@@ -6,14 +6,14 @@ import { useRestaurant } from '../../context/RestaurantContext'
 import Link from 'next/link'
 import Card from '../../components/ui/Card'
 import Table from '../../components/ui/Table'
-import DateRangePicker from '../../components/ui/DateRangePicker'
+import DateTimeRangePicker from '../../components/ui/DateTimeRangePicker'
 import Button from '../../components/ui/Button'
 import NiceSelect from '../../components/NiceSelect'
 import { getSupabase } from '../../services/supabase'
 import { FaCalendarAlt, FaReceipt, FaMoneyBillWave, FaPercentage, FaShoppingBag } from 'react-icons/fa'
 import { printSalesReport } from '../../utils/printSalesReport'
 import { exportSalesReportToCSV, exportSalesReportToExcel } from '../../utils/exportSalesReport'
-import { istSpanFromDatesUtcISO } from '../../utils/istTime';
+import { istSpanFromDateTimesUtcISO } from '../../utils/istTime';
 
 const BRAND = {
   orange: '#f97316',
@@ -113,7 +113,9 @@ export default function SalesPage() {
 
   const [range, setRange] = useState({
     start: new Date(new Date().setHours(0, 0, 0, 0)),
-    end: new Date()
+    end: new Date(),
+    startTime: '00:00',
+    endTime: '23:59'
   })
 
   const [activeReport, setActiveReport] = useState(0)
@@ -213,7 +215,7 @@ export default function SalesPage() {
         })
       }
    
-      const { startUtc, endUtc } = istSpanFromDatesUtcISO(range.start, range.end)
+      const { startUtc, endUtc } = istSpanFromDateTimesUtcISO(range.start, range.startTime, range.end, range.endTime)
       const { data: orders, error: ordersError } = await supabase
         .from('orders')
         .select(`
@@ -493,11 +495,11 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
     <div className="sales-page-container">
       <div className="sales-header">
         <h1>Sales Reports</h1>
-        <div className="sales-controls">
-          <DateRangePicker start={range.start} end={range.end} onChange={setRange} />
-          <Button onClick={handlePrint} variant="outline" style={{ padding: '8px 16px' }}>Print</Button>
-          <Button onClick={handleExportCSV} style={{ background: '#fff7ed', border: '1px solid #fed7aa', color: '#ea580c', padding: '8px 16px' }}>CSV</Button>
-          <Button onClick={handleExportExcel} style={{ background: '#fff7ed', border: '1px solid #fed7aa', color: '#ea580c', padding: '8px 16px' }}>Excel</Button>
+        <DateTimeRangePicker start={range.start} end={range.end} startTime={range.startTime} endTime={range.endTime} onChange={setRange} />
+        <div className="sales-action-btns">
+          <Button onClick={handlePrint} variant="outline" style={{ padding: '7px 14px', fontSize: '0.85rem' }}>Print</Button>
+          <Button onClick={handleExportCSV} style={{ background: '#fff7ed', border: '1px solid #fed7aa', color: '#ea580c', padding: '7px 14px', fontSize: '0.85rem' }}>CSV</Button>
+          <Button onClick={handleExportExcel} style={{ background: '#fff7ed', border: '1px solid #fed7aa', color: '#ea580c', padding: '7px 14px', fontSize: '0.85rem' }}>Excel</Button>
         </div>
       </div>
 

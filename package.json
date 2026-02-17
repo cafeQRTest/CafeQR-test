@@ -17,8 +17,7 @@
     "cap:add:delivery:test": "cross-env CAFEQR_TARGET=delivery-test npx cap add android",
     "cap:add:pos:test": "cross-env CAFEQR_TARGET=pos-test npx cap add android",
     "cap:delivery:test": "node scripts/ensure-cap-assets.js android-delivery-test && cross-env CAFEQR_TARGET=delivery-test npx cap sync android",
-    "cap:pos:test": "node scripts/ensure-cap-assets.js android-pos-test && cross-env CAFEQR_TARGET=pos-test npx cap sync android",
-    "cap:open:android": "npx cap open android"
+    "cap:pos:test": "node scripts/ensure-cap-assets.js android-pos-test && cross-env CAFEQR_TARGET=pos-test npx cap sync android"
   },
   "dependencies": {
     "@capacitor/android": "6.0.0",
@@ -34,7 +33,7 @@
     "@google/generative-ai": "^0.24.1",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.57.4",
-    "@tanstack/react-query": "^5.90.20",
+    "@tanstack/react-query": "^5.90.21",
     "@tanstack/react-query-devtools": "^5.91.3",
     "canvas": "^3.2.0",
     "clsx": "^2.1.1",

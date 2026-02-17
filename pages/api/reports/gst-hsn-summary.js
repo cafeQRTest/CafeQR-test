@@ -6,7 +6,7 @@ import { Parser } from 'json2csv';
 const supabase = getSupabase();
 
 export default async function handler(req, res) {
-  const { from, to, restaurant_id } = req.query;
+  const { from, to, restaurant_id, from_time = '00:00:00', to_time = '23:59:59' } = req.query;
 
   if (!restaurant_id || !from || !to) {
     return res.status(400).json({ error: 'Missing required parameters' });
@@ -33,8 +33,8 @@ export default async function handler(req, res) {
         )
       `)
       .eq('invoice.restaurant_id', restaurant_id)
-      .gte('invoice.invoice_date', `${from}T00:00:00Z`)
-      .lte('invoice.invoice_date', `${to}T23:59:59Z`);
+      .gte('invoice.invoice_date', from.includes('T') ? from : `${from}T${from_time}${from_time.includes('Z') ? '' : 'Z'}`)
+      .lte('invoice.invoice_date', to.includes('T') ? to : `${to}T${to_time}${to_time.includes('Z') ? '' : 'Z'}`);
 
     if (error) throw error;
 

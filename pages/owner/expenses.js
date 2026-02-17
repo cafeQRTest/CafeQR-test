@@ -5,10 +5,11 @@ import { useRequireAuth } from '../../lib/useRequireAuth';
 import { useRestaurant } from '../../context/RestaurantContext';
 import Card from '../../components/ui/Card';
 import Table from '../../components/ui/Table';
-import DateRangePicker from '../../components/ui/DateRangePicker';
+import DateTimeRangePicker from '../../components/ui/DateTimeRangePicker';
 import Button from '../../components/ui/Button';
 import NiceSelect from '../../components/NiceSelect';
-import { istSpanFromDatesUtcISO } from '../../utils/istTime';
+import PremiumTimeSelect from '../../components/PremiumTimeSelect';
+import { istSpanFromDatesUtcISO, istSpanFromDateTimesUtcISO, istYmdFromDate } from '../../utils/istTime';
 import { exportExpensesToCSV } from '../../utils/exportExpenses';
 
 
@@ -28,7 +29,9 @@ export default function ExpensesPage() {
 
   const [range, setRange] = useState({
     start: new Date(new Date().setHours(0, 0, 0, 0)),
-    end: new Date()
+    end: new Date(),
+    startTime: '00:00',
+    endTime: '23:59'
   });
 
 
@@ -116,7 +119,10 @@ export default function ExpensesPage() {
 
   const [showForm, setShowForm] = useState(false);
   const [formDate, setFormDate] = useState(
-    new Date().toISOString().split('T')[0]
+    istYmdFromDate(new Date())
+  );
+  const [formTime, setFormTime] = useState(
+    new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' })
   );
   const [formCategoryId, setFormCategoryId] = useState('');
   const [formNewCategory, setFormNewCategory] = useState('');
@@ -162,11 +168,11 @@ const [paymentProfit, setPaymentProfit] = useState([]);
   ], [categories]);
 
   const startDateStr = useMemo(
-    () => range.start.toISOString().slice(0, 10),
+    () => istYmdFromDate(range.start),
     [range.start]
   );
   const endDateStr = useMemo(
-    () => range.end.toISOString().slice(0, 10),
+    () => istYmdFromDate(range.end),
     [range.end]
   );
 
@@ -191,6 +197,14 @@ const [paymentProfit, setPaymentProfit] = useState([]);
       if (catErr) throw catErr;
       setCategories(catRows || []);
 
+      // 3) Sales summary (same pattern as Sales page)
+      const { startUtc, endUtc } = istSpanFromDateTimesUtcISO(
+        range.start,
+        range.startTime || '00:00',
+        range.end,
+        range.endTime || '23:59'
+      );
+
       // 2) Expenses in range (with category name)
       const { data: expRows, error: expErr } = await supabase
         .from('expenses')
@@ -206,18 +220,12 @@ const [paymentProfit, setPaymentProfit] = useState([]);
         `
         )
         .eq('restaurant_id', restaurantId)
-        .gte('expense_date', startDateStr)
-        .lte('expense_date', endDateStr)
+        .gte('expense_date', startUtc)
+        .lt('expense_date', endUtc)
         .order('expense_date', { ascending: false });
 
       if (expErr) throw expErr;
       setExpenses(expRows || []);
-
-      // 3) Sales summary (same pattern as Sales page)
-      const { startUtc, endUtc } = istSpanFromDatesUtcISO(
-        range.start,
-        range.end
-      );
 
       const { data: orders, error: ordersErr } = await supabase
   .from('orders')
@@ -398,7 +406,7 @@ async function handleSubmitExpense(e) {
     const payload = {
       restaurant_id: restaurantId,
       category_id: categoryId,
-      expense_date: formDate,
+      expense_date: `${formDate}T${formTime}:00`,
       amount: amt,
       description: formDesc || null,
       payment_method: formMethod || null
@@ -425,7 +433,8 @@ async function handleSubmitExpense(e) {
     setFormMethod('');
     setFormNewCategory('');
     setFormCategoryId('');
-    setFormDate(new Date().toISOString().split('T')[0]);
+    setFormDate(istYmdFromDate(new Date()));
+    setFormTime(new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' }));
     setShowForm(false);
 
     await loadData();
@@ -438,7 +447,8 @@ async function handleSubmitExpense(e) {
 
 function openAddExpense() {
   setEditingExpense(null);
-  setFormDate(new Date().toISOString().split('T')[0]);
+  setFormDate(istYmdFromDate(new Date()));
+  setFormTime(new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' }));
   setFormCategoryId('');
   setFormNewCategory('');
   setFormAmount('');
@@ -449,7 +459,12 @@ function openAddExpense() {
 
 function openEditExpense(expense) {
   setEditingExpense(expense);
-  setFormDate(expense.expense_date);
+  const d = new Date(expense.expense_date);
+  setFormDate(expense.expense_date.split('T')[0]);
+  setFormTime(expense.expense_date.includes('T') 
+    ? expense.expense_date.split('T')[1].slice(0, 5) 
+    : '12:00'
+  );
   setFormCategoryId(expense.category_id || '');
   setFormNewCategory(''); // not used when editing
   setFormAmount(String(expense.amount || ''));
@@ -489,38 +504,41 @@ function openEditExpense(expense) {
   return (
     <div className="expenses-page page">
       <div className="expenses-header-row">
-        <div>
-          <h1 className="expenses-title">Expenses &amp; Profit</h1>
-          <p className="expenses-sub">
-            Track daily spend and see clear profit / loss for the selected dates.
-          </p>
+        <div className="expenses-header-top">
+          <div>
+            <h1 className="expenses-title">Expenses &amp; Profit</h1>
+            <p className="expenses-sub">
+              Track daily spend and see clear profit / loss for the selected dates.
+            </p>
+          </div>
+          <div className="expenses-header-btns">
+            <Button 
+              onClick={openAddExpense}
+              style={{ padding: '7px 16px', fontSize: '0.85rem', background: '#f97316', borderColor: '#f97316', color: 'white' }}
+            >
+              + Expense
+            </Button>
+            <Button
+              onClick={handleExportCSV}
+              style={{ background: '#fff7ed', border: '1px solid #fed7aa', color: '#ea580c', padding: '7px 14px', fontSize: '0.85rem' }}
+            >
+              CSV
+            </Button>
+            <Button
+              onClick={() => setShowCategoryManager(true)}
+              style={{ background: 'white', border: '1px solid #d1d5db', color: '#374151', padding: '7px 14px', fontSize: '0.85rem' }}
+            >
+              Categories
+            </Button>
+          </div>
         </div>
-        <div className="expenses-header-actions">
-          <DateRangePicker
-            start={range.start}
-            end={range.end}
-            onChange={setRange}
-          />
-          <Button 
-            onClick={openAddExpense}
-            style={{ padding: '6px 16px', fontSize: '0.9rem', background: '#f97316', borderColor: '#f97316', color: 'white' }}
-          >
-            + Expense
-          </Button>
-          <Button
-            onClick={handleExportCSV}
-            style={{ background: '#fff7ed', border: '1px solid #fed7aa', color: '#ea580c', padding: '6px 12px', fontSize: '0.9rem' }}
-          >
-            CSV
-          </Button>
-          <Button
-            onClick={() => setShowCategoryManager(true)}
-            style={{ background: 'white', border: '1px solid #d1d5db', color: '#374151', padding: '6px 12px', fontSize: '0.9rem' }}
-          >
-            Categories
-          </Button>
-
-        </div>
+        <DateTimeRangePicker
+          start={range.start}
+          end={range.end}
+          startTime={range.startTime}
+          endTime={range.endTime}
+          onChange={setRange}
+        />
       </div>
 
       {error && (
@@ -626,7 +644,8 @@ function openEditExpense(expense) {
             <div className="expenses-table-wrapper">
               <Table
                 columns={[
-                  { header: 'Date', accessor: 'expense_date', cell: (r) => new Date(r.expense_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) },
+                  { header: 'Date', accessor: 'expense_date', cell: (r) => new Date(r.expense_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }) },
+                  { header: 'Time', accessor: 'expense_time', cell: (r) => new Date(r.expense_date).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' }) },
                   { header: 'Category', accessor: 'category_name' },
                   { header: 'Description', accessor: 'description' },
                   { header: 'Pay Method', accessor: 'payment_method', cell: (r) => prettyMethod(r.payment_method) },
@@ -701,15 +720,24 @@ function openEditExpense(expense) {
 </div>
 
             <form onSubmit={handleSubmitExpense} className="expenses-form">
-              <label>
-                <span>Date <span style={{ color: '#ef4444' }}>*</span></span>
-                <input
-                  type="date"
-                  value={formDate}
-                  onChange={(e) => setFormDate(e.target.value)}
-                  required
-                />
-              </label>
+              <div style={{ display: 'flex', gap: '16px' }}>
+                <label style={{ flex: 1 }}>
+                  <span>Date <span style={{ color: '#ef4444' }}>*</span></span>
+                  <input
+                    type="date"
+                    value={formDate}
+                    onChange={(e) => setFormDate(e.target.value)}
+                    required
+                  />
+                </label>
+                <label style={{ flex: 1 }}>
+                  <span>Time <span style={{ color: '#ef4444' }}>*</span></span>
+                  <PremiumTimeSelect
+                    value={formTime}
+                    onChange={(e) => setFormTime(e.target.value)}
+                  />
+                </label>
+              </div>
 
               <label>
                 <span>Category <span style={{ color: '#ef4444' }}>*</span></span>
@@ -996,6 +1024,14 @@ function openEditExpense(expense) {
           margin-bottom: 24px;
         }
 
+        .expenses-header-top {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 12px;
+          flex-wrap: wrap;
+        }
+
         .expenses-title {
           margin: 0;
           font-size: 1.5rem;
@@ -1006,25 +1042,30 @@ function openEditExpense(expense) {
 
         .expenses-sub {
           margin: 4px 0 0;
-          font-size: 0.9rem;
+          font-size: 0.85rem;
           color: #6b7280;
         }
 
-        .expenses-header-actions {
+        .expenses-header-btns {
           display: flex;
-          flex-wrap: wrap;
-          gap: 12px;
-          margin-top: 6px;
+          gap: 6px;
+          align-items: center;
+          flex-shrink: 0;
         }
 
-        @media (min-width: 768px) {
-          .expenses-header-row {
-            flex-direction: row;
-            justify-content: space-between;
-            align-items: center;
+        @media (max-width: 600px) {
+          .expenses-header-top {
+            flex-direction: column;
+            align-items: stretch;
           }
-          .expenses-header-actions {
-            margin-top: 0;
+          .expenses-header-btns {
+            justify-content: flex-start;
+          }
+          .expenses-title {
+            font-size: 1.2rem;
+          }
+          .expenses-sub {
+            font-size: 0.8rem;
           }
         }
 
