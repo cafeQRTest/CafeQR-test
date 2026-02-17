@@ -3,9 +3,14 @@ import { useRouter } from "next/router";
 import { useState, useEffect } from "react";
 import { getSupabase } from "../../services/supabase";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mail, Sparkles, ArrowLeft } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 
 const DELIVERY_NEXT_KEY = "delivery.next_after_magiclink";
+
+function getBaseUrl() {
+  if (typeof window !== 'undefined') return window.location.origin;
+  return process.env.NEXT_PUBLIC_BASE_URL || 'https://cafe-qr-app.vercel.app';
+}
 
 export default function CustomerAuthPage() {
   const supabase = getSupabase();
@@ -19,26 +24,40 @@ export default function CustomerAuthPage() {
   const [otpToken, setOtpToken] = useState("");
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
-  const [showManual, setShowManual] = useState(false);
 
-useEffect(() => {
-  let cancelled = false;
-  (async () => {
-    const { data } = await supabase.auth.getSession();
-    if (!cancelled && data?.session) {
-      router.replace("/app/address");
-    }
-  })();
-  return () => { cancelled = true; };
-}, []);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!cancelled && data?.session) {
+        router.replace("/app/address");
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const sendOtp = async (e) => {
     e.preventDefault();
     setErr("");
     setLoading(true);
 
+    try {
+      localStorage.setItem(DELIVERY_NEXT_KEY, next);
+    } catch {}
+
+    const baseUrl = getBaseUrl();
+    const redirectTo = `${baseUrl}/app/auth/callback?next=${encodeURIComponent(next)}`;
+
     const { error } = await supabase.auth.signInWithOtp({
       email,
+      options: {
+        emailRedirectTo: redirectTo,
+        shouldCreateUser: true, // Explicitly allow user creation for signup
+        data: {
+          // Optional: mark this as a delivery user
+          app_type: 'delivery',
+        },
+      },
     });
 
     setLoading(false);
@@ -66,7 +85,11 @@ useEffect(() => {
       return setErr(error.message);
     }
 
-    router.replace("/app/address");
+    try {
+      localStorage.removeItem(DELIVERY_NEXT_KEY);
+    } catch {}
+    
+    router.replace(next);
   };
 
   return (
@@ -162,7 +185,6 @@ useEffect(() => {
 
       </div>
 
-      {/* Scoped styles - ONLY affects this delivery auth page */}
       <style jsx>{`
         .delivery-auth-page {
           min-height: 100vh;
@@ -257,49 +279,6 @@ useEffect(() => {
         .delivery-auth-submit:disabled {
           opacity: 0.7;
           cursor: not-allowed;
-        }
-        .delivery-auth-sent {
-          text-align: center;
-          background: rgba(240,253,244,0.8);
-          padding: 32px;
-          border-radius: 24px;
-          border: 1px solid rgba(255,255,255,0.4);
-        }
-        .delivery-auth-sent-icon {
-          display: flex;
-          justify-content: center;
-          margin-bottom: 24px;
-          position: relative;
-        }
-        .delivery-auth-sent-icon > div {
-          position: relative;
-        }
-        .sparkle-badge {
-          position: absolute;
-          top: -8px;
-          right: -8px;
-          background: #fff;
-          border-radius: 50%;
-          padding: 4px;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-        .delivery-auth-sent h3 {
-          font-size: 20px;
-          font-weight: 700;
-          color: #111827;
-          margin: 0 0 8px;
-        }
-        .delivery-auth-sent p {
-          color: #475569;
-          margin: 0 0 32px;
-          line-height: 1.6;
-        }
-        .email-highlight {
-          font-weight: 700;
-          color: #111827;
-          background: rgba(255,255,255,0.5);
-          padding: 2px 8px;
-          border-radius: 6px;
         }
         .delivery-auth-back-btn {
           display: inline-flex;
