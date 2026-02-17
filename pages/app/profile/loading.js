@@ -1,5 +1,3 @@
-import CafeQRLoader from "../../../components/CafeQRLoader";
-
 export default function Loading() {
-    return <CafeQRLoader message="Loading Profile..." />;
+    return <div className="p-4 text-center text-gray-500">Loading...</div>;
 }

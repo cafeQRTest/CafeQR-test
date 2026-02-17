@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { getSupabase } from "../../../services/supabase";
 import { motion, AnimatePresence } from "framer-motion";
-import CafeQRLoader from "../../../components/CafeQRLoader";
+
 
 const cartKey = (restaurantId) => `cart_delivery_${restaurantId}`;
 
@@ -191,7 +191,7 @@ export default function DeliveryRestaurantMenu() {
     return { subtotalEx, taxAmount, totalInc };
   }, [cart, restaurant]);
 
-  if (loading) return <CafeQRLoader message="Loading restaurant..." />;
+  if (loading) return <div className="p-4 text-center text-gray-500">Loading...</div>;
   if (!restaurantId) return <div style={{ padding: 40, textAlign: "center" }}>Missing restaurant.</div>;
 
   return (
@@ -256,7 +256,7 @@ export default function DeliveryRestaurantMenu() {
 
       <div className="menu-content">
         {itemsLoading ? (
-          <CafeQRLoader message="Loading menu..." fullScreen={false} />
+          <div className="p-4 text-center text-gray-500">Loading...</div>
         ) : filteredItems.length === 0 ? (
           <div style={{ padding: 20, textAlign: "center", color: "#6b7280" }}>No items found.</div>
         ) : (
