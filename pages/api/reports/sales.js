@@ -161,8 +161,8 @@ export default async function handler(req, res) {
           igstAmt = totalLineTax;
         } else {
           // Intra‑state: GST split equally between CGST and SGST
-          cgstAmt = totalLineTax / 2;
-          sgstAmt = totalLineTax / 2;
+          cgstAmt = Math.round((totalLineTax / 2) * 100) / 100;
+          sgstAmt = Math.round((totalLineTax / 2) * 100) / 100;
         }
 
         rows.push({

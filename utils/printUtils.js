@@ -675,10 +675,11 @@ export function buildReceiptText(order, bill, restaurantProfile) {
 
     // GST Display (Detailed CGST/SGST)
     if (oTotalTax > 0.01) {
-      const halfTax = oTotalTax / 2;
+      const c = Math.round((oTotalTax / 2) * 100) / 100;
+      const s = Math.round((oTotalTax / 2) * 100) / 100;
       const taxTag = isInclusive ? "(incl)" : "";
-      lines.push(withMargins(kvLine(`CGST ${taxTag}:`, fmtRate(halfTax), W), layout));
-      lines.push(withMargins(kvLine(`SGST ${taxTag}:`, fmtRate(halfTax), W), layout));
+      lines.push(withMargins(kvLine(`CGST ${taxTag}:`, fmtRate(c), W), layout));
+      lines.push(withMargins(kvLine(`SGST ${taxTag}:`, fmtRate(s), W), layout));
     }
 
     // Round Off

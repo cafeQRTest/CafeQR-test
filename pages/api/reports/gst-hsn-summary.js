@@ -63,8 +63,8 @@ export default async function handler(req, res) {
       if (isInterState) {
         igstAmt = lineTax;
       } else {
-        cgstAmt = lineTax / 2;
-        sgstAmt = lineTax / 2;
+        cgstAmt = Math.round((lineTax / 2) * 100) / 100;
+        sgstAmt = Math.round((lineTax / 2) * 100) / 100;
       }
 
       const key = `${hsn}__${rate.toFixed(2)}__${isInterState ? 'IGST' : 'CGST_SGST'}`;

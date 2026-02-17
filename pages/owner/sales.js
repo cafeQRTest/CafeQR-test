@@ -256,6 +256,8 @@ export default function SalesPage() {
       let totalOrders = orderData.length
       let totalRevenue = 0
       let totalTax = 0
+      let totalCgst = 0
+      let totalSgst = 0
       let totalQuantity = 0
       const itemCounts = {}
       const itemRevenue = {}
@@ -263,9 +265,15 @@ export default function SalesPage() {
 
       orderData.forEach(o => {
         const revenue = Number(o.total_inc_tax ?? o.total_amount ?? 0)
-        const tax = Number(o.total_tax ?? 0)
+        const taxVal = Number(o.total_tax ?? 0)
+        
+        // Calculate rounded components per order
+        const c = Math.round((taxVal / 2) * 100) / 100
+        const s = Math.round((taxVal / 2) * 100) / 100
+        totalCgst += c
+        totalSgst += s
+        totalTax += (c + s)
         totalRevenue += revenue
-        totalTax += tax
 
         if (Array.isArray(o.items)) {
           o.items.forEach(item => {
@@ -284,17 +292,14 @@ export default function SalesPage() {
         }
       })
 
-      const cgst = totalTax / 2
-      const sgst = totalTax / 2
-
       setSummaryStats({
         totalOrders,
         totalRevenue,
         totalItems: totalQuantity,
         avgOrderValue: totalOrders > 0 ? totalRevenue / totalOrders : 0,
         totalTax,
-        cgst: Math.round(cgst * 100) / 100,
-        sgst: Math.round(sgst * 100) / 100
+        cgst: totalCgst,
+        sgst: totalSgst
       })
 
       const itemsArray = Object.entries(itemCounts)
@@ -403,9 +408,9 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
       setOrderTypeBreakdown(typeArray)
 
       setTaxBreakdown([
-        { tax_type: 'CGST', amount: Math.round(cgst * 100) / 100 },
-        { tax_type: 'SGST', amount: Math.round(sgst * 100) / 100 },
-        { tax_type: 'Total Tax', amount: Math.round(totalTax * 100) / 100 }
+        { tax_type: 'CGST', amount: totalCgst },
+        { tax_type: 'SGST', amount: totalSgst },
+        { tax_type: 'Total Tax', amount: totalTax }
       ])
 
       
