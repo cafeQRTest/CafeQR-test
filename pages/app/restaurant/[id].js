@@ -221,25 +221,7 @@ export default function DeliveryRestaurantMenu() {
               </div>
             </div>
 
-            <Link
-              href="/app/profile"
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: 999,
-                border: "1px solid #e5e7eb",
-                background: "#fff",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                textDecoration: "none",
-                color: "#111827",
-                fontWeight: 900,
-              }}
-              aria-label="Profile"
-            >
-              ☺
-            </Link>
+
           </div>
 
           <input
@@ -773,44 +755,8 @@ export default function DeliveryRestaurantMenu() {
         )}
       </AnimatePresence>
 
-      <BottomNav active="home" />
+
     </div>
   );
 }
 
-function BottomNav({ active }) {
-  const itemStyle = (key) => ({
-    flex: 1,
-    textAlign: "center",
-    textDecoration: "none",
-    color: active === key ? "#f59e0b" : "#6b7280",
-    fontWeight: 900,
-    fontSize: 12,
-    padding: "10px 0",
-  });
-
-  return (
-    <div
-      style={{
-        position: "fixed",
-        left: 0,
-        right: 0,
-        bottom: 0,
-        background: "#fff",
-        borderTop: "1px solid #e5e7eb",
-        display: "flex",
-        height: 64,
-      }}
-    >
-      <Link href="/app" style={itemStyle("home")}>
-        Home
-      </Link>
-      <Link href="/app/addresses" style={itemStyle("addresses")}>
-        Addresses
-      </Link>
-      <Link href="/app/profile" style={itemStyle("profile")}>
-        Profile
-      </Link>
-    </div>
-  );
-}
