@@ -26,6 +26,35 @@ export default function DeliveryCheckout() {
   const [mapLocation, setMapLocation] = useState("");
   const [note, setNote] = useState("");
 
+
+// new state
+const [gps, setGps] = useState(null);
+const [gpsBusy, setGpsBusy] = useState(false);
+
+const detectGps = async () => {
+  setGpsBusy(true);
+  try {
+    if (!navigator.geolocation) throw new Error("Geolocation not supported");
+    const pos = await new Promise((resolve, reject) =>
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0,
+      })
+    );
+    const { latitude, longitude } = pos.coords;
+    const lat = Number(latitude);
+    const lng = Number(longitude);
+    setGps({ lat, lng });
+    setMapLocation(`${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+    localStorage.setItem("detected_delivery_coords", JSON.stringify({ lat, lng }));
+  } catch (e) {
+    alert(e?.message || "Failed to detect GPS location");
+  } finally {
+    setGpsBusy(false);
+  }
+};
+
   // Use the SAME cart key pattern your QR pages already use: cart_${restaurantId}_${tableNumber}
   const cartStorageKey = useMemo(() => {
     if (!restaurantId) return null;
@@ -99,7 +128,7 @@ export default function DeliveryCheckout() {
     };
 
     load();
-  }, [restaurantId, supabase, cartStorageKey, mapLocation]);
+  }, [restaurantId, supabase, cartStorageKey]);
 
   const brandColor = restaurant?.restaurant_profiles?.brand_color || "#f59e0b";
 
@@ -211,6 +240,9 @@ export default function DeliveryCheckout() {
           })
         );
       } catch {}
+
+
+
 
 const orderData = {
   restaurant_id: String(restaurantId),
@@ -356,6 +388,9 @@ const orderData = {
             placeholder="Eg: Ayyanthole, Thrissur"
             style={{ width: "100%", padding: 12, borderRadius: 12, border: "1px solid #e5e7eb", marginTop: 6, outline: "none" }}
           />
+<button type="button" onClick={detectGps} disabled={gpsBusy}>
+  {gpsBusy ? "Detecting..." : "Use my GPS"}
+</button>
 
           <div style={{ height: 10 }} />
 
