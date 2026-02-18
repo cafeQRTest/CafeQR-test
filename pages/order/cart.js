@@ -289,6 +289,13 @@ export default function CartSummary() {
 
   const brandColor = restaurant?.restaurant_profiles?.brand_color || "#f59e0b";
 
+const isDelivery = String(tableNumber || "").toUpperCase() === "DELIVERY";
+
+const checkoutHref = isDelivery
+  ? `/delivery/checkout?r=${restaurantId}&t=${tableNumber}`
+  : `/order/payment?r=${restaurantId}&t=${tableNumber}&total=${totalInc}`;
+
+
   if (cart.length === 0) {
     return (
       <div
@@ -643,8 +650,7 @@ export default function CartSummary() {
           borderTop: "1px solid #e5e7eb",
         }}
       >
-        <Link
-          href={`/order/payment?r=${restaurantId}&t=${tableNumber}&total=${totalInc}`}
+<Link href={checkoutHref}
           style={{
             display: "block",
             width: "100%",
@@ -659,8 +665,10 @@ export default function CartSummary() {
             marginBottom: "8px",
           }}
         >
-          Proceed to Payment (₹{totalInc.toFixed(2)})
-        </Link>
+    {isDelivery
+      ? `Checkout (₹${totalInc.toFixed(2)})`
+      : `Proceed to Payment (₹${totalInc.toFixed(2)})`}
+  </Link>
         <div
           style={{ textAlign: "center", fontSize: "12px", color: "#6b7280" }}
         >
