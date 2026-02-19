@@ -14,10 +14,8 @@ type Options = {
   allowSystemDialog?: boolean;
   scale?: 'normal' | 'large';
   jobKind?: 'bill' | 'kot';
-
-  // NEW
-  winPrinterNames?: string[]; // winspool: override targets (route-specific)
-  btAddresses?: string[];     // android native: override targets (route-specific)
+  winPrinterNames?: string[];
+  btAddresses?: string[];
 };
 
 function readJsonArray(key: string): string[] {
@@ -32,23 +30,47 @@ function readJsonArray(key: string): string[] {
 }
 
 function uniq(arr: string[]) {
-  return Array.from(new Set((arr || []).map(s => String(s).trim()).filter(Boolean)));
+  return Array.from(new Set((arr || []).map((s) => String(s).trim()).filter(Boolean)));
 }
 
-let inFlight = false;
+function sleep(ms: number) {
+  return new Promise<void>((r) => setTimeout(r, ms));
+}
 
-export async function printUniversal(opts: Options) {
+/**
+ * Global print queue:
+ * - guarantees Route-1 KOT finishes before Route-2 begins
+ * - prevents WebUSB/WebSerial races
+ */
+let printChain: Promise<void> = Promise.resolve();
+
+/** Public API: queued printing (never drops a job). */
+export function printUniversal(opts: Options) {
+  const job = printChain.then(async () => {
+    const res = await printUniversalNow(opts);
+
+    // small gap helps some printers/helpers flush before next job
+    await sleep(80);
+
+    return res;
+  });
+
+  // keep the chain alive even if a job fails
+  printChain = job.then(
+    () => undefined,
+    () => undefined
+  );
+
+  return job;
+}
+
+
+async function printUniversalNow(opts: Options) {
   const jobKind: 'bill' | 'kot' = opts.jobKind === 'kot' ? 'kot' : 'bill';
-
-  // prevent concurrent prints from racing the port
-  if (inFlight) return { via: 'locked' as const };
-  inFlight = true;
-  const release = () => setTimeout(() => { inFlight = false; }, 800);
 
   // NOTE: This module can be imported in Next.js server build,
   // but printUniversal should only be called in the browser.
   if (typeof window === 'undefined') {
-    release();
     throw new Error('PRINT_CALLED_ON_SERVER');
   }
 
@@ -343,7 +365,8 @@ export async function printUniversal(opts: Options) {
     }
 
     throw new Error('NO_SILENT_PATH');
-  } finally {
-    release();
+  } catch (e) {
+    throw e;
   }
 }
+
