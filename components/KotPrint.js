@@ -67,6 +67,17 @@ function getItemCategoryName(oi) {
   return String(oi?.menu_items?.category || '').trim();
 }
 
+function toLegacyItemsFromOrderItems(orderItems) {
+  return (Array.isArray(orderItems) ? orderItems : []).map((oi) => ({
+    name: oi?.menu_items?.name || oi?.item_name || oi?.itemName || 'Item',
+    quantity: Number(oi?.quantity ?? oi?.qty ?? 1),
+    price: Number(oi?.price ?? oi?.rate ?? 0),
+    category: String(oi?.menu_items?.category || '').trim(),
+    variantname: oi?.variant_name || oi?.variantName || null,
+  }));
+}
+
+
 function hasPrintedRecently(orderId, kind = 'bill') {
   if (!orderId) return false;
   try {
@@ -386,10 +397,17 @@ export default function KotPrint({ order, onClose, onPrint, autoPrint = true, ki
 
       for (const r of routes) {
         const cats = Array.isArray(r.categories) ? r.categories : [];
-        const subset = allOrderItems.filter((oi) => cats.includes(getItemCategoryName(oi)));
+const norm = (s) => String(s || '').trim().toUpperCase();
+const catSet = new Set(cats.map(norm));
+const subset = allOrderItems.filter((oi) => catSet.has(norm(getItemCategoryName(oi))));
         if (!subset.length) continue;
 
-        const routedOrder = { ...fullOrder, order_items: subset };
+const routedOrder = {
+  ...fullOrder,
+  order_items: subset,
+  // IMPORTANT: some KOT builders read `items` (JSON) instead of `order_items`
+  items: toLegacyItemsFromOrderItems(subset),
+};
         const text = buildKotText(routedOrder, restaurantProfile);
 
         if (onAndroidPWA) {
@@ -439,15 +457,22 @@ export default function KotPrint({ order, onClose, onPrint, autoPrint = true, ki
 
       onPrint?.();
       closeAfterPrint();
-    } catch (e) {
-      // Last resort: download/share
-      try {
-        await downloadTextAndShare(fullOrder, bill, restaurantProfile);
-        onPrint?.();
-      } catch {
-        setStatus('✗ Printing failed');
-      }
-    } finally {
+} catch (e) {
+  // Do not auto-download on failures during auto-print.
+  // Keep download/share as a manual-only fallback.
+  if (!autoPrint) {
+    try {
+      await downloadTextAndShare(fullOrder, bill, restaurantProfile);
+      onPrint?.();
+      return;
+    } catch {
+      // fall through to status
+    }
+  }
+  console.error('[print] failed:', e);
+  setStatus('✗ Printing failed');
+}
+     finally {
       setTimeout(() => {
         lockRef.current = false;
       }, 600);

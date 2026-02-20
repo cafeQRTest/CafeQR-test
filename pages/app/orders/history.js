@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, Clock, ShoppingBag, ArrowRight as ArrowIcon, CheckCircle2, RefreshCw } from "lucide-react";
 import { getSupabase } from "../../../services/supabase";
 import { useCustomerAuth } from "../../../context/CustomerAuthContext";
-import CafeQRLoader from "../../../components/CafeQRLoader";
+
 
 const cartKey = (restaurantId) => `cart_delivery_${restaurantId}`;
 
@@ -115,10 +115,7 @@ export default function OrderHistory() {
 
       localStorage.setItem(cartKey(order.restaurant_id), JSON.stringify(finalCart));
 
-      // Simulate delay for feedback
-      await new Promise(r => setTimeout(r, 600));
-
-      // Navigate to the specific restaurant menu page
+      /* setTimeout removed for performance */
       await router.push(`/app/restaurant/${order.restaurant_id}`);
     } catch (err) {
       console.error("Failed to reorder:", err);
@@ -166,7 +163,7 @@ export default function OrderHistory() {
   };
 
   if (authLoading || loading) {
-    return <CafeQRLoader message="Loading your orders..." />;
+    return <div className="p-4 text-center text-gray-500">Loading...</div>;
   }
 
   return (

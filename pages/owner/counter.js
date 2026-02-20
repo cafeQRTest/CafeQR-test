@@ -208,6 +208,7 @@ function PaymentConfirmDialog({
     } finally { setSubmitting(false); }
   };
 
+
   return (
     <div style={{
       position: 'fixed',
@@ -615,7 +616,7 @@ const NewCreditCustomerModal = ({ visible, onClose, onSave, name, setName, phone
           <h3 style={{ margin: '0 0 8px', fontSize: '20px', fontWeight: 800, color: '#111827' }}>New Credit Customer</h3>
           <p style={{ margin: '0 0 24px', fontSize: '14px', color: '#64748b' }}>Enter customer details to establish a credit account.</p>
         </div>
-        
+
         <div style={{ padding: '0 24px 24px', display: 'grid', gap: '20px' }}>
           {error && (
             <div style={{ 
@@ -781,7 +782,7 @@ import { useSubscription } from '../../context/SubscriptionContext';
 export default function CounterSale() {
   const supabase = getSupabase();
   const { checking } = useRequireAuth(supabase);
-  const { restaurant, loading: loadingRestaurant } = useRestaurant();
+  const { restaurant, loading: loadingRestaurant, staffName } = useRestaurant();
   const { subscription, loading: subLoading } = useSubscription();
   const router = useRouter();
 
@@ -1890,13 +1891,23 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
         Number(orderTime.split(':')[1]),
         0
       ).toISOString(),
+taken_by_name: (takenByName || '').trim() || null,
+taken_by_email: takenByEmail,
+taken_by_user_id: takenByUserId,
+taken_by_role: restaurant?.role || null,
+
     };
 
-    const res = await fetch('/api/orders/create', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(orderData),
-    });
+const bearer = await getBearerTokenOrThrow();
+
+const res = await fetch('/api/orders/create', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    Authorization: bearer,
+  },
+  body: JSON.stringify(orderData),
+});
 
 
     if (!res.ok) {
@@ -1985,6 +1996,17 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
   }
 }
 
+async function getBearerTokenOrThrow() {
+  const { data } = await supabase.auth.getSession();
+  const token = data?.session?.access_token;
+
+  if (!token) {
+    throw new Error('Missing session token. Please logout and login again.');
+  }
+  return `Bearer ${token}`;
+}
+
+
   // Create without finalize (send to kitchen)
   async function doCreateKitchenOrder() {
     let order_type = 'counter';
@@ -2049,12 +2071,24 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
         Number(orderTime.split(':')[0]),
         Number(orderTime.split(':')[1]),
         0
-      ).toISOString()
+      ).toISOString(),
+taken_by_name: (takenByName || '').trim() || null,
+taken_by_email: takenByEmail,
+taken_by_user_id: takenByUserId,
+taken_by_role: restaurant?.role || null
+
     };
 
-    const res = await fetch('/api/orders/create', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(orderData)
-    });
+const bearer = await getBearerTokenOrThrow();
+
+const res = await fetch('/api/orders/create', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    Authorization: bearer,
+  },
+  body: JSON.stringify(orderData),
+});
     if (!res.ok) {
       let msg = 'Failed to create order';
       try { const j = await res.json(); if (j?.error) msg += ': ' + j.error; } catch {}
@@ -2095,8 +2129,77 @@ const orderForPrint = {
     setTimeout(() => setSuccess(''), 2000);
   }
 
+// --- Staff/Waiter Name (mandatory for staff) ---
+// --- Staff identity (auto from login; no manual input) ---
+const isStaffUser = restaurant?.role === 'staff';
+
+const [sessionUser, setSessionUser] = useState(null);
+const [accessToken, setAccessToken] = useState('');
+
+useEffect(() => {
+  (async () => {
+    try {
+      const { data } = await supabase.auth.getSession();
+      const sess = data?.session || null;
+      setSessionUser(sess?.user || null);
+      setAccessToken(sess?.access_token || '');
+    } catch {
+      setSessionUser(null);
+      setAccessToken('');
+    }
+  })();
+}, [supabase]);
+
+const takenByEmail = sessionUser?.email || null;
+const takenByUserId = sessionUser?.id || null;
+
+// Auto-pick a name from (1) RestaurantContext (preferred) or (2) Supabase user metadata
+const meta = sessionUser?.user_metadata || {};
+const takenByName =
+  (staffName ||
+    meta.full_name ||
+    meta.name ||
+    meta.display_name ||
+    meta.username ||
+    '').trim() || null;
+
+function requireTakenByIdentity() {
+  if (!isStaffUser) return true;
+
+  // Must have a logged-in user id (so owner can track who placed it)
+  if (!takenByUserId) {
+    alert('Your session is missing. Please logout and login again.');
+    return false;
+  }
+
+  // Must have a name somewhere (context/metadata). No manual input anymore.
+  if (!takenByName) {
+    alert('Your staff name is not set. Ask admin/owner to set your name in staff profile.');
+    return false;
+  }
+
+  return true;
+}
+
+
+function requireTakenByName() {
+  if (!isStaffUser) return true;
+  const nm = (takenByName || '').trim();
+  if (nm.length < 2) {
+    alert('Please enter Staff/Waiter Name (required).');
+    return false;
+  }
+  if (restaurantId && takenByEmail) {
+    const key = `counter_takenByName:${restaurantId}:${takenByEmail.toLowerCase()}`;
+    localStorage.setItem(key, nm);
+  }
+  return true;
+}
+
+
   const completeSale = async () => {
     if (!cart.length) { alert('Please add items to cart'); return; }
+    if (!requireTakenByIdentity()) return; // ✅ auto identity for staff
     if (isCreditSale && !selectedCreditCustomerId) { alert('Please select a credit customer'); return; }
 
     setProcessing(true);
@@ -2355,6 +2458,7 @@ const orderForPrint = {
                     <div style={{ flex: 1, position: 'relative' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+
                           <SectionLabel>Customer Name</SectionLabel>
                           {selectedCustomerId && (() => {
                              const c = allCustomers.find(cust => cust.customer_id === selectedCustomerId);
@@ -2606,6 +2710,17 @@ const orderForPrint = {
           theme={THEME}
           error={modalError}
         />
+        {isStaffUser && (
+  <div style={{ width: 280 }}>
+    <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+      Staff (auto)
+    </div>
+    <div style={{ padding: '12px 16px', borderRadius: 12, border: '1.5px solid #e2e8f0', fontSize: 14, fontWeight: 700 }}>
+      {takenByName || takenByEmail || '—'}
+    </div>
+  </div>
+)}
+
 
         {/* Search & Category Tabs */}
         <div style={{ 

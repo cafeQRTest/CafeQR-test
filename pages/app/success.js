@@ -13,7 +13,7 @@ export default function DeliverySuccess() {
 
   const [loading, setLoading] = useState(true);
   const [order, setOrder] = useState(null);
-  const [showShimmer, setShowShimmer] = useState(false);
+
 
   useEffect(() => {
     if (!orderId) return;
@@ -38,15 +38,7 @@ export default function DeliverySuccess() {
     load();
   }, [orderId, supabase]);
 
-  // Trigger shimmer effect 1.6s after page loads (0.6s button delay + 1s after)
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setShowShimmer(true);
-      // Remove shimmer class after animation completes
-      setTimeout(() => setShowShimmer(false), 600);
-    }, 1600);
-    return () => clearTimeout(timer);
-  }, []);
+
 
   const amount = Number(amt) || Number(order?.total_amount) || 0;
   const paymentLabel = method === "cod" ? "Cash on Delivery" : method === "online" ? "Paid Online" : method || "Pending";
@@ -146,7 +138,7 @@ export default function DeliverySuccess() {
         >
           <motion.button
             onClick={handleOrderAgain}
-            className={`success-btn ${showShimmer ? "shimmer" : ""} mt-12`}
+            className={`success-btn mt-12`}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
           >

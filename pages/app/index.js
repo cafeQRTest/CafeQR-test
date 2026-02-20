@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import LandingPage from "../../components/LandingPage";
-import CafeQRLoader from "../../components/CafeQRLoader";
+
 import { getSupabase } from "../../services/supabase";
 
 export default function DeliveryAppHome() {
@@ -36,11 +36,11 @@ export default function DeliveryAppHome() {
     run();
 
     return () => {
-      try { unsub?.unsubscribe?.(); } catch {}
+      try { unsub?.unsubscribe?.(); } catch { }
     };
   }, [supabase, router]);
 
-  if (checking) return <CafeQRLoader message="Checking session..." />;
+  if (checking) return <div className="p-4 text-center text-gray-500">Loading...</div>;
 
 
 

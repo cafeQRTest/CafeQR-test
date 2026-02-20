@@ -113,12 +113,31 @@ export default function OrderItemsModal({ order, onClose, modalLoyalty }) {
                       )}
 
                       <div style={{ width: 3, height: 3, borderRadius: '50%', background: '#cbd5e1' }}></div>
-                      <div style={{
-                        background:'#f8fafc', padding:'2px 8px', borderRadius:6, border: '1px solid #f1f5f9',
-                        fontSize:9, fontWeight: 700, color: '#64748b'
-                      }}>
-                          {getOrderTypeLabel(order)}
-                      </div>
+<div style={{
+  background:'#f8fafc', padding:'2px 8px', borderRadius:6, border: '1px solid #f1f5f9',
+  fontSize:9, fontWeight: 700, color: '#64748b'
+}}>
+  {getOrderTypeLabel(order)}
+</div>
+
+{order?.taken_by_name ? (
+  <>
+    <div style={{ width: 3, height: 3, borderRadius: '50%', background: '#cbd5e1' }}></div>
+
+    <div style={{
+      background:'#fff7ed',
+      padding:'2px 8px',
+      borderRadius:6,
+      border: '1px solid #ffedd5',
+      fontSize:9,
+      fontWeight: 800,
+      color: '#c2410c'
+    }}>
+      Staff: {order.taken_by_name}
+    </div>
+  </>
+) : null}
+
                   </div>
               </div>
 {order?.special_instructions ? (

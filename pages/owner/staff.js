@@ -11,8 +11,11 @@ export default function StaffPage() {
 
   const [rows, setRows] = useState([]);
   const [busy, setBusy] = useState(false);
+
+  const [name, setName] = useState(''); // ✅ NEW
   const [email, setEmail] = useState('');
   const [newRole, setNewRole] = useState('staff');
+
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
 
@@ -50,21 +53,34 @@ export default function StaffPage() {
 
   async function handleAdd(e) {
     e.preventDefault();
-    if (!email.trim()) return;
+
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanName = name.trim();
+
+    if (!cleanEmail) return;
+
+    // ✅ Name required when role is staff
+    if (newRole === 'staff' && cleanName.length < 2) {
+      setError('Staff / Waiter name is required (min 2 characters).');
+      return;
+    }
+
     setBusy(true);
     setError('');
     setInfo('');
     try {
-      const clean = email.trim().toLowerCase();
       const { error } = await supabase.from('restaurant_staff').upsert(
         {
           restaurant_id: restaurant.id,
-          staff_email: clean,
+          staff_email: cleanEmail,
           role: newRole,
+          staff_name: cleanName || null, // ✅ NEW
         },
         { onConflict: 'restaurant_id,staff_email' }
       );
       if (error) throw error;
+
+      setName('');
       setEmail('');
       setNewRole('staff');
       setInfo('Saved staff member.');
@@ -81,15 +97,58 @@ export default function StaffPage() {
     setError('');
     setInfo('');
     try {
+      const row = rows.find(r => r.id === id);
+      const currentName = (row?.staff_name || '').trim();
+
+      // ✅ If switching to staff, ensure name exists
+      if (roleValue === 'staff' && currentName.length < 2) {
+        setBusy(false);
+        setError('Please set a Name before assigning role = Staff.');
+        return;
+      }
+
       const { error } = await supabase
         .from('restaurant_staff')
         .update({ role: roleValue })
         .eq('id', id);
       if (error) throw error;
+
       setInfo('Updated role.');
       await load();
     } catch (e) {
       setError(e.message || 'Failed to update role');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleNameSave(id, value) {
+    const clean = (value || '').trim();
+
+    setBusy(true);
+    setError('');
+    setInfo('');
+    try {
+      const row = rows.find(r => r.id === id);
+
+      // ✅ If row is staff, name must be present
+      if (row?.role === 'staff' && clean.length < 2) {
+        setBusy(false);
+        setError('Staff / Waiter name is required (min 2 characters).');
+        return;
+      }
+
+      const { error } = await supabase
+        .from('restaurant_staff')
+        .update({ staff_name: clean || null })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setInfo('Updated name.');
+      await load();
+    } catch (e) {
+      setError(e.message || 'Failed to update name');
     } finally {
       setBusy(false);
     }
@@ -101,10 +160,7 @@ export default function StaffPage() {
     setError('');
     setInfo('');
     try {
-      const { error } = await supabase
-        .from('restaurant_staff')
-        .delete()
-        .eq('id', id);
+      const { error } = await supabase.from('restaurant_staff').delete().eq('id', id);
       if (error) throw error;
       setInfo('Removed staff.');
       await load();
@@ -142,6 +198,14 @@ export default function StaffPage() {
         }}
       >
         <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Staff / Waiter name"
+          style={{ flex: 2, minWidth: 200, padding: 8, fontSize: 14 }}
+        />
+
+        <input
           type="email"
           required
           value={email}
@@ -149,6 +213,7 @@ export default function StaffPage() {
           placeholder="staff@example.com"
           style={{ flex: 2, minWidth: 220, padding: 8, fontSize: 14 }}
         />
+
         <select
           value={newRole}
           onChange={(e) => setNewRole(e.target.value)}
@@ -157,6 +222,7 @@ export default function StaffPage() {
           <option value="manager">Manager</option>
           <option value="staff">Staff / Waiter</option>
         </select>
+
         <button
           type="submit"
           disabled={busy}
@@ -196,6 +262,9 @@ export default function StaffPage() {
         <thead>
           <tr>
             <th style={{ textAlign: 'left', padding: 8, borderBottom: '1px solid #e5e7eb' }}>
+              Name
+            </th>
+            <th style={{ textAlign: 'left', padding: 8, borderBottom: '1px solid #e5e7eb' }}>
               Email
             </th>
             <th style={{ textAlign: 'left', padding: 8, borderBottom: '1px solid #e5e7eb' }}>
@@ -204,12 +273,24 @@ export default function StaffPage() {
             <th style={{ width: 80, padding: 8, borderBottom: '1px solid #e5e7eb' }} />
           </tr>
         </thead>
+
         <tbody>
           {rows.map((row) => (
             <tr key={row.id}>
               <td style={{ padding: 8, borderBottom: '1px solid #f3f4f6' }}>
+                <input
+                  type="text"
+                  defaultValue={row.staff_name || ''}
+                  placeholder="Name"
+                  onBlur={(e) => handleNameSave(row.id, e.target.value)}
+                  style={{ padding: 6, fontSize: 13, width: '100%' }}
+                />
+              </td>
+
+              <td style={{ padding: 8, borderBottom: '1px solid #f3f4f6' }}>
                 {row.staff_email}
               </td>
+
               <td style={{ padding: 8, borderBottom: '1px solid #f3f4f6' }}>
                 <select
                   value={row.role}
@@ -220,6 +301,7 @@ export default function StaffPage() {
                   <option value="staff">Staff</option>
                 </select>
               </td>
+
               <td style={{ padding: 8, borderBottom: '1px solid #f3f4f6' }}>
                 <button
                   type="button"
@@ -239,9 +321,10 @@ export default function StaffPage() {
               </td>
             </tr>
           ))}
+
           {rows.length === 0 && (
             <tr>
-              <td colSpan={3} style={{ padding: 12, fontSize: 13, color: '#6b7280' }}>
+              <td colSpan={4} style={{ padding: 12, fontSize: 13, color: '#6b7280' }}>
                 No staff added yet.
               </td>
             </tr>
