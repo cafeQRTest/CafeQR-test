@@ -17,6 +17,7 @@ const RestaurantCtx = createContext({
   isAdmin: false,
   isManager: false,
   isStaff: false,
+  staffName: null,
   refresh: async () => {},
 });
 
@@ -91,7 +92,7 @@ export function RestaurantProvider({ children }) {
         if (!found && userEmail) {
           const { data: staffRow, error: staffErr } = await supabase
             .from('restaurant_staff')
-            .select('restaurant_id, role')
+	    .select('restaurant_id, role, staff_name')
             .eq('staff_email', userEmail.toLowerCase())
             .maybeSingle();
           if (staffErr) {
@@ -106,7 +107,7 @@ export function RestaurantProvider({ children }) {
             if (restErr) throw restErr;
             if (rest) {
               // Attach the bound staff role temporarily
-              found = { ...rest, _staffRole: staffRow.role };
+	      found = { ...rest, _staffRole: staffRow.role, _staffName: staffRow.staff_name };
             }
           }
         }
@@ -164,12 +165,14 @@ found = { ...found, features, ...prof };
             try {
               const { data: staffRow2 } = await supabase
                 .from('restaurant_staff')
-                .select('role')
+		.select('role, staff_name')
                 .eq('restaurant_id', found.id)
                 .eq('staff_email', userEmail.toLowerCase())
                 .maybeSingle();
               if (staffRow2?.role === 'manager' || staffRow2?.role === 'staff') {
                 role = staffRow2.role;
+	        found = { ...found, _staffName: staffRow2.staff_name };
+
               }
             } catch {
               // keep role as guest
@@ -178,9 +181,14 @@ found = { ...found, features, ...prof };
         }
 
         if (found) {
-          delete found._staffRole;
-          found = { ...found, role };
-        }
+	  const staffName = found._staffName || null;
+
+	  delete found._staffRole;
+ 	  delete found._staffName;
+
+	  found = { ...found, role, staff_name: staffName };
+	}
+
 
         if (!cancelled) setRestaurant(found);
       } catch (e) {
@@ -218,6 +226,8 @@ found = { ...found, features, ...prof };
       isAdmin: role === 'admin',
       isManager: role === 'manager',
       isStaff: role === 'staff',
+    staffName: restaurant?.staff_name || null,
+
       refresh: async () => {
         setRefreshKey(prev => prev + 1);
       },

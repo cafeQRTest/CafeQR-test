@@ -53,6 +53,10 @@ export class OrderService {
         prices_include_tax = false,
         base_tax_rate = null,
         gst_enabled = null,
+        taken_by_name,
+        taken_by_user_id,
+        taken_by_email,
+        taken_by_role,
       } = metadata;
 
       // 1. Prepare Order Payload
@@ -84,6 +88,11 @@ export class OrderService {
         total_inc_tax,
         round_off_amount,
         total_amount, // Final Payable
+        // ✅ NEW: waiter/staff attribution (persist to orders)
+        ...(taken_by_name !== undefined ? { taken_by_name: (taken_by_name || '').trim() || null } : {}),
+        ...(taken_by_user_id !== undefined ? { taken_by_user_id: taken_by_user_id || null } : {}),
+        ...(taken_by_email !== undefined ? { taken_by_email: (taken_by_email || '').trim().toLowerCase() || null } : {}),
+        ...(taken_by_role !== undefined ? { taken_by_role: taken_by_role || null } : {}),
 
         updated_at: new Date().toISOString()
       };

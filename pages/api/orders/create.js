@@ -48,6 +48,12 @@ export default async function handler(req, res) {
       round_off_amount = 0,
       loyalty_amount_used = 0, // Capture loyalty redemption amt
       loyalty_points_used = null, // Capture explicit point redemption
+      // ✅ NEW: staff/waiter attribution (from Counter Sale)
+      // ❌ Untrusted client attribution (ignored; server resolves from auth + DB)
+      taken_by_name: client_taken_by_name = null,
+      taken_by_user_id: client_taken_by_user_id = null,
+      taken_by_email: client_taken_by_email = null,
+      taken_by_role: client_taken_by_role = null,
     } = req.body;
 
     // --- Customer Resolution Logic ---
@@ -85,6 +91,92 @@ export default async function handler(req, res) {
     if (!restaurant_id || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
+    // ------------------------------------------------------------------
+    // ✅ AUTH + ROLE + STAFF NAME RESOLUTION (server-side, trusted)
+    // ------------------------------------------------------------------
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.toLowerCase().startsWith('bearer ')
+      ? authHeader.slice(7).trim()
+      : '';
+
+    // Counter Sale / internal order types must be authenticated because this API
+    // uses service role (bypasses RLS) [page:1]
+    const internalOrderTypes = new Set(['counter', 'parcel', 'delivery']);
+    if (internalOrderTypes.has(order_type) && !token) {
+      return res.status(401).json({ error: 'Missing Authorization token.' });
+    }
+
+    let authUser = null;
+    if (token) {
+      const { data, error } = await supabase.auth.getUser(token);
+      if (!error) authUser = data?.user || null;
+    }
+
+    if (internalOrderTypes.has(order_type) && !authUser) {
+      return res.status(401).json({ error: 'Invalid or expired session token.' });
+    }
+
+    const authEmail =
+      authUser?.email ||
+      authUser?.user_metadata?.email ||
+      null;
+
+    const authUserId = authUser?.id || null;
+
+    // Determine role + staff_name for THIS restaurant
+    let effectiveRole = null; // 'admin' | 'manager' | 'staff' | null
+    let staffNameFromDb = null;
+
+    if (authEmail) {
+      // Owner check
+      const { data: restOwnerRow } = await supabase
+        .from('restaurants')
+        .select('owner_email')
+        .eq('id', restaurant_id)
+        .maybeSingle();
+
+      if (
+        restOwnerRow?.owner_email &&
+        restOwnerRow.owner_email.toLowerCase() === authEmail.toLowerCase()
+      ) {
+        effectiveRole = 'admin';
+        staffNameFromDb = null; // (optional: set from user metadata if you store it)
+      } else {
+        // Staff binding check (role + name)
+        const { data: staffRow } = await supabase
+          .from('restaurant_staff')
+          .select('role, staff_name')
+          .eq('restaurant_id', restaurant_id)
+          .eq('staff_email', authEmail.toLowerCase())
+          .maybeSingle();
+
+        if (staffRow?.role === 'manager' || staffRow?.role === 'staff') {
+          effectiveRole = staffRow.role;
+          staffNameFromDb = (staffRow.staff_name || '').trim() || null;
+        }
+      }
+    }
+
+    // If this is an internal order type, user must be bound to this restaurant
+    if (internalOrderTypes.has(order_type) && !effectiveRole) {
+      return res.status(403).json({ error: 'You do not have access to this restaurant.' });
+    }
+
+    // ✅ Enforce staff name if logged-in staff
+    if (effectiveRole === 'staff') {
+      if (!staffNameFromDb || staffNameFromDb.length < 2) {
+        return res.status(400).json({
+          error: 'Staff/Waiter name is missing. Admin must set it in Team & Access.',
+        });
+      }
+    }
+
+    // ✅ Trusted attribution values (server-only)
+    const serverTakenByName = staffNameFromDb; // staff/manager name from DB, null for admin/guest
+    const serverTakenByRole = effectiveRole;
+    const serverTakenByEmail = authEmail;
+    const serverTakenByUserId = authUserId;
+
 
     console.log('[DEBUG] Incoming Items:', JSON.stringify(items.map(i => ({ id: i.id, menu_item_id: i.menu_item_id })), null, 2));
 
@@ -300,7 +392,15 @@ export default async function handler(req, res) {
         status: finalStatus,
         payment_status: finalPaymentStatus,
         payment_method: processedPaymentMethod,
-        user_id,
+        // Use verified auth user when available (don’t trust client user_id)
+        user_id: authUserId || user_id,
+
+        // ✅ NEW attribution fields (store on the order)
+        taken_by_name: serverTakenByName,
+        taken_by_user_id: serverTakenByUserId,
+        taken_by_email: serverTakenByEmail,
+        taken_by_role: serverTakenByRole,
+
         customer_id: finalCustomerId,
         customer_name,
         customer_phone,
@@ -361,6 +461,10 @@ export default async function handler(req, res) {
         created_at: orderResult.created_at,
         loyalty_amount_used: loyalty_amount_used || 0,
         loyalty_points_used: loyalty_points_used || 0,
+        taken_by_name: serverTakenByName,
+        taken_by_email: serverTakenByEmail,
+        taken_by_role: serverTakenByRole,
+
       },
     };
 
