@@ -383,6 +383,12 @@ lines.push(ALIGN_LEFT);
        lines.push(withMargins(`Bill No: ${order.bill_no}`, layout));
     }
     if (tableLabel) lines.push(withMargins(`For: ${tableLabel}`, layout));
+const staffName = String(order?.taken_by_name || '').trim();
+
+if (staffName) {
+  lines.push(withMargins(`Staff: ${staffName}`, layout));
+}
+
     if (order?.number_of_customers)
       lines.push(
         withMargins(`No. of Customers: ${order.number_of_customers}`, layout)
