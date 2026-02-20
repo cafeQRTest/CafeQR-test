@@ -1009,13 +1009,6 @@ export default function OrdersPage() {
     }
   }, []);
 
-  // Keep-alive ping
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (!document.hidden) fetch('/api/ping', { method: 'POST' }).catch(() => {});
-    }, 30000);
-    return () => clearInterval(interval);
-  }, []);
 
 const onCancelOrderOpen = (order) => setCancelOrderDialog(order);
 const handleCancelConfirm = async (reason) => {
