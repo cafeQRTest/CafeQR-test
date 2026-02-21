@@ -17,6 +17,8 @@ import { round2, roundP, formatQtyP } from '../../lib/qty'
 import EditOrderPanel from '../../components/EditOrderPanel';
 import PaymentConfirmDialog from '../../components/PaymentConfirmDialog';
 import OrderItemsModal from '../../components/OrderItemsModal';
+import { useQueryClient } from '@tanstack/react-query';
+import { tableKeys } from '../../hooks/useTables';
 
 const BRAND = {
   orange: '#f97316',
@@ -783,6 +785,7 @@ async function fetchFullOrder(supabase, orderId) {
 export default function OrdersPage() {
   const supabase = getSupabase();
   const router = useRouter(); // <-- Add this inside the component!
+  const queryClient = useQueryClient();
   const { user, checking } = useRequireAuth(supabase);
   const { restaurant, role, loading: restLoading } = useRestaurant();
   const canCancel = role !== 'staff'; // staff cannot cancel
@@ -1037,6 +1040,16 @@ const handleCancelConfirm = async (reason) => {
        .eq('id', cancelOrderDialog.id)
        .eq('restaurant_id', restaurantId);
        console.log('[CANCEL ORDER] Order status updated to cancelled');
+
+       if (fullOrder?.table_number) {
+         try {
+           await supabase
+             .from('tables')
+             .update({ status: 'available', current_order_id: null })
+             .eq('restaurant_id', restaurantId)
+             .eq('identifier', fullOrder.table_number);
+         } catch(e) { console.error('Error releasing table:', e); }
+       }
    
       const { data: invoice } = await supabase
       .from('invoices')
@@ -1565,6 +1578,7 @@ const complete = async (orderId, actualPaymentMethod = null, details = null) => 
 
     // 4. Loyalty & Print logic is now handled by backend /api/orders/complete
     // We only need to reload orders.
+    queryClient.invalidateQueries({ queryKey: tableKeys.all });
     await loadOrders();
   } catch (e) {
     console.error('[COMPLETE ORDER] Error:', e);

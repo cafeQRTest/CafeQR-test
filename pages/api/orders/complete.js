@@ -182,6 +182,19 @@ if (finalPaymentMethod === 'mixed') {
       }
     }
 
+    // 4.2 Free Table if applicable (Dine-in)
+    if (order.table_number) {
+      try {
+        await supabase
+          .from('tables')
+          .update({ status: 'available', current_order_id: null })
+          .eq('restaurant_id', restaurant_id)
+          .eq('identifier', order.table_number);
+      } catch (tableErr) {
+        console.error('[/api/orders/complete] Table release error:', tableErr);
+      }
+    }
+
     // 5. Build response for printing
     // Re-fetch everything to ensure fidelity (or use OrderService return)
     const { data: finalOrder } = await supabase
