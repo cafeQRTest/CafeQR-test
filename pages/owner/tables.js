@@ -2190,7 +2190,7 @@ const HistoryViewContainer = styled.div`
   animation: ${fadeIn} 0.5s ease-out;
 `;
 
-const OrderHistoryView = ({ onBack, orders, onPrint, onCancel, loading }) => {
+const OrderHistoryView = ({ onBack, orders, onPrint, onCancel, loading, onOrderClick, onInvoiceClick }) => {
   const [filterType, setFilterType] = useState('all');
   const [creditOnly, setCreditOnly] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -2326,7 +2326,11 @@ const OrderHistoryView = ({ onBack, orders, onPrint, onCancel, loading }) => {
                   header: 'Order ID',
                   accessor: 'id',
                   cell: (order) => (
-                    <span style={{ fontWeight: 700, color: '#94a3b8', fontSize: '11px', letterSpacing: '0.5px' }}>
+                    <span 
+                      style={{ fontWeight: 700, color: '#94a3b8', fontSize: '11px', letterSpacing: '0.5px', cursor: 'pointer' }}
+                      onClick={(e) => { e.stopPropagation(); onOrderClick(order); }}
+                      title="Click to view order details"
+                    >
                       #{order.id.slice(0, 8).toUpperCase()}
                     </span>
                   )
@@ -2334,11 +2338,14 @@ const OrderHistoryView = ({ onBack, orders, onPrint, onCancel, loading }) => {
                 {
                   header: 'Invoice No',
                   accessor: 'invoice_no',
-                  cell: (order) => (
-                    <span style={{ fontWeight: 600, color: '#1e293b', fontSize: '13px' }}>
-                      {(order.invoices?.invoice_no || order.invoices?.[0]?.invoice_no || order.invoices?.bill_no || order.invoices?.[0]?.bill_no || order.invoice_no || '—')}
-                    </span>
-                  )
+                  cell: (order) => {
+                    const invoiceNo = order.invoices?.invoice_no || order.invoices?.[0]?.invoice_no || order.invoices?.bill_no || order.invoices?.[0]?.bill_no || order.invoice_no || '—';
+                    return (
+                      <span style={{ fontWeight: 600, color: '#1e293b', fontSize: '13px' }}>
+                        {invoiceNo}
+                      </span>
+                    );
+                  }
                 },
                 {
                   header: 'Date & Time',
@@ -2515,6 +2522,10 @@ export default function TableManagement() {
   const [showFloorsModal, setShowFloorsModal] = useState(false);
   const [editingTable, setEditingTable] = useState(null);
   const [viewOrder, setViewOrder] = useState(null);
+  const [historyModalOrder, setHistoryModalOrder] = useState(null);
+  const [historyInvoice, setHistoryInvoice] = useState(null);
+  const [historyInvoiceItems, setHistoryInvoiceItems] = useState([]);
+  const [historyInvoiceLoading, setHistoryInvoiceLoading] = useState(false);
   const [cancelOrderDialog, setCancelOrderDialog] = useState(null);
    const [billedOrders, setBilledOrders] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -2804,6 +2815,24 @@ const handleModalResend = async (table) => {
     if (!error && data) return data;
     return null;
   }
+
+  // Open invoice detail popup (billing-style) from order history
+  const handleHistoryViewDetails = async (order) => {
+    // Find the invoice from the order's invoices relation
+    const inv = order.invoices?.[0] || order.invoices || null;
+    if (!inv) { alert('No invoice found for this order'); return; }
+    setHistoryInvoice(inv);
+    setHistoryInvoiceLoading(true);
+    setHistoryInvoiceItems([]);
+    try {
+      const { data, error } = await supabase
+        .from('order_items')
+        .select('*, menu_items(name)')
+        .eq('order_id', order.id);
+      if (!error) setHistoryInvoiceItems(data || []);
+    } catch (_) {}
+    finally { setHistoryInvoiceLoading(false); }
+  };
 
   // Silent helper: finish a credit order directly without any popup or alert
   const handleFinishCreditOrder = async (e, orderId) => {
@@ -3757,6 +3786,8 @@ const handleModalResend = async (table) => {
               onPrint={handlePrintBill}
               onCancel={(order) => setCancelOrderDialog(order)}
               loading={loadingHistory}
+              onOrderClick={(order) => setHistoryModalOrder(order)}
+              onInvoiceClick={(order) => handleHistoryViewDetails(order)}
             />
           ) : (
             <>
@@ -5050,6 +5081,131 @@ const handleModalResend = async (table) => {
           onClose={() => setViewOrder(null)}
           onStatusChange={handleOrderStatusChange}
         />
+      )}
+
+      {historyModalOrder && (
+        <OrderItemsModal
+          order={historyModalOrder}
+          onClose={() => setHistoryModalOrder(null)}
+        />
+      )}
+
+      {/* Invoice detail popup — billing-style */}
+      {historyInvoice && (
+        <div
+          onClick={() => setHistoryInvoice(null)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 10001,
+            background: 'rgba(15,23,42,0.45)', backdropFilter: 'blur(5px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: 'white', borderRadius: 20, width: '100%', maxWidth: 480,
+              maxHeight: '85vh', display: 'flex', flexDirection: 'column',
+              boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', overflow: 'hidden'
+            }}
+          >
+            {/* Header */}
+            <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 800, color: '#6366f1', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Invoice Details</div>
+                <h2 style={{ margin: 0, fontSize: 20, fontWeight: 900, color: '#0f172a' }}>{historyInvoice.invoice_no || historyInvoice.bill_no}</h2>
+              </div>
+              <button onClick={() => setHistoryInvoice(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#94a3b8', lineHeight: 1 }}>✕</button>
+            </div>
+
+            {/* Body */}
+            <div style={{ overflowY: 'auto', flex: 1, padding: '20px 24px' }}>
+              {/* Meta grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
+                {historyInvoice.customer_name && (
+                  <div style={{ background: '#f8fafc', borderRadius: 10, padding: '10px 14px' }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>Customer</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{historyInvoice.customer_name}</div>
+                  </div>
+                )}
+                <div style={{ background: '#f8fafc', borderRadius: 10, padding: '10px 14px' }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>Date</div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: '#334155' }}>
+                    {new Date(historyInvoice.date_ordered || historyInvoice.invoice_date).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })}
+                  </div>
+                </div>
+                {historyInvoice.payment_method && (
+                  <div style={{ background: '#f8fafc', borderRadius: 10, padding: '10px 14px' }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>Payment</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', textTransform: 'capitalize' }}>{historyInvoice.payment_method}</div>
+                  </div>
+                )}
+                <div style={{ background: '#f8fafc', borderRadius: 10, padding: '10px 14px' }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>Status</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: String(historyInvoice.status||'').toLowerCase() === 'void' ? '#dc2626' : '#10b981', textTransform: 'capitalize' }}>{historyInvoice.status || 'Paid'}</div>
+                </div>
+              </div>
+
+              {/* Items */}
+              <div style={{ fontSize: 10, fontWeight: 800, color: '#cbd5e1', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8, borderBottom: '1.5px solid #f1f5f9', paddingBottom: 6 }}>Order Items</div>
+              {historyInvoiceLoading ? (
+                <div style={{ padding: '16px 0', color: '#94a3b8', fontSize: 13 }}>Fetching items…</div>
+              ) : historyInvoiceItems.length === 0 ? (
+                <div style={{ padding: '16px 0', color: '#94a3b8', fontSize: 13 }}>No items found</div>
+              ) : (
+                <div style={{ marginBottom: 16 }}>
+                  {historyInvoiceItems.map((item, idx) => {
+                    const price = Number(item.price ?? item.unit_price ?? item.price_at_order ?? 0);
+                    const lineDisc = Number(item.line_discount_amount || 0);
+                    const displayDisc = lineDisc > 0 ? lineDisc : Math.max(0, Number(item.discount_amount || 0) - Number(item.order_discount_share || 0));
+                    const itemName = (() => {
+                      let n = item.menu_items?.name || item.item_name || 'Item';
+                      if (item.variant_name) { const s = ` (${item.variant_name})`; if (!n.endsWith(s)) n += s; }
+                      return n;
+                    })();
+                    return (
+                      <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #f8fafc' }}>
+                        <div style={{ flex: 1 }}>
+                          <span style={{ color: '#f97316', fontWeight: 700, marginRight: 6, fontSize: 12 }}>{item.quantity}×</span>
+                          <span style={{ fontSize: 12, fontWeight: 500, color: '#334155' }}>{itemName}</span>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: '#1e293b' }}>₹{(price * item.quantity).toFixed(2)}</div>
+                          {displayDisc > 0 && <div style={{ fontSize: 10, color: '#ef4444', fontWeight: 600 }}>-₹{displayDisc.toFixed(2)}</div>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Summary */}
+              <div style={{ borderTop: '1.5px solid #f1f5f9', paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {Number(historyInvoice.total_tax || 0) > 0.01 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                    <span style={{ color: '#64748b' }}>GST Total</span>
+                    <span style={{ fontWeight: 600 }}>₹{Number(historyInvoice.total_tax).toFixed(2)}</span>
+                  </div>
+                )}
+                {Number(historyInvoice.discount_amount || 0) > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                    <span style={{ color: '#ef4444' }}>Discount</span>
+                    <span style={{ fontWeight: 600, color: '#ef4444' }}>-₹{Number(historyInvoice.discount_amount).toFixed(2)}</span>
+                  </div>
+                )}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 4 }}>
+                  <span style={{ fontSize: 14, fontWeight: 800, color: '#0f172a' }}>Grand Total</span>
+                  <span style={{ fontSize: 22, fontWeight: 900, color: '#f97316' }}>₹{Number(historyInvoice.total_inc_gst ?? historyInvoice.total_inc_tax ?? 0).toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div style={{ padding: '16px 24px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button onClick={() => setHistoryInvoice(null)} style={{ padding: '10px 20px', borderRadius: 10, border: '1px solid #e2e8f0', background: 'white', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>Close</button>
+              <button onClick={() => downloadInvoicePdf(historyInvoice.order_id).catch(e => alert(e.message))} style={{ padding: '10px 20px', borderRadius: 10, border: 'none', background: '#f97316', color: 'white', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>Download PDF</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {editingOrder && (
