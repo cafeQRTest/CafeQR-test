@@ -95,23 +95,74 @@ export function useTableMutation() {
   return useMutation({
     mutationFn: async ({ table, isEdit, restaurantId }) => {
       if (isEdit) {
-        // 'table' here is assumed to have an 'id'
+        // On edit: check if another active table already uses this identifier (case-insensitive)
+        const editId = table.id;
+        const { data: conflict } = await supabase
+          .from('tables')
+          .select('id, identifier, is_active')
+          .eq('restaurant_id', restaurantId)
+          .ilike('identifier', table.identifier.trim())
+          .eq('is_active', true)
+          .neq('id', editId);
+
+        if (conflict && conflict.length > 0) {
+          throw new Error(`A table with identifier "${table.identifier.trim()}" already exists. Please use a unique name.`);
+        }
+
         const { data, error } = await supabase
           .from('tables')
           .update(table)
-          .eq('id', table.id)
+          .eq('id', editId)
           .select()
           .single();
         if (error) throw error;
         return data;
+
       } else {
-        // 'table' can be a single object or an array for bulk creation
-        const { data, error } = await supabase
-          .from('tables')
-          .insert(table)
-          .select();
-        if (error) throw error;
-        return data;
+        // On create: table can be a single object or an array (bulk)
+        const tablesToInsert = Array.isArray(table) ? table : [table];
+        const results = [];
+
+        for (const t of tablesToInsert) {
+          const identifier = t.identifier.trim();
+
+          // DB-level case-insensitive check (active + soft-deleted)
+          const { data: existing } = await supabase
+            .from('tables')
+            .select('id, identifier, is_active')
+            .eq('restaurant_id', restaurantId)
+            .ilike('identifier', identifier);
+
+          const activeMatch = (existing || []).find(e => e.is_active);
+          const deletedMatch = (existing || []).find(e => !e.is_active);
+
+          if (activeMatch) {
+            throw new Error(`Table "${identifier}" already exists. Please use a unique identifier.`);
+          }
+
+          if (deletedMatch) {
+            // Reactivate the soft-deleted row with new field values
+            const { data: restored, error: restoreErr } = await supabase
+              .from('tables')
+              .update({ ...t, is_active: true, identifier })
+              .eq('id', deletedMatch.id)
+              .select()
+              .single();
+            if (restoreErr) throw restoreErr;
+            results.push(restored);
+          } else {
+            // Fresh insert
+            const { data: created, error: createErr } = await supabase
+              .from('tables')
+              .insert([{ ...t, identifier }])
+              .select()
+              .single();
+            if (createErr) throw createErr;
+            results.push(created);
+          }
+        }
+
+        return Array.isArray(table) ? results : results[0];
       }
     },
     onSuccess: (data, variables) => {

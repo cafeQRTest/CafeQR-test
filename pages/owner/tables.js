@@ -3366,10 +3366,10 @@ const handleModalResend = async (table) => {
         for (let i = 1; i <= formData.tableCount; i++) {
           const identifier = `${baseIdentifier}${i}`;
           
-          // Check for duplicate identifier in existing tables
+          // Case-insensitive duplicate check (active tables in UI state)
           const isDuplicate = tables.some(t => t.identifier.toLowerCase().trim() === identifier.toLowerCase().trim());
           if (isDuplicate) {
-            showAlert(`Block: Table with identifier "${identifier}" already exists. Bulk creation cancelled to avoid duplicates.`);
+            showAlert(`Table "${identifier}" already exists (identifier match is case-insensitive). Bulk creation cancelled.`);
             return;
           }
 
@@ -3387,14 +3387,14 @@ const handleModalResend = async (table) => {
           });
         }
       } else {
-        // Single table (Add or Edit)
-        const isDuplicate = tables.some(t => 
-          t.identifier.toLowerCase().trim() === baseIdentifier.toLowerCase().trim() && 
+        // Case-insensitive duplicate check (active tables in UI state)
+        const isDuplicate = tables.some(t =>
+          t.identifier.toLowerCase().trim() === baseIdentifier.toLowerCase().trim() &&
           (!editingTable || t.id !== editingTable.id)
         );
 
         if (isDuplicate) {
-          showAlert(`Error: A table with the identifier "${baseIdentifier}" already exists. Please use a unique name.`);
+          showAlert(`Table "${baseIdentifier}" already exists (identifier match is case-insensitive). Please use a unique name.`);
           return;
         }
 
@@ -3456,8 +3456,14 @@ const handleModalResend = async (table) => {
     const table = tables.find(t => t.id === tableId);
     if (!table) return;
 
-    if (table.status === 'occupied' || table.status === 'reserved') {
-      showAlert(`Block: Cannot delete table "${table.identifier}" while it is ${table.status.toUpperCase()}. Please clear the table or cancel the reservation first.`);
+    const blockedStatuses = {
+      occupied:    `Table "${table.identifier}" is currently OCCUPIED. Clear the order before deleting.`,
+      reserved:    `Table "${table.identifier}" is RESERVED. Cancel the reservation before deleting.`,
+      cleaning:    `Table "${table.identifier}" is marked as CLEANING. Mark it available before deleting.`,
+      maintenance: `Table "${table.identifier}" is under MAINTENANCE. Mark it available before deleting.`,
+    };
+    if (blockedStatuses[table.status]) {
+      showAlert(blockedStatuses[table.status]);
       return;
     }
 
