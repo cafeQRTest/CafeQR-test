@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { motion, AnimatePresence } from "framer-motion";
 import { Search, ArrowRight, User, ShoppingBag } from "lucide-react";
 import { getSupabase } from "../../../services/supabase";
 import { getOrCreateCustomer } from "../../../lib/customer/getOrCreateCustomer";
@@ -37,20 +36,6 @@ export default function RestaurantListing() {
             // 1. Get User Location (Priority: Query Params -> LocalStorage)
             let userLat = parseFloat(router.query.lat);
             let userLng = parseFloat(router.query.lng);
-
-            if (isNaN(userLat) || isNaN(userLng)) {
-                // Fallback to localStorage address if query params missing
-                const savedAddr = localStorage.getItem('cafeqr_address'); // Note: this stores text, need coords.
-                // Actually, we should check 'available_restaurants' from previous step if we trusted the RPC. 
-                // But USER REQUEST explicitly asks to "implement Haversine formula... in the restaurant listing logic".
-                // So we will re-calculate here to be safe and strictly client-side verified.
-
-                // Let's try to get coords strictly from query or maybe a separate storage key if needed.
-                // For now, if no query, we might show all or none. 
-                // Assuming nav usually provides them.
-            }
-
-            console.log("User Location for Filtering:", userLat, userLng);
 
             // 2. Fetch Restaurants with Location Data
             const { data, error } = await supabase
@@ -90,15 +75,10 @@ export default function RestaurantListing() {
                         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
                         const distance = R * c;
 
-                        console.log(`Hotel: ${r.name}, Distance: ${distance.toFixed(3)}km, Radius: ${radius}km`);
-
-                        return distance <= radius; // STRICT CONDITION
+                        return distance <= radius;
                     });
                     setRestaurants(filteredList);
                 } else {
-                    // If no valid user coords, show all or empty? 
-                    // Showing all might be misleading. Let's show all but warn.
-                    console.warn("No user coordinates found for filtering.");
                     setRestaurants(data);
                 }
             } else {
@@ -161,28 +141,8 @@ export default function RestaurantListing() {
         return parts.join(" • ");
     }, [addrLoading, defaultAddress, localAddress]);
 
-    const containerVariants = {
-        hidden: { opacity: 0 },
-        show: {
-            opacity: 1,
-            transition: {
-                staggerChildren: 0.1
-            }
-        }
-    };
-
-    const itemVariants = {
-        hidden: { opacity: 0, y: 30 },
-        show: { opacity: 1, y: 0 }
-    };
-
     return (
-        <motion.div
-            initial={{ opacity: 0, scale: 0.98 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.4 }}
-            className="delivery-restaurants-page"
-        >
+        <div className="delivery-restaurants-page">
             <header className="delivery-restaurants-header">
                 <div className="header-inner">
                     <div className="header-top">
@@ -190,97 +150,84 @@ export default function RestaurantListing() {
                             <p className="address-label">DELIVER TO</p>
                             <Link href="/app/address" className="address-link">
                                 <span className="address-text">{topAddressText}</span>
-                                <span className="address-arrow">▼</span>
+                                <span className="address-arrow">▲</span>
                             </Link>
                         </div>
 
                         <div style={{ position: 'relative' }}>
-                            <motion.button
+                            <button
                                 onClick={() => setShowMenu(!showMenu)}
-                                animate={{ scale: [1, 1.05, 1] }}
-                                transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                                whileHover={{ scale: 1.1 }}
-                                whileTap={{ scale: 0.95 }}
                                 className="header-avatar"
                             >
                                 <span>👨‍💼</span>
-                            </motion.button>
+                            </button>
 
-                            <AnimatePresence>
-                                {showMenu && (
-                                    <>
-                                        <div
-                                            style={{ position: 'fixed', inset: 0, zIndex: 40 }}
-                                            onClick={() => setShowMenu(false)}
-                                        />
-                                        <motion.div
-                                            initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                                            exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                            {showMenu && (
+                                <>
+                                    <div
+                                        style={{ position: 'fixed', inset: 0, zIndex: 40 }}
+                                        onClick={() => setShowMenu(false)}
+                                    />
+                                    <div
+                                        style={{
+                                            position: 'absolute',
+                                            top: '120%',
+                                            right: 0,
+                                            background: 'white',
+                                            borderRadius: '16px',
+                                            boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+                                            padding: '8px',
+                                            minWidth: '180px',
+                                            zIndex: 50,
+                                            border: '1px solid #f3f4f6'
+                                        }}
+                                    >
+                                        <button
+                                            onClick={() => router.push('/app/orders/history')}
                                             style={{
-                                                position: 'absolute',
-                                                top: '120%',
-                                                right: 0,
-                                                background: 'white',
-                                                borderRadius: '16px',
-                                                boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
-                                                padding: '8px',
-                                                minWidth: '180px',
-                                                zIndex: 50,
-                                                border: '1px solid #f3f4f6'
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '12px',
+                                                width: '100%',
+                                                padding: '12px 16px',
+                                                border: 'none',
+                                                background: 'transparent',
+                                                borderRadius: '12px',
+                                                cursor: 'pointer',
+                                                textAlign: 'left',
+                                                color: '#374151',
+                                                fontSize: '14px',
+                                                fontWeight: 500
                                             }}
                                         >
-                                            <button
-                                                onClick={() => router.push('/app/orders/history')}
-                                                style={{
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    gap: '12px',
-                                                    width: '100%',
-                                                    padding: '12px 16px',
-                                                    border: 'none',
-                                                    background: 'transparent',
-                                                    borderRadius: '12px',
-                                                    cursor: 'pointer',
-                                                    textAlign: 'left',
-                                                    color: '#374151',
-                                                    fontSize: '14px',
-                                                    fontWeight: 500
-                                                }}
-                                                onMouseEnter={(e) => e.target.style.background = '#f9fafb'}
-                                                onMouseLeave={(e) => e.target.style.background = 'transparent'}
-                                            >
-                                                <ShoppingBag size={18} />
-                                                My Orders
-                                            </button>
+                                            <ShoppingBag size={18} />
+                                            My Orders
+                                        </button>
 
-                                            <button
-                                                onClick={() => router.push('/app/profile')}
-                                                style={{
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    gap: '12px',
-                                                    width: '100%',
-                                                    padding: '12px 16px',
-                                                    border: 'none',
-                                                    background: 'transparent',
-                                                    borderRadius: '12px',
-                                                    cursor: 'pointer',
-                                                    textAlign: 'left',
-                                                    color: '#374151',
-                                                    fontSize: '14px',
-                                                    fontWeight: 500
-                                                }}
-                                                onMouseEnter={(e) => e.target.style.background = '#f9fafb'}
-                                                onMouseLeave={(e) => e.target.style.background = 'transparent'}
-                                            >
-                                                <User size={18} />
-                                                Profile
-                                            </button>
-                                        </motion.div>
-                                    </>
-                                )}
-                            </AnimatePresence>
+                                        <button
+                                            onClick={() => router.push('/app/profile')}
+                                            style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '12px',
+                                                width: '100%',
+                                                padding: '12px 16px',
+                                                border: 'none',
+                                                background: 'transparent',
+                                                borderRadius: '12px',
+                                                cursor: 'pointer',
+                                                textAlign: 'left',
+                                                color: '#374151',
+                                                fontSize: '14px',
+                                                fontWeight: 500
+                                            }}
+                                        >
+                                            <User size={18} />
+                                            Profile
+                                        </button>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     </div>
 
@@ -298,9 +245,8 @@ export default function RestaurantListing() {
 
             <div className="delivery-restaurants-content">
                 {loading ? (
-                    <div className="loading-state">
-                        <div className="loading-avatar" />
-                        <div className="loading-text" />
+                    <div className="p-12 text-center text-gray-500 font-medium">
+                        Searching nearby restaurants...
                     </div>
                 ) : filtered.length === 0 ? (
                     <div className="empty-state">
@@ -308,74 +254,63 @@ export default function RestaurantListing() {
                         <p>No restaurants found near you.</p>
                     </div>
                 ) : (
-                    <motion.div
-                        variants={containerVariants}
-                        initial="hidden"
-                        animate="show"
-                        className="restaurants-grid"
-                    >
+                    <div className="restaurants-grid">
                         {filtered.map((r, i) => {
                             const brand = r?.restaurant_profiles?.brand_color || "#f97316";
                             const imgUrl = STOCK_IMAGES[i % STOCK_IMAGES.length];
 
                             return (
-                                <motion.div variants={itemVariants} key={r.id}>
-                                    <Link href={`/app/restaurant/${r.id}`} className="restaurant-card">
-                                        <div className="card-inner">
-                                            <div className="card-image">
-                                                <img src={imgUrl} alt={r.name} />
+                                <Link key={r.id} href={`/app/restaurant/${r.id}`} className="restaurant-card">
+                                    <div className="card-inner">
+                                        <div className="card-image">
+                                            <img src={imgUrl} alt={r.name} loading="lazy" />
+                                        </div>
+
+                                        <div className="card-content">
+                                            <div className="card-info">
+                                                <h3>{r.name}</h3>
+                                                <p>Coffee • Snacks • Beverages</p>
                                             </div>
 
-                                            <div className="card-content">
-                                                <div className="card-info">
-                                                    <h3>{r.name}</h3>
-                                                    <p>Coffee • Snacks • Beverages</p>
+                                            <div className="card-footer">
+                                                <div className="card-rating">
+                                                    <span>4.5 ★</span>
+                                                    <span>20-30 mins</span>
                                                 </div>
 
-                                                <div className="card-footer">
-                                                    <div className="card-rating">
-                                                        <span>4.5 ★</span>
-                                                        <span>20-30 mins</span>
-                                                    </div>
-
-                                                    <span className="card-order-btn" style={{ backgroundColor: brand }}>
-                                                        Order <ArrowRight className="w-3 h-3" />
-                                                    </span>
-                                                </div>
+                                                <span className="card-order-btn" style={{ backgroundColor: brand }}>
+                                                    Order <ArrowRight className="w-3 h-3" />
+                                                </span>
                                             </div>
                                         </div>
-                                    </Link>
-                                </motion.div>
+                                    </div>
+                                </Link>
                             );
                         })}
-                    </motion.div>
+                    </div>
                 )}
             </div>
 
-            {/* Scoped styles - ONLY affects this delivery restaurants page */}
+            {/* Scoped styles */}
             <style jsx>{`
                 .delivery-restaurants-page {
                     min-height: 100vh;
                     width: 100%;
-                    max-width: none;
                     background: #f8fafc;
                     padding-bottom: 120px;
                     font-family: system-ui, -apple-system, sans-serif;
                 }
                 .delivery-restaurants-header {
-                    background: rgba(255,255,255,0.95);
-                    backdrop-filter: blur(12px);
-                    border-bottom: 1px solid rgba(229,231,235,0.6);
+                    background: #fff;
+                    border-bottom: 1px solid #e5e7eb;
                     position: sticky;
                     top: 0;
                     z-index: 20;
                     padding: 12px 16px;
-                    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
                 }
                 .header-inner {
                     max-width: 1280px;
                     margin: 0 auto;
-                    padding: 0 16px;
                 }
                 .header-top {
                     display: flex;
@@ -391,7 +326,7 @@ export default function RestaurantListing() {
                     font-size: 10px;
                     font-weight: 700;
                     color: #9ca3af;
-                    letter-spacing: 0.05em;
+                    text-transform: uppercase;
                     margin: 0 0 2px;
                 }
                 .address-link {
@@ -418,11 +353,10 @@ export default function RestaurantListing() {
                     height: 40px;
                     border-radius: 50%;
                     background: #fff7ed;
-                    border: 2px solid #f97316;
+                    border: 1px solid #f97316;
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
                     font-size: 20px;
                     cursor: pointer;
                 }
@@ -437,59 +371,20 @@ export default function RestaurantListing() {
                     width: 20px;
                     height: 20px;
                     color: #9ca3af;
-                    pointer-events: none;
                 }
                 .search-input {
                     width: 100%;
-                    padding: 12px 12px 12px 40px;
-                    border-radius: 16px;
+                    padding: 10px 12px 10px 40px;
+                    border-radius: 12px;
                     background: #f3f4f6;
-                    border: 2px solid transparent;
+                    border: 1px solid transparent;
                     font-size: 14px;
-                    font-weight: 500;
-                    color: #111827;
                     outline: none;
-                    transition: all 0.2s;
-                }
-                .search-input::placeholder {
-                    color: #9ca3af;
-                }
-                .search-input:focus {
-                    background: #fff;
-                    border-color: rgba(249,115,22,0.3);
-                    box-shadow: 0 4px 12px rgba(0,0,0,0.06);
                 }
                 .delivery-restaurants-content {
                     max-width: 1280px;
                     margin: 0 auto;
                     padding: 24px;
-                    width: 100%;
-                }
-                .loading-state {
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                    justify-content: center;
-                    padding: 80px 0;
-                    gap: 16px;
-                }
-                .loading-avatar {
-                    width: 40px;
-                    height: 40px;
-                    background: #f3f4f6;
-                    border-radius: 50%;
-                    animation: pulse 2s infinite;
-                }
-                .loading-text {
-                    height: 16px;
-                    width: 128px;
-                    background: #f3f4f6;
-                    border-radius: 4px;
-                    animation: pulse 2s infinite;
-                }
-                @keyframes pulse {
-                    0%, 100% { opacity: 1; }
-                    50% { opacity: 0.5; }
                 }
                 .empty-state {
                     text-align: center;
@@ -502,10 +397,6 @@ export default function RestaurantListing() {
                     margin: 0 auto 12px;
                     color: #d1d5db;
                 }
-                .empty-state p {
-                    font-weight: 500;
-                    margin: 0;
-                }
                 .restaurants-grid {
                     display: grid;
                     gap: 16px;
@@ -515,25 +406,18 @@ export default function RestaurantListing() {
                     background: #fff;
                     border-radius: 16px;
                     padding: 12px;
-                    border: 1px solid #f3f4f6;
-                    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+                    border: 1px solid #e5e7eb;
                     text-decoration: none;
                     color: inherit;
-                    transition: all 0.3s ease;
-                }
-                .restaurant-card:hover {
-                    transform: translateY(-4px);
-                    box-shadow: 0 10px 25px rgba(0,0,0,0.08);
                 }
                 .card-inner {
                     display: flex;
                     gap: 16px;
                 }
                 .card-image {
-                    width: 96px;
-                    height: 96px;
+                    width: 80px;
+                    height: 80px;
                     flex-shrink: 0;
-                    background: #f3f4f6;
                     border-radius: 12px;
                     overflow: hidden;
                 }
@@ -541,33 +425,21 @@ export default function RestaurantListing() {
                     width: 100%;
                     height: 100%;
                     object-fit: cover;
-                    transition: transform 0.5s ease;
-                }
-                .restaurant-card:hover .card-image img {
-                    transform: scale(1.1);
                 }
                 .card-content {
                     flex: 1;
                     display: flex;
                     flex-direction: column;
                     justify-content: space-between;
-                    padding: 4px 0;
                 }
                 .card-info h3 {
-                    font-size: 18px;
+                    font-size: 16px;
                     font-weight: 700;
-                    color: #111827;
                     margin: 0 0 4px;
-                    line-height: 1.2;
-                    transition: color 0.2s;
-                }
-                .restaurant-card:hover .card-info h3 {
-                    color: #f97316;
                 }
                 .card-info p {
                     font-size: 12px;
                     color: #6b7280;
-                    font-weight: 500;
                     margin: 0;
                 }
                 .card-footer {
@@ -582,23 +454,19 @@ export default function RestaurantListing() {
                     gap: 4px;
                     font-size: 10px;
                     font-weight: 700;
-                    background: #f0fdf4;
                     color: #15803d;
-                    padding: 4px 8px;
-                    border-radius: 6px;
                 }
                 .card-order-btn {
                     color: #fff;
-                    font-size: 12px;
+                    font-size: 11px;
                     font-weight: 700;
-                    padding: 8px 16px;
-                    border-radius: 9999px;
-                    display: inline-flex;
+                    padding: 6px 12px;
+                    border-radius: 999px;
+                    display: flex;
                     align-items: center;
                     gap: 4px;
-                    box-shadow: 0 2px 8px rgba(249,115,22,0.2);
                 }
             `}</style>
-        </motion.div>
+        </div>
     );
 }

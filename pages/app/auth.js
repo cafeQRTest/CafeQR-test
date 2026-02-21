@@ -2,7 +2,6 @@
 import { useRouter } from "next/router";
 import { useState, useEffect } from "react";
 import { getSupabase } from "../../services/supabase";
-import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft } from "lucide-react";
 
 const DELIVERY_NEXT_KEY = "delivery.next_after_magiclink";
@@ -43,7 +42,7 @@ export default function CustomerAuthPage() {
 
     try {
       localStorage.setItem(DELIVERY_NEXT_KEY, next);
-    } catch {}
+    } catch { }
 
     const baseUrl = getBaseUrl();
     const redirectTo = `${baseUrl}/app/auth/callback?next=${encodeURIComponent(next)}`;
@@ -52,9 +51,8 @@ export default function CustomerAuthPage() {
       email,
       options: {
         emailRedirectTo: redirectTo,
-        shouldCreateUser: true, // Explicitly allow user creation for signup
+        shouldCreateUser: true,
         data: {
-          // Optional: mark this as a delivery user
           app_type: 'delivery',
         },
       },
@@ -87,102 +85,88 @@ export default function CustomerAuthPage() {
 
     try {
       localStorage.removeItem(DELIVERY_NEXT_KEY);
-    } catch {}
-    
+    } catch { }
+
     router.replace(next);
   };
 
   return (
     <div className="delivery-auth-page">
       <div className="delivery-auth-card">
+        {!otpSent ? (
+          <div>
+            <div className="delivery-auth-logo">
+              <img src="/cafeqr-logo.svg" alt="CafeQR" />
+            </div>
 
-        <AnimatePresence mode="wait">
-          {!otpSent ? (
-            <motion.div
-              key="email-form"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-            >
-              <div className="delivery-auth-logo">
-                <img src="/cafeqr-logo.svg" alt="CafeQR" />
+            <div className="delivery-auth-header">
+              <h1>Welcome Back</h1>
+              <p>Enter your email to sign in</p>
+            </div>
+
+            <form onSubmit={sendOtp} className="delivery-auth-form">
+              <div>
+                <label htmlFor="email">Email Address</label>
+                <input
+                  id="email"
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                />
               </div>
 
-              <div className="delivery-auth-header">
-                <h1>Welcome Back</h1>
-                <p>Enter your email to sign in</p>
+              {err && <div className="delivery-auth-error">{err}</div>}
+
+              <button type="submit" disabled={loading} className="delivery-auth-submit">
+                {loading ? 'Sending Code...' : 'Send Login Code'}
+              </button>
+            </form>
+          </div>
+        ) : (
+          <div>
+            <div className="delivery-auth-logo">
+              <img src="/cafeqr-logo.svg" alt="CafeQR" />
+            </div>
+
+            <div className="delivery-auth-header">
+              <h1>Verify Code</h1>
+              <p>Enter the 8-digit code sent to<br /><span className="font-bold text-gray-800">{email}</span></p>
+            </div>
+
+            <form onSubmit={verifyOtp} className="delivery-auth-form">
+              <div>
+                <label htmlFor="otp">Enter Code</label>
+                <input
+                  id="otp"
+                  type="text"
+                  required
+                  value={otpToken}
+                  onChange={(e) => setOtpToken(e.target.value)}
+                  placeholder="12345678"
+                  className="text-center tracking-widest text-xl"
+                  maxLength={8}
+                />
               </div>
 
-              <form onSubmit={sendOtp} className="delivery-auth-form">
-                <div>
-                  <label htmlFor="email">Email Address</label>
-                  <input
-                    id="email"
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@example.com"
-                  />
-                </div>
+              {err && <div className="delivery-auth-error">{err}</div>}
 
-                {err && <div className="delivery-auth-error">{err}</div>}
+              <button type="submit" disabled={loading || otpToken.length !== 8} className="delivery-auth-submit">
+                {loading ? 'Verifying...' : 'Verify & Login'}
+              </button>
 
-                <button type="submit" disabled={loading} className="delivery-auth-submit">
-                  {loading ? 'Sending Code...' : 'Send Login Code'}
-                </button>
-              </form>
-            </motion.div>
-          ) : (
-            <motion.div
-              key="otp-form"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-            >
-              <div className="delivery-auth-logo">
-                <img src="/cafeqr-logo.svg" alt="CafeQR" />
-              </div>
-
-              <div className="delivery-auth-header">
-                <h1>Verify Code</h1>
-                <p>Enter the 8-digit code sent to<br /><span className="font-bold text-gray-800">{email}</span></p>
-              </div>
-
-              <form onSubmit={verifyOtp} className="delivery-auth-form">
-                <div>
-                  <label htmlFor="otp">Enter Code</label>
-                  <input
-                    id="otp"
-                    type="text"
-                    required
-                    value={otpToken}
-                    onChange={(e) => setOtpToken(e.target.value)}
-                    placeholder="12345678"
-                    className="text-center tracking-widest text-xl"
-                    maxLength={8}
-                  />
-                </div>
-
-                {err && <div className="delivery-auth-error">{err}</div>}
-
-                <button type="submit" disabled={loading || otpToken.length !== 8} className="delivery-auth-submit">
-                  {loading ? 'Verifying...' : 'Verify & Login'}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setOtpSent(false)}
-                  className="delivery-auth-back-btn w-full mt-4"
-                >
-                  <ArrowLeft className="w-4 h-4 mr-2" />
-                  <span>Use a different email</span>
-                </button>
-              </form>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
+              <button
+                type="button"
+                onClick={() => setOtpSent(false)}
+                className="delivery-auth-back-btn w-full mt-4"
+              >
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                <span>Use a different email</span>
+              </button>
+            </form>
+          </div>
+        )}
       </div>
 
       <style jsx>{`
@@ -292,12 +276,6 @@ export default function CustomerAuthPage() {
           padding: 12px 24px;
           border-radius: 12px;
           cursor: pointer;
-          transition: all 0.2s;
-        }
-        .delivery-auth-back-btn:hover {
-          background: #f97316;
-          color: #fff;
-          border-color: #f97316;
         }
       `}</style>
     </div>
