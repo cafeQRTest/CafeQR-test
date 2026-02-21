@@ -173,6 +173,7 @@ export default function AddressPage() {
 
       localStorage.setItem("cafeqr_address", address);
       localStorage.setItem("detected_delivery_address", address);
+      localStorage.setItem("delivery_user_location", JSON.stringify({ lat: coords.lat, lng: coords.lng }));
 
       router.push({
         pathname: "/app/restaurants",

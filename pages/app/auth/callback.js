@@ -15,12 +15,12 @@ function getBaseUrl() {
   return baseUrl || '';
 }
 
-// Get the redirect destination, defaulting to /app/address
+// Get the redirect destination, defaulting to /app/restaurants
 function getNextFromStorage() {
   try {
-    return localStorage.getItem(DELIVERY_NEXT_KEY) || "/app/address";
+    return localStorage.getItem(DELIVERY_NEXT_KEY) || "/app/restaurants";
   } catch {
-    return "/app/address";
+    return "/app/restaurants";
   }
 }
 

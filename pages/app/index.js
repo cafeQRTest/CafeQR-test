@@ -12,33 +12,8 @@ export default function DeliveryAppHome() {
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    let unsub;
-
-    const run = async () => {
-      // 1) On cold start / relaunch: check existing session
-      const { data } = await supabase.auth.getSession(); // [web:1867]
-      const session = data?.session;
-
-      if (session) {
-        router.replace("/app/address"); // don’t keep /app/ in back stack [web:1866]
-        return;
-      }
-
-      setChecking(false);
-
-      // 2) If user signs in later, redirect immediately
-      const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
-        if (newSession) router.replace("/app/address"); // [web:1866]
-      });
-      unsub = sub?.subscription;
-    };
-
-    run();
-
-    return () => {
-      try { unsub?.unsubscribe?.(); } catch { }
-    };
-  }, [supabase, router]);
+    setChecking(false);
+  }, []);
 
   if (checking) return <div className="p-4 text-center text-gray-500">Loading...</div>;
 

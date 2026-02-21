@@ -1,4 +1,6 @@
 // pages/app/auth.js
+export const runtime = "edge";
+
 import { useRouter } from "next/router";
 import { useState, useEffect } from "react";
 import { getSupabase } from "../../services/supabase";
@@ -12,33 +14,48 @@ function getBaseUrl() {
 }
 
 export default function CustomerAuthPage() {
-  const supabase = getSupabase();
   const router = useRouter();
 
   const next =
-    typeof router.query.next === "string" ? router.query.next : "/app/address";
+    typeof router.query.next === "string" ? router.query.next : "/app/restaurants";
 
   const [email, setEmail] = useState("");
   const [otpSent, setOtpSent] = useState(false);
   const [otpToken, setOtpToken] = useState("");
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
+    const supabase = getSupabase(); // Initialize safely once inside the effect
+
     (async () => {
       const { data } = await supabase.auth.getSession();
       if (!cancelled && data?.session) {
-        router.replace("/app/address");
+        const nextUrl = localStorage.getItem(DELIVERY_NEXT_KEY);
+        if (nextUrl) {
+          localStorage.removeItem(DELIVERY_NEXT_KEY);
+          router.replace(nextUrl);
+        } else {
+          // Already logged in, no explicit next, let's keep them here.
+          setIsChecking(false);
+        }
+      } else {
+        if (!cancelled) setIsChecking(false);
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [router]);
 
-  const sendOtp = async (e) => {
+  const sendOtp = (e) => {
     e.preventDefault();
     setErr("");
-    setLoading(true);
+
+    const supabase = getSupabase(); // Use localized singleton call
+
+    // 1. Immediate UI Feedback: Move to next screen instantly
+    setOtpSent(true);
 
     try {
       localStorage.setItem(DELIVERY_NEXT_KEY, next);
@@ -47,7 +64,8 @@ export default function CustomerAuthPage() {
     const baseUrl = getBaseUrl();
     const redirectTo = `${baseUrl}/app/auth/callback?next=${encodeURIComponent(next)}`;
 
-    const { error } = await supabase.auth.signInWithOtp({
+    // 2. Fire and Forget the Async call
+    supabase.auth.signInWithOtp({
       email,
       options: {
         emailRedirectTo: redirectTo,
@@ -56,12 +74,12 @@ export default function CustomerAuthPage() {
           app_type: 'delivery',
         },
       },
+    }).then(({ error }) => {
+      if (error) {
+        setOtpSent(false);
+        setErr(error.message);
+      }
     });
-
-    setLoading(false);
-
-    if (error) return setErr(error.message);
-    setOtpSent(true);
   };
 
   const verifyOtp = async (e) => {
@@ -71,6 +89,8 @@ export default function CustomerAuthPage() {
     }
     setErr("");
     setLoading(true);
+
+    const supabase = getSupabase(); // localized usage
 
     const { error } = await supabase.auth.verifyOtp({
       email,
@@ -89,6 +109,14 @@ export default function CustomerAuthPage() {
 
     router.replace(next);
   };
+
+  if (isChecking) {
+    return (
+      <div className="min-h-screen bg-white flex flex-col items-center justify-center p-6">
+        <div className="w-12 h-12 border-4 border-[#FF5200]/20 border-t-[#FF5200] rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="delivery-auth-page">
@@ -119,8 +147,8 @@ export default function CustomerAuthPage() {
 
               {err && <div className="delivery-auth-error">{err}</div>}
 
-              <button type="submit" disabled={loading} className="delivery-auth-submit">
-                {loading ? 'Sending Code...' : 'Send Login Code'}
+              <button type="submit" className="delivery-auth-submit">
+                Send Login Code
               </button>
             </form>
           </div>
