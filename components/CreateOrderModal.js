@@ -1984,6 +1984,8 @@ export default function CreateOrderModal({
     setVegOnly(false);
     setPackagedOnly(false);
     setDiscount({ type: 'amount', value: 0 });
+    setCashPart('');
+    setOnlinePart('');
     // Reset date/time to current
     const d = new Date();
     d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
@@ -2013,6 +2015,16 @@ export default function CreateOrderModal({
         '⚠️ Credit Customer Required'
       );
       return;
+    }
+
+    // --- Mixed payment validation: require cash or online amounts ---
+    if (orderMode === 'settle' && selectedPaymentMethod === 'mixed') {
+      const c = Number(cashPart || 0);
+      const o = Number(onlinePart || 0);
+      if (c === 0 && o === 0) {
+        showAlert('Please enter either a Cash or Online amount for Mixed payment.');
+        return;
+      }
     }
 
     try {
@@ -2074,14 +2086,7 @@ export default function CreateOrderModal({
             total_tax: cartTotals.total_tax,
             subtotal_ex: cartTotals.taxable_amount
         },
-        custom_created_at: new Date(
-            Number(orderDate.split('-')[0]),
-            Number(orderDate.split('-')[1]) - 1,
-            Number(orderDate.split('-')[2]),
-            Number(orderTime.split(':')[0]),
-            Number(orderTime.split(':')[1]),
-            0
-        ).toISOString()
+        custom_created_at: `${orderDate}T${orderTime}:00+05:30`
       };
 
       const res = await fetch('/api/orders/create', {
@@ -3403,21 +3408,7 @@ export default function CreateOrderModal({
                      </MethodCard>
                   </PaymentGrid>
 
-                   {selectedPaymentMethod === 'online' && (
-                     <div style={{ marginTop: 10, padding: '10px', background: '#eff6ff', borderRadius: 12, border: '1.5px solid #bfdbfe' }}>
-                        <div style={{ display: 'flex', gap: 6 }}>
-                           {['upi', 'card', 'net'].map(t => (
-                             <button 
-                               key={t}
-                               onClick={() => setOnlineType(t)}
-                               style={{ flex: 1, padding: '7px', borderRadius: 8, border: onlineType === t ? '2px solid #2563eb' : '1px solid #dbeafe', background: onlineType === t ? 'white' : 'transparent', color: onlineType === t ? '#2563eb' : '#64748b', fontSize: 10, fontWeight: 800, textTransform: 'uppercase', cursor: 'pointer' }}
-                             >
-                               {t === 'upi' ? 'UPI' : t === 'card' ? 'Card' : 'Net'}
-                             </button>
-                           ))}
-                        </div>
-                     </div>
-                   )}
+
 
                    {selectedPaymentMethod === 'mixed' && (
                      <div style={{ marginTop: 12, padding: '12px', background: '#f8fafc', borderRadius: 16, border: '1.5px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: 8 }}>
