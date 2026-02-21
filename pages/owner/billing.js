@@ -168,23 +168,25 @@ const isMixed = (inv) => getPayMethod(inv) === 'mixed' && !!getMixedDetails(inv)
 
       if (error) throw error;
 
-      // Base: exclude only unpaid invoices that are NOT credit
-      // (credit-unpaid, voided, and paid are all kept)
+      // Base: exclude invoices that are not yet settled (pending, non-credit) and unrelated orphans (unpaid, non-credit)
+      // Kept: paid, void, credit (even if pending/unpaid)
       let list = (data || []).filter(inv => {
         const status = String(inv.status || '').toLowerCase();
         const isCredit = String(inv.payment_method || '').toLowerCase() === 'credit';
-        if (status === 'unpaid' && !isCredit) return false;
+        if (!isCredit && (status === 'pending' || status === 'unpaid')) return false;
         return true;
       });
 
       // Filter by report type
       if (reportType === 'sales') {
+        // Paid non-credit only
         list = list.filter(inv => {
           const status = String(inv.status || '').toLowerCase();
           const isCredit = String(inv.payment_method || '').toLowerCase() === 'credit';
-          return status !== 'void' && !isCredit;
+          return status === 'paid' && !isCredit;
         });
       } else if (reportType === 'credit') {
+        // Credit orders (may be unpaid or pending)
         list = list.filter(inv => {
           const status = String(inv.status || '').toLowerCase();
           const isCredit = String(inv.payment_method || '').toLowerCase() === 'credit';
@@ -192,7 +194,8 @@ const isMixed = (inv) => getPayMethod(inv) === 'mixed' && !!getMixedDetails(inv)
         });
       } else if (reportType === 'voided') {
         list = list.filter(inv => String(inv.status || '').toLowerCase() === 'void');
-      } // 'all' shows everything kept by the base filter
+      } // 'all' shows everything kept by the base filter (paid + credit + void)
+
 
       setInvoices(list);
 
