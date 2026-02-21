@@ -45,6 +45,7 @@ export default function DeliverySuccess() {
 
   // Handle navigation - no print logic, just redirect
   const handleOrderAgain = () => {
+    localStorage.setItem("delivery.next_after_magiclink", "/app/address");
     router.push("/app/address");
   };
 

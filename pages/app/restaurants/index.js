@@ -18,7 +18,7 @@ export default function RestaurantListing() {
     const supabase = getSupabase();
     const router = useRouter();
 
-    const [restaurants, setRestaurants] = useState([]);
+    const [allRestaurants, setAllRestaurants] = useState([]);
     const [loading, setLoading] = useState(true);
     const [q, setQ] = useState("");
 
@@ -27,68 +27,9 @@ export default function RestaurantListing() {
     const [localAddress, setLocalAddress] = useState("");
     const [showMenu, setShowMenu] = useState(false);
 
-    useEffect(() => {
-        if (!router.isReady) return;
-
-        const load = async () => {
-            setLoading(true);
-
-            // 1. Get User Location (Priority: Query Params -> LocalStorage)
-            let userLat = parseFloat(router.query.lat);
-            let userLng = parseFloat(router.query.lng);
-
-            // 2. Fetch Restaurants with Location Data
-            const { data, error } = await supabase
-                .from("restaurants")
-                .select(`
-                    id, 
-                    name, 
-                    restaurant_profiles (
-                        brand_color,
-                        latitude,
-                        longitude,
-                        delivery_radius_km
-                    )
-                `)
-                .order("name", { ascending: true });
-
-            if (!error && data) {
-                if (!isNaN(userLat) && !isNaN(userLng)) {
-                    // Haversine Filter
-                    const R = 6371; // Earth Mean Radius in KM
-                    const filteredList = data.filter(r => {
-                        const profile = r.restaurant_profiles;
-                        if (!profile || !profile.latitude || !profile.longitude) return false;
-
-                        const restLat = parseFloat(profile.latitude);
-                        const restLng = parseFloat(profile.longitude);
-                        const radius = parseFloat(profile.delivery_radius_km) || 0;
-
-                        const dLat = (restLat - userLat) * Math.PI / 180;
-                        const dLng = (restLng - userLng) * Math.PI / 180;
-
-                        const a =
-                            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                            Math.cos(userLat * Math.PI / 180) * Math.cos(restLat * Math.PI / 180) *
-                            Math.sin(dLng / 2) * Math.sin(dLng / 2);
-
-                        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-                        const distance = R * c;
-
-                        return distance <= radius;
-                    });
-                    setRestaurants(filteredList);
-                } else {
-                    setRestaurants(data);
-                }
-            } else {
-                setRestaurants([]);
-            }
-            setLoading(false);
-        };
-
-        load();
-    }, [supabase, router.isReady, router.query]);
+    const [userCoords, setUserCoords] = useState(null);
+    const [coordsLoaded, setCoordsLoaded] = useState(false);
+    const [nearbyRestaurants, setNearbyRestaurants] = useState([]);
 
     useEffect(() => {
         const loadDefaultAddress = async () => {
@@ -119,12 +60,117 @@ export default function RestaurantListing() {
         loadDefaultAddress();
     }, [supabase]);
 
+    useEffect(() => {
+        if (!router.isReady) return;
+        if (addrLoading) return; // Wait for auth address resolution
+
+        let lat = parseFloat(router.query.lat);
+        let lng = parseFloat(router.query.lng);
+
+        if (isNaN(lat) || isNaN(lng)) {
+            try {
+                const storedLoc = localStorage.getItem("delivery_user_location");
+                if (storedLoc) {
+                    const parsed = JSON.parse(storedLoc);
+                    lat = parseFloat(parsed.lat);
+                    lng = parseFloat(parsed.lng);
+                }
+            } catch { }
+        }
+
+        if (isNaN(lat) || isNaN(lng)) {
+            if (defaultAddress?.geo?.lat && defaultAddress?.geo?.lng) {
+                lat = parseFloat(defaultAddress.geo.lat);
+                lng = parseFloat(defaultAddress.geo.lng);
+            }
+        }
+
+        if (isNaN(lat) || isNaN(lng)) {
+            router.replace("/app/address");
+        } else {
+            setUserCoords({ lat, lng });
+            setCoordsLoaded(true);
+        }
+    }, [router.isReady, router.query, addrLoading, defaultAddress]);
+
+    useEffect(() => {
+        if (!coordsLoaded || !userCoords) return;
+
+        const loadRestaurants = async () => {
+            setLoading(true);
+            const { data, error } = await supabase
+                .from("restaurants")
+                .select(`
+                    id, 
+                    name, 
+                    restaurant_profiles (
+                        brand_color,
+                        latitude,
+                        longitude,
+                        delivery_radius_km
+                    )
+                `)
+                .order("name", { ascending: true });
+
+            if (!error && data) {
+                setAllRestaurants(data);
+            } else {
+                setAllRestaurants([]);
+            }
+            setLoading(false);
+        };
+
+        loadRestaurants();
+    }, [coordsLoaded, userCoords, supabase]);
+
+    useEffect(() => {
+        const filterRestaurants = () => {
+            if (!allRestaurants.length || !userCoords) {
+                setNearbyRestaurants([]);
+                return;
+            }
+
+            const { lat: userLat, lng: userLng } = userCoords;
+            const R = 6371; // Earth Mean Radius in KM
+            const filteredList = allRestaurants.filter(r => {
+                const profile = r.restaurant_profiles;
+                if (!profile?.latitude || !profile?.longitude) return false;
+
+                const restLat = parseFloat(profile.latitude);
+                const restLng = parseFloat(profile.longitude);
+                const radius = parseFloat(profile.delivery_radius_km) || 10;
+
+                const dLat = (restLat - userLat) * Math.PI / 180;
+                const dLng = (restLng - userLng) * Math.PI / 180;
+
+                const a =
+                    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                    Math.cos(userLat * Math.PI / 180) * Math.cos(restLat * Math.PI / 180) *
+                    Math.sin(dLng / 2) * Math.sin(dLng / 2);
+
+                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                const distance = R * c;
+
+                return distance <= radius;
+            });
+
+            setNearbyRestaurants(filteredList);
+        };
+
+        filterRestaurants();
+
+        window.addEventListener("focus", filterRestaurants);
+        return () => window.removeEventListener("focus", filterRestaurants);
+    }, [allRestaurants, userCoords]);
+
+
+
     const filtered = useMemo(() => {
         const term = q.trim().toLowerCase();
-        return (restaurants || []).filter((r) =>
+        return (nearbyRestaurants || []).filter((r) =>
             (r?.name || "").toLowerCase().includes(term)
         );
-    }, [restaurants, q]);
+    }, [nearbyRestaurants, q]);
 
     const topAddressText = useMemo(() => {
         if (localAddress) return localAddress;
@@ -244,9 +290,9 @@ export default function RestaurantListing() {
             </header>
 
             <div className="delivery-restaurants-content">
-                {loading ? (
+                {!coordsLoaded || loading ? (
                     <div className="p-12 text-center text-gray-500 font-medium">
-                        Searching nearby restaurants...
+                        Finding nearby restaurants...
                     </div>
                 ) : filtered.length === 0 ? (
                     <div className="empty-state">
