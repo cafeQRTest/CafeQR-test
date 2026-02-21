@@ -366,15 +366,17 @@ setPaymentProfit(
   const creditOutstanding = summary.creditExtended - summary.creditPayments;
   const netCashProfit = netProfitAccrual - creditOutstanding;
 
-const prettyMethod = (m) => {
-  if (m === 'none' || m === 'unassigned') return 'Other / Not tagged';
+const prettyMethod = (method) => {
+  const m = String(method || '').toLowerCase();
+  if (!m || m === 'none' || m === 'unassigned') return 'None';
   if (m === 'upi') return 'UPI';
   if (m === 'card') return 'Card';
   if (m === 'online') return 'Online';
   if (m === 'cash') return 'Cash';
   if (m === 'credit') return 'Credit';
+  if (m === 'mixed') return 'Mixed';
   if (m === 'unknown') return 'Unknown';
-  return m || 'Other';
+  return m;
 };
 
   function formatMoney(n) {

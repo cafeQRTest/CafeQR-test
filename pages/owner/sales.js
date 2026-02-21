@@ -99,7 +99,7 @@ function getOrderInvoice(order) {
 
 function prettyMethod(method) {
   const m = String(method || '').toLowerCase();
-  if (!m || m === 'none' || m === 'unknown') return 'Pending';
+  if (!m || m === 'none' || m === 'unknown') return 'None';
   if (m === 'upi') return 'UPI';
   if (m === 'card') return 'Card';
   if (m === 'online') return 'Online';

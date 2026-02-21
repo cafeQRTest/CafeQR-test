@@ -482,7 +482,7 @@ export default async function handler(req, res) {
       metadata: {
         status: 'new', // Force status to 'new' on edit so it reappears in Kitchen "New" column
         payment_status: orderHeader?.payment_status || 'pending',
-        payment_method: orderHeader?.payment_method || 'cash',
+        payment_method: orderHeader?.payment_method,
         customer_id: req.body.customer_id || orderHeader?.customer_id, // Prevent customer_id loss!
         customer_name: orderHeader?.customer_name,
         customer_phone: orderHeader?.customer_phone,

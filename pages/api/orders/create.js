@@ -357,7 +357,7 @@ export default async function handler(req, res) {
     const finalStatus = incomingStatus || 'new';
 
     // Payment Logic (Mirroring frontend counter.js)
-    let processedPaymentMethod = payment_method || 'cash';
+    let processedPaymentMethod = payment_method;
     let processedMixedDetails = mixed_payment_details || null;
     let finalPaymentStatus = payment_status || 'pending';
 

@@ -120,8 +120,9 @@ const getMixedSplit = (inv) => {
 const isMixed = (inv) => getPayMethod(inv) === 'mixed' && !!getMixedDetails(inv);
 
 
-  const prettyMethod = (m) => {
-    if (m === 'none' || m === 'unassigned') return '';
+  const prettyMethod = (method) => {
+    const m = String(method || '').toLowerCase();
+    if (!m || m === 'none' || m === 'unassigned') return 'None';
     if (m === 'upi') return 'UPI';
     if (m === 'card') return 'Card';
     if (m === 'online') return 'Online';
@@ -129,7 +130,7 @@ const isMixed = (inv) => getPayMethod(inv) === 'mixed' && !!getMixedDetails(inv)
     if (m === 'credit') return 'Credit';
     if (m === 'mixed') return 'Mixed';
     if (m === 'unknown') return 'Unknown';
-    return m || 'Other';
+    return m;
   };
 
   const getInvoiceTotal = (inv) => {

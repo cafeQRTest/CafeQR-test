@@ -37,7 +37,7 @@ export class OrderService {
       const {
         status = 'new',
         payment_status = 'pending',
-        payment_method = 'cash',
+        payment_method = null,
         user_id = null,
         customer_id = null,
         customer_name = null,

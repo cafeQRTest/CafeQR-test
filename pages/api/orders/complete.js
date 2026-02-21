@@ -15,7 +15,7 @@ export default async function handler(req, res) {
   const {
     order_id,
     restaurant_id,
-    payment_method = 'cash',
+    payment_method = null,
     discount_obj = null, // { type: 'percent', value: 10 } or { type: 'amount', value: 50 }
     round_off_amount = 0,
     updated_items = null, // Array of items with potential line-discounts
