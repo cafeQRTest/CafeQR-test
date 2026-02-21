@@ -4084,32 +4084,7 @@ export default function CreateOrderModal({
                    <span style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>Packaged</span>
                 </label>
 
-                <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-                   <div 
-                    onClick={() => setQuickProduct({ ...quickProduct, has_variants: !quickProduct.has_variants })}
-                    style={{
-                      width: 44,
-                      height: 24,
-                      borderRadius: 12,
-                      background: quickProduct.has_variants ? '#9333ea' : '#e2e8f0',
-                      position: 'relative',
-                      transition: 'all 0.3s'
-                    }}
-                   >
-                     <div style={{
-                       width: 18,
-                       height: 18,
-                       background: 'white',
-                       borderRadius: '50%',
-                       position: 'absolute',
-                       top: 3,
-                       left: quickProduct.has_variants ? 23 : 3,
-                       transition: 'all 0.3s',
-                       boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                     }} />
-                   </div>
-                   <span style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>Has Variants</span>
-                </label>
+
               </div>
               
               {/* Action Buttons */}
