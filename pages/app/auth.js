@@ -1,5 +1,5 @@
 // pages/app/auth.js
-export const runtime = "edge";
+export const runtime = "experimental-edge";
 
 import { useRouter } from "next/router";
 import { useState, useEffect } from "react";
