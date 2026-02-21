@@ -30,6 +30,11 @@ export default function DeliveryPayment() {
   const [custStreet, setCustStreet] = useState("");
   const [note, setNote] = useState("");
 
+  const isNameValid = custName.trim().length > 0;
+  const isPhoneValid = custPhone.length === 10;
+  const isAddrValid = custHouseNo.trim().length >= 5 && /[a-zA-Z]/.test(custHouseNo);
+  const isFormValid = isNameValid && isPhoneValid && isAddrValid;
+
   useEffect(() => {
     if (!restaurantId) return;
 
@@ -85,7 +90,7 @@ export default function DeliveryPayment() {
 
           if (profile) {
             if (profile.name) setCustName(profile.name);
-            if (profile.phone) setCustPhone(profile.phone);
+            if (profile.phone) setCustPhone(profile.phone.replace(/\D/g, '').slice(0, 10));
           }
         }
       }
@@ -107,7 +112,7 @@ export default function DeliveryPayment() {
 
           if (profile) {
             if (profile.name) setCustName(profile.name);
-            if (profile.phone) setCustPhone(profile.phone);
+            if (profile.phone) setCustPhone(profile.phone.replace(/\D/g, '').slice(0, 10));
           }
         }
       }
@@ -171,13 +176,9 @@ export default function DeliveryPayment() {
   }, [cart, restaurant]);
 
   const validateDelivery = () => {
-    if (!custName.trim()) return "Please enter your name.";
-    if (!custPhone.trim() || custPhone.trim().length < 8)
-      return "Please enter a valid phone number.";
-    if (!custAddress.trim() || custAddress.trim().length < 8)
-      return "Detected location invalid.";
-    if (!custHouseNo.trim()) return "Please enter House / Flat / Building.";
-    if (!custStreet.trim()) return "Please enter Street / Locality.";
+    if (!isNameValid) return "Please enter your name.";
+    if (!isPhoneValid) return "Please enter a valid phone number.";
+    if (!isAddrValid) return "Please enter a valid address.";
     if (!restaurantId) return "Missing restaurant.";
     if (!cart?.length) return "Cart is empty.";
     if (!Number.isFinite(totals.totalInc) || totals.totalInc <= 0)
@@ -290,22 +291,43 @@ export default function DeliveryPayment() {
 
     setPlacing(true);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        alert("Waiting for session... Please refresh or log in again.");
+        setPlacing(false);
+        return;
+      }
+      const token = session.access_token;
+
       await saveLastDeliveryDetails(currentUser);
 
       const orderData = {
         ...buildOrderPayload(),
         payment_method: "none",
         payment_status: "pending",
+        order_type: "delivery"
       };
+
+      console.log("Antigravity Debug: Order Payload:", orderData);
 
       const res = await fetch("/api/orders/create", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
         body: JSON.stringify(orderData),
       });
 
       const result = await res.json();
-      if (!res.ok) throw new Error(result.error || "Order creation failed");
+      if (!res.ok) {
+        // Expose secret error info
+        throw {
+          message: result.error || "Order creation failed",
+          details: result.details || "None",
+          hint: result.hint || "None"
+        };
+      }
 
       await notifyOwner({
         restaurantId,
@@ -325,8 +347,10 @@ export default function DeliveryPayment() {
         )}&method=cod&amt=${amt}`
       );
     } catch (e) {
-      console.error("Supabase/Order Error:", e);
-      const msg = 'An error occurred while confirming your order. Please check your "Order History" to see if it was successfully placed. If it is not there, please try placing it again.';
+      console.error("Antigravity Debug: Place Order Error:", e);
+      alert("DB Error: " + (e.message || e) + " | Details: " + (e.details || "None"));
+
+      const msg = 'An error occurred while confirming your order. Please check your "Order History" to see if it was successfully placed.';
       if (confirm(msg)) {
         router.push("/app/orders/history");
       }
@@ -514,7 +538,7 @@ export default function DeliveryPayment() {
         <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: 14 }}>
           <div style={{ fontWeight: 900, marginBottom: 10 }}>Customer info</div>
 
-          <label style={{ fontSize: 12, color: "#6b7280" }}>Name</label>
+          <label style={{ fontSize: 12, color: "#6b7280" }}>Name <span style={{ color: "red" }}>*</span></label>
           <input
             value={custName}
             onChange={(e) => setCustName(e.target.value)}
@@ -523,7 +547,7 @@ export default function DeliveryPayment() {
               width: "100%",
               padding: 12,
               borderRadius: 12,
-              border: "1px solid #e5e7eb",
+              border: !isNameValid && custName.length > 0 ? "1px solid red" : "1px solid #e5e7eb",
               marginTop: 6,
               outline: "none",
             }}
@@ -531,16 +555,21 @@ export default function DeliveryPayment() {
 
           <div style={{ height: 10 }} />
 
-          <label style={{ fontSize: 12, color: "#6b7280" }}>Phone</label>
+          <label style={{ fontSize: 12, color: "#6b7280" }}>
+            Phone <span style={{ color: "red" }}>*</span>
+            {custPhone.length > 0 && !isPhoneValid && (
+              <span style={{ color: "red", marginLeft: 8 }}>Enter valid phone number</span>
+            )}
+          </label>
           <input
             value={custPhone}
-            onChange={(e) => setCustPhone(e.target.value)}
-            placeholder="Your phone number"
+            onChange={(e) => setCustPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+            placeholder="10-digit mobile number"
             style={{
               width: "100%",
               padding: 12,
               borderRadius: 12,
-              border: "1px solid #e5e7eb",
+              border: !isPhoneValid && custPhone.length > 0 ? "1px solid red" : "1px solid #e5e7eb",
               marginTop: 6,
               outline: "none",
             }}
@@ -572,7 +601,12 @@ export default function DeliveryPayment() {
 
           <div style={{ height: 10 }} />
 
-          <label style={{ fontSize: 12, color: "#6b7280" }}>Address details</label>
+          <label style={{ fontSize: 12, color: "#6b7280" }}>
+            Address details <span style={{ color: "red" }}>*</span>
+            {custHouseNo.length > 0 && !isAddrValid && (
+              <span style={{ color: "red", marginLeft: 8 }}>Enter a valid address</span>
+            )}
+          </label>
           <input
             value={custHouseNo}
             onChange={(e) => setCustHouseNo(e.target.value)}
@@ -581,7 +615,7 @@ export default function DeliveryPayment() {
               width: "100%",
               padding: 12,
               borderRadius: 12,
-              border: "1px solid #e5e7eb",
+              border: !isAddrValid && custHouseNo.length > 0 ? "1px solid red" : "1px solid #e5e7eb",
               marginTop: 6,
               outline: "none",
             }}
@@ -703,7 +737,7 @@ export default function DeliveryPayment() {
         }}
       >
         <button
-          disabled={placing}
+          disabled={placing || !isFormValid}
           onClick={() => (payMode === "online" ? payOnlineRazorpay() : placeCOD())}
           style={{
             width: "100%",
@@ -713,7 +747,8 @@ export default function DeliveryPayment() {
             borderRadius: 14,
             padding: 14,
             fontWeight: 900,
-            cursor: placing ? "not-allowed" : "pointer",
+            cursor: (placing || !isFormValid) ? "not-allowed" : "pointer",
+            opacity: isFormValid ? 1 : 0.5,
           }}
         >
           {placing ? "Please wait…" : payMode === "online" ? "Pay & Place order" : "Place order"}

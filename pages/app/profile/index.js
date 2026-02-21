@@ -16,6 +16,10 @@ export default function ProfilePage() {
     const [name, setName] = useState("");
     const [phone, setPhone] = useState("");
 
+    const isNameValid = name.trim().length > 0;
+    const isPhoneValid = phone.length === 10;
+    const isFormValid = isNameValid && isPhoneValid;
+
     const [msg, setMsg] = useState("");
     const [saving, setSaving] = useState(false);
 
@@ -42,7 +46,7 @@ export default function ProfilePage() {
 
                 if (mounted && profile) {
                     if (profile.name) setName(profile.name);
-                    if (profile.phone) setPhone(profile.phone);
+                    if (profile.phone) setPhone(profile.phone.replace(/\D/g, '').slice(0, 10));
                 }
             }
 
@@ -54,7 +58,7 @@ export default function ProfilePage() {
     }, []);
 
     const save = async () => {
-        if (saving) return;
+        if (!isFormValid || saving) return;
         setMsg("");
         setSaving(true);
 
@@ -72,7 +76,6 @@ export default function ProfilePage() {
         const nextPhone = phone.trim();
 
         // Use 'customers' table, matching on user_id
-        // First, try to find existing to get the ID (to support update if upsert on user_id is not uniquely constrained)
         const { data: existing } = await supabase
             .from('customers')
             .select('id')
@@ -118,7 +121,6 @@ export default function ProfilePage() {
         window.location.href = "/app";
     };
 
-    // We explicitly use the Loading component here because we are in Pages Router
     if (loading) return <Loading />;
 
     return (
@@ -157,7 +159,7 @@ export default function ProfilePage() {
                 <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: 14 }}>
                     <div style={{ fontWeight: 900, marginBottom: 10 }}>Customer details</div>
 
-                    <label style={{ fontSize: 12, color: "#6b7280" }}>Name</label>
+                    <label style={{ fontSize: 12, color: "#6b7280" }}>Name <span style={{ color: "red" }}>*</span></label>
                     <input
                         value={name}
                         onChange={(e) => setName(e.target.value)}
@@ -166,7 +168,7 @@ export default function ProfilePage() {
                             width: "100%",
                             padding: 12,
                             borderRadius: 12,
-                            border: "1px solid #e5e7eb",
+                            border: !isNameValid && name.length > 0 ? "1px solid red" : "1px solid #e5e7eb",
                             marginTop: 6,
                             outline: "none",
                         }}
@@ -174,16 +176,21 @@ export default function ProfilePage() {
 
                     <div style={{ height: 10 }} />
 
-                    <label style={{ fontSize: 12, color: "#6b7280" }}>Phone</label>
+                    <label style={{ fontSize: 12, color: "#6b7280" }}>
+                        Phone <span style={{ color: "red" }}>*</span>
+                        {phone.length > 0 && !isPhoneValid && (
+                            <span style={{ color: "red", marginLeft: 8 }}>Enter valid phone number</span>
+                        )}
+                    </label>
                     <input
                         value={phone}
-                        onChange={(e) => setPhone(e.target.value)}
-                        placeholder="Your phone"
+                        onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                        placeholder="10-digit mobile number"
                         style={{
                             width: "100%",
                             padding: 12,
                             borderRadius: 12,
-                            border: "1px solid #e5e7eb",
+                            border: !isPhoneValid && phone.length > 0 ? "1px solid red" : "1px solid #e5e7eb",
                             marginTop: 6,
                             outline: "none",
                         }}
@@ -192,15 +199,16 @@ export default function ProfilePage() {
                     <div style={{ display: "flex", gap: 10, marginTop: 12, alignItems: "center" }}>
                         <button
                             onClick={save}
-                            disabled={saving}
+                            disabled={saving || !isFormValid}
                             style={{
-                                background: saving ? "#cbd5e1" : "#f59e0b",
+                                background: (saving || !isFormValid) ? "#cbd5e1" : "#f59e0b",
                                 border: "none",
                                 color: "#fff",
                                 borderRadius: 12,
                                 padding: "12px 14px",
                                 fontWeight: 900,
-                                cursor: saving ? "default" : "pointer",
+                                cursor: (saving || !isFormValid) ? "not-allowed" : "pointer",
+                                opacity: isFormValid ? 1 : 0.5,
                             }}
                         >
                             {saving ? "Saving..." : "Save"}
@@ -241,8 +249,6 @@ export default function ProfilePage() {
                     </button>
                 ) : null}
             </div>
-
-
         </div>
     );
 }

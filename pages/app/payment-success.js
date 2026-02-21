@@ -3,51 +3,63 @@
 import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Loader2, AlertCircle, ArrowLeft } from "lucide-react";
+import { ArrowLeft, Loader2, AlertCircle } from "lucide-react";
 import Link from "next/link";
+import { getSupabase } from "../../services/supabase";
 
 export default function DeliveryPaymentSuccess() {
   const router = useRouter();
+  const supabase = getSupabase();
   const [status, setStatus] = useState("processing");
   const [message, setMessage] = useState("Processing your payment...");
 
   useEffect(() => {
     processPaymentReturn();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const processPaymentReturn = async () => {
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("No active session found. Please re-login.");
+      const token = session.access_token;
+
       const pendingStr = localStorage.getItem("pending_delivery_order");
       if (!pendingStr) throw new Error("No pending delivery order found.");
 
       const pendingOrder = JSON.parse(pendingStr || "{}");
       if (!pendingOrder?.restaurant_id) throw new Error("Order data incomplete.");
 
-      const session = JSON.parse(localStorage.getItem("delivery_payment_session") || "{}");
+      const paymentSession = JSON.parse(localStorage.getItem("delivery_payment_session") || "{}");
 
       setMessage("Creating your order...");
 
+      const payload = {
+        ...pendingOrder,
+        order_type: "delivery",
+        payment_status: "completed",
+        payment_details: {
+          ...(pendingOrder.payment_details || {}),
+          razorpay_payment_id: paymentSession.razorpay_payment_id || null,
+          razorpay_signature: paymentSession.razorpay_signature || null,
+        },
+      };
+
+      console.log("Antigravity Debug: Online Order Payload:", payload);
+
       const response = await fetch("/api/orders/create", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...pendingOrder,
-          payment_status: "completed",
-          payment_details: {
-            ...(pendingOrder.payment_details || {}),
-            razorpay_payment_id: session.razorpay_payment_id || null,
-            razorpay_signature: session.razorpay_signature || null,
-          },
-        }),
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify(payload),
       });
 
-      if (!response.ok) {
-        const txt = await response.text();
-        throw new Error(`Order creation failed: ${txt || response.statusText}`);
-      }
-
       const result = await response.json();
+      if (!response.ok) {
+        console.error("Antigravity Debug: Database Error:", result.error || result, result.details, result.hint);
+        throw new Error(result.error || "Order creation failed");
+      }
 
       // Best-effort owner notification
       fetch("/api/notify-owner", {
