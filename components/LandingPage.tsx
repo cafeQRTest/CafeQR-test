@@ -1,12 +1,14 @@
-import React, { useState } from 'react';
+import React, { useEffect } from 'react';
 import { useRouter } from 'next/router';
 
 const LandingPage = () => {
     const router = useRouter();
-    const [isLoading, setIsLoading] = useState(false);
+
+    useEffect(() => {
+        router.prefetch('/app/auth');
+    }, [router]);
 
     const handleFind = () => {
-        setIsLoading(true);
         router.push('/app/auth');
     };
 
@@ -34,10 +36,9 @@ const LandingPage = () => {
 
                     <button
                         onClick={handleFind}
-                        disabled={isLoading}
-                        className="bg-[#FF5200] text-white font-bold rounded-xl py-4 px-10 text-xl flex items-center justify-center w-full sm:w-auto disabled:bg-gray-300 disabled:cursor-not-allowed"
+                        className="bg-[#FF5200] text-white font-bold rounded-xl py-4 px-10 text-xl flex items-center justify-center w-full sm:w-auto"
                     >
-                        {isLoading ? 'Loading...' : 'Find Restaurants'}
+                        Find Restaurants
                     </button>
                 </div>
             </main>

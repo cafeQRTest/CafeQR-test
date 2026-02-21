@@ -24,7 +24,6 @@ export default function CustomerAuthPage() {
   const [otpToken, setOtpToken] = useState("");
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
-  const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -37,12 +36,7 @@ export default function CustomerAuthPage() {
         if (nextUrl) {
           localStorage.removeItem(DELIVERY_NEXT_KEY);
           router.replace(nextUrl);
-        } else {
-          // Already logged in, no explicit next, let's keep them here.
-          setIsChecking(false);
         }
-      } else {
-        if (!cancelled) setIsChecking(false);
       }
     })();
     return () => { cancelled = true; };
@@ -109,14 +103,6 @@ export default function CustomerAuthPage() {
 
     router.replace(next);
   };
-
-  if (isChecking) {
-    return (
-      <div className="min-h-screen bg-white flex flex-col items-center justify-center p-6">
-        <div className="w-12 h-12 border-4 border-[#FF5200]/20 border-t-[#FF5200] rounded-full animate-spin" />
-      </div>
-    );
-  }
 
   return (
     <div className="delivery-auth-page">

@@ -10,7 +10,7 @@ export default function OrderSuccess() {
   // 3. GET the singleton instance
   const supabase = getSupabase();
   const { id: orderId, method, amt: amtQuery } = router.query
-  
+
   // 2. REMOVE the useRequireAuth hook
   // const { checking } = useRequireAuth(supabase)
 
@@ -27,42 +27,42 @@ export default function OrderSuccess() {
   useEffect(() => {
     if (!orderId) return
     let cancelled = false
-    ;(async () => {
-      setLoading(true)
-      try {
-        // 3. USE the singleton instance
-        const { data: o, error: e } = await supabase
-          .from('orders')
-          .select('*')
-          .eq('id', orderId)
-          .single()
-        if (e || !o) throw e || new Error('Order not found')
+      ; (async () => {
+        setLoading(true)
+        try {
+          // 3. USE the singleton instance
+          const { data: o, error: e } = await supabase
+            .from('orders')
+            .select('*')
+            .eq('id', orderId)
+            .single()
+          if (e || !o) throw e || new Error('Order not found')
 
-        // 3. USE the singleton instance
-        const { data: inv } = await supabase
-          .from('invoices')
-          .select('*')
-          .eq('order_id', orderId)
-          .single()
-        
-        // Load restaurant profile for brand color
-        const { data: profile } = await supabase
-          .from('restaurant_profiles')
-          .select('brand_color')
-          .eq('restaurant_id', o.restaurant_id)
-          .single()
-          
-        if (!cancelled) {
-          setOrder({ ...o, invoice: inv || null })
-          if (profile?.brand_color) setBrandColor(profile.brand_color)
-          if (inv?.pdf_url) setInvoiceArrived(true)
+          // 3. USE the singleton instance
+          const { data: inv } = await supabase
+            .from('invoices')
+            .select('*')
+            .eq('order_id', orderId)
+            .single()
+
+          // Load restaurant profile for brand color
+          const { data: profile } = await supabase
+            .from('restaurant_profiles')
+            .select('brand_color')
+            .eq('restaurant_id', o.restaurant_id)
+            .single()
+
+          if (!cancelled) {
+            setOrder({ ...o, invoice: inv || null })
+            if (profile?.brand_color) setBrandColor(profile.brand_color)
+            if (inv?.pdf_url) setInvoiceArrived(true)
+          }
+        } catch {
+          if (!cancelled) setError('Failed to load order details')
+        } finally {
+          if (!cancelled) setLoading(false)
         }
-      } catch {
-        if (!cancelled) setError('Failed to load order details')
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    })()
+      })()
     return () => {
       cancelled = true
     }
@@ -150,11 +150,10 @@ export default function OrderSuccess() {
 
   if (!orderId) return <div style={{ padding: 20 }}>No order found.</div>
   // 2. REMOVE the checking condition
-  if (loading) return <div style={{ padding: 20 }}>Loading order details...</div>
   if (error) return <div style={{ padding: 20, color: 'red' }}>{error}</div>
 
-  const invoiceUrl = order.invoice?.pdf_url
-  const isCompleted = order.status === 'completed'
+  const invoiceUrl = order?.invoice?.pdf_url;
+  const isCompleted = order?.status === 'completed';
   // If amount was explicitly passed from payment flow, prefer it
   const amtRaw = amtQuery
   const amtStr = Array.isArray(amtRaw) ? amtRaw[0] : amtRaw
@@ -163,21 +162,21 @@ export default function OrderSuccess() {
   try {
     const s = typeof window !== 'undefined' ? sessionStorage.getItem('last_paid_amount') : null
     amountFromSession = s != null && s !== '' && !isNaN(Number(s)) ? Number(s) : null
-  } catch {}
+  } catch { }
   const amountFromQuery = amtStr != null && amtStr !== '' && !isNaN(Number(amtStr)) ? Number(amtStr) : null
   const derivedFromExAndTax = (
     order.subtotal_ex_tax != null && order.total_tax != null
   ) ? (Number(order.subtotal_ex_tax) + Number(order.total_tax)) : null
 
   // Build candidates and pick the smallest positive to avoid duplicates/double-add
-  const rawCandidates = [
+  const rawCandidates = order ? [
     amountFromQuery,
     amountFromSession,
     order.total_inc_tax,
     order.total_amount,
     order.total,
     derivedFromExAndTax
-  ]
+  ] : [amountFromQuery, amountFromSession];
   const candidates = rawCandidates
     .map(n => (n == null ? null : Number(n)))
     .filter(n => Number.isFinite(n) && n > 0)
@@ -194,69 +193,69 @@ export default function OrderSuccess() {
       </div>
       <div style={{ maxWidth: 600, margin: '3rem auto', padding: '0 1rem', textAlign: 'center' }}>
         <h1>Thank you for your order!</h1>
-        <p>Your order #{order.id.slice(0, 8).toUpperCase()} has been placed.</p>
-        <p>Payment Method: <strong>{method || order.payment_method}</strong></p>
+        <p>Your order #{order?.id?.slice(0, 8).toUpperCase() || '...'} has been placed.</p>
+        <p>Payment Method: <strong>{method || order?.payment_method || '...'}</strong></p>
         <p>Total Amount: <strong>₹{amount.toFixed(2)}</strong></p>
 
-      <div style={{ margin: '20px 0', padding: 16, background: '#f3f4f6', borderRadius: 8 }}>
-        <p><strong>Order Status:</strong> {order.status.replace('_', ' ').toUpperCase()}</p>
+        <div style={{ margin: '20px 0', padding: 16, background: '#f3f4f6', borderRadius: 8 }}>
+          <p><strong>Order Status:</strong> {order?.status?.replace('_', ' ').toUpperCase() || 'PROCESSING...'}</p>
 
-        {invoiceUrl ? (
-          <div>
-            <p style={{ color: 'green' }}>✅ Your bill is ready!</p>
-            <button
-              onClick={() => window.open(invoiceUrl, '_blank')}
-              style={{
-                display: 'inline-block',
-                padding: '12px 24px',
-                background: '#059669',
-                color: '#fff',
-                border: 'none',
-                borderRadius: 8,
-                cursor: 'pointer',
-                margin: '10px'
-              }}
-            >
-              📄 View / Download Bill
-            </button>
-            <p style={{ color: '#6b7280', marginTop: 8 }}>
-              Redirecting to thank-you page shortly…
+          {invoiceUrl ? (
+            <div>
+              <p style={{ color: 'green' }}>✅ Your bill is ready!</p>
+              <button
+                onClick={() => window.open(invoiceUrl, '_blank')}
+                style={{
+                  display: 'inline-block',
+                  padding: '12px 24px',
+                  background: '#059669',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  margin: '10px'
+                }}
+              >
+                📄 View / Download Bill
+              </button>
+              <p style={{ color: '#6b7280', marginTop: 8 }}>
+                Redirecting to thank-you page shortly…
+              </p>
+            </div>
+          ) : isCompleted ? (
+            <div>
+              <p style={{ color: '#f59e0b' }}>Bill is being generated…</p>
+              <button
+                onClick={checkForInvoice}
+                disabled={checkingInvoice}
+                style={{
+                  padding: '8px 16px',
+                  background: '#f59e0b',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 4,
+                  cursor: checkingInvoice ? 'not-allowed' : 'pointer',
+                  opacity: checkingInvoice ? 0.6 : 1
+                }}
+              >
+                {checkingInvoice ? 'Checking…' : 'Check for Bill'}
+              </button>
+              <p style={{ marginTop: 20, color: '#6b7280' }}>
+                If your bill does not appear, please wait or refresh.
+              </p>
+            </div>
+          ) : (
+            <p style={{ color: '#6b7280' }}>
+              Your bill will be available once the restaurant completes the order.
             </p>
-          </div>
-        ) : isCompleted ? (
-          <div>
-            <p style={{ color: '#f59e0b' }}>Bill is being generated…</p>
-            <button
-              onClick={checkForInvoice}
-              disabled={checkingInvoice}
-              style={{
-                padding: '8px 16px',
-                background: '#f59e0b',
-                color: '#fff',
-                border: 'none',
-                borderRadius: 4,
-                cursor: checkingInvoice ? 'not-allowed' : 'pointer',
-                opacity: checkingInvoice ? 0.6 : 1
-              }}
-            >
-              {checkingInvoice ? 'Checking…' : 'Check for Bill'}
-            </button>
+          )}
+
+          {!invoiceArrived && (
             <p style={{ marginTop: 20, color: '#6b7280' }}>
-              If your bill does not appear, please wait or refresh.
+              Window closes in {timer} second{timer !== 1 ? 's' : ''}.
             </p>
-          </div>
-        ) : (
-          <p style={{ color: '#6b7280' }}>
-            Your bill will be available once the restaurant completes the order.
-          </p>
-        )}
-
-        {!invoiceArrived && (
-          <p style={{ marginTop: 20, color: '#6b7280' }}>
-            Window closes in {timer} second{timer !== 1 ? 's' : ''}.
-          </p>
-        )}
-      </div>
+          )}
+        </div>
 
         <button
           onClick={handleMore}

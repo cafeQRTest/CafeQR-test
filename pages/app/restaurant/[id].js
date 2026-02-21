@@ -26,6 +26,7 @@ export default function DeliveryRestaurantMenu() {
   const [cart, setCart] = useState([]);
   const [cartOpen, setCartOpen] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
+  const [showToast, setShowToast] = useState(false);
 
   useEffect(() => {
     const check = () => setIsDesktop(window.innerWidth > 768);
@@ -33,6 +34,16 @@ export default function DeliveryRestaurantMenu() {
     window.addEventListener("resize", check);
     return () => window.removeEventListener("resize", check);
   }, []);
+
+  useEffect(() => {
+    if (router.query.toast === "order_received") {
+      setShowToast(true);
+      const t = setTimeout(() => setShowToast(false), 3500);
+
+      router.replace(`/app/restaurant/${restaurantId}`, undefined, { shallow: true });
+      return () => clearTimeout(t);
+    }
+  }, [router.query.toast, restaurantId]);
 
   useEffect(() => {
     if (!restaurantId) return;
@@ -755,7 +766,50 @@ export default function DeliveryRestaurantMenu() {
         )}
       </AnimatePresence>
 
-
+      <AnimatePresence>
+        {showToast && (
+          <motion.div
+            initial={{ y: 100, opacity: 0, scale: 0.9 }}
+            animate={{ y: 0, opacity: 1, scale: 1 }}
+            exit={{ y: 100, opacity: 0, scale: 0.9 }}
+            style={{
+              position: "fixed",
+              bottom: 40,
+              left: 0,
+              right: 0,
+              margin: "0 auto",
+              width: "max-content",
+              background: "#10b981", // elegant green
+              color: "#fff",
+              padding: "16px 28px",
+              borderRadius: 999,
+              fontWeight: 800,
+              fontSize: 16,
+              boxShadow: "0 10px 30px rgba(16, 185, 129, 0.4)",
+              zIndex: 1000,
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+            }}
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="3"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+              <polyline points="22 4 12 14.01 9 11.01"></polyline>
+            </svg>
+            Order Received!
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

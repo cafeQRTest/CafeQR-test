@@ -18,7 +18,7 @@ import {
 } from '../services/supabase'
 import { ensureSessionValid } from '../lib/authActions'
 import { usePrintService } from '../lib/usePrintService'
-import CafeQRLoader from "../components/CafeQRLoader";
+
 import ReactQueryProvider from '../lib/react-query-provider';
 
 // ── constants ────────────────────────────────────────────────────────────────
@@ -220,7 +220,8 @@ function DeliveryAuthGate({ children }) {
 
   // Optional loader (prevents flashing protected page before redirect)
   if (isProtected && (loading || !isLoggedIn)) {
-    return <CafeQRLoader message="Logging out..." />;
+    if (isDelivery) return null; // Delivery app handles its own unblocked loading or uses different strategy
+    return <div style={{ padding: 40, textAlign: 'center' }}>Logging out...</div>;
   }
 
   return <>{children}</>;
@@ -267,6 +268,7 @@ function MyApp({ Component, pageProps }) {
             } catch { }
             if (canGoBack) window.history.back()
             else if (path.startsWith(OWNER_PREFIX)) NativeApp.exitApp?.()
+            else if (path.startsWith(DELIVERY_PREFIX)) router.replace('/app')
             else router.replace('/owner')
           })
           const prev = cleanup
@@ -329,12 +331,15 @@ function MyApp({ Component, pageProps }) {
     }
   }, [router, ready])
 
-  if (!mounted || !router.isReady) return <CafeQRLoader message="Loading..." />;
-
   const path = router.pathname || ''
   const isOwner = path.startsWith(OWNER_PREFIX)
   const isCustomer = path.startsWith(CUSTOMER_PREFIX)
   const isDeliveryApp = path.startsWith(DELIVERY_PREFIX)
+
+  if (!mounted || !router.isReady) {
+    if (isDeliveryApp || path === '/') return null; // Let the delivery apps paint immediately!
+    return <div style={{ padding: 40, textAlign: 'center' }}>Loading...</div>;
+  }
 
   return (
     <>
