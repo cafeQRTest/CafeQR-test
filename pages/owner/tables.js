@@ -3269,7 +3269,7 @@ const handleModalResend = async (table) => {
   
   // Filtered tables
   const filteredTables = useMemo(() => {
-    return tables.filter(table => {
+    const filtered = tables.filter(table => {
       const matchesSearch = searchQuery === '' || 
         table.identifier.toLowerCase().includes(searchQuery.toLowerCase());
       
@@ -3279,6 +3279,10 @@ const handleModalResend = async (table) => {
       
       return matchesSearch && matchesSection && matchesStatus && matchesFloor;
     });
+
+    return filtered.sort((a, b) => 
+      a.identifier.localeCompare(b.identifier, undefined, { numeric: true, sensitivity: 'base' })
+    );
   }, [tables, searchQuery, filterSection, filterStatus, filterFloor]);
 
   // Filtered orders for non-dine-in modes

@@ -25,7 +25,11 @@ async function fetchTables(restaurantId) {
     .order('identifier');
 
   if (error) throw error;
-  return data || [];
+  
+  const tables = data || [];
+  return tables.sort((a, b) => 
+    a.identifier.localeCompare(b.identifier, undefined, { numeric: true, sensitivity: 'base' })
+  );
 }
 
 // Fetch Sections
