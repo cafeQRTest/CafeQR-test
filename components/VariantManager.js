@@ -220,6 +220,7 @@ export default function VariantManager({ onClose, onSaved, restaurantId }) {
       const { error: updErr } = await supabase
         .from('variant_options')
         .update({ 
+          name: trimmedName,
           is_active: true, 
           display_order: template?.options?.length || 0 
         })
