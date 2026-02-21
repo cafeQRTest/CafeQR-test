@@ -1241,6 +1241,7 @@ export default function CreateOrderModal({
   
   // Quick Add Product State
   const [showQuickAddModal, setShowQuickAddModal] = useState(false);
+  const [quickAddLoading, setQuickAddLoading] = useState(false);
   const [quickProduct, setQuickProduct] = useState({
     name: '',
     price: '',
