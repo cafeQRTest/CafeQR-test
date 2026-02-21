@@ -2203,7 +2203,17 @@ const OrderHistoryView = ({ onBack, orders, onPrint, onCancel, loading, onOrderC
   const filteredOrders = useMemo(() => {
     let result = orders;
     if (filterType !== 'all') {
-      result = result.filter(o => o.order_type === filterType);
+      result = result.filter(o => {
+        const type = (o.order_type || '').toLowerCase();
+        if (filterType === 'takeaway') {
+          return type === 'parcel' || type === 'takeaway' || type === 'parcel_service';
+        } else if (filterType === 'delivery') {
+          return type === 'delivery' || !!o.delivery_address_id || type === 'home_delivery';
+        } else if (filterType === 'dine-in') {
+          return type === 'dine-in';
+        }
+        return type === filterType;
+      });
     }
     if (creditOnly) {
       result = result.filter(o => o.is_credit === true || o.payment_method === 'credit');
@@ -3796,33 +3806,35 @@ const handleModalResend = async (table) => {
                 <Subtitle>{pageInfo.subtitle}</Subtitle>
               </TitleBlock>
               
-              {serviceMode === 'dine-in' && (
-                <HeaderActions>
-                  <HistoryButton onClick={() => setActiveSubView('history')}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"></path>
-                    </svg>
-                    Order History
-                  </HistoryButton>
+              <HeaderActions>
+                <HistoryButton onClick={() => setActiveSubView('history')}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"></path>
+                  </svg>
+                  Order History
+                </HistoryButton>
 
-                  <ConfigButton onClick={() => setShowSectionsModal(true)}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 3H3v18h18V12"></path>
-                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                    </svg>
-                    Manage Sections
-                  </ConfigButton>
-                  <ConfigButton onClick={() => setShowFloorsModal(true)}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M3 9h18"></path>
-                      <path d="M3 15h18"></path>
-                      <path d="M3 3v18"></path>
-                      <path d="M21 3v18"></path>
-                    </svg>
-                    Manage Floors
-                  </ConfigButton>
-                </HeaderActions>
-              )}
+                {serviceMode === 'dine-in' && (
+                  <>
+                    <ConfigButton onClick={() => setShowSectionsModal(true)}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 3H3v18h18V12"></path>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                      </svg>
+                      Manage Sections
+                    </ConfigButton>
+                    <ConfigButton onClick={() => setShowFloorsModal(true)}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 9h18"></path>
+                        <path d="M3 15h18"></path>
+                        <path d="M3 3v18"></path>
+                        <path d="M21 3v18"></path>
+                      </svg>
+                      Manage Floors
+                    </ConfigButton>
+                  </>
+                )}
+              </HeaderActions>
             </div>
             
             {serviceMode === 'dine-in' ? (
