@@ -51,7 +51,19 @@ const Container = styled(motion.div)`
   position: relative;
   border: 1px solid rgba(255, 255, 255, 0.8);
   
-  &::-webkit-scrollbar { width: 0px; }
+  &::-webkit-scrollbar {
+    width: 5px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: #e2e8f0;
+    border-radius: 10px;
+  }
+  &:hover::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+  }
 `;
 
 const Header = styled.div`

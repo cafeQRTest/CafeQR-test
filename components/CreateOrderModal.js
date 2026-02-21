@@ -6,7 +6,7 @@ import styled, { keyframes } from 'styled-components';
 import { getSupabase } from '../services/supabase';
 import { useAlert } from '../context/AlertContext';
 import { useAvailableMenuItems } from '../hooks/useMenuItems';
-import { useUpdateTableStatus } from '../hooks/useTables';
+import { useUpdateTableStatus, tableKeys } from '../hooks/useTables';
 import { useRestaurant } from '../context/RestaurantContext';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAllCustomers, useCreditCustomers, useRestaurantProfileConfig, orderKeys } from '../hooks/useCreateOrderData';
@@ -1604,9 +1604,19 @@ export default function CreateOrderModal({
   };
 
   const handleVariantSelect = (itemWithVariant) => {
+    const cartId = itemWithVariant.cartId || (itemWithVariant.variant_id ? `v_${itemWithVariant.id}_${itemWithVariant.variant_id}` : itemWithVariant.id);
     addItemToCart(itemWithVariant);
     setShowVariantSelector(false);
     setSelectedItem(null);
+    
+    // Focus the newly added variant in the cart
+    setTimeout(() => {
+      const input = document.getElementById(`qty-input-${cartId}`);
+      if (input) {
+        input.focus();
+        input.select();
+      }
+    }, 150);
   };
 
   const addToCartDirect = (item) => addItemToCart(item);
@@ -2093,7 +2103,14 @@ export default function CreateOrderModal({
           restaurantId: restaurantId,
           status: 'occupied'
         });
+      } else {
+        // Otherwise, still invalidate to ensure any status changes (like from Settle) are reflected
+        queryClient.invalidateQueries({ queryKey: tableKeys.all });
       }
+
+      // Also invalidate order list queries since a new one was placed
+      queryClient.invalidateQueries({ queryKey: orderKeys.all });
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
 
       // Trigger Printing
       if (orderMode === 'settle') {
@@ -2741,9 +2758,20 @@ export default function CreateOrderModal({
                           active={index === activeSuggestionIndex}
                           orderMode={orderMode}
                           onClick={() => {
+                            const cartId = item.cartId || (item.variant_id ? `v_${item.id}_${item.variant_id}` : item.id);
                             addToCart(item);
                             setSearchQuery('');
-                            searchInputRef.current?.focus();
+                            // If it has variants, addToCart will open a modal, so we don't focus yet.
+                            // Otherwise, focus the newly added/updated item in cart.
+                            if (!item.has_variants && !item.has_addons) {
+                              setTimeout(() => {
+                                const input = document.getElementById(`qty-input-${cartId}`);
+                                if (input) {
+                                  input.focus();
+                                  input.select();
+                                }
+                              }, 100);
+                            }
                           }}
                         >
                           <div className="name-info">
@@ -2967,6 +2995,7 @@ export default function CreateOrderModal({
                           onMouseLeave={(e) => { e.currentTarget.style.background = 'white'; e.currentTarget.style.color = '#475569'; }}
                         >−</button>
                         <input
+                          id={`qty-input-${item.cartId}`}
                           type="text"
                           inputMode="decimal"
                           value={qtyDrafts[item.cartId] ?? formatQtyP(item.quantity, item.uom_precision ?? 2)}
