@@ -213,6 +213,7 @@ export default function PaymentPage() {
           restaurant_id: restaurantId,
           restaurant_name: restaurant?.name || null,
           table_number: tableNumber,
+          order_type: 'dine-in',
           items: cart.map(i => ({
             id: i.id,
             name: i.name,
@@ -276,6 +277,7 @@ export default function PaymentPage() {
         const pendingOrder = {
           restaurant_id: restaurantId,
           table_number: tableNumber,
+          order_type: 'dine-in',
           items: cart.map(i => ({
             id: i.id,
             name: i.name,
@@ -331,6 +333,7 @@ export default function PaymentPage() {
         const pendingOrder = {
           restaurant_id: restaurantId,
           table_number: tableNumber,
+          order_type: 'dine-in',
           items: cart.map(i => ({
             id: i.id,
             name: i.name,
