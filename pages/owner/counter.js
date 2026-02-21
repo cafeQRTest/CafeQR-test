@@ -1301,7 +1301,10 @@ try {
     .eq('restaurant_id', restaurantId)
     .eq('is_active', true)
     .order('identifier');
-  setTableRecords(realTables || []);
+    const sortedTables = (realTables || []).sort((a, b) => 
+      String(a.identifier).localeCompare(String(b.identifier), undefined, { numeric: true, sensitivity: 'base' })
+    );
+    setTableRecords(sortedTables);
 } catch (_) { /* non-critical */ }
 setSendToKitchenEnabled(profile?.features_counter_send_to_kitchen_enabled !== false);
 setCustomerFeatureEnabled(!!profile?.featurescustomersenabled);
@@ -2526,7 +2529,9 @@ function requireTakenByName() {
                           (t.section || '').toLowerCase().includes(q) ||
                           (t.floor_level || '').toLowerCase().includes(q)
                         );
-                      });
+                      }).sort((a, b) => 
+                        String(a.identifier).localeCompare(String(b.identifier), undefined, { numeric: true, sensitivity: 'base' })
+                      );
 
                       if (filtered.length === 0) {
                         return <div style={{ textAlign: 'center', padding: '32px 0', color: '#9ca3af', fontSize: 14 }}>No tables found</div>;
