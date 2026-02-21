@@ -168,15 +168,31 @@ const isMixed = (inv) => getPayMethod(inv) === 'mixed' && !!getMixedDetails(inv)
 
       if (error) throw error;
 
-      let list = data || [];
+      // Base: exclude only unpaid invoices that are NOT credit
+      // (credit-unpaid, voided, and paid are all kept)
+      let list = (data || []).filter(inv => {
+        const status = String(inv.status || '').toLowerCase();
+        const isCredit = String(inv.payment_method || '').toLowerCase() === 'credit';
+        if (status === 'unpaid' && !isCredit) return false;
+        return true;
+      });
+
       // Filter by report type
       if (reportType === 'sales') {
-        list = list.filter(inv => inv.payment_method !== 'credit' && String(inv.status || '').toLowerCase() !== 'void' && String(inv.status || '').toLowerCase() !== 'unpaid');
-       } else if (reportType === 'credit') {
-         list = list.filter(inv => (inv.payment_method === 'credit' || String(inv.status || '').toLowerCase() === 'unpaid') && String(inv.status || '').toLowerCase() !== 'void');
+        list = list.filter(inv => {
+          const status = String(inv.status || '').toLowerCase();
+          const isCredit = String(inv.payment_method || '').toLowerCase() === 'credit';
+          return status !== 'void' && !isCredit;
+        });
+      } else if (reportType === 'credit') {
+        list = list.filter(inv => {
+          const status = String(inv.status || '').toLowerCase();
+          const isCredit = String(inv.payment_method || '').toLowerCase() === 'credit';
+          return (isCredit || status === 'unpaid') && status !== 'void';
+        });
       } else if (reportType === 'voided') {
         list = list.filter(inv => String(inv.status || '').toLowerCase() === 'void');
-      } // 'all' shows everything
+      } // 'all' shows everything kept by the base filter
 
       setInvoices(list);
 

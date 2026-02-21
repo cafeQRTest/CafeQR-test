@@ -37,6 +37,8 @@ export default function OrderPage() {
   const [justAddedItem, setJustAddedItem] = useState('')
   const [enableMenuImages, setEnableMenuImages] = useState(false)
   const addToastTimeoutRef = useRef(null)
+  const [tableStatus, setTableStatus] = useState(null)   // null = not yet checked
+  const [tableStatusLabel, setTableStatusLabel] = useState('')
 
   // Variant state
   const [showVariantSelector, setShowVariantSelector] = useState(false)
@@ -206,7 +208,28 @@ export default function OrderPage() {
            }
         }
 
-        // 3. Fetch Menu
+        // 3. Fetch table status if a tableNumber is present
+        if (tableNumber) {
+          const { data: tableData } = await supabase
+            .from('tables')
+            .select('status')
+            .eq('restaurant_id', restaurantId)
+            .eq('identifier', tableNumber)
+            .eq('is_active', true)
+            .maybeSingle();
+
+          const status = tableData?.status || 'available';
+          setTableStatus(status);
+          const statusLabels = {
+            occupied: 'This table is currently occupied',
+            reserved: 'This table is reserved',
+            cleaning: 'This table is being cleaned',
+            maintenance: 'This table is under maintenance',
+          };
+          setTableStatusLabel(statusLabels[status] || '');
+        }
+
+        // 4. Fetch Menu
         const { data: rawItems, error: menuErr } = await supabase
           .from('menu_items')
           .select(`
@@ -432,7 +455,10 @@ export default function OrderPage() {
     }
   }
 
+  const tableBlocked = tableStatus !== null && tableStatus !== 'available';
+
   const addToCart = (item) => {
+    if (tableBlocked) return
     if (item.status && item.status !== 'available') {
       alert('This item is currently out of stock.')
       return
@@ -540,6 +566,42 @@ export default function OrderPage() {
         </div>
       </div>
     )
+  }
+
+  // Show blocked screen if table is not available
+  if (tableBlocked) {
+    const statusMessages = {
+      occupied:    { label: 'Occupied',    message: 'This table is currently occupied. Please ask the staff for assistance.' },
+      reserved:    { label: 'Reserved',    message: 'This table is reserved. Please ask the staff for assistance.' },
+      cleaning:    { label: 'Cleaning',    message: 'This table is being cleaned. Please check back shortly.' },
+      maintenance: { label: 'Maintenance', message: 'This table is temporarily unavailable. Please contact the staff.' },
+    };
+    const s = statusMessages[tableStatus] || { label: tableStatus, message: 'This table is not available right now. Please contact the staff.' };
+    return (
+      <div style={{
+        minHeight: '100vh', display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        background: '#f8fafc', padding: '24px', textAlign: 'center',
+        fontFamily: 'Inter, sans-serif'
+      }}>
+        <Head>
+          <title>{restaurant?.name || 'Table Unavailable'}</title>
+        </Head>
+        <div style={{ fontSize: 13, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 12 }}>
+          {restaurant?.name}{tableNumber ? ` · Table T-${tableNumber}` : ''}
+        </div>
+        <div style={{
+          fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em',
+          color: '#64748b', border: '1.5px solid #e2e8f0',
+          borderRadius: 99, padding: '4px 16px', marginBottom: 16
+        }}>
+          {s.label}
+        </div>
+        <p style={{ fontSize: 16, fontWeight: 600, color: '#1e293b', maxWidth: 300, lineHeight: 1.6, margin: 0 }}>
+          {s.message}
+        </p>
+      </div>
+    );
   }
 
   return (

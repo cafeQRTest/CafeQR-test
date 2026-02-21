@@ -680,38 +680,30 @@ function PaxEditDialog({ order, onSave, onClose }) {
 function TableEditDialog({ order, onSave, onClose, tables = [], tablesCount = 0 }) {
   const [val, setVal] = useState(() => {
     if (order.order_type === 'parcel') return 'parcel';
+    if (order.order_type === 'delivery') return 'delivery';
     if (order.table_number) return `table:${order.table_number}`;
     return '';
   });
 
   const tableOptions = useMemo(() => {
-     // 1. Start with DB tables
-     const options = tables.map(t => ({
+     // Only available tables can be moved to
+     const availableTables = tables.filter(t => t.status === 'available');
+
+     const options = availableTables.map(t => ({
          value: `table:${t.identifier}`,
          label: t.identifier.match(/^\d+$/) ? `Table ${t.identifier}` : t.identifier,
          sortKey: t.identifier
      }));
 
-     // 2. Add numeric fallbacks 1..tablesCount if not present
+     // 2. Add numeric fallbacks only for counts (no status info available for fallbacks)
      const existingIds = new Set(tables.map(t => String(t.identifier)));
      for (let i = 1; i <= tablesCount; i++) {
         const idStr = String(i);
-        // Also check if "Ti" or "Table i" exists? No, just strict check on what we expect
         if (!existingIds.has(idStr)) {
-             // Basic check: if we have "T1", we don't add "1". 
-             // But if user has "T1" in DB, and tablesCount=5, they expect 5 tables.
-             // If DB has T1..T5, we are good.
-             // If DB has T1 and tablesCount=5, we add 2,3,4,5. 
-             // We do NOT add "1" if "T1" is technically different but semantic duplicate? 
-             // Let's assume strict identifier match for now to simply fill gaps.
-             // Ideally we shouldn't mix "T1" and "1", but this ensures reachability.
-             
-             // Check if we have a table that "looks like" this number (e.g. "T5" vs "5")
              const hasSimilar = tables.some(t => {
-                 const num = t.identifier.replace(/\D/g, ''); // Extract number "T5" -> "5"
+                 const num = t.identifier.replace(/\D/g, '');
                  return num === idStr;
              });
-
              if (!hasSimilar) {
                 options.push({
                    value: `table:${i}`,
@@ -749,9 +741,10 @@ function TableEditDialog({ order, onSave, onClose, tables = [], tablesCount = 0 
           <NiceSelect
             value={val}
             onChange={setVal}
-            placeholder="Select Table or Parcel..."
+            placeholder="Select Table or Type..."
             options={[
-              { value: 'parcel', label: 'Parcel / Takeaway' },
+              { value: 'parcel', label: 'Takeaway / Parcel' },
+              { value: 'delivery', label: 'Home Delivery' },
               ...tableOptions
             ]}
           />
@@ -825,7 +818,7 @@ export default function OrdersPage() {
       .from('tables')
       .select('*')
       .eq('restaurant_id', restaurantId)
-      // .eq('is_active', true) // Relaxed to ensure all tables show up (in case of flag mismatch)
+      .eq('is_active', true)
       .order('identifier', { ascending: true }) 
       .then(({ data }) => {
         if (data) { 
@@ -1394,11 +1387,13 @@ useEffect(() => {
       if (val === 'parcel') {
         tableNum = null;
         orderType = 'parcel';
+      } else if (val === 'delivery') {
+        tableNum = null;
+        orderType = 'delivery';
       } else if (val && val.startsWith('table:')) {
         tableNum = val.split(':')[1];
         orderType = 'dine-in';
       } else {
-         // Fallback for direct number input if any old usage remains
          tableNum = val ? String(val).trim() : null;
          if (tableNum) orderType = 'dine-in';
       }

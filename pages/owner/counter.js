@@ -869,6 +869,9 @@ const getDraftOrQtyNumber = (cartId, fallbackQty, precision = 2) => {
 
 
   const [tables, setTables] = useState([]);
+  const [tableRecords, setTableRecords] = useState([]); // Full table objects with status
+  const [showTablePicker, setShowTablePicker] = useState(false);
+  const [tableSearch, setTableSearch] = useState('');
   const [menuItems, setMenuItems] = useState([]);
   const [cart, setCart] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1286,9 +1289,20 @@ setRoundOffConfig({
 // NEW: set credit feature flag
 setCreditFeatureEnabled(!!profile?.features_credit_enabled);
 
-// Set tables from profile count
+// Set tables from profile count (legacy number list)
 const tCount = profile?.tables_count || 0;
 setTables(Array.from({ length: tCount }, (_, i) => i + 1));
+
+// Also fetch real table records for the picker (status, section, floor)
+try {
+  const { data: realTables } = await supabase
+    .from('tables')
+    .select('id, identifier, status, section, floor_level, capacity, shape')
+    .eq('restaurant_id', restaurantId)
+    .eq('is_active', true)
+    .order('identifier');
+  setTableRecords(realTables || []);
+} catch (_) { /* non-critical */ }
 setSendToKitchenEnabled(profile?.features_counter_send_to_kitchen_enabled !== false);
 setCustomerFeatureEnabled(!!profile?.featurescustomersenabled);
 setEnableMenuImages(!!profile?.features_menu_images_enabled);
@@ -2344,19 +2358,331 @@ function requireTakenByName() {
             {/* Table/Type Selection */}
             <div>
               <SectionLabel>Table / Order Type</SectionLabel>
-              <div style={{ maxWidth: '240px' }}>
-                <NiceSelect
-                  value={orderSelect}
-                  onChange={setOrderSelect}
-                  placeholder="Select Type..."
-                  options={[
-                    { value: 'parcel', label: 'Parcel / Takeaway' },
-                    { value: 'delivery', label: 'Home Delivery 🏠' },
-                    ...tables.map(n => ({ value: `table:${n}`, label: `Table ${n}` }))
-                  ]}
-                />
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+
+                {/* Takeaway button */}
+                <button
+                  type="button"
+                  onClick={() => setOrderSelect(orderSelect === 'parcel' ? '' : 'parcel')}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '9px 18px', borderRadius: 99,
+                    border: orderSelect === 'parcel' ? '2px solid #f97316' : '1.5px solid #d1d5db',
+                    background: orderSelect === 'parcel' ? '#fff7ed' : '#ffffff',
+                    color: orderSelect === 'parcel' ? '#c2410c' : '#374151',
+                    fontWeight: 600, fontSize: 14, cursor: 'pointer', transition: 'all 0.2s',
+                    boxShadow: orderSelect === 'parcel' ? '0 0 0 3px #f9731620' : '0 1px 3px rgba(0,0,0,0.06)',
+                  }}
+                >
+                  Takeaway
+                </button>
+
+                {/* Tables button */}
+                <button
+                  type="button"
+                  onClick={() => { setShowTablePicker(true); setTableSearch(''); }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '9px 18px', borderRadius: 99,
+                    border: orderSelect.startsWith('table:') ? '2px solid #f97316' : '1.5px solid #d1d5db',
+                    background: orderSelect.startsWith('table:') ? '#fff7ed' : '#ffffff',
+                    color: orderSelect.startsWith('table:') ? '#c2410c' : '#374151',
+                    fontWeight: 600, fontSize: 14, cursor: 'pointer', transition: 'all 0.2s',
+                    boxShadow: orderSelect.startsWith('table:') ? '0 0 0 3px #f9731620' : '0 1px 3px rgba(0,0,0,0.06)',
+                  }}
+                >
+
+                  {orderSelect.startsWith('table:')
+                    ? (() => {
+                        const tNum = orderSelect.split(':')[1];
+                        const rec = tableRecords.find(t => String(t.identifier) === String(tNum));
+                        return rec ? `Table ${rec.identifier}${rec.section ? ` · ${rec.section}` : ''}` : `Table ${tNum}`;
+                      })()
+                    : 'Tables'}
+                  {orderSelect.startsWith('table:') && (
+                    <span
+                      onClick={(e) => { e.stopPropagation(); setOrderSelect(''); }}
+                      style={{ marginLeft: 2, color: '#9ca3af', fontSize: 17, lineHeight: 1, cursor: 'pointer' }}
+                    >×</span>
+                  )}
+                </button>
+
+                {/* Delivery button */}
+                <button
+                  type="button"
+                  onClick={() => setOrderSelect(orderSelect === 'delivery' ? '' : 'delivery')}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '9px 18px', borderRadius: 99,
+                    border: orderSelect === 'delivery' ? '2px solid #f97316' : '1.5px solid #d1d5db',
+                    background: orderSelect === 'delivery' ? '#fff7ed' : '#ffffff',
+                    color: orderSelect === 'delivery' ? '#c2410c' : '#374151',
+                    fontWeight: 600, fontSize: 14, cursor: 'pointer', transition: 'all 0.2s',
+                    boxShadow: orderSelect === 'delivery' ? '0 0 0 3px #f9731620' : '0 1px 3px rgba(0,0,0,0.06)',
+                  }}
+                >
+                  Delivery
+                </button>
+
               </div>
             </div>
+
+            {/* Table Picker Popup */}
+            {showTablePicker && (
+              <div
+                style={{
+                  position: 'fixed', inset: 0,
+                  background: 'rgba(15, 23, 42, 0.45)',
+                  backdropFilter: 'blur(3px)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  zIndex: 2000, padding: 16
+                }}
+                onClick={() => setShowTablePicker(false)}
+              >
+                <div
+                  style={{
+                    background: '#fff', borderRadius: 20,
+                    width: '100%', maxWidth: 700,
+                    maxHeight: '92vh', display: 'flex', flexDirection: 'column',
+                    boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)',
+                    animation: 'slideUp 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {/* Header */}
+                  <div style={{ padding: '20px 20px 12px', borderBottom: '1px solid #f1f5f9' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                      <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#111827' }}>Select Table</h3>
+                      <button
+                        onClick={() => setShowTablePicker(false)}
+                        style={{ background: 'none', border: 'none', fontSize: 22, color: '#9ca3af', cursor: 'pointer', lineHeight: 1, padding: 4 }}
+                      >✕</button>
+                    </div>
+                    {/* Search Bar */}
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      padding: '8px 12px',
+                      border: '1.5px solid #e5e7eb', borderRadius: 10,
+                      background: '#f9fafb'
+                    }}>
+                      <span style={{ color: '#9ca3af', fontSize: 16 }}>🔍</span>
+                      <input
+                        autoFocus
+                        placeholder="Search table or section..."
+                        value={tableSearch}
+                        onChange={(e) => setTableSearch(e.target.value)}
+                        style={{
+                          flex: 1, border: 'none', outline: 'none',
+                          background: 'transparent', fontSize: 14,
+                          fontWeight: 500, color: '#1e293b'
+                        }}
+                      />
+                      {tableSearch && (
+                        <span
+                          onClick={() => setTableSearch('')}
+                          style={{ color: '#9ca3af', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}
+                        >×</span>
+                      )}
+                    </div>
+                    {/* Legend - matches tables.js visual floor plan exactly */}
+                    <div style={{ display: 'flex', gap: 12, marginTop: 10, flexWrap: 'wrap', fontSize: 12, color: '#475569', fontWeight: 600 }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: '50%', background: '#ffffff', border: '1px solid #e2e8f0', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.06)', flexShrink: 0 }}></span>
+                        Available
+                      </span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: '50%', background: '#f97316', boxShadow: '0 2px 4px rgba(249,115,22,0.2)', flexShrink: 0 }}></span>
+                        Occupied
+                      </span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: '50%', background: '#10b981', boxShadow: '0 2px 4px rgba(16,185,129,0.2)', flexShrink: 0 }}></span>
+                        Billed
+                      </span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: '50%', background: '#3b82f6', flexShrink: 0 }}></span>
+                        Reserved
+                      </span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: '50%', background: '#f59e0b', flexShrink: 0 }}></span>
+                        Cleaning
+                      </span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: '50%', background: '#64748b', flexShrink: 0 }}></span>
+                        Maintenance
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Table Grid */}
+                  <div style={{ overflowY: 'auto', padding: 16, flex: 1 }}>
+                    {(() => {
+                      const q = tableSearch.trim().toLowerCase();
+                      // Use tableRecords if available, fall back to number list
+                      const source = tableRecords.length > 0 ? tableRecords : tables.map(n => ({ id: n, identifier: n, status: 'available', section: null, floor_level: null }));
+                      const filtered = source.filter(t => {
+                        if (!q) return true;
+                        return (
+                          String(t.identifier).toLowerCase().includes(q) ||
+                          (t.section || '').toLowerCase().includes(q) ||
+                          (t.floor_level || '').toLowerCase().includes(q)
+                        );
+                      });
+
+                      if (filtered.length === 0) {
+                        return <div style={{ textAlign: 'center', padding: '32px 0', color: '#9ca3af', fontSize: 14 }}>No tables found</div>;
+                      }
+
+                      const statusMeta = (status) => {
+                        // Exact same colours as tables.js VisualTable & FloorPlanLegend
+                        switch (status) {
+                          case 'available':
+                            return {
+                              gradient: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+                              textColor: '#475569',
+                              border: '#e2e8f0',
+                              dot: '#ffffff',
+                              dotBorder: '1px solid #e2e8f0',
+                              dotShadow: 'inset 0 1px 3px rgba(0,0,0,0.06)',
+                              label: 'Available',
+                              clickable: true,
+                            };
+                          case 'occupied':
+                            return {
+                              gradient: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
+                              textColor: '#ffffff',
+                              border: '#ea580c44',
+                              dot: '#f97316',
+                              dotBorder: 'none',
+                              dotShadow: '0 2px 4px rgba(249,115,22,0.35)',
+                              label: 'Occupied',
+                              clickable: false,
+                            };
+                          case 'reserved':
+                            return {
+                              gradient: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                              textColor: '#ffffff',
+                              border: 'transparent',
+                              dot: '#3b82f6',
+                              dotBorder: 'none',
+                              dotShadow: '0 2px 4px rgba(59,130,246,0.35)',
+                              label: 'Reserved',
+                              clickable: false,
+                            };
+                          case 'cleaning':
+                            return {
+                              gradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                              textColor: '#ffffff',
+                              border: 'transparent',
+                              dot: '#f59e0b',
+                              dotBorder: 'none',
+                              dotShadow: '0 2px 4px rgba(245,158,11,0.35)',
+                              label: 'Cleaning',
+                              clickable: false,
+                            };
+                          case 'maintenance':
+                            return {
+                              gradient: 'linear-gradient(135deg, #64748b 0%, #475569 100%)',
+                              textColor: '#ffffff',
+                              border: 'transparent',
+                              dot: '#64748b',
+                              dotBorder: 'none',
+                              dotShadow: 'none',
+                              label: 'Maintenance',
+                              clickable: false,
+                            };
+                          default: // billed or anything else
+                            return {
+                              gradient: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                              textColor: '#ffffff',
+                              border: '#05966944',
+                              dot: '#10b981',
+                              dotBorder: 'none',
+                              dotShadow: '0 2px 4px rgba(16,185,129,0.35)',
+                              label: 'Billed',
+                              clickable: false,
+                            };
+                        }
+                      };
+
+                      return (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 12 }}>
+                          {filtered.map(t => {
+                            const meta = statusMeta(t.status || 'available');
+                            const isSelected = orderSelect === `table:${t.identifier}`;
+                            return (
+                              <button
+                                key={t.id}
+                                type="button"
+                                disabled={!meta.clickable}
+                                onClick={() => {
+                                  if (!meta.clickable) return;
+                                  setOrderSelect(`table:${t.identifier}`);
+                                  setShowTablePicker(false);
+                                }}
+                                style={{
+                                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                                  gap: 4, padding: '14px 8px',
+                                  borderRadius: t.shape === 'round' ? '50%' : 12,
+                                  width: t.shape === 'round' ? '96px' : undefined,
+                                  height: t.shape === 'round' ? '96px' : undefined,
+                                  border: isSelected
+                                    ? '3px solid #f97316'
+                                    : `1.5px solid ${meta.border || 'transparent'}`,
+                                  background: isSelected
+                                    ? 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%)'
+                                    : meta.gradient,
+                                  cursor: meta.clickable ? 'pointer' : 'not-allowed',
+                                  opacity: meta.clickable ? 1 : 0.75,
+                                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                                  boxShadow: isSelected
+                                    ? '0 0 0 3px #f9731630, 0 6px 16px rgba(249,115,22,0.2)'
+                                    : meta.clickable
+                                      ? '0 2px 10px rgba(0,0,0,0.04)'
+                                      : '0 8px 20px -4px rgba(0,0,0,0.18)',
+                                  position: 'relative',
+                                }}
+                              >
+                                {/* Status dot indicator */}
+                                <div style={{
+                                  position: 'absolute', top: 6, right: 6,
+                                  width: 8, height: 8, borderRadius: '50%',
+                                  background: meta.dot,
+                                  border: meta.dotBorder || 'none',
+                                  boxShadow: meta.dotShadow || 'none',
+                                }} />
+                                <span style={{
+                                  fontSize: 20, fontWeight: 800,
+                                  color: isSelected ? '#c2410c' : meta.textColor,
+                                  textShadow: meta.clickable && !isSelected ? 'none' : '0 1px 3px rgba(0,0,0,0.15)',
+                                  lineHeight: 1.1,
+                                }}>
+                                  {t.identifier}
+                                </span>
+                                {t.section && (
+                                  <span style={{
+                                    fontSize: 10, fontWeight: 600,
+                                    color: isSelected ? '#9a3412' : meta.textColor,
+                                    opacity: 0.85, textAlign: 'center', lineHeight: 1.2
+                                  }}>{t.section}</span>
+                                )}
+                                {t.capacity && (
+                                  <span style={{
+                                    fontSize: 9, fontWeight: 600, textTransform: 'uppercase',
+                                    letterSpacing: '0.4px',
+                                    color: isSelected ? '#9a3412' : meta.textColor,
+                                    opacity: 0.75,
+                                  }}>{t.capacity} seats</span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              </div>
+            )}
             
              {/* Backdate Configuration (New) */}
              <div>
