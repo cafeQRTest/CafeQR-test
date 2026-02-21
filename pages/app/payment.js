@@ -21,6 +21,9 @@ export default function DeliveryPayment() {
 
   const [payMode, setPayMode] = useState("cod"); // "cod" | "online"
   const [placing, setPlacing] = useState(false);
+  const [successStep, setSuccessStep] = useState(false);
+  const [sessionToken, setSessionToken] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
 
   // Delivery details
   const [custName, setCustName] = useState("");
@@ -31,8 +34,8 @@ export default function DeliveryPayment() {
   const [note, setNote] = useState("");
 
   const isNameValid = custName.trim().length > 0;
-  const isPhoneValid = custPhone.length === 10;
-  const isAddrValid = custHouseNo.trim().length >= 5 && /[a-zA-Z]/.test(custHouseNo);
+  const isPhoneValid = custPhone.length >= 10;
+  const isAddrValid = custHouseNo.trim().length > 0;
   const isFormValid = isNameValid && isPhoneValid && isAddrValid;
 
   useEffect(() => {
@@ -80,12 +83,18 @@ export default function DeliveryPayment() {
         if (detected) setCustAddress(detected);
 
         // Fetch Profile Data (SSOT)
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          setSessionToken(session.access_token);
+        }
+
+        const { data: { user: dbUser } } = await supabase.auth.getUser();
+        if (dbUser) {
+          setCurrentUser(dbUser);
           const { data: profile } = await supabase
             .from('customers')
             .select('name, phone')
-            .eq('user_id', user.id)
+            .eq('user_id', dbUser.id)
             .maybeSingle();
 
           if (profile) {
@@ -100,10 +109,16 @@ export default function DeliveryPayment() {
 
     load();
 
-    // Listen for auth changes to re-fetch if needed
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session) {
+        setSessionToken(session.access_token);
+      } else {
+        setSessionToken(null);
+      }
+
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
         if (session?.user) {
+          setCurrentUser(session.user);
           const { data: profile } = await supabase
             .from('customers')
             .select('name, phone')
@@ -114,7 +129,11 @@ export default function DeliveryPayment() {
             if (profile.name) setCustName(profile.name);
             if (profile.phone) setCustPhone(profile.phone.replace(/\D/g, '').slice(0, 10));
           }
+        } else {
+          setCurrentUser(null);
         }
+      } else if (event === 'SIGNED_OUT') {
+        setCurrentUser(null);
       }
     });
 
@@ -251,36 +270,27 @@ export default function DeliveryPayment() {
       .join("\n");
   };
 
-  const buildOrderPayload = () => {
-    const deliveryBlock = buildDeliveryBlock();
-
+  const buildOrderPayload = (currentUser) => {
     return {
       restaurant_id: restaurantId,
-      restaurant_name: restaurant?.name || null,
       customer_name: custName.trim(),
       customer_phone: custPhone.trim(),
       table_number: "DELIVERY",
       items: cart.map((i) => ({
-        id: i.menu_item_id || i.id, // Use real UUID if available (handle reorder case)
+        id: i.menu_item_id || i.id,
         name: i.name,
         price: Number(i.price) || 0,
         quantity: Number(i.quantity) || 1,
-        veg: !!i.veg,
         variant_id: i.selectedVariant?.variant_id || null,
         variant_name: i.selectedVariant?.variant_name || null,
       })),
-      subtotal: totals.subtotalEx,
-      tax: totals.taxAmount,
-      total_amount: totals.totalInc,
-      special_instructions: deliveryBlock,
-      user_id: user?.id || null,
+      special_instructions: buildDeliveryBlock(),
+      user_id: currentUser?.id || user?.id || null,
     };
   };
 
-  const placeCOD = async () => {
-    // Fresh auth check as per requirement
-    const { data: { user: currentUser } } = await supabase.auth.getUser();
-
+  const placeCOD = () => {
+    // Rely on pre-fetched state for instant execution
     if (!currentUser) {
       alert("Please log in to place an order.");
       router.push("/app/auth");
@@ -290,73 +300,65 @@ export default function DeliveryPayment() {
     if (err) return alert(err);
 
     setPlacing(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        alert("Waiting for session... Please refresh or log in again.");
-        setPlacing(false);
-        return;
-      }
-      const token = session.access_token;
 
-      await saveLastDeliveryDetails(currentUser);
+    // Fire-and-forget save of user details
+    saveLastDeliveryDetails(currentUser).catch(console.error);
 
-      const orderData = {
-        ...buildOrderPayload(),
-        payment_method: "none",
-        payment_status: "pending",
-        order_type: "delivery"
-      };
-
-      console.log("Antigravity Debug: Order Payload:", orderData);
-
-      const res = await fetch("/api/orders/create", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
-        body: JSON.stringify(orderData),
-      });
-
-      const result = await res.json();
-      if (!res.ok) {
-        // Expose secret error info
-        throw {
-          message: result.error || "Order creation failed",
-          details: result.details || "None",
-          hint: result.hint || "None"
-        };
-      }
-
-      await notifyOwner({
-        restaurantId,
-        orderId: result.order_id,
-        orderItems: orderData.items,
-      });
-
-      if (typeof window !== "undefined") {
-        localStorage.removeItem(cartKey(restaurantId));
-        localStorage.removeItem("detected_delivery_address");
-      }
-
-      const amt = encodeURIComponent(String(totals.totalInc));
-      router.replace(
-        `/app/success?orderId=${encodeURIComponent(
-          result.order_id || result.id
-        )}&method=cod&amt=${amt}`
-      );
-    } catch (e) {
-      console.error("Antigravity Debug: Place Order Error:", e);
-      alert("DB Error: " + (e.message || e) + " | Details: " + (e.details || "None"));
-
-      const msg = 'An error occurred while confirming your order. Please check your "Order History" to see if it was successfully placed.';
-      if (confirm(msg)) {
-        router.push("/app/orders/history");
-      }
-    } finally {
+    if (!sessionToken) {
+      alert("Waiting for session... Please refresh or log in again.");
       setPlacing(false);
+      return;
     }
+
+    const orderData = {
+      ...buildOrderPayload(currentUser),
+      payment_method: "none",
+      payment_status: "pending",
+      order_type: "delivery"
+    };
+
+    // Optimistic UI: 1. Clear Cart First
+    if (typeof window !== "undefined") {
+      localStorage.removeItem(cartKey(restaurantId));
+      localStorage.removeItem("detected_delivery_address");
+    }
+    setCart([]); // Clear state immediately
+
+    // Optimistic UI: 2. In-Place Success Overlay
+    setSuccessStep(true);
+    setTimeout(() => {
+      router.replace("/app/restaurants");
+    }, 1500);
+
+    // Process backend in the background seamlessly
+    (async () => {
+      try {
+        const res = await fetch("/api/orders/create", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${sessionToken}`
+          },
+          body: JSON.stringify(orderData),
+        });
+
+        const result = await res.json();
+        if (!res.ok) {
+          throw new Error(result.error || "Order creation failed");
+        }
+
+        await notifyOwner({
+          restaurantId,
+          orderId: result.order_id,
+          orderItems: orderData.items,
+        });
+      } catch (e) {
+        console.error("Antigravity Debug: Place Order Background Error:", e);
+        if (typeof window !== 'undefined') {
+          alert("Order Sync Warning: There was an issue finalizing your order in the background. " + (e.message || e));
+        }
+      }
+    })();
   };
 
   const ensureRazorpayScript = async () => {
@@ -374,9 +376,7 @@ export default function DeliveryPayment() {
   };
 
   const payOnlineRazorpay = async () => {
-    // Fresh auth check
-    const { data: { user: currentUser } } = await supabase.auth.getUser();
-
+    // Rely on pre-fetched state
     if (!currentUser) {
       alert("Please log in to place an order.");
       router.push("/app/auth");
@@ -421,7 +421,8 @@ export default function DeliveryPayment() {
 
       // 2) Store pending delivery order locally (created after payment success)
       const pendingDeliveryOrder = {
-        ...buildOrderPayload(),
+        ...buildOrderPayload(currentUser),
+        total_amount: totals.totalInc,
         payment_method: "online",
         payment_status: "completed",
         payment_details: {
@@ -452,21 +453,55 @@ export default function DeliveryPayment() {
         theme: { color: brandColor },
         handler: function (response) {
           try {
-            localStorage.setItem(
-              "delivery_payment_session",
-              JSON.stringify({
-                razorpay_order_id: response.razorpay_order_id,
+            const payload = {
+              ...pendingDeliveryOrder,
+              payment_details: {
+                ...pendingDeliveryOrder.payment_details,
                 razorpay_payment_id: response.razorpay_payment_id,
                 razorpay_signature: response.razorpay_signature,
-                amount: data.amount,
-                currency: data.currency,
-              })
-            );
-          } catch {
-            // ignore
+              },
+            };
+
+            // Clear immediately
+            localStorage.removeItem("detected_delivery_address");
+            if (typeof window !== "undefined") {
+              localStorage.removeItem(cartKey(restaurantId));
+            }
+            setCart([]);
+
+            // Trigger Success UI
+            setSuccessStep(true);
+            setTimeout(() => {
+              router.replace("/app/restaurants");
+            }, 1500);
+
+            // Async Background Process
+            fetch("/api/orders/create", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${sessionToken}`
+              },
+              body: JSON.stringify(payload),
+            })
+              .then(res => res.json())
+              .then(result => {
+                if (result.order_id || result.id) {
+                  fetch("/api/notify-owner", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      restaurantId,
+                      orderId: result.order_id ?? result.id,
+                      orderItems: pendingDeliveryOrder.items || [],
+                    }),
+                  }).catch(() => { });
+                }
+              }).catch(console.error);
+
+          } catch (e) {
+            console.error(e);
           }
-          localStorage.removeItem("detected_delivery_address");
-          window.location.href = "/app/payment-success";
         },
         modal: {
           ondismiss: function () {
@@ -485,6 +520,19 @@ export default function DeliveryPayment() {
 
   if (loading) return <div className="p-4 text-center text-gray-500">Loading...</div>;
 
+  if (successStep) {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#f8f9fa" }}>
+        <div style={{ width: 80, height: 80, borderRadius: "50%", background: "#10b981", color: "white", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 20 }}>
+          <svg fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24" width="40" height="40">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"></path>
+          </svg>
+        </div>
+        <h2 style={{ margin: 0, color: "#111827", fontSize: 24, fontWeight: 800 }}>Order Placed!</h2>
+      </div>
+    );
+  }
+
   if (!restaurantId || !restaurant) {
     return (
       <div style={{ padding: 40, textAlign: "center" }}>
@@ -496,7 +544,7 @@ export default function DeliveryPayment() {
     );
   }
 
-  if (!cart?.length) {
+  if (!placing && !cart?.length) {
     return (
       <div style={{ padding: 40, textAlign: "center" }}>
         Your cart is empty.
@@ -741,19 +789,28 @@ export default function DeliveryPayment() {
           onClick={() => (payMode === "online" ? payOnlineRazorpay() : placeCOD())}
           style={{
             width: "100%",
-            background: brandColor,
-            border: "none",
+            background: placing || !isFormValid ? "#d1d5db" : brandColor,
             color: "#fff",
+            padding: 16,
             borderRadius: 14,
-            padding: 14,
-            fontWeight: 900,
-            cursor: (placing || !isFormValid) ? "not-allowed" : "pointer",
-            opacity: isFormValid ? 1 : 0.5,
+            fontWeight: 800,
+            fontSize: 16,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 10,
+            border: "none",
+            cursor: placing || !isFormValid ? "not-allowed" : "pointer",
           }}
         >
-          {placing ? "Please wait…" : payMode === "online" ? "Pay & Place order" : "Place order"}
+          {placing ? (
+            <span>Processing...</span>
+          ) : payMode === "cod" ? (
+            <span>Confirm Order (COD)</span>
+          ) : (
+            <span>Pay ₹{totals.totalInc.toFixed(2)}</span>
+          )}
         </button>
-
         <div style={{ marginTop: 8, fontSize: 12, color: "#6b7280", textAlign: "center" }}>
           You will receive confirmation after the order is placed.
         </div>

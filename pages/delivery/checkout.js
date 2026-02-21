@@ -3,7 +3,7 @@ import { useRouter } from "next/router";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { getSupabase } from "../../services/supabase";
-import CafeQRLoader from "../../components/CafeQRLoader";
+
 
 export default function DeliveryCheckout() {
   const router = useRouter();
@@ -27,33 +27,33 @@ export default function DeliveryCheckout() {
   const [note, setNote] = useState("");
 
 
-// new state
-const [gps, setGps] = useState(null);
-const [gpsBusy, setGpsBusy] = useState(false);
+  // new state
+  const [gps, setGps] = useState(null);
+  const [gpsBusy, setGpsBusy] = useState(false);
 
-const detectGps = async () => {
-  setGpsBusy(true);
-  try {
-    if (!navigator.geolocation) throw new Error("Geolocation not supported");
-    const pos = await new Promise((resolve, reject) =>
-      navigator.geolocation.getCurrentPosition(resolve, reject, {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0,
-      })
-    );
-    const { latitude, longitude } = pos.coords;
-    const lat = Number(latitude);
-    const lng = Number(longitude);
-    setGps({ lat, lng });
-    setMapLocation(`${lat.toFixed(6)}, ${lng.toFixed(6)}`);
-    localStorage.setItem("detected_delivery_coords", JSON.stringify({ lat, lng }));
-  } catch (e) {
-    alert(e?.message || "Failed to detect GPS location");
-  } finally {
-    setGpsBusy(false);
-  }
-};
+  const detectGps = async () => {
+    setGpsBusy(true);
+    try {
+      if (!navigator.geolocation) throw new Error("Geolocation not supported");
+      const pos = await new Promise((resolve, reject) =>
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0,
+        })
+      );
+      const { latitude, longitude } = pos.coords;
+      const lat = Number(latitude);
+      const lng = Number(longitude);
+      setGps({ lat, lng });
+      setMapLocation(`${lat.toFixed(6)}, ${lng.toFixed(6)}`);
+      localStorage.setItem("detected_delivery_coords", JSON.stringify({ lat, lng }));
+    } catch (e) {
+      alert(e?.message || "Failed to detect GPS location");
+    } finally {
+      setGpsBusy(false);
+    }
+  };
 
   // Use the SAME cart key pattern your QR pages already use: cart_${restaurantId}_${tableNumber}
   const cartStorageKey = useMemo(() => {
@@ -114,7 +114,7 @@ const detectGps = async () => {
             if (last?.street) setStreet(last.street);
             if (last?.mapLocation) setMapLocation(last.mapLocation);
             if (last?.note) setNote(last.note); // ✅ move it here
-          } catch {}
+          } catch { }
 
           // If you already store detected location somewhere, reuse it
           const detected = localStorage.getItem("detected_delivery_address");
@@ -239,30 +239,30 @@ const detectGps = async () => {
             note: note.trim(),
           })
         );
-      } catch {}
+      } catch { }
 
 
 
 
-const orderData = {
-  restaurant_id: String(restaurantId),
-  restaurant_name: restaurant?.name || null,
-  table_number: "DELIVERY",
-  order_type: "counter", // or "delivery" if you want, but keep consistent in DB
+      const orderData = {
+        restaurant_id: String(restaurantId),
+        restaurant_name: restaurant?.name || null,
+        table_number: "DELIVERY",
+        order_type: "counter", // or "delivery" if you want, but keep consistent in DB
 
-  customer_name: custName.trim(),
-  customer_phone: custPhone.trim(),
+        customer_name: custName.trim(),
+        customer_phone: custPhone.trim(),
 
-  items: cart.map((i) => ({
-    // IMPORTANT: your API reads (menu_item_id || id)
-    menu_item_id: i.menu_item_id || i.id,
-    name: i.displayName || i.name,
-    price: Number(i.price) || 0,
-    quantity: Number(i.quantity) || 1,
-    veg: !!i.veg,
-    variant_id: i.selectedVariant?.variant_id || null,
-    variant_name: i.selectedVariant?.variant_name || null,
-  })),
+        items: cart.map((i) => ({
+          // IMPORTANT: your API reads (menu_item_id || id)
+          menu_item_id: i.menu_item_id || i.id,
+          name: i.displayName || i.name,
+          price: Number(i.price) || 0,
+          quantity: Number(i.quantity) || 1,
+          veg: !!i.veg,
+          variant_id: i.selectedVariant?.variant_id || null,
+          variant_name: i.selectedVariant?.variant_name || null,
+        })),
 
         subtotal: totals.subtotalEx,
         tax: totals.taxAmount,
@@ -292,7 +292,7 @@ const orderData = {
       // Clear cart
       try {
         if (cartStorageKey) localStorage.removeItem(cartStorageKey);
-      } catch {}
+      } catch { }
 
       const amt = encodeURIComponent(String(totals.totalInc));
       // Reuse your existing QR success page
@@ -305,7 +305,7 @@ const orderData = {
     }
   };
 
-  if (loading) return <CafeQRLoader message="Loading delivery checkout..." />;
+  if (loading) return <div style={{ padding: 40, textAlign: 'center' }}>Loading delivery checkout...</div>;
 
   if (!restaurantId || !restaurant) {
     return (
@@ -388,9 +388,9 @@ const orderData = {
             placeholder="Eg: Ayyanthole, Thrissur"
             style={{ width: "100%", padding: 12, borderRadius: 12, border: "1px solid #e5e7eb", marginTop: 6, outline: "none" }}
           />
-<button type="button" onClick={detectGps} disabled={gpsBusy}>
-  {gpsBusy ? "Detecting..." : "Use my GPS"}
-</button>
+          <button type="button" onClick={detectGps} disabled={gpsBusy}>
+            {gpsBusy ? "Detecting..." : "Use my GPS"}
+          </button>
 
           <div style={{ height: 10 }} />
 

@@ -116,7 +116,6 @@ export default function ProfilePage() {
     };
 
     const logout = async () => {
-        setLoading(true);
         await supabase.auth.signOut().catch(() => { });
         window.location.href = "/app";
     };
