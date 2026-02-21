@@ -3982,7 +3982,10 @@ export default function CreateOrderModal({
                   <NiceSelect
                     value={quickProduct.category}
                     onChange={(val) => setQuickProduct({ ...quickProduct, category: val })}
-                    options={categories.filter(c => c.value !== 'all').map(c => ({ value: c.value, label: c.label }))}
+                    options={
+                      [...new Set(menuItems.map(m => m.category).filter(Boolean))]
+                        .map(c => ({ value: c, label: c }))
+                    }
                     placeholder="Select Category"
                     style={{ background: '#f8fafc', borderRadius: 14, height: 50 }}
                   />
