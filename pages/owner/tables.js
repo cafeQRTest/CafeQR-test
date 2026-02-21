@@ -3479,12 +3479,6 @@ const handleModalResend = async (table) => {
 
   const handleAddSection = async (name) => {
     try {
-      const isDuplicate = sections.some(s => s.section_name.toLowerCase().trim() === name.toLowerCase().trim());
-      if (isDuplicate) {
-        showAlert(`Error: A section named "${name}" already exists.`);
-        return;
-      }
-
       await addSectionMutation.mutateAsync({ name: name.trim(), restaurantId: restaurant.id });
     } catch (error) {
       showAlert(error.message || 'Failed to add section');
@@ -3512,12 +3506,6 @@ const handleModalResend = async (table) => {
 
   const handleAddFloor = async (name) => {
     try {
-      const isDuplicate = floors.some(f => f.floor_name.toLowerCase().trim() === name.toLowerCase().trim());
-      if (isDuplicate) {
-        showAlert(`Error: A floor level named "${name}" already exists.`);
-        return;
-      }
-
       await addFloorMutation.mutateAsync({ name: name.trim(), restaurantId: restaurant.id });
     } catch (error) {
        console.error(error);

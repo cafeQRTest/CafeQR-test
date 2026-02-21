@@ -165,9 +165,36 @@ export function useAddSection() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ name, restaurantId }) => {
+      const trimmedName = name.trim();
+
+      // Check if a record with the same name exists (active or inactive)
+      const { data: existingList } = await supabase
+        .from('table_sections')
+        .select('*')
+        .eq('restaurant_id', restaurantId)
+        .ilike('section_name', trimmedName);
+
+      if (existingList && existingList.length > 0) {
+        // Block if already active
+        if (existingList.some(e => e.is_active)) {
+          throw new Error(`A section named "${trimmedName}" already exists.`);
+        }
+        // Reactivate the soft-deleted record, updating name to new casing
+        const existing = existingList[0];
+        const { data, error } = await supabase
+          .from('table_sections')
+          .update({ section_name: trimmedName, is_active: true })
+          .eq('id', existing.id)
+          .select()
+          .single();
+        if (error) throw error;
+        return data;
+      }
+
+      // No previous record — insert fresh
       const { data, error } = await supabase
         .from('table_sections')
-        .insert([{ restaurant_id: restaurantId, section_name: name }])
+        .insert([{ restaurant_id: restaurantId, section_name: trimmedName }])
         .select()
         .single();
       if (error) throw error;
@@ -200,9 +227,36 @@ export function useAddFloor() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ name, restaurantId }) => {
+      const trimmedName = name.trim();
+
+      // Check if a record with the same name exists (active or inactive)
+      const { data: existingList } = await supabase
+        .from('table_floors')
+        .select('*')
+        .eq('restaurant_id', restaurantId)
+        .ilike('floor_name', trimmedName);
+
+      if (existingList && existingList.length > 0) {
+        // Block if already active
+        if (existingList.some(e => e.is_active)) {
+          throw new Error(`A floor level named "${trimmedName}" already exists.`);
+        }
+        // Reactivate the soft-deleted record, updating name to new casing
+        const existing = existingList[0];
+        const { data, error } = await supabase
+          .from('table_floors')
+          .update({ floor_name: trimmedName, is_active: true })
+          .eq('id', existing.id)
+          .select()
+          .single();
+        if (error) throw error;
+        return data;
+      }
+
+      // No previous record — insert fresh
       const { data, error } = await supabase
         .from('table_floors')
-        .insert([{ restaurant_id: restaurantId, floor_name: name }])
+        .insert([{ restaurant_id: restaurantId, floor_name: trimmedName }])
         .select()
         .single();
       if (error) throw error;
