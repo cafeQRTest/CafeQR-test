@@ -12,9 +12,19 @@ export const orderHistoryKeys = {
 async function fetchCompletedOrders(restaurantId) {
   if (!restaurantId) return [];
 
-  // Get boundaries for today in Asia/Kolkata (IST)
+  // Get boundaries for today in Asia/Kolkata (IST) mathematically
+  // to prevent iPhone/Safari "Invalid Date" errors
   const todayIST = istYmdFromDate(new Date());
-  const { startUtc } = istDayRangeUtcISO(todayIST);
+  let startUtc;
+  try {
+     const [y, m, d] = todayIST.split('-').map(Number);
+     const istOffsetMs = (5 * 60 + 30) * 60 * 1000;
+     const midnightUtcTimestamp = Date.UTC(y, m - 1, d, 0, 0, 0);
+     startUtc = new Date(midnightUtcTimestamp - istOffsetMs).toISOString();
+  } catch (e) {
+     // Fallback to old behavior just in case
+     startUtc = istDayRangeUtcISO(todayIST).startUtc;
+  }
 
   // Fetch completed orders for today IST
   const { data, error } = await supabase
