@@ -1,4 +1,4 @@
-// pages/owner/table-management.js - Premium Table Management Screen
+﻿// pages/owner/table-management.js - Premium Table Management Screen
 // Comprehensive table management with grid/list views, real-time status, sections, and advanced features
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
@@ -2192,17 +2192,24 @@ const HistoryViewContainer = styled.div`
 
 const OrderHistoryView = ({ onBack, orders, onPrint, onCancel, loading }) => {
   const [filterType, setFilterType] = useState('all');
+  const [creditOnly, setCreditOnly] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [filterType]);
+  }, [filterType, creditOnly]);
 
   const filteredOrders = useMemo(() => {
-    if (filterType === 'all') return orders;
-    return orders.filter(o => o.order_type === filterType);
-  }, [orders, filterType]);
+    let result = orders;
+    if (filterType !== 'all') {
+      result = result.filter(o => o.order_type === filterType);
+    }
+    if (creditOnly) {
+      result = result.filter(o => o.is_credit === true || o.payment_method === 'credit');
+    }
+    return result;
+  }, [orders, filterType, creditOnly]);
 
   const totalRevenue = filteredOrders.reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
   const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
@@ -2212,13 +2219,16 @@ const OrderHistoryView = ({ onBack, orders, onPrint, onCancel, loading }) => {
     { id: 'all', label: 'All Orders' },
     { id: 'dine-in', label: 'Dine-In' },
     { id: 'takeaway', label: 'Takeaway' },
-    { id: 'delivery', label: 'Delivery' }
+    { id: 'delivery', label: 'Delivery' },
   ];
 
   return (
     <HistoryViewContainer>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
-        <div style={{ display: 'flex', alignItems: 'center' }}>
+      {/* Single header row: back + title on left, all filters on right */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '32px', gap: '16px', flexWrap: 'wrap' }}>
+
+        {/* Left: back button + title */}
+        <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
           <button 
             onClick={onBack}
             style={{ 
@@ -2232,7 +2242,8 @@ const OrderHistoryView = ({ onBack, orders, onPrint, onCancel, loading }) => {
               alignItems: 'center',
               color: '#64748b',
               boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
-              transition: 'all 0.2s'
+              transition: 'all 0.2s',
+              flexShrink: 0
             }}
             onMouseEnter={e => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.borderColor = '#cbd5e1'; }}
             onMouseLeave={e => { e.currentTarget.style.background = 'white'; e.currentTarget.style.borderColor = '#e2e8f0'; }}
@@ -2247,19 +2258,40 @@ const OrderHistoryView = ({ onBack, orders, onPrint, onCancel, loading }) => {
           </TitleBlock>
         </div>
 
-        <div style={{ width: '400px' }}>
-          <FilterCarousel>
-            {orderTypes.map(type => (
-              <FilterPill 
-                key={type.id}
-                active={filterType === type.id}
-                onClick={() => setFilterType(type.id)}
-                style={{ width: 'auto' }}
-              >
-                {type.label}
-              </FilterPill>
-            ))}
-          </FilterCarousel>
+        {/* Right: filter pills — right-aligned, wrap gracefully */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          flexWrap: 'wrap',
+          justifyContent: 'flex-end',
+          flex: 1,
+          minWidth: 0
+        }}>
+          {orderTypes.map(type => (
+            <FilterPill 
+              key={type.id}
+              active={filterType === type.id}
+              onClick={() => setFilterType(type.id)}
+              style={{ width: 'auto', flexShrink: 0 }}
+            >
+              {type.label}
+            </FilterPill>
+          ))}
+          {/* Credit toggle — combinable with any type filter */}
+          <FilterPill
+            active={creditOnly}
+            onClick={() => setCreditOnly(v => !v)}
+            style={{
+              width: 'auto',
+              flexShrink: 0,
+              borderColor: creditOnly ? '#7c3aed' : undefined,
+              background: creditOnly ? '#f3e8ff' : undefined,
+              color: creditOnly ? '#7c3aed' : undefined,
+            }}
+          >
+            💳 Credit
+          </FilterPill>
         </div>
       </div>
 
@@ -2363,6 +2395,40 @@ const OrderHistoryView = ({ onBack, orders, onPrint, onCancel, loading }) => {
                       ₹{Number(order.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                     </span>
                   )
+                },
+                {
+                  header: 'Payment',
+                  accessor: 'payment_method',
+                  cell: (order) => {
+                    const method = order.payment_method || '—';
+                    const isCredit = order.is_credit || method === 'credit';
+                    const colors = {
+                      credit:  { bg: '#f3e8ff', color: '#7c3aed', border: '#ddd6fe' },
+                      cash:    { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' },
+                      online:  { bg: '#eff6ff', color: '#2563eb', border: '#bfdbfe' },
+                      mixed:   { bg: '#fff7ed', color: '#ea580c', border: '#fed7aa' },
+                    };
+                    const c = colors[method] || { bg: '#f8fafc', color: '#64748b', border: '#e2e8f0' };
+                    return (
+                      <div style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 5,
+                        padding: '4px 10px',
+                        borderRadius: '100px',
+                        background: c.bg,
+                        border: `1px solid ${c.border}`,
+                        color: c.color,
+                        fontSize: '11px',
+                        fontWeight: 800,
+                        textTransform: 'capitalize',
+                        whiteSpace: 'nowrap'
+                      }}>
+                        {isCredit ? '💳' : method === 'cash' ? '💵' : method === 'online' ? '📲' : method === 'mixed' ? '🔀' : '—'}
+                        {' '}{method === '—' ? '—' : method}
+                      </div>
+                    );
+                  }
                 },
                 {
                   header: 'Actions',
@@ -2739,6 +2805,35 @@ const handleModalResend = async (table) => {
     return null;
   }
 
+  // Silent helper: finish a credit order directly without any popup or alert
+  const handleFinishCreditOrder = async (e, orderId) => {
+    e?.stopPropagation();
+    try {
+      const response = await fetch('/api/orders/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          order_id: orderId,
+          restaurant_id: restaurant.id,
+          payment_method: 'credit',
+        }),
+      });
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Failed to complete credit order');
+      }
+      setBilledOrders(prev => {
+        const next = new Set(prev);
+        next.delete(orderId);
+        return next;
+      });
+      refetch();
+    } catch (error) {
+      console.error('[CREDIT FINISH]', error);
+      showAlert(error.message || 'Failed to complete credit order');
+    }
+  };
+
   // Payment Handlers
   const handlePaymentClick = async (e, table) => {
     e.stopPropagation();
@@ -2748,7 +2843,14 @@ const handleModalResend = async (table) => {
       const full = await fetchFullOrder(table.current_order.id);
       if (!full) throw new Error("Order not found");
 
-      // Calculate totals
+      // Credit orders are handled by the Finish button directly — should not reach here
+      // but guard just in case
+      if (full.is_credit && full.credit_customer_id) {
+        await handleFinishCreditOrder(e, full.id);
+        return;
+      }
+
+      // Normal Order: open payment modal
       const totals = calculateOrderTotals(
         full.order_items || [],
         full.discount || { type: 'amount', value: 0 },
@@ -3844,11 +3946,19 @@ const handleModalResend = async (table) => {
                           }}
                         >Cancel</ActionButton>
                       </div>
-                      <ActionButton 
-                        variant="danger" 
-                        fullWidth 
-                        onClick={(e) => handlePaymentClick(e, { current_order: { id: order.id } })}
-                      >Pay & Finish</ActionButton>
+                      {order.is_credit && order.credit_customer_id ? (
+                        <ActionButton 
+                          variant="danger" 
+                          fullWidth 
+                          onClick={(e) => handleFinishCreditOrder(e, order.id)}
+                        >Finish</ActionButton>
+                      ) : (
+                        <ActionButton 
+                          variant="danger" 
+                          fullWidth 
+                          onClick={(e) => handlePaymentClick(e, { current_order: { id: order.id } })}
+                        >Pay & Finish</ActionButton>
+                      )}
                     </TableActions>
                   </TableCard>
                 ))}
@@ -3899,7 +4009,11 @@ const handleModalResend = async (table) => {
                          const full = await fetchFullOrder(order.id);
                          if(full) setCancelOrderDialog(full);
                       }} style={{ padding: '6px 12px', height: '32px' }}>Cancel</ActionButton>
-                      <ActionButton variant="danger" onClick={(e) => handlePaymentClick(e, { current_order: { id: order.id } })} style={{ padding: '6px 12px', height: '32px' }}>Pay</ActionButton>
+                       {order.is_credit && order.credit_customer_id ? (
+                         <ActionButton variant="danger" onClick={(e) => handleFinishCreditOrder(e, order.id)} style={{ padding: '6px 12px', height: '32px' }}>Finish</ActionButton>
+                       ) : (
+                         <ActionButton variant="danger" onClick={(e) => handlePaymentClick(e, { current_order: { id: order.id } })} style={{ padding: '6px 12px', height: '32px' }}>Pay</ActionButton>
+                       )}
                     </div>
                   </TableListRow>
                 ))}
@@ -4146,16 +4260,29 @@ const handleModalResend = async (table) => {
                           </div>
                           
 
-                          <ActionButton 
-                            variant="danger"
-                            fullWidth
-                            onClick={(e) => {
-                              handlePaymentClick(e, activeVisualTable);
-                              setActiveVisualTable(null);
-                            }}
-                          >
-                            Pay & Finish
-                          </ActionButton>
+                          {activeVisualTable.current_order?.is_credit && activeVisualTable.current_order?.credit_customer_id ? (
+                            <ActionButton 
+                              variant="danger"
+                              fullWidth
+                              onClick={(e) => {
+                                handleFinishCreditOrder(e, activeVisualTable.current_order.id);
+                                setActiveVisualTable(null);
+                              }}
+                            >
+                              Finish
+                            </ActionButton>
+                          ) : (
+                            <ActionButton 
+                              variant="danger"
+                              fullWidth
+                              onClick={(e) => {
+                                handlePaymentClick(e, activeVisualTable);
+                                setActiveVisualTable(null);
+                              }}
+                            >
+                              Pay & Finish
+                            </ActionButton>
+                          )}
                         </>
                       )}
                       
@@ -4467,14 +4594,24 @@ const handleModalResend = async (table) => {
 
                  {table.status === 'occupied' && (
                    <>
-
-                    <ActionButton 
-                      variant="danger"
-                      fullWidth
-                      onClick={(e) => handlePaymentClick(e, table)}
-                    >
-                      Pay & Finish
-                    </ActionButton>
+                     {table.current_order?.is_credit && table.current_order?.credit_customer_id ? (
+                       <ActionButton 
+                         variant="success"
+                         fullWidth
+                         onClick={(e) => handleFinishCreditOrder(e, table.current_order.id)}
+                         style={{ background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)', border: 'none' }}
+                       >
+                         ✓ Finish
+                       </ActionButton>
+                     ) : (
+                       <ActionButton 
+                         variant="danger"
+                         fullWidth
+                         onClick={(e) => handlePaymentClick(e, table)}
+                       >
+                         Pay & Finish
+                       </ActionButton>
+                     )}
                    </>
                  )}
               </TableActions>
@@ -4631,15 +4768,27 @@ const handleModalResend = async (table) => {
 
                 {table.status === 'occupied' && (
                   <>
-                    <ActionButton 
-                      variant="danger"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handlePaymentClick(e, table);
-                      }}
-                    >
-                      Pay & Finish
-                    </ActionButton>
+                    {table.current_order?.is_credit && table.current_order?.credit_customer_id ? (
+                      <ActionButton 
+                        variant="danger"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleFinishCreditOrder(e, table.current_order.id);
+                        }}
+                      >
+                        Finish
+                      </ActionButton>
+                    ) : (
+                      <ActionButton 
+                        variant="danger"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handlePaymentClick(e, table);
+                        }}
+                      >
+                        Pay & Finish
+                      </ActionButton>
+                    )}
                   </>
                 )}
               </div>

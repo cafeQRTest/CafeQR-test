@@ -18,7 +18,7 @@ async function fetchTables(restaurantId) {
     .from('tables')
     .select(`
       *,
-      current_order:orders!current_order_id(id)
+      current_order:orders!current_order_id(id, is_credit, credit_customer_id)
     `)
     .eq('restaurant_id', restaurantId)
     .eq('is_active', true)

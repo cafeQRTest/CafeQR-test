@@ -1939,6 +1939,15 @@ export default function CreateOrderModal({
       return;
     }
 
+    // --- Credit validation: block if credit mode is on but no customer is selected ---
+    if (isCreditMode && !selectedCreditCustomerId) {
+      showAlert(
+        'Please select a Credit Customer before placing a Credit order. Use the customer dropdown to search or create one.',
+        '⚠️ Credit Customer Required'
+      );
+      return;
+    }
+
     try {
       setCreating(true);
 
@@ -1973,6 +1982,9 @@ export default function CreateOrderModal({
         items: items,
         payment_method: orderMode === 'settle' ? selectedPaymentMethod : null,
         payment_status: orderMode === 'settle' ? 'paid' : 'pending',
+        // Credit order fields
+        is_credit: isCreditMode && !!selectedCreditCustomerId,
+        credit_customer_id: (isCreditMode && selectedCreditCustomerId) ? selectedCreditCustomerId : null,
         discount_amount: cartTotals.discount_amount,
         total_discount_percent: discount.type === 'percent' ? discount.value : 0,
         base_tax_rate: Number(restaurant?.default_tax_rate || 5),
