@@ -2846,7 +2846,7 @@ export default function CreateOrderModal({
                         style={{ flex: 1, minWidth: 0, cursor: 'default', paddingLeft: 4 }}
                       >
                         <div style={{ fontSize: 14, fontWeight: 900, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', letterSpacing: '-0.3px' }}>
-                          {item.name}
+                          {item.name}{item.variant_name ? ` (${item.variant_name})` : ''}
                         </div>
                         <div style={{ 
                           fontSize: 9, 

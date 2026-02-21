@@ -217,6 +217,7 @@ export default async function handler(req, res) {
       await restoreStockForItems(supabase, restaurant_id, removedItems);
 
       for (const ri of removedItems) {
+        const displayName = ri.variant_name ? `${ri.item_name} (${ri.variant_name})` : ri.item_name;
         kot_removed_items.push({
           menu_item_id: ri.menu_item_id,
           name: ri.item_name,
@@ -297,6 +298,7 @@ export default async function handler(req, res) {
             ...breakdown,
           });
 
+          const displayName = newLine.variant_name ? `${newLine.name} (${newLine.variant_name})` : newLine.name;
           // For KOT: full qty as added
           added_items.push({
             menu_item_id: menuItemId,
@@ -352,62 +354,64 @@ export default async function handler(req, res) {
 
           const qtyDiff = newLine.quantity - current.quantity;
 
-          if (qtyDiff !== 0) {
-            changedItems.push({
-              menu_item_id: menuItemId,
-              name: newLine.name,
-              quantity: Math.abs(qtyDiff),
-              price: newLine.price,
-              hsn: newLine.hsn,
-              action: qtyDiff > 0 ? 'INCREASED' : 'DECREASED',
-              old_qty: current.quantity,
-              new_qty: newLine.quantity,
-              is_packaged_good: !!newLine.is_packaged_good,
-              uom_short_code: newLine.uom_short_code,
-              uom_precision: newLine.uom_precision,
-            });
-          }
+            const displayName = newLine.variant_name ? `${newLine.name} (${newLine.variant_name})` : newLine.name;
 
-          if (qtyDiff > 0) {
-            added_items.push({
-              menu_item_id: menuItemId,
-              name: newLine.name,
-              quantity: qtyDiff,
-              price: newLine.price,
-              hsn: newLine.hsn,
-              action: 'INCREASED',
-              old_qty: current.quantity,
-              new_qty: newLine.quantity,
-              variant_name: newLine.variant_name,
-              uom_short_code: newLine.uom_short_code,
-              uom_precision: newLine.uom_precision,
-            });
+            if (qtyDiff !== 0) {
+              changedItems.push({
+                menu_item_id: menuItemId,
+                name: newLine.name,
+                quantity: Math.abs(qtyDiff),
+                price: newLine.price,
+                hsn: newLine.hsn,
+                action: qtyDiff > 0 ? 'INCREASED' : 'DECREASED',
+                old_qty: current.quantity,
+                new_qty: newLine.quantity,
+                is_packaged_good: !!newLine.is_packaged_good,
+                uom_short_code: newLine.uom_short_code,
+                uom_precision: newLine.uom_precision,
+              });
+            }
 
-            await deductStockForItem(supabase, restaurant_id, {
-              ...newLine,
-              quantity: qtyDiff,
-            });
-          } else if (qtyDiff < 0) {
-            const removedQty = Math.abs(qtyDiff);
+            if (qtyDiff > 0) {
+              added_items.push({
+                menu_item_id: menuItemId,
+                name: newLine.name,
+                quantity: qtyDiff,
+                price: newLine.price,
+                hsn: newLine.hsn,
+                action: 'INCREASED',
+                old_qty: current.quantity,
+                new_qty: newLine.quantity,
+                variant_name: newLine.variant_name,
+                uom_short_code: newLine.uom_short_code,
+                uom_precision: newLine.uom_precision,
+              });
 
-            await restoreStockForItems(supabase, restaurant_id, [
-              { ...current, quantity: removedQty },
-            ]);
+              await deductStockForItem(supabase, restaurant_id, {
+                ...newLine,
+                quantity: qtyDiff,
+              });
+            } else if (qtyDiff < 0) {
+              const removedQty = Math.abs(qtyDiff);
 
-            kot_removed_items.push({
-              menu_item_id: menuItemId,
-              name: newLine.name,
-              quantity: Number(removedQty),
-              price: Number(newLine.price),
-              hsn: newLine.hsn,
-              action: 'REMOVED_PARTIAL',
-              old_qty: current.quantity,
-              new_qty: newLine.quantity,
-              variant_name: newLine.variant_name,
-              uom_short_code: newLine.uom_short_code,
-              uom_precision: newLine.uom_precision,
-            });
-          }
+              await restoreStockForItems(supabase, restaurant_id, [
+                { ...current, quantity: removedQty },
+              ]);
+
+              kot_removed_items.push({
+                menu_item_id: menuItemId,
+                name: newLine.name,
+                quantity: Number(removedQty),
+                price: Number(newLine.price),
+                hsn: newLine.hsn,
+                action: 'REMOVED_PARTIAL',
+                old_qty: current.quantity,
+                new_qty: newLine.quantity,
+                variant_name: newLine.variant_name,
+                uom_short_code: newLine.uom_short_code,
+                uom_precision: newLine.uom_precision,
+              });
+            }
         }
         // unchanged → no DB/stock/KOT change
       })

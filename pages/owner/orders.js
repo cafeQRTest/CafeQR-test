@@ -2190,7 +2190,14 @@ function OrderCard({
         {items.slice(0, 3).map((it,i)=>(
           <div key={i} style={{ display: 'flex', justifyContent: 'space-between' }}>
              <div>
-               <span style={{fontWeight:600}}>{formatQtyP(it.quantity, it.uom_precision ?? 0)}×</span> {it.name}
+               <span style={{fontWeight:600}}>{formatQtyP(it.quantity, it.uom_precision ?? 0)}×</span> {(() => {
+                 let n = it.name || "Item";
+                 if (it.variant_name) {
+                   const suffix = ` (${it.variant_name})`;
+                   if (n.endsWith(suffix)) n = n.slice(0, -suffix.length);
+                 }
+                 return n;
+               })()}
                {it.variant_name && <span style={{fontSize:12, color:'#6b7280', marginLeft:6}}>({it.variant_name})</span>}
              </div>
           </div>

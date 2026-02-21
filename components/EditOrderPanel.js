@@ -286,9 +286,9 @@ export default function EditOrderPanel({ order, onClose, onSave, tablesCount = 0
         const sameVariant = String(l.variant_id || '') === String(variantId || '');
         const sameName = (l.name || '').trim().toLowerCase() === (finalName || '').trim().toLowerCase();
         
-        // Match if (Same ID AND Same Variant) OR (Same Name)
-        // This covers cases where ID might have changed but it's the same product name
-        return (sameItem && sameVariant) || sameName;
+        // Match if (Same ID OR Same Name) AND Same Variant
+        // This ensures the same product with a different variant is treated as a NEW line
+        return (sameItem || sameName) && sameVariant;
       });
 
       // If already exists, just increase qty and update details to latest
@@ -470,7 +470,19 @@ export default function EditOrderPanel({ order, onClose, onSave, tablesCount = 0
             >
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 14, fontWeight: 600 }}>
-                  {line.name || 'Item'}
+                  {(() => {
+                    let n = line.name || 'Item';
+                    if (line.variant_name) {
+                      const suffix = ` (${line.variant_name})`;
+                      if (n.endsWith(suffix)) n = n.slice(0, -suffix.length);
+                    }
+                    return n;
+                  })()}
+                  {line.variant_name && (
+                    <span style={{ fontSize: 12, color: '#6b7280', marginLeft: 4 }}>
+                      ({line.variant_name})
+                    </span>
+                  )}
                 </div>
                 <div style={{ fontSize: 12, color: '#6b7280' }}>
                   ₹{Number(line.price || 0).toFixed(2)}

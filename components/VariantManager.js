@@ -195,15 +195,50 @@ export default function VariantManager({ onClose, onSaved, restaurantId }) {
   };
 
   const addOption = async (templateId) => {
-    if (!newOptionName.trim()) return;
+    const trimmedName = newOptionName.trim();
+    if (!trimmedName) return;
     setError('');
     
     const template = templates.find(t => t.id === templateId);
+
+    // Check if it already exists (active or inactive)
+    const { data: existingList, error: checkErr } = await supabase
+      .from('variant_options')
+      .select('*')
+      .eq('template_id', templateId)
+      .ilike('name', trimmedName);
+
+    if (existingList && existingList.length > 0) {
+      // If any matches are active, block it
+      if (existingList.some(e => e.is_active)) {
+        setError('Option already exists.');
+        return;
+      }
+
+      // Re-activate the first soft-deleted option found
+      const existing = existingList[0];
+      const { error: updErr } = await supabase
+        .from('variant_options')
+        .update({ 
+          is_active: true, 
+          display_order: template?.options?.length || 0 
+        })
+        .eq('id', existing.id);
+
+      if (!updErr) {
+        setNewOptionName('');
+        fetchTemplates();
+      } else {
+        setError('Failed to re-add option: ' + updErr.message);
+      }
+      return;
+    }
+
     const { error } = await supabase
       .from('variant_options')
       .insert({
         template_id: templateId,
-        name: newOptionName.trim(),
+        name: trimmedName,
         display_order: template?.options?.length || 0,
         is_active: true
       });

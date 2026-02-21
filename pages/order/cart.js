@@ -437,7 +437,7 @@ const checkoutHref = isDelivery
                   {item.veg ? "🟢" : "🔺"}
                 </span>
                 <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 500 }}>
-                  {item.displayName || item.name}
+                  {item.displayName || item.name}{item.variant_name ? ` (${item.variant_name})` : ""}
                 </h3>
               </div>
               <div

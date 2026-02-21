@@ -667,8 +667,14 @@ const exportHsnSummary = async () => {
                               <div className="item-main">
                                 <span className="qty">{formatQtyP(item.quantity, item.uom_precision ?? 2)}x</span>
                                 <span className="name">
-                                  {item.menu_items?.name || item.item_name || 'Item'}
-                                  {item.variant_name ? ` (${item.variant_name})` : ''}
+                                  {(() => {
+                                    let n = item.menu_items?.name || item.item_name || 'Item';
+                                    if (item.variant_name) {
+                                      const suffix = ` (${item.variant_name})`;
+                                      if (!n.endsWith(suffix)) n += suffix;
+                                    }
+                                    return n;
+                                  })()}
                                 </span>
                               </div>
                               <div className="item-price" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>

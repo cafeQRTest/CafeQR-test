@@ -17,6 +17,8 @@ export default async function handler(req, res) {
     const { data, error } = await supabase
       .from('invoice_items')
       .select(`
+        item_name,
+        variant_name,
         hsn,
         qty,
         tax_rate,
@@ -80,10 +82,18 @@ export default async function handler(req, res) {
           totalCGST: 0,
           totalSGST: 0,
           totalCess: 0,
+          itemNames: new Set(),
         });
       }
-
+      
       const g = groups.get(key);
+      let fullName = row.item_name || 'Item';
+      if (row.variant_name) {
+        const suffix = ` (${row.variant_name})`;
+        if (!fullName.endsWith(suffix)) fullName += suffix;
+      }
+      if (fullName) g.itemNames.add(fullName);
+      
       g.totalQty += qty;
       g.totalTaxable += taxable;
       g.totalIGST += igstAmt;
@@ -95,7 +105,7 @@ export default async function handler(req, res) {
     // 4) Build CSV records
     const rows = Array.from(groups.values()).map(g => ({
       HSN: g.hsn,
-      Description: '',             // optional – can be filled manually by accountant
+      Description: Array.from(g.itemNames).join(', '),
       UQC: 'NOS',                  // or leave blank / map from your own config
       'Rate %': g.rate.toFixed(2),
       'Total Quantity': g.totalQty.toFixed(3),

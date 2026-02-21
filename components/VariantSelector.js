@@ -91,8 +91,8 @@ export default function VariantSelector({ item, onSelect, onClose, visible, gstE
             ...item,
             selectedVariant: variant,
             price: variant.price,
-            name: `${item.name} (${variant.variant_name})`,
-            displayName: `${item.name} (${variant.variant_name})`,
+            name: item.name,
+            displayName: item.name,
             quantity: qty,
             variant_id: variant.variant_id,
             variant_name: variant.variant_name

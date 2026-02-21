@@ -355,7 +355,77 @@ export const exportSalesReportToExcel = ({
           <p><strong>Report Period:</strong> ${startDate} to ${endDate}</p>
           <p><strong>Generated:</strong> ${new Date().toLocaleString()}</p>
         </div>
-        <!-- (rest of your existing HTML export code stays exactly the same) -->
+        <div class="summary-grid">
+          <div class="summary-card">
+            <div class="summary-label">Total Orders</div>
+            <div class="summary-value">${summaryStats.totalOrders}</div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-label">Total Revenue</div>
+            <div class="summary-value currency">${fmtMoney(summaryStats.totalRevenue)}</div>
+          </div>
+          <div class="summary-card">
+            <div class="summary-label">Total Tax</div>
+            <div class="summary-value currency">${fmtMoney(summaryStats.totalTax)}</div>
+          </div>
+        </div>
+
+        <h2>Item-wise Sales</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Item Name</th>
+              <th>Quantity Sold</th>
+              <th>Revenue</th>
+              <th>Category</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${salesData.map(item => `
+              <tr>
+                <td>${item.item_name}</td>
+                <td>${item.quantity_sold}</td>
+                <td class="currency">₹${fmtMoney(item.revenue)}</td>
+                <td>${item.category}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+
+        <h2>Detailed Orders</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Order ID</th>
+              <th>Invoice</th>
+              <th>Date</th>
+              <th>Customer</th>
+              <th>Method</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${ordersList.map(o => {
+              const inv = getOrderInvoice(o);
+              const method = pick(inv || o, ['payment_method', 'paymentmethod', 'actual_payment_method'], 'unknown');
+              const mixed = pick(inv || o, ['mixed_payment_details', 'mixedpaymentdetails'], null);
+              return `
+                <tr>
+                  <td>#${o.id.slice(0, 8)}</td>
+                  <td>${inv?.invoice_no || ''}</td>
+                  <td>${new Date(o.date_ordered || o.created_at).toLocaleDateString('en-IN')}</td>
+                  <td>${o.customer_name || 'Walk-in'}</td>
+                  <td>${prettyMixed(method, mixed)}</td>
+                  <td class="currency">₹${fmtMoney(o.total_amount || o.total_inc_tax)}</td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+
+        <div style="margin-top: 30px; font-size: 11px; color: #94a3b8;">
+          Cafe QR • Generated Report
+        </div>
       </body>
       </html>
     `;

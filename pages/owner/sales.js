@@ -35,16 +35,18 @@ function computeOrderTotalDisplay(order) {
 }
 
 function toDisplayItems(order) {
-  if (Array.isArray(order.items) && order.items.length > 0) {
-    return order.items.map((item) => ({
-      ...item,
-      menu_item_id: item.menu_item_id || item.id,
-    }));
-  }
-  if (Array.isArray(order.order_items)) {
+  if (Array.isArray(order.order_items) && order.order_items.length > 0) {
     return order.order_items.map((oi) => ({
       menu_item_id: oi.menu_item_id,
-      name: oi.item_name || oi.menu_items?.name || 'Item',
+      name: (() => {
+        let n = oi.item_name || oi.menu_items?.name || 'Item';
+        const vName = oi.variant_name || null;
+        if (vName) {
+           const suffix = ` (${vName})`;
+           if (n.endsWith(suffix)) n = n.slice(0, -suffix.length);
+        }
+        return n;
+      })(),
       quantity: oi.quantity,
       price: oi.price,
       is_packaged_good: oi.is_packaged_good,
@@ -53,6 +55,20 @@ function toDisplayItems(order) {
       line_discount_amount: oi.line_discount_amount,
       order_discount_share: oi.order_discount_share,
       discount_amount: oi.discount_amount,
+    }));
+  }
+  if (Array.isArray(order.items) && order.items.length > 0) {
+    return order.items.map((item) => ({
+      ...item,
+      name: (() => {
+        let n = item.name || "Item";
+        if (item.variant_name) {
+          const suffix = ` (${item.variant_name})`;
+          if (n.endsWith(suffix)) n = n.slice(0, -suffix.length);
+        }
+        return n;
+      })(),
+      menu_item_id: item.menu_item_id || item.id,
     }));
   }
   return [];
@@ -228,6 +244,12 @@ export default function SalesPage() {
           status,
           customer_name,
           items,
+          order_items (
+            item_name,
+            quantity,
+            price,
+            variant_name
+          ),
           payment_method,
           mixed_payment_details,
           order_type,
@@ -277,21 +299,30 @@ export default function SalesPage() {
         totalTax += (c + s)
         totalRevenue += revenue
 
-        if (Array.isArray(o.items)) {
-          o.items.forEach(item => {
-            const name = item.name || 'Unknown Item'
-            const itemCategory = itemCategoryMap[name] || item.category || 'Uncategorized'
-            const quantity = Number(item.quantity) || 1
-            const price = Number(item.price) || 0
-            const itemTotal = quantity * price
+        const displayItems = toDisplayItems(o);
+        displayItems.forEach(item => {
+          const baseName = item.name || 'Unknown Item';
+          const variantName = item.variant_name || null;
+          const fullName = (() => {
+            let n = baseName;
+            if (variantName) {
+              const suffix = ` (${variantName})`;
+              if (!n.endsWith(suffix)) n += suffix;
+            }
+            return n;
+          })();
+          
+          const itemCategory = itemCategoryMap[baseName] || item.category || 'Uncategorized';
+          const quantity = Number(item.quantity) || 0;
+          const price = Number(item.price) || 0;
+          const itemTotal = quantity * price;
 
-            itemCounts[name] = (itemCounts[name] || 0) + quantity
-            itemRevenue[name] = (itemRevenue[name] || 0) + itemTotal
-            totalQuantity += quantity
+          itemCounts[fullName] = (itemCounts[fullName] || 0) + quantity;
+          itemRevenue[fullName] = (itemRevenue[fullName] || 0) + itemTotal;
+          totalQuantity += quantity;
 
-            categoryMap[itemCategory] = (categoryMap[itemCategory] || 0) + itemTotal
-          })
-        }
+          categoryMap[itemCategory] = (categoryMap[itemCategory] || 0) + itemTotal;
+        });
       })
 
       setSummaryStats({
@@ -309,7 +340,11 @@ export default function SalesPage() {
           item_name: name,
           quantity_sold: quantity,
           revenue: itemRevenue[name] || 0,
-          category: itemCategoryMap[name] || 'Uncategorized'
+          category: itemCategoryMap[(() => {
+             // Extract base name for category lookup
+             const match = name.match(/^(.*?)\s*\((.*)\)$/);
+             return match ? match[1] : name;
+          })()] || 'Uncategorized'
         }))
         .sort((a, b) => b.revenue - a.revenue)
       

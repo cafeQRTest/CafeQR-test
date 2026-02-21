@@ -34,23 +34,33 @@ export function toDisplayItems(order) {
   // DB/API shape (HAS discount data)
   if (Array.isArray(order?.order_items) && order.order_items.length) {
     return order.order_items.map((oi) => {
-         const lineDisc = Number(oi.line_discount_amount || 0);
-         const orderShare = Number(oi.order_discount_share || 0);
-         const totalDisc = Number(oi.discount_amount || (lineDisc + orderShare));
+      const lineDisc = Number(oi.line_discount_amount || 0);
+      const orderShare = Number(oi.order_discount_share || 0);
+      const totalDisc = Number(oi.discount_amount || (lineDisc + orderShare));
 
-         return {
-          name: oi.variant_name 
-            ? `${oi.menu_items?.name || oi.item_name || "Item"} (${oi.variant_name})`
-            : (oi.menu_items?.name || oi.item_name || "Item"),
-          quantity: Number(oi.quantity || 0),
-          price: Number(oi.price || oi.unit_price || 0),
-          line_discount_amount: lineDisc,
-          order_discount_share: orderShare,
-          discount_amount: totalDisc,
-          uom: oi.uom_short_code || "",
-          uom_short_code: oi.uom_short_code || "",
-          uom_precision: oi.uom_precision ?? 0,
-        };
+      return {
+        name: (() => {
+          let n = oi.menu_items?.name || oi.item_name || "Item";
+          if (oi.variant_name) {
+            const suffix = ` (${oi.variant_name})`;
+            if (n.endsWith(suffix)) {
+              n = n.slice(0, -suffix.length);
+            }
+          }
+          return n;
+        })(),
+        variant_name: oi.variant_name || null,
+        quantity: Number(oi.quantity || 0),
+        price: Number(oi.price || oi.unit_price || 0),
+        line_discount_amount: lineDisc,
+        order_discount_share: orderShare,
+        discount_amount: totalDisc,
+        uom: oi.uom_short_code || "",
+        uom_short_code: oi.uom_short_code || "",
+        uom_precision: oi.uom_precision ?? 0,
+        variant_id: oi.variant_option_id || oi.variant_id || null,
+        menu_item_id: oi.menu_item_id || null,
+      };
     });
   }
 
@@ -71,13 +81,16 @@ export function toDisplayItems(order) {
       }
 
       return {
-        name: i.variant_name ? `${i.name} (${i.variant_name})` : i.name,
+        name: i.name,
+        variant_name: i.variant_name || null,
         quantity: i.quantity,
         price: i.price,
         discount_amount: discountAmount,
         uom: i.uom || "",
         uom_short_code: i.uom_short_code || "",
-        uom_precision: i.uom_precision,
+        uom_precision: i.uom_precision || 0,
+        variant_id: i.variant_id || i.variant_option_id || null,
+        menu_item_id: i.menu_item_id || i.id || null,
       };
     });
   }
@@ -405,7 +418,15 @@ if (staffName) {
       lines.push(withMargins(dashes(), layout));
 
       items.forEach((it) => {
-        const nameLines = wrapText(it?.name || "Item", nameW);
+        let baseName = it.name || "Item";
+        if (it.variant_name) {
+          const suffix = ` (${it.variant_name})`;
+          if (baseName.endsWith(suffix)) {
+            baseName = baseName.slice(0, -suffix.length);
+          }
+        }
+        const displayName = it.variant_name ? `${baseName} (${it.variant_name})` : baseName;
+        const nameLines = wrapText(displayName || "Item", nameW);
         const qtyNum = Number(it?.quantity || 1);
         const p = Number.isInteger(it?.uom_precision)
           ? it.uom_precision
@@ -616,7 +637,14 @@ export function buildReceiptText(order, bill, restaurantProfile) {
       // netLineTotal is the value after all discounts for this line item
       const netLineTotal = rateNum * qtyNum - itemDiscount;
 
-      let nameStr = it?.name || "Item";
+      let baseName = it.name || "Item";
+      if (it.variant_name) {
+        const suffix = ` (${it.variant_name})`;
+        if (baseName.endsWith(suffix)) {
+          baseName = baseName.slice(0, -suffix.length);
+        }
+      }
+      let nameStr = it.variant_name ? `${baseName} (${it.variant_name})` : baseName;
 
       // If narrow receipt and discount exists, append to name
       // This is the LINE discount only

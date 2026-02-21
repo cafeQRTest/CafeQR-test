@@ -21,14 +21,24 @@ function toDisplayItems(order) {
     
     // Transform order_items
     if (order.order_items && Array.isArray(order.order_items)) {
-        return order.order_items.map(i => ({
-            ...i,
-            name: i.menu_items?.name || i.item_name || i.name || 'Unknown',
-            price: Number(i.price),
-            quantity: Number(i.quantity),
-            variant_name: i.variant_name || null,
-            uom_precision: i.menu_items?.uom?.precision ?? 0
-        }));
+        return order.order_items.map(i => {
+            let n = i.menu_items?.name || i.item_name || i.name || 'Unknown';
+            if (i.variant_name) {
+                const suffix = ` (${i.variant_name})`;
+                if (n.endsWith(suffix)) {
+                    n = n.slice(0, -suffix.length);
+                }
+            }
+            return {
+                ...i,
+                name: n,
+                price: Number(i.price),
+                quantity: Number(i.quantity),
+                variant_id: i.variant_option_id || i.variant_id || null,
+                variant_name: i.variant_name || null,
+                uom_precision: i.menu_items?.uom?.precision ?? 0
+            };
+        });
     }
     
     // Legacy JSONB

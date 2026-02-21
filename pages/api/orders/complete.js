@@ -197,6 +197,11 @@ if (finalPaymentMethod === 'mixed') {
       bill_no: result.billNo,
       order_for_print: {
         ...finalOrder,
+        items: finalOrder.order_items.map(oi => ({
+          ...oi,
+          name: oi.item_name,
+          variant_name: oi.variant_name || ""
+        })),
         bill: result.invoice,
         // Add loyalty data for immediate print/UI context
         loyalty_amount_used: loyalty_amount_used || 0,

@@ -36,6 +36,7 @@ export default async function handler(req, res) {
         invoice_items (
           line_no,
           item_name,
+          variant_name,
           hsn,
           qty,
           unit_rate_ex_tax,
@@ -168,7 +169,14 @@ export default async function handler(req, res) {
         rows.push({
           ...common,
           'Line No': line.line_no,
-          'Item Name': line.item_name,
+          'Item Name': (() => {
+            let n = line.item_name || 'Item';
+            if (line.variant_name) {
+              const suffix = ` (${line.variant_name})`;
+              if (!n.endsWith(suffix)) n += suffix;
+            }
+            return n;
+          })(),
           HSN: line.hsn || '',
           'Tax Rate %': Number(line.tax_rate || 0).toFixed(2),
           Qty: Number(qty).toFixed(2),
