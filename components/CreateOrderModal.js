@@ -1339,6 +1339,62 @@ export default function CreateOrderModal({
     return `${hh}:${mm}`;
   });
 
+  // Loyalty Implementation
+  const [loyaltyData, setLoyaltyData] = useState({ 
+    availablePoints: 0, 
+    conversionRate: 0, 
+    minPoints: 0,
+    maxRedemption: 0,
+  });
+  const [loyaltyAmountUsed, setLoyaltyAmountUsed] = useState(0);
+  const [loyaltyPointsUsed, setLoyaltyPointsUsed] = useState(0);
+
+  useEffect(() => {
+    async function fetchLoyalty() {
+      if (!selectedCustomerId || !restaurantId) return;
+      try {
+        const { data: cust } = await supabase
+          .from('v_owner_customers')
+          .select('loyalty_points, loyalty_program_id')
+          .eq('customer_id', selectedCustomerId)
+          .maybeSingle();
+        
+        if (!cust) return;
+
+        let programId = cust.loyalty_program_id;
+        if (!programId) {
+          const { data: def } = await supabase
+            .from('loyalty_programs')
+            .select('id')
+            .eq('restaurant_id', restaurantId)
+            .eq('is_default', true)
+            .maybeSingle();
+          programId = def?.id;
+        }
+
+        if (programId) {
+          const { data: prog } = await supabase
+            .from('loyalty_programs')
+            .select('*')
+            .eq('id', programId)
+            .single();
+          
+          if (prog) {
+            setLoyaltyData({
+              availablePoints: cust.loyalty_points || 0,
+              conversionRate: Number(prog.redemption_conversion_rate || 1.0),
+              minPoints: prog.redemption_min_points || 100,
+              maxRedemption: prog.max_redemption_amount_per_order || 0,
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Loyalty Fetch Error:', err);
+      }
+    }
+    fetchLoyalty();
+  }, [selectedCustomerId, restaurantId]);
+
   // Upsells for cart
   const [cartUpsells, setCartUpsells] = useState([]);
   
@@ -1991,10 +2047,14 @@ export default function CreateOrderModal({
         prices_include_tax: !!restaurant?.prices_include_tax,
         round_off_amount: cartTotals.round_off_amount,
         // Add payment breakdown for mixed if applicable
-        payment_breakdown: (orderMode === 'settle' && selectedPaymentMethod === 'mixed') ? {
+        loyalty_amount_used: loyaltyAmountUsed || 0,
+        loyalty_points_used: loyaltyPointsUsed || 0,
+        mixed_payment_details: (orderMode === 'settle' && selectedPaymentMethod === 'mixed') ? {
             cash_amount: Number(cashPart || 0),
             online_amount: Number(onlinePart || 0),
-            online_method: onlineType
+            online_method: onlineType,
+            loyalty_amount_used: loyaltyAmountUsed || 0,
+            is_mixed: true
         } : null,
         override_totals: {
             total_amount: cartTotals.total_amount,
@@ -3331,6 +3391,32 @@ export default function CreateOrderModal({
 
                    {selectedPaymentMethod === 'mixed' && (
                      <div style={{ marginTop: 12, padding: '12px', background: '#f8fafc', borderRadius: 16, border: '1.5px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {selectedCustomerId && loyaltyData.conversionRate > 0 && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            <label style={{ display: 'block', fontSize: 9, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase' }}>Redeem Loyalty (Avail: {loyaltyData.availablePoints})</label>
+                            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                              <span style={{ position: 'absolute', left: 10, fontSize: 13, fontWeight: 800 }}>🪙</span>
+                              <input 
+                                type="number" 
+                                value={loyaltyPointsUsed || ''} 
+                                onChange={(e) => {
+                                  let pts = parseInt(e.target.value) || 0;
+                                  pts = Math.min(pts, loyaltyData.availablePoints);
+                                  let amt = pts * loyaltyData.conversionRate;
+                                  if (loyaltyData.maxRedemption > 0) amt = Math.min(amt, loyaltyData.maxRedemption);
+                                  
+                                  setLoyaltyPointsUsed(pts);
+                                  setLoyaltyAmountUsed(amt);
+                                  
+                                  const rem = Math.max(0, total - amt - Number(cashPart || 0));
+                                  setOnlinePart(rem > 0 ? rem.toFixed(2) : '0.00');
+                                }}
+                                style={{ width: '100%', padding: '8px 8px 8px 28px', background: '#ecfdf5', borderRadius: 8, border: '2px solid #10b98130', fontSize: 13, fontWeight: 800, outline: 'none' }}
+                              />
+                              {loyaltyAmountUsed > 0 && <span style={{ position: 'absolute', right: 12, fontSize: 12, fontWeight: 900, color: '#16a34a' }}>₹{loyaltyAmountUsed.toFixed(2)}</span>}
+                            </div>
+                          </div>
+                        )}
                         <div style={{ display: 'flex', gap: 8 }}>
                           <div style={{ flex: 1 }}>
                             <label style={{ display: 'block', fontSize: 9, fontWeight: 800, color: '#94a3b8', marginBottom: 4, textTransform: 'uppercase' }}>Cash (₹)</label>
@@ -3340,7 +3426,7 @@ export default function CreateOrderModal({
                               onChange={(e) => {
                                  const val = e.target.value;
                                  setCashPart(val);
-                                 const rem = (total - Number(val));
+                                 const rem = Math.max(0, total - Number(val) - loyaltyAmountUsed);
                                  setOnlinePart(rem > 0 ? rem.toFixed(2) : '0.00');
                               }}
                               style={{ width: '100%', padding: '8px', borderRadius: 8, border: '2px solid #16a34a', fontSize: 15, fontWeight: 900, outline: 'none' }}
