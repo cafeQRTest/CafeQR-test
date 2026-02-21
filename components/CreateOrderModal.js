@@ -2089,9 +2089,17 @@ export default function CreateOrderModal({
         custom_created_at: `${orderDate}T${orderTime}:00+05:30`
       };
 
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      
+      const payloadHeaders = { 'Content-Type': 'application/json' };
+      if (token) {
+        payloadHeaders['Authorization'] = `Bearer ${token}`;
+      }
+
       const res = await fetch('/api/orders/create', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: payloadHeaders,
         body: JSON.stringify(orderData),
       });
 
