@@ -129,13 +129,14 @@ if (finalPaymentMethod === 'mixed') {
 
   // Optional strict check (recommended)
   const payable = Number(calcResult.total_amount ?? 0);
-  if (Math.abs((cash + online) - payable) > 0.01) {
+  const loyaltyDed = Number(loyalty_amount_used || 0);
+  if (Math.abs((cash + online + loyaltyDed) - payable) > 0.01) {
     return res.status(400).json({
-      error: `Mixed split mismatch: cash+online=${(cash + online).toFixed(2)} payable=${payable.toFixed(2)}`
+      error: `Mixed split mismatch: cash+online+loyalty=${(cash + online + loyaltyDed).toFixed(2)} payable=${payable.toFixed(2)}`
     });
   }
 
-  finalMixed = { cash_amount: cash, online_amount: online };
+  finalMixed = { cash_amount: cash, online_amount: online, loyalty_amount_used: loyaltyDed };
 } else {
   // Non-mixed orders should not carry mixed details
   finalMixed = null;
