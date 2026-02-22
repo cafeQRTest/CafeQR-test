@@ -679,10 +679,10 @@ function PaxEditDialog({ order, onSave, onClose }) {
 
 function TableEditDialog({ order, onSave, onClose, tables = [], tablesCount = 0 }) {
   const [val, setVal] = useState(() => {
-    if (order.order_type === 'parcel') return 'parcel';
+    if (order.order_type === 'parcel' || order.order_type === 'takeaway') return 'takeaway';
     if (order.order_type === 'delivery') return 'delivery';
     if (order.table_number) return `table:${order.table_number}`;
-    return '';
+    return 'takeaway';
   });
 
   const tableOptions = useMemo(() => {
@@ -743,7 +743,7 @@ function TableEditDialog({ order, onSave, onClose, tables = [], tablesCount = 0 
             onChange={setVal}
             placeholder="Select Table or Type..."
             options={[
-              { value: 'parcel', label: 'Takeaway / Parcel' },
+              { value: 'takeaway', label: 'Takeaway / Parcel' },
               { value: 'delivery', label: 'Home Delivery' },
               ...tableOptions
             ]}
@@ -1384,9 +1384,9 @@ useEffect(() => {
       let tableNum = null;
       let orderType = 'dine-in';
 
-      if (val === 'parcel') {
+      if (val === 'takeaway' || val === 'parcel') {
         tableNum = null;
-        orderType = 'parcel';
+        orderType = 'takeaway';
       } else if (val === 'delivery') {
         tableNum = null;
         orderType = 'delivery';
@@ -2101,7 +2101,7 @@ function getOrderTypeLabel(order) {
   if (order.table_number && order.table_number !== null) {
     return `Table ${order.table_number}`;
   }
-  if (order.order_type === 'parcel') return 'Parcel';
+  if (order.order_type === 'parcel' || order.order_type === 'takeaway') return 'Takeaway';
   return '';
 }
 

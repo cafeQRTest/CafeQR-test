@@ -73,6 +73,7 @@ export function useTables(restaurantId) {
     queryKey: tableKeys.list(restaurantId),
     queryFn: () => fetchTables(restaurantId),
     enabled: !!restaurantId,
+    refetchInterval: 10000, // Safety net: refetch every 10s if real-time fails
   });
 }
 

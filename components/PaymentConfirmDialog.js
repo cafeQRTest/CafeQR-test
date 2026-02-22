@@ -284,7 +284,7 @@ const CancelBtn = styled(motion.button)`
 function getOrderTypeLabel(o) {
   if (!o) return '';
   if (o.table_number) return `Table ${o.table_number}`;
-  if (o.order_type === 'parcel') return 'Parcel';
+  if (o.order_type === 'parcel' || o.order_type === 'takeaway') return 'Takeaway';
   return '';
 }
 

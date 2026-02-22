@@ -101,7 +101,7 @@ export default async function handler(req, res) {
 
     // Counter Sale / internal order types must be authenticated because this API
     // uses service role (bypasses RLS) [page:1]
-    const internalOrderTypes = new Set(['counter', 'parcel', 'delivery']);
+    const internalOrderTypes = new Set(['counter', 'parcel', 'delivery', 'takeaway', 'dine-in']);
     if (internalOrderTypes.has(order_type) && !token) {
       return res.status(401).json({ error: 'Missing Authorization token.' });
     }

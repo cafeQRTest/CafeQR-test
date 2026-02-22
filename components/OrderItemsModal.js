@@ -10,7 +10,7 @@ function getOrderTypeLabel(order) {
   if (order.table_number && order.table_number !== null) {
     return `Table ${order.table_number}`;
   }
-  if (order.order_type === 'parcel') return 'Parcel';
+  if (order.order_type === 'parcel' || order.order_type === 'takeaway') return 'Takeaway';
   return '';
 }
 

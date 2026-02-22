@@ -2206,7 +2206,7 @@ const OrderHistoryView = ({ onBack, orders, onPrint, onCancel, loading, onOrderC
       result = result.filter(o => {
         const type = (o.order_type || '').toLowerCase();
         if (filterType === 'takeaway') {
-          return type === 'parcel' || type === 'takeaway' || type === 'parcel_service';
+          return type === 'parcel' || type === 'takeaway' || type === 'parcel_service' || type === 'takeaway';
         } else if (filterType === 'delivery') {
           return type === 'delivery' || !!o.delivery_address_id || type === 'home_delivery';
         } else if (filterType === 'dine-in') {
@@ -2567,12 +2567,12 @@ export default function TableManagement() {
   const { data: sections = [] } = useSections(restaurant?.id);
   const { data: floors = [] } = useFloors(restaurant?.id, tables);
   // Consolidate order fetching to 'all' so we have everything for filtering in JS
-  const { data: orders = [], isLoading: loadingOrders } = useOrders(
+  const { data: orders = [], isLoading: loadingOrders, refetch: refetchOrders } = useOrders(
     restaurant?.id, 
     'all'
   );
 
-  const { data: completedOrders = [], isLoading: loadingHistory } = useCompletedOrders(restaurant?.id);
+  const { data: completedOrders = [], isLoading: loadingHistory, refetch: refetchHistory } = useCompletedOrders(restaurant?.id);
   
   // React Query mutations
   const tableMutation = useTableMutation();
@@ -3238,12 +3238,12 @@ const handleModalResend = async (table) => {
     }
   };
   
-  // Real-time subscription - refetch when tables change
+  // Real-time subscription - refetch when tables or orders change
   useEffect(() => {
     if (!restaurant?.id) return;
 
     const channel = supabase
-      .channel('table-updates')
+      .channel('table-management-realtime')
       .on(
         'postgres_changes',
         {
@@ -3254,16 +3254,46 @@ const handleModalResend = async (table) => {
         },
         (payload) => {
           console.log('Real-time table update:', payload);
-          // Use React Query's refetch instead of manual loading
           refetch();
         }
       )
-      .subscribe();
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'orders',
+          filter: `restaurant_id=eq.${restaurant.id}`
+        },
+        (payload) => {
+          console.log('Real-time order update:', payload);
+          refetch();
+          refetchOrders();
+          refetchHistory();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'invoices',
+          filter: `restaurant_id=eq.${restaurant.id}`
+        },
+        (payload) => {
+          console.log('Real-time invoice update:', payload);
+          refetchOrders();
+          refetchHistory();
+        }
+      )
+      .subscribe((status) => {
+        console.log(`[REALTIME] Subscription status: ${status}`, restaurant.id);
+      });
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [restaurant, supabase, refetch]);
+  }, [restaurant?.id, supabase, refetch, refetchOrders, refetchHistory]);
   
   
   // Statistics
@@ -5386,7 +5416,7 @@ const handleModalResend = async (table) => {
         onSuccess={() => {
           refetch(); // Refresh tables list
         }}
-        orderType={serviceMode === 'dine-in' ? 'dine-in' : (serviceMode === 'takeaway' ? 'parcel' : 'delivery')}
+        orderType={serviceMode === 'dine-in' ? 'dine-in' : (serviceMode === 'takeaway' ? 'takeaway' : 'delivery')}
       />
       {cancelOrderDialog && (
         <CancelConfirmDialog 

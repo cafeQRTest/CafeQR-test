@@ -1817,9 +1817,10 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
   try {
     let order_type = 'counter';
     let table_number = null;
-    if (orderSelect === 'parcel') order_type = 'parcel';
+    if (orderSelect === 'parcel') order_type = 'takeaway';
     else if (orderSelect === 'delivery') order_type = 'delivery';
     else if (orderSelect && orderSelect.startsWith('table:')) {
+      order_type = 'dine-in';
       table_number = orderSelect.split(':')[1] || null;
     }
 
@@ -2028,9 +2029,12 @@ async function getBearerTokenOrThrow() {
   async function doCreateKitchenOrder() {
     let order_type = 'counter';
     let table_number = null;
-    if (orderSelect === 'parcel') order_type = 'parcel';
+    if (orderSelect === 'parcel') order_type = 'takeaway';
     else if (orderSelect === 'delivery') order_type = 'delivery';
-    else if (orderSelect && orderSelect.startsWith('table:')) table_number = orderSelect.split(':')[1] || null;
+    else if (orderSelect && orderSelect.startsWith('table:')) {
+      order_type = 'dine-in';
+      table_number = orderSelect.split(':')[1] || null;
+    }
 
     const calcItemDiscount = (i) => {
          const price = Number(i.price || 0);
@@ -2366,15 +2370,15 @@ function requireTakenByName() {
                 {/* Takeaway button */}
                 <button
                   type="button"
-                  onClick={() => setOrderSelect(orderSelect === 'parcel' ? '' : 'parcel')}
+                  onClick={() => setOrderSelect(orderSelect === 'takeaway' || orderSelect === 'parcel' ? '' : 'takeaway')}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 6,
                     padding: '9px 18px', borderRadius: 99,
-                    border: orderSelect === 'parcel' ? '2px solid #f97316' : '1.5px solid #d1d5db',
-                    background: orderSelect === 'parcel' ? '#fff7ed' : '#ffffff',
-                    color: orderSelect === 'parcel' ? '#c2410c' : '#374151',
+                    border: (orderSelect === 'takeaway' || orderSelect === 'parcel') ? '2px solid #f97316' : '1.5px solid #d1d5db',
+                    background: (orderSelect === 'takeaway' || orderSelect === 'parcel') ? '#fff7ed' : '#ffffff',
+                    color: (orderSelect === 'takeaway' || orderSelect === 'parcel') ? '#c2410c' : '#374151',
                     fontWeight: 600, fontSize: 14, cursor: 'pointer', transition: 'all 0.2s',
-                    boxShadow: orderSelect === 'parcel' ? '0 0 0 3px #f9731620' : '0 1px 3px rgba(0,0,0,0.06)',
+                    boxShadow: (orderSelect === 'takeaway' || orderSelect === 'parcel') ? '0 0 0 3px #f9731620' : '0 1px 3px rgba(0,0,0,0.06)',
                   }}
                 >
                   Takeaway
