@@ -481,9 +481,11 @@ export default function PaymentConfirmDialog({ order, onConfirm, onCancel }) {
         await onConfirm('mixed', { 
           ...common, 
           mixed_payment_details: {
-             cash_amount: c.toFixed(2), 
-             online_amount: o.toFixed(2), 
-             online_method: onlineMethod,
+             ...(c > 0 && { cash_amount: c.toFixed(2) }),
+             ...(o > 0 && { 
+                 online_amount: o.toFixed(2)
+             }),
+             ...(l > 0 && { loyalty_amount: l.toFixed(2) }),
              is_mixed: true
           }
         });

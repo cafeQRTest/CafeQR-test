@@ -197,9 +197,11 @@ function PaymentConfirmDialog({
         if (!validateMixed()) { setSubmitting(false); return; }
         await onConfirm('mixed', {
           ...details,
-          cash_amount: Number(cashAmount),
-          online_amount: Number(onlineAmount),
-          online_method: onlineMethod,
+          ...(Number(cashAmount || 0) > 0 && { cash_amount: Number(cashAmount) }),
+          ...(Number(onlineAmount || 0) > 0 && { 
+              online_amount: Number(onlineAmount)
+          }),
+          ...(Number(details.loyalty_amount_used || 0) > 0 && { loyalty_amount: Number(details.loyalty_amount_used) }),
           is_mixed: true
         });
       } else {

@@ -2073,10 +2073,11 @@ export default function CreateOrderModal({
         loyalty_amount_used: loyaltyAmountUsed || 0,
         loyalty_points_used: loyaltyPointsUsed || 0,
         mixed_payment_details: (orderMode === 'settle' && selectedPaymentMethod === 'mixed') ? {
-            cash_amount: Number(cashPart || 0),
-            online_amount: Number(onlinePart || 0),
-            online_method: onlineType,
-            loyalty_amount_used: loyaltyAmountUsed || 0,
+            ...(Number(cashPart || 0) > 0 && { cash_amount: Number(cashPart || 0) }),
+            ...(Number(onlinePart || 0) > 0 && { 
+                online_amount: Number(onlinePart || 0)
+            }),
+            ...(Number(loyaltyAmountUsed || 0) > 0 && { loyalty_amount: Number(loyaltyAmountUsed || 0) }),
             is_mixed: true
         } : null,
         override_totals: {
