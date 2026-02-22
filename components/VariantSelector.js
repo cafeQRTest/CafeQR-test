@@ -10,6 +10,16 @@ export default function VariantSelector({ item, onSelect, onClose, visible, gstE
   const [addonQuantities, setAddonQuantities] = useState({});
   const [variantQtyDrafts, setVariantQtyDrafts] = useState({}); // variantId -> string
   const [mainQty, setMainQty] = useState(1); // Only used if !hasVariants
+  
+  // Reset state when visible changes to true or item changes
+  React.useEffect(() => {
+    if (visible) {
+      setVariantQuantities({});
+      setAddonQuantities({});
+      setVariantQtyDrafts({});
+      setMainQty(1);
+    }
+  }, [visible, item?.id, item?.variant_id]); // Reset on visibility or item change
 
   if (!visible || !item) return null;
 
