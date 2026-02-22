@@ -1967,6 +1967,16 @@ export default function CreateOrderModal({
   }, [cart, discount, restaurant, roundOffConfig]);
 
   const total = cartTotals.total_amount;
+  
+  // Reset payment amounts if total changes to avoid stale or invalid splits
+  useEffect(() => {
+    if (selectedPaymentMethod === 'mixed') {
+      setCashPart('');
+      setOnlinePart('0.00');
+      setLoyaltyPointsUsed(0);
+      setLoyaltyAmountUsed(0);
+    }
+  }, [total, selectedPaymentMethod]);
 
   // Reset modal state
   const resetModal = () => {
