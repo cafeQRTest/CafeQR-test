@@ -21,6 +21,7 @@ export default function EditOrderPanel({ order, onClose, onSave, tablesCount = 0
   // Initialize location state
   const [selectedLocation, setSelectedLocation] = useState(() => {
      if (order.order_type === 'parcel' || order.order_type === 'takeaway') return 'takeaway';
+     if (order.order_type === 'delivery') return 'delivery';
      if (order.table_number) return `table:${order.table_number}`;
      return 'takeaway'; // default fallback
   });
@@ -94,9 +95,10 @@ export default function EditOrderPanel({ order, onClose, onSave, tablesCount = 0
   // Detect if location changed
   const hasLocationChange = (() => {
      const isTakeaway = order.order_type === 'parcel' || order.order_type === 'takeaway';
+     const isDelivery = order.order_type === 'delivery';
      const origLoc = isTakeaway 
         ? 'takeaway' 
-        : (order.table_number ? `table:${order.table_number}` : 'takeaway');
+        : (isDelivery ? 'delivery' : (order.table_number ? `table:${order.table_number}` : 'takeaway'));
      return selectedLocation !== origLoc;
   })();
 
@@ -111,6 +113,9 @@ export default function EditOrderPanel({ order, onClose, onSave, tablesCount = 0
     if (selectedLocation === 'takeaway' || selectedLocation === 'parcel') {
        tableNum = null;
        orderType = 'takeaway';
+    } else if (selectedLocation === 'delivery') {
+       tableNum = null;
+       orderType = 'delivery';
     } else if (selectedLocation && selectedLocation.startsWith('table:')) {
        tableNum = selectedLocation.split(':')[1];
        orderType = 'dine-in';

@@ -926,7 +926,7 @@ const TableCard = styled.div`
        content: '';
        position: absolute;
        top: 0; left: 0; right: 0; height: 10px;
-       background: ${props.billed ? 'linear-gradient(90deg, #10b981, #059669)' : 'linear-gradient(90deg, #f97316, #ea580c)'};
+       background: ${props.billed ? 'linear-gradient(90deg, #10b981, #059669)' : 'linear-gradient(90deg, #ef4444, #dc2626)'};
        z-index: 2;
        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     }
@@ -941,11 +941,11 @@ const TableCard = styled.div`
   `}
 
   ${props => props.status === 'occupied' && !props.billed && css`
-    background: #fffcf5;
-    border-color: #fdba74;
+    background: #fffafa;
+    border-color: #fecaca;
     box-shadow: 
-      0 10px 30px -5px rgba(249, 115, 22, 0.12),
-      0 4px 12px -2px rgba(249, 115, 22, 0.06);
+      0 10px 30px -5px rgba(239, 68, 68, 0.12),
+      0 4px 12px -2px rgba(239, 68, 68, 0.06);
   `}
   box-shadow: 
     0 10px 30px -5px rgba(0, 0, 0, 0.04),
@@ -1008,8 +1008,8 @@ const StatusBadge = styled.div`
         background: ${minimal ? 'transparent' : 'rgba(16, 185, 129, 0.12)'}; color: ${minimal ? 'inherit' : '#065f46'};
       `;
       case 'occupied': return `
-        background: ${minimal ? 'transparent' : 'rgba(234, 88, 12, 0.1)'}; color: #ea580c;
-        border: ${minimal ? 'none' : '1px solid rgba(234, 88, 12, 0.2)'};
+        background: ${minimal ? 'transparent' : 'rgba(239, 68, 68, 0.1)'}; color: #ef4444;
+        border: ${minimal ? 'none' : '1px solid rgba(239, 68, 68, 0.2)'};
       `;
       case 'reserved': return `
         background: ${minimal ? 'transparent' : 'rgba(59, 130, 246, 0.12)'}; color: #1e40af;
@@ -1206,7 +1206,7 @@ const TableListRow = styled.div`
   border-bottom: 1px solid #f1f5f9;
   border-left: 5px solid ${props => {
     if (props.billed) return '#10b981';
-    if (props.status === 'occupied') return '#f97316';
+    if (props.status === 'occupied') return '#ef4444';
     if (props.status === 'cleaning') return '#f59e0b';
     return 'transparent';
   }};
@@ -1214,7 +1214,7 @@ const TableListRow = styled.div`
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   background: ${props => {
     if (props.billed) return '#f5fff9';
-    if (props.status === 'occupied') return '#fffcf5';
+    if (props.status === 'occupied') return '#fffafa';
     return 'white';
   }};
   color: #1e293b;
@@ -1300,7 +1300,7 @@ const VisualTable = styled.div`
   background: ${props => 
     props.billed ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' :
     props.status === 'available' ? 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)' :
-    props.status === 'occupied' ? 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)' :
+    props.status === 'occupied' ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)' :
     props.status === 'reserved' ? 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)' :
     props.status === 'cleaning' ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' :
     'linear-gradient(135deg, #64748b 0%, #475569 100%)'
@@ -1314,7 +1314,7 @@ const VisualTable = styled.div`
   color: ${props => props.status === 'available' ? '#475569' : 'white'};
   border: 1px solid ${props => {
     if (props.status === 'available') return '#e2e8f0';
-    if (props.status === 'occupied') return '#ea580c44';
+    if (props.status === 'occupied') return '#ef444444';
     if (props.billed) return '#05966944';
     return 'transparent';
   }};
@@ -3758,11 +3758,13 @@ const handleModalResend = async (table) => {
                           width: '8px', 
                           height: '8px', 
                           borderRadius: '50%', 
-                          background: status === 'available' ? '#10b981' : 
+                          background: status === 'available' ? '#ffffff' : 
                                     status === 'occupied' ? '#ef4444' : 
                                     status === 'reserved' ? '#3b82f6' : 
                                     status === 'cleaning' ? '#f59e0b' : 
-                                    status === 'maintenance' ? '#6366f1' : '#cbd5e1'
+                                    status === 'maintenance' ? '#64748b' : '#cbd5e1',
+                          border: status === 'available' ? '1px solid #e2e8f0' : 'none',
+                          boxShadow: status === 'available' ? 'inset 0 1px 3px rgba(0,0,0,0.06)' : 'none'
                         }} />
                         {status.charAt(0).toUpperCase() + status.slice(1)}
                       </FilterPill>
@@ -4113,7 +4115,7 @@ const handleModalResend = async (table) => {
                     Available
                   </LegendItem>
                   <LegendItem>
-                    <LegendDot color="#f97316" style={{ boxShadow: '0 2px 4px rgba(249, 115, 22, 0.2)' }} />
+                    <LegendDot color="#ef4444" style={{ boxShadow: '0 2px 4px rgba(239, 68, 68, 0.2)' }} />
                     Occupied
                   </LegendItem>
                   <LegendItem>

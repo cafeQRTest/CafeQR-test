@@ -2500,7 +2500,7 @@ function requireTakenByName() {
                         Available
                       </span>
                       <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                        <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: '50%', background: '#f97316', boxShadow: '0 2px 4px rgba(249,115,22,0.2)', flexShrink: 0 }}></span>
+                        <span style={{ display: 'inline-block', width: 12, height: 12, borderRadius: '50%', background: '#ef4444', boxShadow: '0 2px 4px rgba(239,68,68,0.2)', flexShrink: 0 }}></span>
                         Occupied
                       </span>
                       <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -2559,12 +2559,12 @@ function requireTakenByName() {
                             };
                           case 'occupied':
                             return {
-                              gradient: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
+                              gradient: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
                               textColor: '#ffffff',
-                              border: '#ea580c44',
-                              dot: '#f97316',
+                              border: '#ef444444',
+                              dot: '#ef4444',
                               dotBorder: 'none',
-                              dotShadow: '0 2px 4px rgba(249,115,22,0.35)',
+                              dotShadow: '0 2px 4px rgba(239,68,68,0.35)',
                               label: 'Occupied',
                               clickable: false,
                             };
