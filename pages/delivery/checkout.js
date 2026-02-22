@@ -248,7 +248,7 @@ export default function DeliveryCheckout() {
         restaurant_id: String(restaurantId),
         restaurant_name: restaurant?.name || null,
         table_number: "DELIVERY",
-        order_type: "counter", // or "delivery" if you want, but keep consistent in DB
+        order_type: "delivery",
 
         customer_name: custName.trim(),
         customer_phone: custPhone.trim(),

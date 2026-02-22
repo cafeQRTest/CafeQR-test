@@ -149,7 +149,7 @@ export default function OrderSuccess() {
   }
 
   if (!orderId) return <div style={{ padding: 20 }}>No order found.</div>
-  // 2. REMOVE the checking condition
+  if (loading) return <div style={{ padding: 20 }}>Loading order details...</div>
   if (error) return <div style={{ padding: 20, color: 'red' }}>{error}</div>
 
   const invoiceUrl = order?.invoice?.pdf_url;
@@ -165,7 +165,7 @@ export default function OrderSuccess() {
   } catch { }
   const amountFromQuery = amtStr != null && amtStr !== '' && !isNaN(Number(amtStr)) ? Number(amtStr) : null
   const derivedFromExAndTax = (
-    order.subtotal_ex_tax != null && order.total_tax != null
+    order?.subtotal_ex_tax != null && order?.total_tax != null
   ) ? (Number(order.subtotal_ex_tax) + Number(order.total_tax)) : null
 
   // Build candidates and pick the smallest positive to avoid duplicates/double-add

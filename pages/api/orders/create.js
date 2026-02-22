@@ -99,10 +99,21 @@ export default async function handler(req, res) {
       ? authHeader.slice(7).trim()
       : '';
 
-    // Counter Sale / internal order types must be authenticated because this API
-    // uses service role (bypasses RLS) [page:1]
-    const internalOrderTypes = new Set(['counter', 'parcel', 'delivery', 'takeaway', 'dine-in']);
-    if (internalOrderTypes.has(order_type) && !token) {
+    // Backoffice order types must be authenticated because this API
+    // uses service role (bypasses RLS). Public checkout flows (QR/delivery)
+    // are intentionally guest-friendly and call this endpoint without a token.
+    const normalizedOrderType = String(order_type || '').trim().toLowerCase();
+    const normalizedTable = String(table_number || '').trim().toUpperCase();
+    const internalOrderTypes = new Set(['counter', 'parcel', 'takeaway']);
+    const isPublicGuestCheckout =
+      !token &&
+      (
+        normalizedOrderType === 'dine-in' ||
+        normalizedOrderType === 'delivery' ||
+        normalizedTable === 'DELIVERY'
+      );
+
+    if (internalOrderTypes.has(normalizedOrderType) && !token && !isPublicGuestCheckout) {
       return res.status(401).json({ error: 'Missing Authorization token.' });
     }
 
@@ -112,7 +123,7 @@ export default async function handler(req, res) {
       if (!error) authUser = data?.user || null;
     }
 
-    if (internalOrderTypes.has(order_type) && !authUser) {
+    if (internalOrderTypes.has(normalizedOrderType) && !authUser && !isPublicGuestCheckout) {
       return res.status(401).json({ error: 'Invalid or expired session token.' });
     }
 
@@ -158,7 +169,7 @@ export default async function handler(req, res) {
     }
 
     // If this is an internal order type, user must be bound to this restaurant
-    if (internalOrderTypes.has(order_type) && !effectiveRole) {
+    if (internalOrderTypes.has(normalizedOrderType) && !effectiveRole && !isPublicGuestCheckout) {
       return res.status(403).json({ error: 'You do not have access to this restaurant.' });
     }
 

@@ -399,7 +399,7 @@ lines.push(ALIGN_LEFT);
 const staffName = String(order?.taken_by_name || '').trim();
 
 if (staffName) {
-  lines.push(withMargins(`Staff: ${staffName}`, layout));
+  lines.push(withMargins(`Attended by: ${staffName}`, layout));
 }
 
     if (order?.number_of_customers)
