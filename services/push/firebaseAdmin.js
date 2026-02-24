@@ -62,10 +62,16 @@ function normalizePrivateKey(raw) {
 }
 
 export function getFirebaseAdminCreds() {
+  // Directly pull from process.env because Vercel injects environment variables here,
+  // whereas the fallback .env parser might not work correctly in a serverless environment or if the files don't exist.
+  const projectId = process.env.FIREBASE_PROJECT_ID || readServerEnv('FIREBASE_PROJECT_ID');
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL || readServerEnv('FIREBASE_CLIENT_EMAIL');
+  const privateKeyRaw = process.env.FIREBASE_PRIVATE_KEY || readServerEnv('FIREBASE_PRIVATE_KEY');
+
   return {
-    projectId: readServerEnv('FIREBASE_PROJECT_ID'),
-    clientEmail: readServerEnv('FIREBASE_CLIENT_EMAIL'),
-    privateKey: normalizePrivateKey(readServerEnv('FIREBASE_PRIVATE_KEY')),
+    projectId,
+    clientEmail,
+    privateKey: normalizePrivateKey(privateKeyRaw),
   };
 }
 
