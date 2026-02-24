@@ -57,22 +57,33 @@ function readServerEnv(key) {
 
 function normalizePrivateKey(raw) {
   if (!raw) return '';
-  // Vercel sometimes injects the key surrounded by literal quotes or escapes newlines as literal string '\n'
-  // 1. Remove wrapping quotes if they exist
-  let key = raw.trim();
-  if ((key.startsWith('"') && key.endsWith('"')) || (key.startsWith("'") && key.endsWith("'"))) {
-    key = key.slice(1, -1);
-  }
-  // 2. Globally replace literal \n and \r\n with actual newline characters
-  key = key.replace(/\\n/g, '\n').replace(/\\r\\n/g, '\n');
 
-  // 3. Ensure it successfully decoded into a multi-line string (has at least one real newline or is short)
-  if (!key.includes('\n') && key.includes('-----BEGIN PRIVATE KEY-----')) {
-    // Fallback: forcefully split it if the regex somehow missed it
-    key = key.split('\\n').join('\n');
+  // 1. Convert any possible literal string escapes into actual space/newlines
+  let text = String(raw).replace(/\\n/g, '\n').replace(/\\r/g, '').replace(/"/g, '').replace(/'/g, '');
+
+  // 2. Extract just the base64 content between the headers
+  const beginHeader = '-----BEGIN PRIVATE KEY-----';
+  const endHeader = '-----END PRIVATE KEY-----';
+
+  if (!text.includes(beginHeader) || !text.includes(endHeader)) {
+    // If it doesn't even have the headers, return it as is and let Firebase fail normally
+    return text.trim();
   }
 
-  return key.endsWith('\n') ? key : `${key}\n`;
+  // Find the content between headers, strip all whitespace/newlines from it completely
+  const contentStartIndex = text.indexOf(beginHeader) + beginHeader.length;
+  const contentEndIndex = text.indexOf(endHeader);
+
+  const base64Content = text.substring(contentStartIndex, contentEndIndex).replace(/\s+/g, '');
+
+  // 3. Rebuild the string perfectly RFC compliant (64 chars per line)
+  const lines = [beginHeader];
+  for (let i = 0; i < base64Content.length; i += 64) {
+    lines.push(base64Content.substring(i, i + 64));
+  }
+  lines.push(endHeader);
+
+  return lines.join('\n') + '\n';
 }
 
 export function getFirebaseAdminCreds() {
