@@ -21,6 +21,7 @@ import { ensureSessionValid } from '../lib/authActions'
 import { usePrintService } from '../lib/usePrintService'
 
 import ReactQueryProvider from '../lib/react-query-provider';
+import PushBanner from '../components/PushBanner';
 
 // ── constants ────────────────────────────────────────────────────────────────
 const OWNER_PREFIX = '/owner'
@@ -60,6 +61,11 @@ function safeInitNative(router) {
         importance: 5
       }).catch(() => { })
       PushNotifications.removeAllListeners().catch(() => { })
+      PushNotifications.addListener('pushNotificationReceived', notification => {
+        window.dispatchEvent(
+          new CustomEvent('new-order-push', { detail: notification })
+        );
+      })
       PushNotifications.addListener('pushNotificationActionPerformed', action => {
         const url = action.notification?.data?.url || '/owner/orders'
         router.push(url).catch(() => {
@@ -376,6 +382,7 @@ function MyApp({ Component, pageProps }) {
                     </Layout>
                     {/* Only render print orchestrator for POS/owner routes, not delivery app */}
                     {!isDeliveryApp && <AppPrintOrchestrator />}
+                    <PushBanner />
                   </GlobalSubscriptionGate>
                 </SubscriptionProvider>
               </AlertProvider>
