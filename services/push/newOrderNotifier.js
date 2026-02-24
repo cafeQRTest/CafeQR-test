@@ -59,7 +59,7 @@ async function markLogRow(supabase, id, patch) {
       .update({ ...patch, updated_at: new Date().toISOString() })
       .eq('id', id);
   } catch (e) {
-    if (isDev) console.warn('[push:new_order] log update failed:', e?.message || e);
+    console.warn('[push:new_order] log update failed:', e?.message || e);
   }
 }
 
@@ -94,16 +94,14 @@ export async function sendNewOrderPush({
   let logId = null;
   if (logErr) {
     if (logErr.code === '23505') {
-      if (isDev) console.log('[push:new_order] duplicate skipped', { restaurantId, orderId });
+      console.log('[push:new_order] duplicate skipped', { restaurantId, orderId });
       return { ok: true, duplicate: true, successCount: 0, failureCount: 0 };
     }
     const missingLogTable =
       logErr.code === '42P01' ||
       String(logErr.message || '').toLowerCase().includes('push_notifications_log');
     if (missingLogTable) {
-      if (isDev) {
-        console.warn('[push:new_order] push_notifications_log table missing; sending without idempotency');
-      }
+      console.warn('[push:new_order] push_notifications_log table missing; sending without idempotency');
     } else {
       console.error('[push:new_order] log insert failed:', logErr);
       return { ok: false, reason: 'log_insert_failed', error: logErr.message };
@@ -139,19 +137,17 @@ export async function sendNewOrderPush({
   const uniqueTokens = Array.from(new Set((rows || []).map((r) => r.device_token).filter(Boolean)));
   if (!uniqueTokens.length) {
     await markLogRow(supabase, logId, { status: 'no_subscribers', success_count: 0, failure_count: 0 });
-    if (isDev) console.log('[push:new_order] no subscribers', { restaurantId });
+    console.log('[push:new_order] no subscribers', { restaurantId });
     return { ok: true, successCount: 0, failureCount: 0 };
   }
 
   const firebaseInit = ensureFirebaseAdminInitialized();
   if (!firebaseInit.ok) {
     await markLogRow(supabase, logId, { status: 'missing_firebase_env', success_count: 0, failure_count: 0 });
-    if (isDev) {
-      console.warn('[push:new_order] Firebase Admin unavailable; push skipped', {
-        reason: firebaseInit.reason,
-        missing: firebaseInit.missing || [],
-      });
-    }
+    console.warn('[push:new_order] Firebase Admin unavailable; push skipped', {
+      reason: firebaseInit.reason,
+      missing: firebaseInit.missing || [],
+    });
     return { ok: false, reason: 'firebase_not_initialized', details: firebaseInit };
   }
 
@@ -233,15 +229,13 @@ export async function sendNewOrderPush({
       },
     });
 
-    if (isDev) {
-      console.log('[push:new_order] send result', {
-        restaurantId,
-        orderId,
-        successCount: response.successCount,
-        failureCount: response.failureCount,
-        tokenCount: uniqueTokens.length,
-      });
-    }
+    console.log('[push:new_order] send result', {
+      restaurantId,
+      orderId,
+      successCount: response.successCount,
+      failureCount: response.failureCount,
+      tokenCount: uniqueTokens.length,
+    });
 
     return {
       ok: true,

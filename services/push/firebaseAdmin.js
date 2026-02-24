@@ -98,9 +98,7 @@ export function ensureFirebaseAdminInitialized() {
     });
     return { ok: true };
   } catch (e) {
-    if (isDev) {
-      console.error('[push] Firebase Admin init failed:', e?.message || e);
-    }
+    console.error('[push] Firebase Admin init failed:', e?.message || e);
     return { ok: false, reason: 'init_failed', error: e?.message || 'init_failed' };
   }
 }
