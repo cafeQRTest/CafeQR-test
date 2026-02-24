@@ -482,28 +482,26 @@ export default async function handler(req, res) {
 
 
 
-    // 11) Fire-and-forget background tasks (inventory + low-stock alerts + notify-owner)
-    // Added await so Vercel doesn't kill the execution before push notifications fire
+    // 10.5) Send Push Notification IMMEDIATELY before any other background tasks
+    if (String(finalStatus || '').toLowerCase() === 'new') {
+      try {
+        await sendNewOrderPush({
+          supabase,
+          restaurantId: restaurant_id,
+          orderId: orderResult.orderId,
+          orderType: order_type,
+          tableNumber: table_number,
+          totalAmount: finalGrandTotal,
+        });
+      } catch (e) {
+        console.warn('Notification dispatch failed (non-blocking):', e?.message || e);
+      }
+    }
+
+    // 11) Fire-and-forget background tasks (inventory + low-stock alerts)
     await (async () => {
       try {
-        // Push notification first to keep alert latency low.
-        if (String(finalStatus || '').toLowerCase() === 'new') {
-          try {
-            await sendNewOrderPush({
-              supabase,
-              restaurantId: restaurant_id,
-              orderId: orderResult.orderId,
-              orderType: order_type,
-              tableNumber: table_number,
-              totalAmount: finalGrandTotal,
-            });
-          } catch (e) {
-            console.warn(
-              'Notification dispatch failed (non-blocking):',
-              e?.message || e
-            );
-          }
-        }
+
 
         // ✅ Deduct stock for each menu item based on recipes
         for (const item of mergedItems) {
