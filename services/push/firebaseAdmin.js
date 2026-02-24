@@ -56,8 +56,22 @@ function readServerEnv(key) {
 }
 
 function normalizePrivateKey(raw) {
-  const key = stripWrappingQuotes(raw).replace(/\\n/g, '\n').replace(/\r\n/g, '\n');
-  if (!key) return '';
+  if (!raw) return '';
+  // Vercel sometimes injects the key surrounded by literal quotes or escapes newlines as literal string '\n'
+  // 1. Remove wrapping quotes if they exist
+  let key = raw.trim();
+  if ((key.startsWith('"') && key.endsWith('"')) || (key.startsWith("'") && key.endsWith("'"))) {
+    key = key.slice(1, -1);
+  }
+  // 2. Globally replace literal \n and \r\n with actual newline characters
+  key = key.replace(/\\n/g, '\n').replace(/\\r\\n/g, '\n');
+
+  // 3. Ensure it successfully decoded into a multi-line string (has at least one real newline or is short)
+  if (!key.includes('\n') && key.includes('-----BEGIN PRIVATE KEY-----')) {
+    // Fallback: forcefully split it if the regex somehow missed it
+    key = key.split('\\n').join('\n');
+  }
+
   return key.endsWith('\n') ? key : `${key}\n`;
 }
 
