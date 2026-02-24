@@ -11,7 +11,7 @@ export function usePushNotifications(onToken?: (token: string) => void) {
         // Android: ensure a channel exists for sound/vibration
         // No-op on iOS
         await PushNotifications.createChannel({
-          id: 'orders_v2',
+          id: 'orders',
           name: 'Order Alerts',
           importance: 4,         // High
           sound: 'beep',      

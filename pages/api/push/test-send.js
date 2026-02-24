@@ -1,26 +1,20 @@
 // pages/api/push/test-send.js
-import admin from 'firebase-admin';
-
-function normalizePrivateKey(raw) {
-  if (!raw) return '';
-  let key = raw.trim();
-  if ((key.startsWith('"') && key.endsWith('"')) || (key.startsWith("'") && key.endsWith("'"))) key = key.slice(1, -1);
-  key = key.replace(/\r\n/g, '\n');
-  return key.endsWith('\n') ? key : key + '\n';
-}
-
-if (!admin.apps.length) {
-  const projectId = process.env.FIREBASE_PROJECT_ID;
-  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-  const privateKey = normalizePrivateKey(process.env.FIREBASE_PRIVATE_KEY);
-  if (!projectId || !clientEmail || !privateKey) throw new Error('Missing Firebase Admin envs');
-  admin.initializeApp({ credential: admin.credential.cert({ projectId, clientEmail, privateKey }) });
-}
+import { admin, ensureFirebaseAdminInitialized } from '../../../services/push/firebaseAdmin';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
+    const init = ensureFirebaseAdminInitialized();
+    if (!init.ok) {
+      return res.status(500).json({
+        ok: false,
+        error: 'Firebase Admin is not configured',
+        reason: init.reason,
+        missing: init.missing || [],
+      });
+    }
+
     const { token, title, body, url, data } = req.body || {};
     if (!token) return res.status(400).json({ error: 'Missing token' });
 
@@ -37,7 +31,7 @@ export default async function handler(req, res) {
       },
       android: {
         priority: 'high',
-        notification: { channelId: 'orders_v2', sound: 'beep', priority: 'high' },
+        notification: { channelId: 'orders', sound: 'beep', priority: 'high' },
       },
       apns: {
         headers: { 'apns-priority': '10' },

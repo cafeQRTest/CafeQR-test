@@ -1,46 +1,53 @@
 // pages/api/push/test-send-restaurant.js
 import { createClient } from '@supabase/supabase-js';
-import admin from 'firebase-admin';
-
-function normalizePrivateKey(raw) {
-  if (!raw) return '';
-  let key = raw.trim();
-  if ((key.startsWith('"') && key.endsWith('"')) || (key.startsWith("'") && key.endsWith("'"))) key = key.slice(1, -1);
-  key = key.replace(/\r\n/g, '\n');
-  return key.endsWith('\n') ? key : key + '\n';
-}
+import { admin, ensureFirebaseAdminInitialized } from '../../../services/push/firebaseAdmin';
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-
-if (!admin.apps.length) {
-  const projectId = process.env.FIREBASE_PROJECT_ID;
-  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-  const privateKey = normalizePrivateKey(process.env.FIREBASE_PRIVATE_KEY);
-  if (!projectId || !clientEmail || !privateKey) throw new Error('Missing Firebase Admin envs');
-  admin.initializeApp({ credential: admin.credential.cert({ projectId, clientEmail, privateKey }) });
-}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   try {
+    const init = ensureFirebaseAdminInitialized();
+    if (!init.ok) {
+      return res.status(500).json({
+        error: 'Firebase Admin is not configured',
+        reason: init.reason,
+        missing: init.missing || [],
+      });
+    }
+
     const { restaurantId, title = 'Test: All tokens', body = 'Expect tray banner + sound', url = '/owner/orders' } = req.body || {};
     if (!restaurantId) return res.status(400).json({ error: 'restaurantId required' });
 
-    const { data: rows, error } = await supabase
+    let rows = [];
+    let error = null;
+    const enabledQuery = await supabase
       .from('push_subscription_restaurants')
       .select('device_token')
-      .eq('restaurant_id', restaurantId);
+      .eq('restaurant_id', restaurantId)
+      .eq('enabled', true);
+
+    if (!enabledQuery.error) {
+      rows = enabledQuery.data || [];
+    } else {
+      const fallback = await supabase
+        .from('push_subscription_restaurants')
+        .select('device_token')
+        .eq('restaurant_id', restaurantId);
+      rows = fallback.data || [];
+      error = fallback.error || null;
+    }
 
     if (error) return res.status(500).json({ error: error.message });
 
-    const tokens = (rows || []).map(r => r.device_token).filter(Boolean);
+    const tokens = Array.from(new Set((rows || []).map((r) => r.device_token).filter(Boolean)));
     if (!tokens.length) return res.status(200).json({ sent: 0, successCount: 0, failureCount: 0, errors: [], prefixes: [] });
 
     const message = {
       notification: { title, body },
       data: { url, kind: 'test-restaurant' },
       android: {
-        notification: { channelId: 'orders_v2', sound: 'beep', priority: 'high' },
+        notification: { channelId: 'orders', sound: 'beep', priority: 'high' },
         priority: 'high',
       },
       tokens,

@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { InvoiceService } from '../../../services/invoiceService';
 import { OrderService } from '../../../services/orderService';
 import { ensureCustomer } from '../../../lib/customer/ensureCustomer';
+import { sendNewOrderPush } from '../../../services/push/newOrderNotifier';
 
 export default async function handler(req, res) {
   console.log('[/api/orders/create] handler called, method =', req.method);
@@ -484,6 +485,25 @@ export default async function handler(req, res) {
     // 11) Fire-and-forget background tasks (inventory + low-stock alerts + notify-owner)
     (async () => {
       try {
+        // Push notification first to keep alert latency low.
+        if (String(finalStatus || '').toLowerCase() === 'new') {
+          try {
+            await sendNewOrderPush({
+              supabase,
+              restaurantId: restaurant_id,
+              orderId: orderResult.orderId,
+              orderType: order_type,
+              tableNumber: table_number,
+              totalAmount: finalGrandTotal,
+            });
+          } catch (e) {
+            console.warn(
+              'Notification dispatch failed (non-blocking):',
+              e?.message || e
+            );
+          }
+        }
+
         // ✅ Deduct stock for each menu item based on recipes
         for (const item of mergedItems) {
           if (!item.id || !item.quantity) continue;
@@ -634,30 +654,6 @@ export default async function handler(req, res) {
           invoiceNo: orderResult.invoiceNo,
           timestamp: new Date().toISOString(),
         });
-
-        // Push notification (non-blocking, background)
-        try {
-          const base = process.env.NEXT_PUBLIC_BASE_URL || '';
-          await fetch(`${base}/api/notify-owner`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              restaurantId: restaurant_id,
-              orderId: orderResult.orderId,
-              orderItems: items,
-            }),
-          }).catch((e) =>
-            console.warn(
-              'notify-owner failed (non-blocking):',
-              e?.message || e
-            )
-          );
-        } catch (e) {
-          console.warn(
-            'Notification dispatch failed (non-blocking):',
-            e?.message || e
-          );
-        }
       } catch (bgErr) {
         console.error('Background tasks failed:', bgErr);
       }

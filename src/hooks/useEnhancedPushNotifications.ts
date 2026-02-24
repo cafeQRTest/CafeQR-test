@@ -15,7 +15,7 @@ export function useEnhancedPushNotifications(
     async function init() {
       try {
         await PushNotifications.createChannel({
-          id: 'order',
+          id: 'orders',
           name: 'Order Alerts',
           description: 'High priority new order alerts',
           importance: 4,
@@ -36,8 +36,7 @@ export function useEnhancedPushNotifications(
                 deviceToken: token.value,
                 restaurantId,
                 userEmail,
-                platform: Capacitor.getPlatform(),
-                channelId: 'orders_v3'
+                platform: Capacitor.getPlatform()
               })
             });
             if (res.ok) onToken?.(token.value);

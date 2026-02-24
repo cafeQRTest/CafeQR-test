@@ -2,6 +2,7 @@
 
 /* global importScripts, firebase, self, clients */
 try {
+  importScripts('/api/push/sw-config.js');
   importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js');
   importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js');
 } catch (e) {
@@ -19,15 +20,13 @@ self.addEventListener('activate', (event) => {
 
 let messaging;
 try {
-  firebase?.initializeApp?.({
-    apiKey: "AIzaSyATyNkWG6l1VMuaxrOtvDtraYSJwjtDmSE",
-    authDomain: "cafe-qr-notifications.firebaseapp.com",
-    projectId: "cafe-qr-notifications",
-    storageBucket: "cafe-qr-notifications.firebasestorage.app",
-    messagingSenderId: "620603470804",
-    appId: "1:620603470804:web:fb903bb1ef725098d1dc41"
-  });
-  messaging = firebase?.messaging?.();
+  const cfg = self.__FIREBASE_SW_CONFIG || {};
+  if (cfg.apiKey && cfg.projectId && cfg.messagingSenderId && cfg.appId) {
+    firebase?.initializeApp?.(cfg);
+    messaging = firebase?.messaging?.();
+  } else {
+    console.warn('[fcm-sw] Missing Firebase config; background push disabled.');
+  }
 } catch (e) {
   // Still allow SW to run without FCM
   console.warn('[fcm-sw] firebase init failed:', e?.message || e);
@@ -38,8 +37,10 @@ async function safeShowNotification(title, options) {
   try {
     // Fallback assets if custom ones are missing
     const finalOptions = {
-      icon: options?.icon || '/icon-192x192.png',
-      badge: options?.badge || '/icon-192x192.png',
+      icon: options?.icon || '/icons/icon-192.png',
+      badge: options?.badge || '/icons/icon-192.png',
+      tag: options?.tag || 'new-order',
+      renotify: true,
       ...options
     };
     return await self.registration.showNotification(title, finalOptions);
@@ -56,12 +57,16 @@ try {
       const title = payload?.data?.title || payload?.notification?.title || 'New Order';
       const body = payload?.data?.body || payload?.notification?.body || 'You have a new order.';
       const url = payload?.data?.url || '/owner/orders';
+      const orderId = payload?.data?.orderId || '';
+      const restaurantId = payload?.data?.restaurantId || '';
+      const notificationTag = orderId ? `new-order-${orderId}` : 'new-order';
 
       const options = {
         body,
-        icon: '/icon-192x192.png',
-        badge: '/icon-192x192.png',
-        data: { url, ...payload?.data }
+        icon: '/icons/icon-192.png',
+        badge: '/icons/icon-192.png',
+        tag: notificationTag,
+        data: { url, orderId, restaurantId, ...payload?.data }
       };
 
       return safeShowNotification(title, options);
@@ -77,7 +82,9 @@ try {
 // Click → focus or open
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const urlToOpen = event?.notification?.data?.url || '/owner/orders';
+  const relativeUrl = event?.notification?.data?.url || '/owner/orders';
+  const urlToOpen = new URL(relativeUrl, self.location.origin).toString();
+
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
       for (const c of list) {

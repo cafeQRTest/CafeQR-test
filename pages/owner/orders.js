@@ -3,7 +3,6 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import styled, { keyframes, css } from 'styled-components';
 import { useRouter } from 'next/router'; // <-- Import useRouter at the top!
-import { Capacitor } from '@capacitor/core';
 import { getSupabase } from '../../services/supabase';
 import { LoyaltyService } from '../../services/loyaltyService';
 import { useRequireAuth } from '../../lib/useRequireAuth';
@@ -11,9 +10,11 @@ import { useRestaurant } from '../../context/RestaurantContext';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import { subscribeOwnerDevice } from '../../helpers/subscribePush';
+import { arePushAlertsDisabled, detectPushPlatform, getPushTokenPrefix, getStoredPushToken } from '../../lib/push/tokenStore';
 import { downloadInvoicePdf } from '../../lib/downloadInvoicePdf'
 import NiceSelect from '../../components/NiceSelect';
 import { round2, roundP, formatQtyP } from '../../lib/qty'
+import EnableAlertsButton from '../../components/EnableAlertsButton';
 import EditOrderPanel from '../../components/EditOrderPanel';
 import PaymentConfirmDialog from '../../components/PaymentConfirmDialog';
 import OrderItemsModal from '../../components/OrderItemsModal';
@@ -516,7 +517,7 @@ function timeAgo(dateString) {
   const mins = diffMins % 60;
   return `${hours}h ${mins}m ago`;
 }
-const prefix = (s) => (s ? s.slice(0,24) : '');
+const prefix = (s) => getPushTokenPrefix(s, 24);
 
 function computeOrderTotalDisplay(order) {
   const toNum = (v) => (v == null ? null : Number(v));
@@ -910,7 +911,7 @@ export default function OrdersPage() {
   useEffect(() => {
     const saveToken = async () => {
       if (!user || !supabase) return;
-      const fcmToken = localStorage.getItem('fcm_token');
+      const fcmToken = getStoredPushToken();
       if (!fcmToken) return;
       try {
         const { error: updateError } = await supabase
@@ -931,7 +932,7 @@ export default function OrdersPage() {
 
     async function subscribeWith(token) {
       if (!restaurantId || !token) return;
-      const platform = Capacitor.isNativePlatform() ? 'android' : 'web';
+      const platform = detectPushPlatform();
       console.log('[push] subscribing', { rid: restaurantId, tokenPrefix: prefix(token), platform });
       try {
         await subscribeOwnerDevice({ restaurantId, token, platform });
@@ -949,13 +950,14 @@ export default function OrdersPage() {
 
     async function run() {
       if (!restaurantId) return;
+      if (arePushAlertsDisabled()) return;
       // First attempt with whatever is already stored by _app registration
-      const stored = localStorage.getItem('fcm_token');
+      const stored = getStoredPushToken();
       if (stored) await subscribeWith(stored);
 
       // Retry shortly to capture refreshed token if it appears a moment later
       setTimeout(() => {
-        const again = localStorage.getItem('fcm_token');
+        const again = getStoredPushToken();
         if (!canceled && again && again !== stored) {
           console.log('[push] retry subscribe with updated token', prefix(again));
           subscribeWith(again);
@@ -1667,6 +1669,10 @@ if (ordersByStatus.mobileFilter === 'inprogress') {
           </Button>
         </div>
       </header>
+
+      <div style={{ padding: '0 12px 10px', display: 'flex', justifyContent: 'flex-start' }}>
+        <EnableAlertsButton restaurantId={restaurantId} />
+      </div>
 
       <ControlsBar>
         <SearchWrapper>

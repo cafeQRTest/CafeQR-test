@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
+import { sendNewOrderPush } from '../../../services/push/newOrderNotifier'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -52,9 +53,25 @@ export default async function handler(req, res) {
       external_order_id: payload.order_id,
       created_at: new Date(payload.order_date)
     }
-    const { data, error } = await supabase.from('orders').insert([orderData])
+    const { data, error } = await supabase.from('orders').insert([orderData]).select('id')
     if (error) throw error
     // TODO: Insert order items similarly
+
+    // Send push notification
+    try {
+      if (data && data.length > 0) {
+        await sendNewOrderPush({
+          supabase,
+          restaurantId: restaurant_id,
+          orderId: data[0].id,
+          orderType: 'swiggy',
+          tableNumber: 'SWIGGY',
+          totalAmount: payload.total_amount || 0,
+        });
+      }
+    } catch (pushErr) {
+      console.error('Swiggy push notification error:', pushErr)
+    }
 
     res.status(200).json({ success: true })
   } catch (e) {

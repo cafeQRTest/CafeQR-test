@@ -12,6 +12,7 @@ import { useRouter } from 'next/router'
 import { useEffect, useState } from 'react'
 import { Capacitor } from '@capacitor/core'
 import { getFCMToken } from '../lib/firebase/messaging'
+import { arePushAlertsDisabled, detectPushPlatform, getStoredPushToken, setStoredPushToken } from '../lib/push/tokenStore'
 import { CustomerAuthProvider, useCustomerAuth } from "../context/CustomerAuthContext";
 import {
   getSupabase
@@ -53,7 +54,7 @@ function safeInitNative(router) {
     try {
       const { PushNotifications } = await import('@capacitor/push-notifications')
       await PushNotifications.createChannel({
-        id: 'orders_v2',
+        id: 'orders',
         name: 'Orders',
         description: 'Order alerts',
         importance: 5
@@ -65,10 +66,11 @@ function safeInitNative(router) {
           window.location.href = url
         })
       })
-      const perm = await PushNotifications.requestPermissions()
+      const perm = await PushNotifications.checkPermissions()
       if (perm.receive !== 'granted') return
       PushNotifications.addListener('registration', ({ value }) => {
-        localStorage.setItem('fcm_token', value)
+        setStoredPushToken(value)
+        if (arePushAlertsDisabled()) return
         postSubscribe(value, 'android')
       })
       await PushNotifications.register()
@@ -79,9 +81,10 @@ function safeInitNative(router) {
 function safeInitWebOnly() {
   return async () => {
     try {
-      const token = await getFCMToken()
+      if (arePushAlertsDisabled()) return
+      const token = await getFCMToken({ requestPermission: false })
       if (token) {
-        localStorage.setItem('fcm_token', token)
+        setStoredPushToken(token)
         await postSubscribe(token, 'web')
       }
     } catch { }
@@ -90,9 +93,18 @@ function safeInitWebOnly() {
 
 async function ensureSubscribed() {
   if (typeof window === 'undefined') return
-  const token = localStorage.getItem('fcm_token')
+  if (arePushAlertsDisabled()) return
+  let token = getStoredPushToken()
+  const platform = detectPushPlatform()
+
+  if (platform === 'web' && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+    // Refresh token opportunistically (FCM rotates tokens in some cases).
+    const refreshed = await getFCMToken({ requestPermission: false })
+    if (refreshed) token = refreshed
+  }
+
   if (!token) return
-  await postSubscribe(token, Capacitor.isNativePlatform() ? 'android' : 'web')
+  await postSubscribe(token, platform)
 }
 
 // ── subscription gate (must return children or null) ─────────────────────────

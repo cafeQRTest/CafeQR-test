@@ -1,27 +1,13 @@
 // pages/api/push/send-notification.js
-import admin from 'firebase-admin';
-
-function normalizePrivateKey(raw) {
-  if (!raw) return '';
-  let key = raw.trim();
-  if ((key.startsWith('"') && key.endsWith('"')) || (key.startsWith("'") && key.endsWith("'"))) {
-    key = key.slice(1, -1);
-  }
-  key = key.replace(/\r\n/g, '\n');
-  return key.endsWith('\n') ? key : key + '\n';
-}
-
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      privateKey: normalizePrivateKey(process.env.FIREBASE_PRIVATE_KEY),
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-    }),
-  });
-}
+import { admin, ensureFirebaseAdminInitialized } from '../../../services/push/firebaseAdmin';
 
 export async function sendOrderNotification(orderData, deviceTokens) {
+  const init = ensureFirebaseAdminInitialized();
+  if (!init.ok) {
+    const missing = init.missing?.join(', ') || 'Firebase Admin env';
+    throw new Error(`Firebase Admin not configured: ${missing}`);
+  }
+
   const message = {
     notification: {
       title: '🔔 New Order Alert!',
@@ -38,7 +24,7 @@ export async function sendOrderNotification(orderData, deviceTokens) {
     android: {
       priority: 'high',
       notification: {
-        channelId: 'orders_v2',
+        channelId: 'orders',
         sound: 'beep',
       }
     },

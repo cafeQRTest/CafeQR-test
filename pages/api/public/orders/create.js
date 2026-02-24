@@ -1,6 +1,7 @@
 // pages/api/public/orders/create.js
 import { getServerSupabase } from '../../../../services/supabase-server';
 import { InvoiceService } from '../../../../services/invoiceService';
+import { sendNewOrderPush } from '../../../../services/push/newOrderNotifier';
 
 function normalizePhone(phone) {
   return String(phone || '').replace(/[^\d+]/g, '').trim();
@@ -247,6 +248,20 @@ export default async function handler(req, res) {
   } catch (e) {
     // keep the order; invoice can be retried from admin
     console.warn('Invoice creation failed:', e?.message || e);
+  }
+
+  // 10) Send push notification
+  try {
+    await sendNewOrderPush({
+      supabase,
+      restaurantId,
+      orderId: order.id,
+      orderType: 'delivery',
+      tableNumber: 'DELIVERY',
+      totalAmount: total_inc_tax,
+    });
+  } catch (e) {
+    console.error('Push notification failed:', e);
   }
 
   return res.status(200).json({

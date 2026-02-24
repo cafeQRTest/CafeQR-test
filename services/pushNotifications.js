@@ -1,6 +1,7 @@
 // services/pushNotifications.js
 import { PushNotifications } from '@capacitor/push-notifications';
 import { Capacitor } from '@capacitor/core';
+import { setStoredPushToken } from '../lib/push/tokenStore';
 
 export class PushNotificationService {
   static async initialize(restaurantId, userId) {
@@ -31,7 +32,7 @@ export class PushNotificationService {
       PushNotifications.addListener('registration', async ({ value }) => {
         const token = value;
         console.log('[PushInit] token:', token?.slice(0, 24));
-        try { localStorage.setItem('fcm_token', token); } catch {}
+        try { setStoredPushToken(token); } catch {}
 
         // POST to subscribe API and log result
         try {

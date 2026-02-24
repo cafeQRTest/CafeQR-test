@@ -2,7 +2,9 @@
 export async function subscribeOwnerDevice({ restaurantId, token, platform }) {
   const body = { restaurantId, deviceToken: token, platform };
   const tokenPrefix = (token || '').slice(0, 24);
-  console.log('[push] subscribeOwnerDevice →', { restaurantId, platform, tokenPrefix });
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('[push] subscribeOwnerDevice →', { restaurantId, platform, tokenPrefix });
+  }
 
   const resp = await fetch('/api/push/subscribe', {
     method: 'POST',
@@ -16,6 +18,8 @@ export async function subscribeOwnerDevice({ restaurantId, token, platform }) {
     throw new Error(json?.error || 'subscribe failed');
   }
 
-  console.log('[push] subscribe ok', { row: json?.subscription, tokenPrefix });
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('[push] subscribe ok', { row: json?.subscription, tokenPrefix });
+  }
   return json;
 }
