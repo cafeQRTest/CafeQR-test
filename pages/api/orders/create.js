@@ -483,7 +483,8 @@ export default async function handler(req, res) {
 
 
     // 11) Fire-and-forget background tasks (inventory + low-stock alerts + notify-owner)
-    (async () => {
+    // Added await so Vercel doesn't kill the execution before push notifications fire
+    await (async () => {
       try {
         // Push notification first to keep alert latency low.
         if (String(finalStatus || '').toLowerCase() === 'new') {
