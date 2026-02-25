@@ -89,11 +89,13 @@ function safeInitNative(router) {
       }
       const { PushNotifications } = await import('@capacitor/push-notifications')
       await PushNotifications.createChannel({
-        id: 'orders',
+        id: 'orders_sound',
         name: 'Orders',
-        description: 'Order alerts',
-        importance: 5
-      }).catch(() => { })
+        description: 'Order alerts with sound',
+        importance: 5,
+        visibility: 1,
+        sound: 'beep.wav'
+      }).catch((e) => { console.warn('createChannel', e) })
       PushNotifications.removeAllListeners().catch(() => { })
       PushNotifications.addListener('pushNotificationReceived', notification => {
         window.dispatchEvent(

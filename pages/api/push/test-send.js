@@ -31,11 +31,11 @@ export default async function handler(req, res) {
       },
       android: {
         priority: 'high',
-        notification: { channelId: 'orders', sound: 'beep', priority: 'high' },
+        notification: { channelId: 'orders_sound', sound: 'beep', priority: 'high' },
       },
       apns: {
         headers: { 'apns-priority': '10' },
-        payload: { aps: { sound: 'default', badge: 1 } },
+        payload: { aps: { sound: 'beep.wav', badge: 1 } },
       },
     };
 

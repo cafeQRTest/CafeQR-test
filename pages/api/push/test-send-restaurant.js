@@ -44,11 +44,14 @@ export default async function handler(req, res) {
     if (!tokens.length) return res.status(200).json({ sent: 0, successCount: 0, failureCount: 0, errors: [], prefixes: [] });
 
     const message = {
-      notification: { title, body },
+      notification: { title, body, badge: '/icons/icon-192.png' },
       data: { url, kind: 'test-restaurant' },
       android: {
-        notification: { channelId: 'orders', sound: 'beep', priority: 'high' },
+        notification: { channelId: 'orders_sound', sound: 'beep', priority: 'high' },
         priority: 'high',
+      },
+      apns: {
+        payload: { aps: { sound: 'beep.wav' } },
       },
       tokens,
     };

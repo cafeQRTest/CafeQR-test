@@ -183,14 +183,14 @@ export async function sendNewOrderPush({
     android: {
       priority: 'high',
       notification: {
-        channelId: 'orders',
+        channelId: 'orders_sound',
         sound: 'beep',
         tag: `new-order-${orderId}`,
       },
     },
     apns: {
       headers: { 'apns-priority': '10' },
-      payload: { aps: { sound: 'default' } },
+      payload: { aps: { sound: 'beep.wav' } },
     },
   };
 
