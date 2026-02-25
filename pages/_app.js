@@ -58,11 +58,35 @@ async function postSubscribe(token, platform) {
   } catch { }
 }
 
+async function postUnsubscribe(token) {
+  if (!token) return;
+  let rid = null;
+  try {
+    const url = new URL(window.location.href);
+    rid =
+      url.searchParams.get('r') ||
+      url.searchParams.get('rid') ||
+      localStorage.getItem('active_restaurant_id');
+  } catch { }
+  if (!rid) return;
+  try {
+    await fetch(`${process.env.NEXT_PUBLIC_API_BASE || ''}/api/push/unsubscribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ restaurantId: rid, deviceToken: token })
+    });
+  } catch { }
+}
+
 // return async initializers to support the “()()” call style
 function safeInitNative(router) {
   return async () => {
     try {
-      if (!isPushEnabledContext()) return;
+      if (!isPushEnabledContext()) {
+        const { PushNotifications } = await import('@capacitor/push-notifications');
+        await PushNotifications.removeAllListeners().catch(() => { });
+        return;
+      }
       const { PushNotifications } = await import('@capacitor/push-notifications')
       await PushNotifications.createChannel({
         id: 'orders',
@@ -110,7 +134,17 @@ function safeInitWebOnly() {
 
 async function ensureSubscribed() {
   if (typeof window === 'undefined') return
-  if (!isPushEnabledContext()) return;
+
+  if (!isPushEnabledContext()) {
+    // If not in a POS context, attempt to forcefully unsubscribe any leftover tokens.
+    const leftoverToken = getStoredPushToken();
+    if (leftoverToken) {
+      await postUnsubscribe(leftoverToken);
+      setStoredPushToken(''); // Clear it so we don't keep hitting the endpoint
+    }
+    return;
+  }
+
   if (arePushAlertsDisabled()) return
   let token = getStoredPushToken()
   const platform = detectPushPlatform()

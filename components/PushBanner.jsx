@@ -29,6 +29,18 @@ export default function PushBanner() {
             const title = payload.title || payload.notification?.title || payload.data?.title || 'New Order';
             const body = payload.body || payload.notification?.body || payload.data?.body || 'You have a new order.';
             const url = payload.url || payload.data?.url || '/owner/orders';
+            const pushRestaurantId = payload.data?.restaurantId || payload.restaurantId;
+
+            // Strict POS Isolation: Only show push notification if it matches the current active restaurant
+            try {
+                const activeRid = localStorage.getItem('active_restaurant_id');
+                if (pushRestaurantId && activeRid && String(pushRestaurantId) !== String(activeRid)) {
+                    console.log('[PushBanner] Ignoring push for different restaurant:', pushRestaurantId);
+                    return;
+                }
+            } catch (err) {
+                console.warn('[PushBanner] Error checking active_restaurant_id:', err);
+            }
 
             setNotification({ title, body, url, id: Date.now() });
 
