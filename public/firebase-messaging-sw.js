@@ -66,8 +66,19 @@ try {
         icon: '/icons/icon-192.png',
         badge: '/icons/icon-192.png',
         tag: notificationTag,
+        vibrate: [200, 100, 200, 100, 200],
+        silent: false,
         data: { url, orderId, restaurantId, ...payload?.data }
       };
+
+      // In some browsers, playing audio in the background SW context might be blocked without interaction.
+      // But we can still attempt it or rely on the OS's native webpush sound when sent by FCM.
+      try {
+        if (typeof Audio !== 'undefined') {
+          const snd = new Audio('/beep.mp3');
+          snd.play().catch(() => { });
+        }
+      } catch (e) { }
 
       return safeShowNotification(title, options);
     } catch (e) {

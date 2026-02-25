@@ -33,6 +33,23 @@ export default async function handler(req, res) {
         priority: 'high',
         notification: { channelId: 'orders_sound', sound: 'beep', priority: 'high' },
       },
+      webpush: {
+        headers: {
+          Urgency: 'high'
+        },
+        payload: {
+          aps: { sound: 'beep.wav' }
+        },
+        notification: {
+          title: title || '🔔 Test order',
+          body: body || 'Background/killed banner test',
+          icon: '/icons/icon-192.png',
+          badge: '/icons/icon-192.png',
+          vibrate: [200, 100, 200, 100, 200],
+          requireInteraction: true,
+          silent: false
+        }
+      },
       apns: {
         headers: { 'apns-priority': '10' },
         payload: { aps: { sound: 'beep.wav', badge: 1 } },

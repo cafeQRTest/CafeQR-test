@@ -46,6 +46,18 @@ export default async function handler(req, res) {
     const message = {
       notification: { title, body, badge: '/icons/icon-192.png' },
       data: { url, kind: 'test-restaurant' },
+      webpush: {
+        headers: { Urgency: 'high' },
+        fcmOptions: { link: url },
+        notification: {
+          title, body,
+          icon: '/icons/icon-192.png',
+          badge: '/icons/icon-192.png',
+          vibrate: [200, 100, 200, 100, 200],
+          requireInteraction: true,
+          silent: false
+        }
+      },
       android: {
         notification: { channelId: 'orders_sound', sound: 'beep', priority: 'high' },
         priority: 'high',

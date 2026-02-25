@@ -44,19 +44,19 @@ export default function PushBanner() {
 
             setNotification({ title, body, url, id: Date.now() });
 
-            // Play sound
+            // Make alarm repetitive if needed to ensure they hear it
             if (audioRef.current) {
+                audioRef.current.loop = true; // explicitly loop the alarm
                 audioRef.current.currentTime = 0;
                 audioRef.current.play().catch(err => {
                     console.warn('[PushBanner] Could not play audio:', err);
                 });
             }
 
-            // Auto dismiss after 6 seconds
-            if (timerRef.current) clearTimeout(timerRef.current);
-            timerRef.current = setTimeout(() => {
-                setNotification(null);
-            }, 6000);
+            // DO NOT auto-dismiss. We want the alarm to keep ringing 
+            // until the user physically acknowledges the new order!
+            // if (timerRef.current) clearTimeout(timerRef.current);
+            // timerRef.current = setTimeout(() => { ... }, 6000);
         };
 
         window.addEventListener('new-order-push', handlePush);
@@ -64,20 +64,32 @@ export default function PushBanner() {
         return () => {
             window.removeEventListener('new-order-push', handlePush);
             if (timerRef.current) clearTimeout(timerRef.current);
+            if (audioRef.current) {
+                audioRef.current.pause();
+                audioRef.current.currentTime = 0;
+            }
         };
     }, []);
 
     if (!notification) return null;
 
+    const stopAlarm = () => {
+        if (audioRef.current) {
+            audioRef.current.pause();
+            audioRef.current.currentTime = 0;
+        }
+        setNotification(null);
+    };
+
     return (
         <div
             onClick={() => {
+                stopAlarm();
                 if (notification.url) {
                     router.push(notification.url).catch(() => {
                         window.location.href = notification.url;
                     });
                 }
-                setNotification(null);
             }}
             style={{
                 position: 'fixed',
@@ -120,7 +132,7 @@ export default function PushBanner() {
             <button
                 onClick={(e) => {
                     e.stopPropagation();
-                    setNotification(null);
+                    stopAlarm();
                 }}
                 style={{
                     background: 'transparent',

@@ -171,6 +171,9 @@ export async function sendNewOrderPush({
       body,
     },
     webpush: {
+      headers: {
+        Urgency: 'high'
+      },
       fcmOptions: { link: url },
       notification: {
         title: 'New Order',
@@ -178,6 +181,9 @@ export async function sendNewOrderPush({
         icon: '/icons/icon-192.png',
         badge: '/icons/icon-192.png',
         tag: `new-order-${orderId}`,
+        vibrate: [200, 100, 200, 100, 200],
+        requireInteraction: true,
+        silent: false
       },
     },
     android: {
