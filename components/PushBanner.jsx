@@ -11,8 +11,9 @@ export default function PushBanner() {
     useEffect(() => {
         if (typeof window !== 'undefined') {
             const h = window.location.hostname;
-            const isPosDomain = h === 'localhost' || h === '127.0.0.1' || h === 'test-cafeqr.vercel.app';
-            if (!isPosDomain) return;
+            const isTargetDomain = h === 'localhost' || h === '127.0.0.1' || h === 'test-cafeqr.vercel.app';
+            const isDeliveryApp = window.location.pathname.startsWith('/app');
+            if (!isTargetDomain || isDeliveryApp) return;
         }
 
         // Preload audio
