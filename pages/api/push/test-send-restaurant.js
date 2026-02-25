@@ -59,7 +59,7 @@ export default async function handler(req, res) {
         }
       },
       android: {
-        notification: { channelId: 'orders_sound', sound: 'beep', priority: 'high' },
+        notification: { channelId: 'orders_sound_v2', sound: 'beep', priority: 'high' },
         priority: 'high',
       },
       apns: {

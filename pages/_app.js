@@ -58,6 +58,17 @@ async function postSubscribe(token, platform) {
   } catch { }
 }
 
+async function postUnsubscribeDevice(token) {
+  if (!token) return;
+  try {
+    await fetch(`${process.env.NEXT_PUBLIC_API_BASE || ''}/api/push/unsubscribe-device`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deviceToken: token })
+    });
+  } catch { }
+}
+
 async function postUnsubscribe(token) {
   if (!token) return;
   let rid = null;
@@ -89,12 +100,13 @@ function safeInitNative(router) {
       }
       const { PushNotifications } = await import('@capacitor/push-notifications')
       await PushNotifications.createChannel({
-        id: 'orders_sound',
-        name: 'Orders',
+        id: 'orders_sound_v2',
+        name: 'Orders Sound',
         description: 'Order alerts with sound',
         importance: 5,
         visibility: 1,
-        sound: 'beep.wav'
+        sound: 'beep',
+        vibration: true
       }).catch((e) => { console.warn('createChannel', e) })
       PushNotifications.removeAllListeners().catch(() => { })
       PushNotifications.addListener('pushNotificationReceived', notification => {
@@ -141,9 +153,16 @@ async function ensureSubscribed() {
     // If not in a POS context, attempt to forcefully unsubscribe any leftover tokens.
     const leftoverToken = getStoredPushToken();
     if (leftoverToken) {
-      await postUnsubscribe(leftoverToken);
+      await postUnsubscribeDevice(leftoverToken);
       setStoredPushToken(''); // Clear it so we don't keep hitting the endpoint
     }
+    // Edge case for Native Capacitor:
+    // If we're inside the webview and native push wasn't removed...
+    try {
+      const { PushNotifications } = await import('@capacitor/push-notifications');
+      PushNotifications.removeAllListeners().catch(() => { });
+    } catch (e) { }
+
     return;
   }
 

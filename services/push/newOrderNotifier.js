@@ -189,7 +189,7 @@ export async function sendNewOrderPush({
     android: {
       priority: 'high',
       notification: {
-        channelId: 'orders_sound',
+        channelId: 'orders_sound_v2',
         sound: 'beep',
         tag: `new-order-${orderId}`,
       },

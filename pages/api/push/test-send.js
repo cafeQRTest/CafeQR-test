@@ -31,7 +31,7 @@ export default async function handler(req, res) {
       },
       android: {
         priority: 'high',
-        notification: { channelId: 'orders_sound', sound: 'beep', priority: 'high' },
+        notification: { channelId: 'orders_sound_v2', sound: 'beep', priority: 'high' },
       },
       webpush: {
         headers: {
