@@ -9,6 +9,12 @@ export default function PushBanner() {
     const timerRef = useRef(null);
 
     useEffect(() => {
+        if (typeof window !== 'undefined') {
+            const h = window.location.hostname;
+            const isPosDomain = h === 'localhost' || h === '127.0.0.1' || h === 'test-cafeqr.vercel.app';
+            if (!isPosDomain) return;
+        }
+
         // Preload audio
         if (typeof window !== 'undefined') {
             audioRef.current = new Audio('/beep.mp3');

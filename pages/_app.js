@@ -29,6 +29,12 @@ const CUSTOMER_PREFIX = '/order'
 const PUBLIC_EXEMPT = ['/order/success', '/order/thank-you']
 
 // ── helpers (module scope) ───────────────────────────────────────────────────
+function isPosDomain() {
+  if (typeof window === 'undefined') return false;
+  const h = window.location.hostname;
+  return h === 'localhost' || h === '127.0.0.1' || h === 'test-cafeqr.vercel.app';
+}
+
 async function postSubscribe(token, platform) {
   if (!token) return
   let rid = null
@@ -53,6 +59,7 @@ async function postSubscribe(token, platform) {
 function safeInitNative(router) {
   return async () => {
     try {
+      if (!isPosDomain()) return;
       const { PushNotifications } = await import('@capacitor/push-notifications')
       await PushNotifications.createChannel({
         id: 'orders',
@@ -87,6 +94,7 @@ function safeInitNative(router) {
 function safeInitWebOnly() {
   return async () => {
     try {
+      if (!isPosDomain()) return;
       if (arePushAlertsDisabled()) return
       const token = await getFCMToken({ requestPermission: false })
       if (token) {
@@ -99,6 +107,7 @@ function safeInitWebOnly() {
 
 async function ensureSubscribed() {
   if (typeof window === 'undefined') return
+  if (!isPosDomain()) return;
   if (arePushAlertsDisabled()) return
   let token = getStoredPushToken()
   const platform = detectPushPlatform()
