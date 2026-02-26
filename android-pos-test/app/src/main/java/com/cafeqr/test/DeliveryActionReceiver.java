@@ -27,6 +27,10 @@ public class DeliveryActionReceiver extends BroadcastReceiver {
             nm.cancel(2); // DELIVERY_NOTIFICATION_ID = 2
         }
 
+        // Stop the foreground service to kill the looping sound
+        Intent stopService = new Intent(context, MyForegroundService.class);
+        context.stopService(stopService);
+
         // Determine action type
         String actionParam = "accept";
         if ("com.cafeqr.test.ACTION_DECLINE".equals(action)) {

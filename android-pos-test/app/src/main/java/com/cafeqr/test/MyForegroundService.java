@@ -38,7 +38,14 @@ public class MyForegroundService extends Service {
             : buildNotification(intent);
 
         startForeground(isDelivery ? DELIVERY_NOTIFICATION_ID : NOTIFICATION_ID, notification);
-        stopSelf();
+
+        if (isDelivery) {
+            // Keep service alive for 2 minutes so FLAG_INSISTENT keeps looping
+            new android.os.Handler(android.os.Looper.getMainLooper())
+                .postDelayed(this::stopSelf, 120_000);
+        } else {
+            stopSelf();
+        }
         return START_STICKY;
     }
 

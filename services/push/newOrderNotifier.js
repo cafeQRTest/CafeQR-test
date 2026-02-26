@@ -170,57 +170,100 @@ export async function sendNewOrderPush({
 
   const url = `/owner/orders?highlight=${encodeURIComponent(String(orderId))}`;
 
-  const message = {
-    tokens: uniqueTokens,
-    notification: {
-      title: notifTitle,
-      body: notifBody,
-    },
-    data: {
-      type: notifType,
-      orderId: String(orderId),
-      restaurantId: String(restaurantId),
-      url,
-      title: notifTitle,
-      body: notifBody,
-    },
-    webpush: {
-      headers: {
-        Urgency: 'high'
-      },
-      fcmOptions: { link: url },
-      notification: {
+  let message;
+
+  if (isPendingDelivery) {
+    // DATA-ONLY message for delivery orders.
+    // This ensures onMessageReceived ALWAYS fires (even when app is killed),
+    // so our custom ForegroundService with FLAG_INSISTENT (looping sound) runs.
+    message = {
+      tokens: uniqueTokens,
+      // NO top-level "notification" key — critical for background delivery
+      data: {
+        type: notifType,
+        orderId: String(orderId),
+        restaurantId: String(restaurantId),
+        url,
         title: notifTitle,
         body: notifBody,
-        icon: '/icons/icon-192.png',
-        badge: '/icons/icon-192.png',
-        tag: `new-order-${orderId}`,
-        vibrate: isPendingDelivery
-          ? [500, 200, 500, 200, 500, 200, 500, 200, 500]
-          : [300, 100, 300, 100, 300, 100, 300],
-        requireInteraction: true,
-        silent: false,
-        ...(isPendingDelivery ? {
+      },
+      webpush: {
+        headers: { Urgency: 'high' },
+        fcmOptions: { link: url },
+        notification: {
+          title: notifTitle,
+          body: notifBody,
+          icon: '/icons/icon-192.png',
+          badge: '/icons/icon-192.png',
+          tag: `new-order-${orderId}`,
+          vibrate: [500, 200, 500, 200, 500, 200, 500, 200, 500],
+          requireInteraction: true,
+          silent: false,
           actions: [
             { action: 'accept', title: '\u2705 Accept' },
             { action: 'decline', title: '\u274c Decline' },
-          ]
-        } : {}),
+          ],
+        },
       },
-    },
-    android: {
-      priority: 'high',
+      android: {
+        priority: 'high',
+        // NO "notification" sub-key — forces data-only on Android
+      },
+      apns: {
+        headers: { 'apns-priority': '10' },
+        payload: {
+          aps: {
+            'content-available': 1,
+            sound: 'beep.wav',
+            alert: { title: notifTitle, body: notifBody },
+          },
+        },
+      },
+    };
+  } else {
+    // Regular orders: standard notification+data message
+    message = {
+      tokens: uniqueTokens,
       notification: {
-        channelId: isPendingDelivery ? 'delivery_alerts' : 'orders_sound_v2',
-        sound: 'beep',
-        tag: `new-order-${orderId}`,
+        title: notifTitle,
+        body: notifBody,
       },
-    },
-    apns: {
-      headers: { 'apns-priority': '10' },
-      payload: { aps: { sound: 'beep.wav' } },
-    },
-  };
+      data: {
+        type: notifType,
+        orderId: String(orderId),
+        restaurantId: String(restaurantId),
+        url,
+        title: notifTitle,
+        body: notifBody,
+      },
+      webpush: {
+        headers: { Urgency: 'high' },
+        fcmOptions: { link: url },
+        notification: {
+          title: notifTitle,
+          body: notifBody,
+          icon: '/icons/icon-192.png',
+          badge: '/icons/icon-192.png',
+          tag: `new-order-${orderId}`,
+          vibrate: [300, 100, 300, 100, 300, 100, 300],
+          requireInteraction: true,
+          silent: false,
+        },
+      },
+      android: {
+        priority: 'high',
+        notification: {
+          channelId: 'orders_sound_v2',
+          sound: 'beep',
+          tag: `new-order-${orderId}`,
+        },
+      },
+      apns: {
+        headers: { 'apns-priority': '10' },
+        payload: { aps: { sound: 'beep.wav' } },
+      },
+    };
+  }
 
   try {
     const response = await admin.messaging().sendEachForMulticast(message);
