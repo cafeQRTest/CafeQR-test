@@ -77,6 +77,7 @@ export default function Layout({
   showCustomerHeader = false,
 }) {
   const router = useRouter();
+  const { restaurant } = useRestaurant();
 
   // If landing/login/signup page or delivery app routes, render raw children (allows full screen control)
   const fullScreenRoutes = ['/', '/login', '/signup', '/forgot-password'];
@@ -100,6 +101,20 @@ export default function Layout({
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
+
+  // Verify push token to prevent cross-restaurant bleed on unclean swaps
+  useEffect(() => {
+    if (typeof window !== 'undefined' && restaurant?.id) {
+      const token = localStorage.getItem('fcmtoken') || localStorage.getItem('fcm_token');
+      if (token) {
+        fetch('/api/push/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ restaurantId: restaurant.id, deviceToken: token }),
+        }).catch(e => console.warn('Silently failed to verify push token:', e));
+      }
+    }
+  }, [restaurant?.id]);
 
   // Sync scroll lock
   useEffect(() => {
@@ -582,9 +597,9 @@ function Sidebar({ collapsed, onSignOut, isSigningOut }) {
       : []),
     ...(feature.table_ordering_enabled
       ? [
-          { href: '/owner/tables', label: 'Tables', icon: <FaUtensils /> },
-          ...(feature.qr_ordering_enabled !== false ? [{ href: '/owner/availability', label: 'Availability', icon: <FaClock /> }] : [])
-        ]
+        { href: '/owner/tables', label: 'Tables', icon: <FaUtensils /> },
+        ...(feature.qr_ordering_enabled !== false ? [{ href: '/owner/availability', label: 'Availability', icon: <FaClock /> }] : [])
+      ]
       : []),
     ...(feature.production_enabled
       ? [{ href: '/owner/production', label: 'Production', icon: <FaIndustry /> }]
@@ -917,9 +932,9 @@ function MobileSidebar({ onNavigate, onSignOut, isSigningOut }) {
       : []),
     ...(feature.table_ordering_enabled
       ? [
-          { href: '/owner/tables', label: 'Tables', icon: <FaUtensils /> },
-          ...(feature.qr_ordering_enabled !== false ? [{ href: '/owner/availability', label: 'Availability', icon: <FaClock /> }] : [])
-        ]
+        { href: '/owner/tables', label: 'Tables', icon: <FaUtensils /> },
+        ...(feature.qr_ordering_enabled !== false ? [{ href: '/owner/availability', label: 'Availability', icon: <FaClock /> }] : [])
+      ]
       : []),
     ...(feature.production_enabled
       ? [{ href: '/owner/production', label: 'Production', icon: <FaIndustry /> }]
