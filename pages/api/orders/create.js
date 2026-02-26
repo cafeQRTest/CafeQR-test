@@ -366,7 +366,12 @@ export default async function handler(req, res) {
     }));
 
     // 6. Final Status & Payment logic
-    const finalStatus = incomingStatus || 'new';
+    let finalStatus = incomingStatus || 'new';
+
+    // Intercept Delivery Orders for Manual Acceptance
+    if ((String(order_type || '').toLowerCase() === 'delivery' || String(table_number || '').toUpperCase() === 'DELIVERY') && finalStatus === 'new') {
+      finalStatus = 'pending_acceptance';
+    }
 
     // Payment Logic (Mirroring frontend counter.js)
     let processedPaymentMethod = payment_method;
@@ -483,7 +488,8 @@ export default async function handler(req, res) {
 
 
     // 10.5) Send Push Notification IMMEDIATELY before any other background tasks
-    if (String(finalStatus || '').toLowerCase() === 'new') {
+    const statusForPush = String(finalStatus || '').toLowerCase();
+    if (statusForPush === 'new' || statusForPush === 'pending_acceptance') {
       try {
         await sendNewOrderPush({
           supabase,
@@ -492,6 +498,7 @@ export default async function handler(req, res) {
           orderType: order_type,
           tableNumber: table_number,
           totalAmount: finalGrandTotal,
+          status: statusForPush // Pass status to differentiate the push message
         });
       } catch (e) {
         console.warn('Notification dispatch failed (non-blocking):', e?.message || e);
