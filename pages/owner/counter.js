@@ -1819,8 +1819,8 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
   try {
     let order_type = 'counter';
     let table_number = null;
-    if (orderSelect === 'parcel') order_type = 'takeaway';
-    else if (orderSelect === 'delivery') order_type = 'delivery';
+    if (orderSelect === 'takeaway' || orderSelect === 'parcel') order_type = 'takeaway';
+    else if (orderSelect === 'delivery' || orderSelect === 'Home Delivery') order_type = 'delivery';
     else if (orderSelect && orderSelect.startsWith('table:')) {
       order_type = 'dine-in';
       table_number = orderSelect.split(':')[1] || null;
@@ -2031,7 +2031,7 @@ async function getBearerTokenOrThrow() {
   async function doCreateKitchenOrder() {
     let order_type = 'counter';
     let table_number = null;
-    if (orderSelect === 'parcel') order_type = 'takeaway';
+    if (orderSelect === 'takeaway' || orderSelect === 'parcel') order_type = 'takeaway';
     else if (orderSelect === 'delivery') order_type = 'delivery';
     else if (orderSelect && orderSelect.startsWith('table:')) {
       order_type = 'dine-in';

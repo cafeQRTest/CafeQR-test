@@ -110,6 +110,7 @@ export default function OwnerCustomersPage() {
           phone,
           email,
           address,
+          age,
           loyalty_program_id,
           created_at
         `)
@@ -127,6 +128,7 @@ export default function OwnerCustomersPage() {
         displayPhone: r.phone || 'No Phone',
         email: r.email || '',
         address: r.address || '',
+        age: r.age || '',
         total_spent: Number(r.total_spent || 0),
         order_count: Number(r.order_count || 0), 
         visit_count: Number(r.visit_count || 0),
@@ -385,6 +387,8 @@ export default function OwnerCustomersPage() {
       name: c.name,
       email: c.email,
       originalEmail: c.email,
+      age: c.age || '',
+      originalAge: c.age || '',
       order_count: c.order_count || 0,
       loyalty_program_id: c.loyalty_program_id || '', // Load into edit state
       originalLoyaltyId: c.loyalty_program_id || '',
@@ -418,6 +422,8 @@ export default function OwnerCustomersPage() {
       name: '',
       email: '',
       originalEmail: '',
+      age: '',
+      originalAge: '',
       loyalty_program_id: '', // Default to empty
       addresses: []
     });
@@ -432,6 +438,7 @@ export default function OwnerCustomersPage() {
     try {
       const newPhone = editData.phone?.trim() || null;
       const newName = editData.name?.trim();
+      const newAge = editData.age ? parseInt(editData.age, 10) : null;
       
       // Check if this is a new customer or an update
       const isNewCustomer = !editData.customer_id;
@@ -493,6 +500,7 @@ export default function OwnerCustomersPage() {
             phone: newPhone,
             email: editData.email?.trim() || null,
             address: null,
+            age: newAge,
             total_spent: 0,
             visit_count: 0,
             is_active: true,
@@ -560,6 +568,7 @@ export default function OwnerCustomersPage() {
             phone: newPhone,
             email: editData.email?.trim() || null,
             address: addrString?.trim() || null,
+            age: newAge,
             loyalty_program_id: editData.loyalty_program_id || null, // Update program
             updated_at: new Date().toISOString()
           })
@@ -904,6 +913,7 @@ export default function OwnerCustomersPage() {
                         name: c.name,
                         email: c.email,
                         address: c.address,
+                        age: c.age,
                         loyalty_program_id: c.loyalty_program_id || ''
                      })}>
                         Edit
@@ -1251,17 +1261,33 @@ export default function OwnerCustomersPage() {
                     </div>
                  </div>
 
-                 <div className="form-group-premium" style={{ marginTop: 14 }}>
-                    <label style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 6, display: 'block', letterSpacing: '0.05em' }}>
-                       📧 Email Address
-                    </label>
-                    <input 
-                      type="email" 
-                      value={editData.email} 
-                      onChange={e => setEditData({...editData, email: e.target.value})} 
-                      placeholder="e.g. guest@example.com"
-                      style={{ width: '100%', padding: '12px 14px', borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 14, outline: 'none', transition: 'border 0.2s', background: '#fff' }}
-                    />
+                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                    <div className="form-group-premium" style={{ marginTop: 14 }}>
+                       <label style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 6, display: 'block', letterSpacing: '0.05em' }}>
+                          📧 Email Address
+                       </label>
+                       <input 
+                         type="email" 
+                         value={editData.email} 
+                         onChange={e => setEditData({...editData, email: e.target.value})} 
+                         placeholder="e.g. guest@example.com"
+                         style={{ width: '100%', padding: '12px 14px', borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 14, outline: 'none', transition: 'border 0.2s', background: '#fff' }}
+                       />
+                    </div>
+                    <div className="form-group-premium" style={{ marginTop: 14 }}>
+                       <label style={{ fontSize: 10, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', marginBottom: 6, display: 'block', letterSpacing: '0.05em' }}>
+                          🎂 Age
+                       </label>
+                       <input 
+                         type="number" 
+                         value={editData.age || ''} 
+                         onChange={e => setEditData({...editData, age: e.target.value})} 
+                         placeholder="e.g. 25"
+                         min="0"
+                         max="150"
+                         style={{ width: '100%', padding: '12px 14px', borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 14, outline: 'none', transition: 'border 0.2s', background: '#fff' }}
+                       />
+                    </div>
                  </div>
 
                  {/* Loyalty Program Selector */}
@@ -1669,7 +1695,7 @@ export default function OwnerCustomersPage() {
               </div>
               <div className="modal-foot">
                  <Button variant="outline" onClick={() => setEditData(null)} disabled={processing}>Cancel</Button>
-                  <Button onClick={handleUpdateCustomer} disabled={processing || (editData.customer_id && editData.name === editData.originalName && editData.phone === editData.originalPhone && (editData.email || '') === (editData.originalEmail || '') && (editData.loyalty_program_id || '') === (editData.originalLoyaltyId || ''))}>
+                  <Button onClick={handleUpdateCustomer} disabled={processing || (editData.customer_id && editData.name === editData.originalName && editData.phone === editData.originalPhone && (editData.email || '') === (editData.originalEmail || '') && (editData.age || '') == (editData.originalAge || '') && (editData.loyalty_program_id || '') === (editData.originalLoyaltyId || ''))}>
                      {processing ? 'Saving...' : (editData.customer_id ? 'Save Changes' : 'Save Customer')}
                   </Button>
               </div>
@@ -1976,7 +2002,7 @@ export default function OwnerCustomersPage() {
                     </div>
                  </div>
 
-                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
+                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 24 }}>
                     <div className="info-box" style={{ margin: 0, flexDirection: 'column', gap: 4, background: '#fff', border: '1px solid #f1f5f9' }}>
                        <span style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>PHONE</span>
                        <span style={{ fontSize: 14, fontWeight: 600, color: '#334155' }}>{viewCustomer.phone || '-'}</span>
@@ -1984,6 +2010,10 @@ export default function OwnerCustomersPage() {
                     <div className="info-box" style={{ margin: 0, flexDirection: 'column', gap: 4, background: '#fff', border: '1px solid #f1f5f9' }}>
                        <span style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>EMAIL</span>
                        <span style={{ fontSize: 14, fontWeight: 600, color: '#334155' }}>{viewCustomer.email || '-'}</span>
+                    </div>
+                    <div className="info-box" style={{ margin: 0, flexDirection: 'column', gap: 4, background: '#fff', border: '1px solid #f1f5f9' }}>
+                       <span style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>AGE</span>
+                       <span style={{ fontSize: 14, fontWeight: 600, color: '#334155' }}>{viewCustomer.age || '-'}</span>
                     </div>
                  </div>
                  
@@ -2063,6 +2093,7 @@ export default function OwnerCustomersPage() {
                         name: viewCustomer.name,
                         email: viewCustomer.email,
                         address: viewCustomer.address,
+                        age: viewCustomer.age,
                         loyalty_program_id: viewCustomer.loyalty_program_id || '',
                         originalLoyaltyId: viewCustomer.loyalty_program_id || '',
                         addresses: [] // Will likely need to load.
