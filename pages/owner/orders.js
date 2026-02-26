@@ -222,6 +222,12 @@ const ColumnHeader = styled.div`
   }
 `;
 
+const deliveryPulse = keyframes`
+  0% { box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.6); }
+  70% { box-shadow: 0 0 0 10px rgba(249, 115, 22, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(249, 115, 22, 0); }
+`;
+
 const OrderCardStyled = styled.div`
   background: white;
   border-radius: 12px;
@@ -241,6 +247,12 @@ const OrderCardStyled = styled.div`
     border-color: ${BRAND.orange}40;
   }
 
+  &.is-pending {
+    border: 2px solid ${BRAND.orange};
+    border-left: 6px solid ${BRAND.orange};
+    background: #fff7ed;
+    animation: ${deliveryPulse} 2s infinite;
+  }
   &.is-new {
     border-top: 4px solid #3b82f6;
   }
@@ -369,11 +381,12 @@ const TooltipSpan = styled.span`
 
 
 // Constants
-const STATUSES = ['new','in_progress','ready','completed'];
-const LABELS = { new: 'New', in_progress: 'Cooking', ready: 'Ready', completed: 'Done' };
-const COLORS = { new: '#3b82f6', in_progress: '#f59e0b', ready: '#10b981', completed: '#10b981' };
+const STATUSES = ['pending_acceptance', 'new', 'in_progress', 'ready', 'completed'];
+const LABELS = { pending_acceptance: 'Incoming', new: 'New', in_progress: 'Cooking', ready: 'Ready', completed: 'Done' };
+const COLORS = { pending_acceptance: '#f97316', new: '#3b82f6', in_progress: '#f59e0b', ready: '#10b981', completed: '#10b981' };
 const PAGE_SIZE = 20;
 const UI_COLUMNS = [
+  { id: 'pending', label: 'Incoming 🚀', statuses: ['pending_acceptance'] },
   { id: 'new', label: 'New', statuses: ['new'] },
   { id: 'inprogress', label: 'In Progress', statuses: ['in_progress', 'ready'] },
   { id: 'completed', label: 'Done', statuses: ['completed'] },
@@ -389,7 +402,7 @@ async function restoreStockForOrder(supabase, restaurantId, orderItems) {
 
   for (const oi of orderItems) {
     console.log('[STOCK RESTORE] Processing item:', { menu_item_id: oi.menu_item_id, quantity: oi.quantity, is_packaged: oi.is_packaged_good });
-    
+
     if (!oi.menu_item_id || !oi.quantity) {
       console.log('[STOCK RESTORE] Skipping - no menu_item_id or quantity');
       continue;
@@ -401,7 +414,7 @@ async function restoreStockForOrder(supabase, restaurantId, orderItems) {
     // Fetch recipe for this menu item
     // Fetch recipe for this menu item
     // We need to handle variants if present
-    
+
     // Attempt to find specific recipe for variant, else base
     let recipeQuery = supabase
       .from('recipes')
@@ -410,9 +423,9 @@ async function restoreStockForOrder(supabase, restaurantId, orderItems) {
       .eq('restaurant_id', restaurantId)
 
     const { data: potentialRecipes, error: recipeErr } = await recipeQuery
-    
+
     console.log('[STOCK RESTORE] Recipe fetch result:', { potentialRecipes, error: recipeErr })
-    
+
     if (recipeErr || !potentialRecipes?.length) {
       console.log('[STOCK RESTORE] No recipes found or error')
       continue
@@ -427,17 +440,17 @@ async function restoreStockForOrder(supabase, restaurantId, orderItems) {
         .from('variant_pricing')
         .select('variant_options!inner(id, name)')
         .eq('menu_item_id', oi.menu_item_id);
-      
+
       if (vpErr) console.error('[STOCK RESTORE] Lookup error:', vpErr);
 
       if (vpData) {
         const normName = oi.variant_name.trim().toLowerCase();
         const match = vpData.find(v => v.variant_options?.name?.trim().toLowerCase() === normName);
         if (match && match.variant_options?.id) {
-            targetVariantId = match.variant_options.id;
-            console.log('[STOCK RESTORE] RESOLVED ID:', targetVariantId);
+          targetVariantId = match.variant_options.id;
+          console.log('[STOCK RESTORE] RESOLVED ID:', targetVariantId);
         } else {
-            console.log('[STOCK RESTORE] No match found for name:', normName);
+          console.log('[STOCK RESTORE] No match found for name:', normName);
         }
       }
     }
@@ -447,7 +460,7 @@ async function restoreStockForOrder(supabase, restaurantId, orderItems) {
       if (!rId || !targetVariantId) return false; // One is null
       return String(rId) === String(targetVariantId);
     })
-    
+
     // Fallback to base
     if (!recipe && targetVariantId) {
       recipe = potentialRecipes.find(r => r.variant_option_id === null)
@@ -455,17 +468,17 @@ async function restoreStockForOrder(supabase, restaurantId, orderItems) {
     // If absolutely no match found (and no base), maybe pick first? Or behave strictly?
     // Let's behave strictly - if no base and no variant recipe, then no ingredients deducted.
     if (!recipe && !targetVariantId && potentialRecipes.length > 0) {
-        recipe = potentialRecipes.find(r => r.variant_option_id === null)
+      recipe = potentialRecipes.find(r => r.variant_option_id === null)
     }
 
     if (!recipe?.recipe_items?.length) {
-       console.log('[STOCK RESTORE] No recipe items found for matched recipe')
-       continue
+      console.log('[STOCK RESTORE] No recipe items found for matched recipe')
+      continue
     }
 
     for (const ri of recipe.recipe_items) {
       console.log('[STOCK RESTORE] Processing ingredient:', ri.ingredient_id);
-      
+
       // Get current stock
       const { data: ing, error: ingErr } = await supabase
         .from('ingredients')
@@ -473,7 +486,7 @@ async function restoreStockForOrder(supabase, restaurantId, orderItems) {
         .eq('id', ri.ingredient_id)
         .eq('restaurant_id', restaurantId)
         .single();
-      
+
       if (ingErr || !ing) {
         console.error('[STOCK RESTORE] Ingredient fetch failed:', ingErr);
         continue;
@@ -485,12 +498,12 @@ async function restoreStockForOrder(supabase, restaurantId, orderItems) {
       const oldStock = Number(ing.current_stock || 0);
       const newStock = roundP(oldStock + addBack, precision);
       console.log('[STOCK RESTORE] Updating stock for', ing.name, ':', oldStock, '→', newStock);
-      
+
       const { error: updateErr } = await supabase
         .from('ingredients')
         .update({ current_stock: newStock, updated_at: new Date().toISOString() })
         .eq('id', ing.id);
-      
+
       if (updateErr) {
         console.error('[STOCK RESTORE] Update failed:', updateErr);
       } else {
@@ -510,7 +523,7 @@ function timeAgo(dateString) {
   const now = new Date();
   const diffMs = now - date;
   const diffMins = Math.floor(diffMs / 60000);
-  
+
   if (diffMins < 1) return 'Just now';
   if (diffMins < 60) return `${diffMins}m ago`;
   const hours = Math.floor(diffMins / 60);
@@ -565,7 +578,7 @@ function toDisplayItems(order) {
 
 
 
- // Local EditOrderPanel removed. Imported from ../../components/EditOrderPanel
+// Local EditOrderPanel removed. Imported from ../../components/EditOrderPanel
 
 
 
@@ -593,7 +606,7 @@ function CancelConfirmDialog({ order, onConfirm, onCancel }) {
       backgroundColor: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(5px)',
       display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: 12
     }}>
-      <div style={{ 
+      <div style={{
         backgroundColor: 'white', padding: 20, borderRadius: 16, maxWidth: 320, width: '100%',
         boxShadow: '0 12px 24px -10px rgba(0, 0, 0, 0.15)',
         animation: 'fadeIn 0.2s ease-out'
@@ -602,19 +615,19 @@ function CancelConfirmDialog({ order, onConfirm, onCancel }) {
         <p style={{ fontSize: 12, color: '#64748b', lineHeight: 1.4, marginBottom: 16 }}>
           Are you sure you want to cancel order <strong>#{order.id.slice(0, 8)}</strong>? This cannot be undone.
         </p>
-        
+
         <label style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Reason</label>
         <textarea
           value={reason}
           onChange={e => setReason(e.target.value)}
           rows={2}
-          style={{ 
+          style={{
             width: '100%', padding: '10px', fontSize: 12, borderRadius: 10, border: '1.5px solid #e2e8f0',
             outline: 'none', background: '#f8fafc', color: '#1e293b', marginBottom: 20
           }}
           placeholder="e.g. Mistake in order"
         />
-        
+
         <div style={{ display: 'flex', gap: 8 }}>
           <Button onClick={onCancel} variant="outline" style={{ flex: 1, height: 38, borderRadius: 10, fontSize: 13 }} disabled={submitting}>
             Keep
@@ -636,38 +649,38 @@ function PaxEditDialog({ order, onSave, onClose }) {
       backgroundColor: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(5px)',
       display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: 12
     }}>
-      <div style={{ 
+      <div style={{
         backgroundColor: 'white', padding: 20, borderRadius: 16, width: '100%', maxWidth: 280,
         boxShadow: '0 12px 24px -10px rgba(0, 0, 0, 0.15)',
         animation: 'fadeIn 0.2s ease-out'
       }}>
         <h3 style={{ fontSize: 16, fontWeight: 800, color: '#0f172a', margin: '0 0 4px 0', letterSpacing: '-0.01em' }}>Update Pax</h3>
         <p style={{ fontSize: 11, color: '#64748b', marginBottom: 12 }}>
-            Set count for <strong>{order.table_number ? `T-${order.table_number}` : 'Counter'}</strong>
+          Set count for <strong>{order.table_number ? `T-${order.table_number}` : 'Counter'}</strong>
         </p>
-        
+
         <label style={{ fontSize: 9, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Number of Pax</label>
-        <input 
-            type="number"
-            autoFocus
-            value={val}
-            onChange={e => {
-              const v = e.target.value;
-              if (v === '') setVal('');
-              else {
-                const n = parseInt(v, 10);
-                if (n >= 0) setVal(n);
-              }
-            }}
-            placeholder="0"
-            style={{ 
-                width: '100%', padding: '10px', fontSize: 16, fontWeight: 700,
-                border: '1.5px solid #e2e8f0', borderRadius: 10,
-                outline: 'none', background: '#f8fafc', color: '#0f172a',
-                marginBottom: 16, textAlign: 'center'
-            }}
+        <input
+          type="number"
+          autoFocus
+          value={val}
+          onChange={e => {
+            const v = e.target.value;
+            if (v === '') setVal('');
+            else {
+              const n = parseInt(v, 10);
+              if (n >= 0) setVal(n);
+            }
+          }}
+          placeholder="0"
+          style={{
+            width: '100%', padding: '10px', fontSize: 16, fontWeight: 700,
+            border: '1.5px solid #e2e8f0', borderRadius: 10,
+            outline: 'none', background: '#f8fafc', color: '#0f172a',
+            marginBottom: 16, textAlign: 'center'
+          }}
         />
-        
+
         <div style={{ display: 'flex', gap: 8 }}>
           <Button onClick={onClose} variant="outline" style={{ flex: 1, height: 38, borderRadius: 10, fontSize: 13 }}>Cancel</Button>
           <Button onClick={() => onSave(val)} style={{ flex: 1.5, height: 38, borderRadius: 10, background: BRAND.orange, color: 'white', fontSize: 13 }}>Update</Button>
@@ -687,38 +700,38 @@ function TableEditDialog({ order, onSave, onClose, tables = [], tablesCount = 0 
   });
 
   const tableOptions = useMemo(() => {
-     // Only available tables can be moved to
-     const availableTables = tables.filter(t => t.status === 'available');
+    // Only available tables can be moved to
+    const availableTables = tables.filter(t => t.status === 'available');
 
-     const options = availableTables.map(t => ({
-         value: `table:${t.identifier}`,
-         label: t.identifier.match(/^\d+$/) ? `Table ${t.identifier}` : t.identifier,
-         sortKey: t.identifier
-     }));
+    const options = availableTables.map(t => ({
+      value: `table:${t.identifier}`,
+      label: t.identifier.match(/^\d+$/) ? `Table ${t.identifier}` : t.identifier,
+      sortKey: t.identifier
+    }));
 
-     // 2. Add numeric fallbacks only for counts (no status info available for fallbacks)
-     const existingIds = new Set(tables.map(t => String(t.identifier)));
-     for (let i = 1; i <= tablesCount; i++) {
-        const idStr = String(i);
-        if (!existingIds.has(idStr)) {
-             const hasSimilar = tables.some(t => {
-                 const num = t.identifier.replace(/\D/g, '');
-                 return num === idStr;
-             });
-             if (!hasSimilar) {
-                options.push({
-                   value: `table:${i}`,
-                   label: `Table ${i}`,
-                   sortKey: i
-                });
-             }
+    // 2. Add numeric fallbacks only for counts (no status info available for fallbacks)
+    const existingIds = new Set(tables.map(t => String(t.identifier)));
+    for (let i = 1; i <= tablesCount; i++) {
+      const idStr = String(i);
+      if (!existingIds.has(idStr)) {
+        const hasSimilar = tables.some(t => {
+          const num = t.identifier.replace(/\D/g, '');
+          return num === idStr;
+        });
+        if (!hasSimilar) {
+          options.push({
+            value: `table:${i}`,
+            label: `Table ${i}`,
+            sortKey: i
+          });
         }
-     }
+      }
+    }
 
-     // 3. Sort
-     return options.sort((a, b) => {
-        return String(a.sortKey).localeCompare(String(b.sortKey), undefined, { numeric: true, sensitivity: 'base' });
-     });
+    // 3. Sort
+    return options.sort((a, b) => {
+      return String(a.sortKey).localeCompare(String(b.sortKey), undefined, { numeric: true, sensitivity: 'base' });
+    });
 
   }, [tables, tablesCount]);
 
@@ -728,14 +741,14 @@ function TableEditDialog({ order, onSave, onClose, tables = [], tablesCount = 0 
       backgroundColor: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(5px)',
       display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: 12
     }} onClick={onClose}>
-      <div style={{ 
+      <div style={{
         backgroundColor: 'white', padding: 20, borderRadius: 16, width: '100%', maxWidth: 320,
         boxShadow: '0 12px 24px -10px rgba(0, 0, 0, 0.15)',
         animation: 'fadeIn 0.2s ease-out'
       }} onClick={e => e.stopPropagation()}>
         <h3 style={{ fontSize: 16, fontWeight: 800, color: '#0f172a', margin: '0 0 4px 0', letterSpacing: '-0.01em' }}>Update Table / Type</h3>
         <p style={{ fontSize: 11, color: '#64748b', marginBottom: 16 }}>
-            Set location for Order <strong>#{order.id.slice(0,6)}</strong>
+          Set location for Order <strong>#{order.id.slice(0, 6)}</strong>
         </p>
 
         <div style={{ marginBottom: 20 }}>
@@ -750,11 +763,11 @@ function TableEditDialog({ order, onSave, onClose, tables = [], tablesCount = 0 
             ]}
           />
         </div>
-        
+
         <div style={{ display: 'flex', gap: 8 }}>
           <Button onClick={onClose} variant="outline" style={{ flex: 1, height: 38, borderRadius: 10, fontSize: 13 }}>Cancel</Button>
-          <Button 
-            onClick={() => onSave(val)} 
+          <Button
+            onClick={() => onSave(val)}
             disabled={!val}
             style={{ flex: 1.5, height: 38, borderRadius: 10, background: BRAND.orange, color: 'white', fontSize: 13 }}
           >
@@ -795,15 +808,15 @@ export default function OrdersPage() {
   const channelRef = useRef(null);
 
   const [ordersByStatus, setOrdersByStatus] = useState({
-    new: [], in_progress: [], ready: [], completed: [], mobileFilter: 'new'
+    pending_acceptance: [], new: [], in_progress: [], ready: [], completed: [], mobileFilter: 'pending'
   });
-  
+
   const [tablesCount, setTablesCount] = useState(0);
   const [tables, setTables] = useState([]);
 
   useEffect(() => {
     if (!restaurantId || !supabase) return;
-    
+
     // Fetch tables count (keep for backward compat if needed elsewhere)
     supabase
       .from('restaurant_profiles')
@@ -820,18 +833,18 @@ export default function OrdersPage() {
       .select('*')
       .eq('restaurant_id', restaurantId)
       .eq('is_active', true)
-      .order('identifier', { ascending: true }) 
+      .order('identifier', { ascending: true })
       .then(({ data }) => {
-        if (data) { 
-           // Robust alphanumeric sort (T1, T2, T10...)
-           const sorted = data.sort((a, b) => {
-              return a.identifier.localeCompare(b.identifier, undefined, { numeric: true, sensitivity: 'base' });
-           });
-           setTables(sorted);
+        if (data) {
+          // Robust alphanumeric sort (T1, T2, T10...)
+          const sorted = data.sort((a, b) => {
+            return a.identifier.localeCompare(b.identifier, undefined, { numeric: true, sensitivity: 'base' });
+          });
+          setTables(sorted);
         }
       });
   }, [restaurantId, supabase]);
-  
+
   const [completedPage, setCompletedPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -839,7 +852,7 @@ export default function OrdersPage() {
   const [paymentConfirmDialog, setPaymentConfirmDialog] = useState(null);
   const [itemsModalOrder, setItemsModalOrder] = useState(null); // Global state for items modal
   const [modalLoyalty, setModalLoyalty] = useState(null); // { earned, used, amount_used }
-  
+
   useEffect(() => {
     if (!itemsModalOrder || !supabase) {
       setModalLoyalty(null);
@@ -850,26 +863,26 @@ export default function OrdersPage() {
         .from('loyalty_transactions')
         .select('txn_type, points_delta, points_earned, points_redeemed, amount_value')
         .eq('order_id', itemsModalOrder.id);
-      
+
       if (!error && data) {
-         const earned = data.reduce((s, t) => s + (Number(t.points_earned) || (t.txn_type === 'earn' ? Math.abs(t.points_delta) : 0)), 0);
-         const used = data.reduce((s, t) => s + (Number(t.points_redeemed) || (t.txn_type === 'redeem' ? Math.abs(t.points_delta) : 0)), 0);
-         const amt = data.reduce((s, t) => s + (t.txn_type === 'redeem' ? Number(t.amount_value || 0) : 0), 0);
-         setModalLoyalty({ earned, used, amount_used: amt });
+        const earned = data.reduce((s, t) => s + (Number(t.points_earned) || (t.txn_type === 'earn' ? Math.abs(t.points_delta) : 0)), 0);
+        const used = data.reduce((s, t) => s + (Number(t.points_redeemed) || (t.txn_type === 'redeem' ? Math.abs(t.points_delta) : 0)), 0);
+        const amt = data.reduce((s, t) => s + (t.txn_type === 'redeem' ? Number(t.amount_value || 0) : 0), 0);
+        setModalLoyalty({ earned, used, amount_used: amt });
       }
     };
     fetchModalLoyalty();
   }, [itemsModalOrder, supabase]);
 
   const notificationAudioRef = useRef(null);
-  
+
   // Search State
   const [searchQuery, setSearchQuery] = useState('');
-  
+
   // Touch state for swipe 
   const [touchStart, setTouchStart] = useState(null);
   const [touchEnd, setTouchEnd] = useState(null);
-  const minSwipeDistance = 50; 
+  const minSwipeDistance = 50;
 
   const onTouchStart = (e) => {
     setTouchEnd(null); // Reset
@@ -885,7 +898,7 @@ export default function OrdersPage() {
     const distance = touchStart - touchEnd;
     const isLeftSwipe = distance > minSwipeDistance;
     const isRightSwipe = distance < -minSwipeDistance;
-    
+
     // UI_COLUMNS: [0:new, 1:inprogress, 2:completed]
     const currentIndex = UI_COLUMNS.findIndex(c => c.id === ordersByStatus.mobileFilter);
     if (currentIndex === -1) return;
@@ -893,13 +906,13 @@ export default function OrdersPage() {
     if (isLeftSwipe) {
       // Next tab (swipe left)
       if (currentIndex < UI_COLUMNS.length - 1) {
-        setOrdersByStatus(prev => ({...prev, mobileFilter: UI_COLUMNS[currentIndex + 1].id}));
+        setOrdersByStatus(prev => ({ ...prev, mobileFilter: UI_COLUMNS[currentIndex + 1].id }));
       }
-    } 
+    }
     if (isRightSwipe) {
       // Prev tab (swipe right)
       if (currentIndex > 0) {
-        setOrdersByStatus(prev => ({...prev, mobileFilter: UI_COLUMNS[currentIndex - 1].id}));
+        setOrdersByStatus(prev => ({ ...prev, mobileFilter: UI_COLUMNS[currentIndex - 1].id }));
       }
     }
   };
@@ -942,7 +955,7 @@ export default function OrdersPage() {
           const r = await fetch('/api/push/echo?rid=' + encodeURIComponent(restaurantId));
           const j = await r.json();
           console.log('[push] echo', j);
-        } catch {}
+        } catch { }
       } catch (e) {
         console.warn('[push] subscribe error', e);
       }
@@ -980,7 +993,7 @@ export default function OrdersPage() {
       if (!a) return;
       const wasMuted = a.muted;
       a.muted = true;
-      a.play().catch(() => {});
+      a.play().catch(() => { });
       a.pause();
       a.currentTime = 0;
       a.muted = wasMuted;
@@ -1009,351 +1022,410 @@ export default function OrdersPage() {
   }, []);
 
 
-const onCancelOrderOpen = (order) => {
-  if (!canCancel) {
-    setError('Staff accounts cannot cancel orders.');
-    return;
-  }
-  setCancelOrderDialog(order);
-};
+  const onCancelOrderOpen = (order) => {
+    if (!canCancel) {
+      setError('Staff accounts cannot cancel orders.');
+      return;
+    }
+    setCancelOrderDialog(order);
+  };
 
-const handleCancelConfirm = async (reason) => {
-  if (!cancelOrderDialog) return;
-  console.log('[CANCEL ORDER] Starting cancellation for order:', cancelOrderDialog.id);
-  try {
-       // Get full order with items before cancelling
-       const fullOrder = await fetchFullOrder(supabase, cancelOrderDialog.id);
-       console.log('[CANCEL ORDER] Full order fetched:', fullOrder);
-       console.log('[CANCEL ORDER] order_items:', fullOrder?.order_items);
-       console.log('[CANCEL ORDER] order_items length:', fullOrder?.order_items?.length);
-       console.log('[CANCEL ORDER] order_items is array?', Array.isArray(fullOrder?.order_items));
+  const handleCancelConfirm = async (reason) => {
+    if (!cancelOrderDialog) return;
+    console.log('[CANCEL ORDER] Starting cancellation for order:', cancelOrderDialog.id);
+    try {
+      // Get full order with items before cancelling
+      const fullOrder = await fetchFullOrder(supabase, cancelOrderDialog.id);
+      console.log('[CANCEL ORDER] Full order fetched:', fullOrder);
+      console.log('[CANCEL ORDER] order_items:', fullOrder?.order_items);
+      console.log('[CANCEL ORDER] order_items length:', fullOrder?.order_items?.length);
+      console.log('[CANCEL ORDER] order_items is array?', Array.isArray(fullOrder?.order_items));
 
-       // Cancel the order
-       await supabase
-       .from('orders')
-       .update({ status: 'cancelled', description: reason })
-       .eq('id', cancelOrderDialog.id)
-       .eq('restaurant_id', restaurantId);
-       console.log('[CANCEL ORDER] Order status updated to cancelled');
+      // Cancel the order
+      await supabase
+        .from('orders')
+        .update({ status: 'cancelled', description: reason })
+        .eq('id', cancelOrderDialog.id)
+        .eq('restaurant_id', restaurantId);
+      console.log('[CANCEL ORDER] Order status updated to cancelled');
 
-       if (fullOrder?.table_number) {
-         try {
-           await supabase
-             .from('tables')
-             .update({ status: 'available', current_order_id: null })
-             .eq('restaurant_id', restaurantId)
-             .eq('identifier', fullOrder.table_number);
-         } catch(e) { console.error('Error releasing table:', e); }
-       }
-   
+      if (fullOrder?.table_number) {
+        try {
+          await supabase
+            .from('tables')
+            .update({ status: 'available', current_order_id: null })
+            .eq('restaurant_id', restaurantId)
+            .eq('identifier', fullOrder.table_number);
+        } catch (e) { console.error('Error releasing table:', e); }
+      }
+
       const { data: invoice } = await supabase
-      .from('invoices')
-      .select('id')
-      .eq('order_id', cancelOrderDialog.id)
-      .eq('restaurant_id', restaurantId)
-      .maybeSingle();
+        .from('invoices')
+        .select('id')
+        .eq('order_id', cancelOrderDialog.id)
+        .eq('restaurant_id', restaurantId)
+        .maybeSingle();
 
       if (invoice) {
-      console.log('[CANCEL ORDER] Found invoice, voiding:', invoice.id);
-      const res = await fetch('/api/invoices/void', {
+        console.log('[CANCEL ORDER] Found invoice, voiding:', invoice.id);
+        const res = await fetch('/api/invoices/void', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            invoice_id: invoice.id,
+            restaurant_id: restaurantId,
+            reason: reason,
+          }),
+        });
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}));
+          console.warn('[CANCEL ORDER] Invoice void failed (non-critical):', j?.error);
+          // Don't throw - order cancel + stock restore should succeed anyway
+        } else {
+          console.log('[CANCEL ORDER] Invoice voided successfully');
+        }
+      } else {
+        console.log('[CANCEL ORDER] No invoice found - skipping void');
+
+        // Attempt manual loyalty reversal for non-invoiced orders (e.g. if points were redeemed on a New order)
+        if (restaurant?.loyalty_enabled) {
+          console.log('[CANCEL ORDER] Loyalty enabled, checking/reversing transactions for non-invoiced order');
+          try {
+            await LoyaltyService.handleOrderReversal(supabase, {
+              restaurant_id: restaurantId,
+              order_id: cancelOrderDialog.id
+            });
+            console.log('[CANCEL ORDER] Manual Loyalty Reversal Checked/Completed');
+          } catch (error) {
+            console.error('[CANCEL ORDER] Loyalty reversal failed:', error);
+          }
+        }
+      }
+      // Restore stock for cancelled order
+      let itemsToRestore = fullOrder?.order_items;
+
+      // Fallback: if order_items is empty, try to use items JSONB column
+      if ((!itemsToRestore || itemsToRestore.length === 0) && fullOrder?.items && Array.isArray(fullOrder.items)) {
+        console.log('[CANCEL ORDER] order_items empty, using items JSONB column');
+        console.log('[CANCEL ORDER] Raw items JSONB:', fullOrder.items);
+
+        // Convert items JSONB to order_items format
+        // Need to look up menu_item_id by name if not present
+        const itemsToConvert = [];
+        for (const item of fullOrder.items) {
+          console.log('[CANCEL ORDER] Processing item from JSONB:', item);
+          let menuItemId = item.id || item.menu_item_id || null;
+
+          // If no ID, try to look up by name
+          if (!menuItemId && item.name) {
+            console.log('[CANCEL ORDER] Looking up menu item by name:', item.name);
+            const { data: menuItem, error: lookupErr } = await supabase
+              .from('menu_items')
+              .select('id, is_packaged_good')
+              .eq('restaurant_id', restaurantId)
+              .ilike('name', item.name)
+              .maybeSingle();
+
+            if (!lookupErr && menuItem) {
+              menuItemId = menuItem.id;
+              console.log('[CANCEL ORDER] Found menu item ID:', menuItemId);
+              item.is_packaged_good = menuItem.is_packaged_good;
+            } else {
+              console.warn('[CANCEL ORDER] Could not find menu item for name:', item.name);
+            }
+          }
+
+          itemsToConvert.push({
+            menu_item_id: menuItemId,
+            quantity: item.quantity || item.qty || 1,
+            is_packaged_good: item.is_packaged_good || false,
+            variant_option_id: item.variant_id || item.variant_option_id || null, // Capture variant info
+            variant_name: item.variant_name || null
+          });
+        }
+
+        itemsToRestore = itemsToConvert;
+        console.log('[CANCEL ORDER] Converted items:', itemsToRestore);
+      }
+
+      if (itemsToRestore && itemsToRestore.length > 0) {
+        console.log('[CANCEL ORDER] Calling restoreStockForOrder with', itemsToRestore.length, 'items');
+        await restoreStockForOrder(supabase, restaurantId, itemsToRestore);
+      } else {
+        console.warn('[CANCEL ORDER] No order items found to restore stock. Full order:', JSON.stringify(fullOrder, null, 2));
+      }
+
+      loadOrders();
+      setCancelOrderDialog(null);
+    } catch (error) {
+      console.error('[CANCEL ORDER] Error:', error);
+      setError(error.message);
+    }
+  };
+  const handleCancelDismiss = () => setCancelOrderDialog(null);
+
+  // Accept a delivery order: promote to 'new', trigger KOT print
+  const handleAcceptDelivery = async (order) => {
+    if (!supabase || !restaurantId || !order?.id) return;
+    try {
+      // 1. Promote status to 'new'
+      const { error: updateErr } = await supabase
+        .from('orders')
+        .update({ status: 'new' })
+        .eq('id', order.id)
+        .eq('restaurant_id', restaurantId);
+      if (updateErr) throw updateErr;
+
+      // 2. Fetch full order for printing
+      const fullOrder = await fetchFullOrder(supabase, order.id);
+      const orderForPrint = fullOrder || order;
+
+      // 3. Insert into print queue for cross-device KOT
+      try {
+        await supabase.from('kot_print_queue').insert({
+          restaurant_id: restaurantId,
+          order_id: order.id,
+          print_data: orderForPrint,
+          processed: false,
+        });
+      } catch (qErr) {
+        console.warn('[ACCEPT DELIVERY] kot_print_queue insert failed (non-critical):', qErr);
+      }
+
+      // 4. Dispatch local KOT print event
+      window.dispatchEvent(
+        new CustomEvent('auto-print-order', {
+          detail: { ...orderForPrint, autoPrint: true, kind: 'kot' },
+        })
+      );
+
+      // 5. Reload orders
+      await loadOrders();
+    } catch (e) {
+      console.error('[ACCEPT DELIVERY] Error:', e);
+      setError(e.message || 'Failed to accept delivery order');
+    }
+  };
+
+  const handleEditSave = async (edited) => {
+    try {
+      if (!restaurantId) {
+        setError('No restaurant selected');
+        return;
+      }
+
+      const resp = await fetch('/api/orders/edit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          invoice_id: invoice.id,
+          order_id: edited.id,
           restaurant_id: restaurantId,
-          reason: reason,
+          lines: edited.lines,
+          table_number: edited.table_number, // Pass table number update
+          order_type: edited.order_type,     // Pass order type update
+          reason: 'Order edited from dashboard',
         }),
       });
- if (!res.ok) {
-        const j = await res.json().catch(() => ({}));
-        console.warn('[CANCEL ORDER] Invoice void failed (non-critical):', j?.error);
-        // Don't throw - order cancel + stock restore should succeed anyway
-      } else {
-        console.log('[CANCEL ORDER] Invoice voided successfully');
+
+      const data = await resp.json();
+
+      if (!resp.ok) {
+        setError(data.error || 'Failed to edit order');
+        return;
       }
-    } else {
-      console.log('[CANCEL ORDER] No invoice found - skipping void');
-      
-      // Attempt manual loyalty reversal for non-invoiced orders (e.g. if points were redeemed on a New order)
-      if (restaurant?.loyalty_enabled) {
-          console.log('[CANCEL ORDER] Loyalty enabled, checking/reversing transactions for non-invoiced order');
-          try {
-             await LoyaltyService.handleOrderReversal(supabase, {
-                restaurant_id: restaurantId,
-                order_id: cancelOrderDialog.id
-             });
-             console.log('[CANCEL ORDER] Manual Loyalty Reversal Checked/Completed');
-          } catch (error) {
-             console.error('[CANCEL ORDER] Loyalty reversal failed:', error);
-          }
+
+      // Insert into print queue for cross-device KOT printing
+      if (data.order_for_print && (editingOrder.status === 'new' || editingOrder.status === 'in_progress')) {
+        try {
+          await supabase
+            .from('kot_print_queue')
+            .insert({
+              restaurant_id: restaurantId,
+              order_id: editingOrder.id,
+              print_data: data.order_for_print,
+              processed: false
+            });
+          console.log('[EDIT] Inserted into print queue for order:', editingOrder.id);
+        } catch (err) {
+          console.error('[EDIT] Failed to insert into print queue:', err);
+        }
       }
-    }
-       // Restore stock for cancelled order
-       let itemsToRestore = fullOrder?.order_items;
-       
-       // Fallback: if order_items is empty, try to use items JSONB column
-       if ((!itemsToRestore || itemsToRestore.length === 0) && fullOrder?.items && Array.isArray(fullOrder.items)) {
-         console.log('[CANCEL ORDER] order_items empty, using items JSONB column');
-         console.log('[CANCEL ORDER] Raw items JSONB:', fullOrder.items);
-         
-         // Convert items JSONB to order_items format
-         // Need to look up menu_item_id by name if not present
-         const itemsToConvert = [];
-         for (const item of fullOrder.items) {
-           console.log('[CANCEL ORDER] Processing item from JSONB:', item);
-           let menuItemId = item.id || item.menu_item_id || null;
-           
-           // If no ID, try to look up by name
-           if (!menuItemId && item.name) {
-             console.log('[CANCEL ORDER] Looking up menu item by name:', item.name);
-             const { data: menuItem, error: lookupErr } = await supabase
-               .from('menu_items')
-               .select('id, is_packaged_good')
-               .eq('restaurant_id', restaurantId)
-               .ilike('name', item.name)
-               .maybeSingle();
-             
-             if (!lookupErr && menuItem) {
-               menuItemId = menuItem.id;
-               console.log('[CANCEL ORDER] Found menu item ID:', menuItemId);
-               item.is_packaged_good = menuItem.is_packaged_good;
-             } else {
-               console.warn('[CANCEL ORDER] Could not find menu item for name:', item.name);
-             }
-           }
-           
-           itemsToConvert.push({
-             menu_item_id: menuItemId,
-             quantity: item.quantity || item.qty || 1,
-             is_packaged_good: item.is_packaged_good || false,
-             variant_option_id: item.variant_id || item.variant_option_id || null, // Capture variant info
-             variant_name: item.variant_name || null
-           });
-         }
-         
-         itemsToRestore = itemsToConvert;
-         console.log('[CANCEL ORDER] Converted items:', itemsToRestore);
-       }
-       
-       if (itemsToRestore && itemsToRestore.length > 0) {
-         console.log('[CANCEL ORDER] Calling restoreStockForOrder with', itemsToRestore.length, 'items');
-         await restoreStockForOrder(supabase, restaurantId, itemsToRestore);
-       } else {
-         console.warn('[CANCEL ORDER] No order items found to restore stock. Full order:', JSON.stringify(fullOrder, null, 2));
-       }
 
-       loadOrders();
-       setCancelOrderDialog(null);
-      } catch (error) {
-          console.error('[CANCEL ORDER] Error:', error);
-          setError(error.message);
-     }
-};
-const handleCancelDismiss = () => setCancelOrderDialog(null);
-
-const handleEditSave = async (edited) => {
-  try {
-    if (!restaurantId) {
-      setError('No restaurant selected');
-      return;
-    }
-
-    const resp = await fetch('/api/orders/edit', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        order_id: edited.id,
-        restaurant_id: restaurantId,
-        lines: edited.lines,
-        table_number: edited.table_number, // Pass table number update
-        order_type: edited.order_type,     // Pass order type update
-        reason: 'Order edited from dashboard',
-      }),
-    });
-
-    const data = await resp.json();
-
-    if (!resp.ok) {
-      setError(data.error || 'Failed to edit order');
-      return;
-    }
- 
-    // Insert into print queue for cross-device KOT printing
-    if (data.order_for_print && (editingOrder.status === 'new' || editingOrder.status === 'in_progress')) {
-      try {
-        await supabase
-          .from('kot_print_queue')
-          .insert({
-            restaurant_id: restaurantId,
-            order_id: editingOrder.id,
-            print_data: data.order_for_print,
-            processed: false
-          });
-        console.log('[EDIT] Inserted into print queue for order:', editingOrder.id);
-      } catch (err) {
-        console.error('[EDIT] Failed to insert into print queue:', err);
+      // Dispatch locally for this device to print if needed
+      if (data.order_for_print) {
+        window.dispatchEvent(
+          new CustomEvent('auto-print-order', {
+            detail: {
+              ...data.order_for_print,
+              autoPrint: true,
+              kind: 'kot',
+            },
+          })
+        );
       }
+
+      // Refresh & close
+      await loadOrders();
+      setEditingOrder(null);
+
+
+    } catch (e) {
+      setError(e.message || 'Failed to save order changes');
+    }
+  };
+
+
+
+
+  // Fetch orders helper
+  async function fetchBucket(status, page = 1, supabase, restaurantId) {
+    if (!supabase || !restaurantId) return [];
+    let q = supabase
+      .from('orders')
+      .select('*, order_items(*, menu_items(name, uom:unit_of_measures(precision)))')
+      .eq('restaurant_id', restaurantId)
+      .eq('status', status);
+
+    if (status === 'completed') {
+      const to = page * PAGE_SIZE - 1;
+      const { data, error } = await q
+        .order('updated_at', { ascending: false })
+        .range(0, to);
+      if (error) throw error;
+      return data;
     }
 
-    // Dispatch locally for this device to print if needed
-    if (data.order_for_print) {
-      window.dispatchEvent(
-        new CustomEvent('auto-print-order', {
-          detail: {
-            ...data.order_for_print,
-            autoPrint: true,
-            kind: 'kot',
-          },
-        })
-      );
-    }
-
-    // Refresh & close
-    await loadOrders();
-    setEditingOrder(null);
-   
-
-  } catch (e) {
-    setError(e.message || 'Failed to save order changes');
-  }
-};
-
-
-
-
-// Fetch orders helper
-async function fetchBucket(status, page = 1, supabase, restaurantId) {
-  if (!supabase || !restaurantId) return [];
-  let q = supabase
-    .from('orders')
-    .select('*, order_items(*, menu_items(name, uom:unit_of_measures(precision)))')
-    .eq('restaurant_id', restaurantId)
-    .eq('status', status);
-
-  if (status === 'completed') {
-    const to = page * PAGE_SIZE - 1;
-    const { data, error } = await q
-      .order('updated_at', { ascending: false })
-      .range(0, to);
+    const { data, error } = await q.order('updated_at', { ascending: true });
     if (error) throw error;
     return data;
   }
 
-  const { data, error } = await q.order('updated_at', { ascending: true });
-  if (error) throw error;
-  return data;
-}
+  // ✅ Only ONE loadOrders, independent of completedPage
+  const loadOrders = useCallback(
+    async (page = 1) => {
+      if (!supabase || !restaurantId) return;
+      setLoading(true);
+      setError('');
+      try {
+        const [pa, n, i, r, c] = await Promise.all([
+          fetchBucket('pending_acceptance', 1, supabase, restaurantId),
+          fetchBucket('new', 1, supabase, restaurantId),
+          fetchBucket('in_progress', 1, supabase, restaurantId),
+          fetchBucket('ready', 1, supabase, restaurantId),
+          fetchBucket('completed', page, supabase, restaurantId),
+        ]);
 
-// ✅ Only ONE loadOrders, independent of completedPage
-const loadOrders = useCallback(
-  async (page = 1) => {
-    if (!supabase || !restaurantId) return;
-    setLoading(true);
-    setError('');
-    try {
-      const [n, i, r, c] = await Promise.all([
-        fetchBucket('new', 1, supabase, restaurantId),
-        fetchBucket('in_progress', 1, supabase, restaurantId),
-        fetchBucket('ready', 1, supabase, restaurantId),
-        fetchBucket('completed', page, supabase, restaurantId),
-      ]);
+        setOrdersByStatus((prev) => ({
+          pending_acceptance: pa,
+          new: n,
+          in_progress: i,
+          ready: r,
+          completed: c,
+          mobileFilter: prev.mobileFilter || 'pending',
+        }));
+      } catch (e) {
+        setError(e.message);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [restaurantId, supabase]
+  );
 
-      setOrdersByStatus({
-        new: n,
-        in_progress: i,
-        ready: r,
-        completed: c,
-        mobileFilter: 'new',
-      });
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
+  // Initial load / when restaurant changes
+  useEffect(() => {
+    if (restaurantId) {
+      setCompletedPage(1);
+      loadOrders(1);
     }
-  },
-  [restaurantId, supabase]
-);
-
-// Initial load / when restaurant changes
-useEffect(() => {
-  if (restaurantId) {
-    setCompletedPage(1);
-    loadOrders(1);
-  }
-}, [restaurantId, loadOrders]);
+  }, [restaurantId, loadOrders]);
 
   // Realtime subscription & reconnection logic
   // Realtime subscription & order state sync
-useEffect(() => {
-  if (!supabase || !restaurantId) return;
+  useEffect(() => {
+    if (!supabase || !restaurantId) return;
 
-  const channel = supabase
-    .channel(`orders:${restaurantId}`)
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'orders', filter: `restaurant_id=eq.${restaurantId}` },
-      (payload) => {
-        const payloadOrder = payload.new;
-        if (!payloadOrder) return;
-        // Fetch full order with items and precision to ensure UI is correct
-        supabase
-          .from('orders')
-          .select('*, order_items(*, menu_items(name, uom:unit_of_measures(precision)))')
-          .eq('id', payloadOrder.id)
-          .single()
-          .then(({ data: fullOrder }) => {
-             if (!fullOrder) return;
-             // Update order in kanban/mobile list
-             setOrdersByStatus((prev) => {
-               const updated = { ...prev };
-               for (const status of STATUSES) {
-                 updated[status] = prev[status].filter((o) => o.id !== fullOrder.id);
-               }
-               if (fullOrder.status && updated[fullOrder.status]) {
-                 updated[fullOrder.status] = [fullOrder, ...updated[fullOrder.status]];
-               }
-               return updated;
-             });
-             // Only play sound for new orders
-             if (payload.eventType === 'INSERT' && fullOrder.status === 'new') {
-               playNotificationSound();
-             }
-          });
-      }
-    )
-    .subscribe();
-
-  function onVisible() {
-    if (document.visibilityState === 'visible') {
-      setTimeout(async () => {
-        try {
-          if (!supabase) return;
-          const { data } = await supabase
+    const channel = supabase
+      .channel(`orders:${restaurantId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'orders', filter: `restaurant_id=eq.${restaurantId}` },
+        (payload) => {
+          const payloadOrder = payload.new;
+          if (!payloadOrder) return;
+          // Fetch full order with items and precision to ensure UI is correct
+          supabase
             .from('orders')
             .select('*, order_items(*, menu_items(name, uom:unit_of_measures(precision)))')
-            .eq('restaurant_id', restaurantId)
-            .eq('status', 'new')
-            .gte('updated_at', new Date(Date.now() - 120000).toISOString())
-            .order('updated_at', { ascending: true });
-          if (data) {
+            .eq('id', payloadOrder.id)
+            .single()
+            .then(({ data: fullOrder }) => {
+              if (!fullOrder) return;
+              // Update order in kanban/mobile list
+              setOrdersByStatus((prev) => {
+                const updated = { ...prev };
+                for (const status of STATUSES) {
+                  updated[status] = (prev[status] || []).filter((o) => o.id !== fullOrder.id);
+                }
+                const targetBucket = fullOrder.status;
+                if (targetBucket && updated[targetBucket] !== undefined) {
+                  updated[targetBucket] = [fullOrder, ...updated[targetBucket]];
+                }
+                return updated;
+              });
+              // Play sound for new regular orders AND incoming delivery orders
+              if (payload.eventType === 'INSERT' && (fullOrder.status === 'new' || fullOrder.status === 'pending_acceptance')) {
+                playNotificationSound();
+              }
+            });
+        }
+      )
+      .subscribe();
+
+    function onVisible() {
+      if (document.visibilityState === 'visible') {
+        setTimeout(async () => {
+          try {
+            if (!supabase) return;
+            const cutoff = new Date(Date.now() - 120000).toISOString();
+            // Catch-up for pending delivery orders
+            const { data: pa } = await supabase
+              .from('orders')
+              .select('*, order_items(*, menu_items(name, uom:unit_of_measures(precision)))')
+              .eq('restaurant_id', restaurantId)
+              .eq('status', 'pending_acceptance')
+              .gte('updated_at', cutoff)
+              .order('updated_at', { ascending: true });
+            // Catch-up for new regular orders
+            const { data } = await supabase
+              .from('orders')
+              .select('*, order_items(*, menu_items(name, uom:unit_of_measures(precision)))')
+              .eq('restaurant_id', restaurantId)
+              .eq('status', 'new')
+              .gte('updated_at', cutoff)
+              .order('updated_at', { ascending: true });
             setOrdersByStatus((prev) => ({
               ...prev,
-              new: [...data, ...prev.new].filter((o, i, arr) => arr.findIndex((x) => x.id === o.id) === i),
+              pending_acceptance: pa
+                ? [...pa, ...(prev.pending_acceptance || [])].filter((o, idx, arr) => arr.findIndex((x) => x.id === o.id) === idx)
+                : prev.pending_acceptance || [],
+              new: data
+                ? [...data, ...prev.new].filter((o, idx, arr) => arr.findIndex((x) => x.id === o.id) === idx)
+                : prev.new,
             }));
+          } catch (e) {
+            console.warn('Visibility catch-up error:', e);
           }
-        } catch (e) {
-          console.warn('Visibility catch-up error:', e);
-        }
-      }, 500);
+        }, 500);
+      }
     }
-  }
 
-  window.addEventListener('visibilitychange', onVisible);
-  return () => {
-    window.removeEventListener('visibilitychange', onVisible);
-    if (supabase) supabase.removeChannel(channel);
-  };
-}, [supabase, restaurantId, playNotificationSound]);
+    window.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.removeEventListener('visibilitychange', onVisible);
+      if (supabase) supabase.removeChannel(channel);
+    };
+  }, [supabase, restaurantId, playNotificationSound]);
 
 
   // All remaining functions and JSX unchanged
@@ -1396,17 +1468,17 @@ useEffect(() => {
         tableNum = val.split(':')[1];
         orderType = 'dine-in';
       } else {
-         tableNum = val ? String(val).trim() : null;
-         if (tableNum) orderType = 'dine-in';
+        tableNum = val ? String(val).trim() : null;
+        if (tableNum) orderType = 'dine-in';
       }
 
-      const updateData = { table_number: tableNum, order_type: orderType }; 
+      const updateData = { table_number: tableNum, order_type: orderType };
 
       const { error } = await supabase.from('orders').update(updateData).eq('id', id).eq('restaurant_id', restaurantId);
       if (error) throw error;
-      
+
       // Reload current page if we are looking at completed orders, or just reload default
-      loadOrders(completedPage); 
+      loadOrders(completedPage);
     } catch (e) {
       console.error("Failed to update table:", e);
       alert("Failed to update table number: " + e.message);
@@ -1417,227 +1489,232 @@ useEffect(() => {
   const finalize = async (order) => {
     console.log('[FINALIZE] START', order?.id, order?.payment_method); // DEBUG
 
- if (!order?.id || !supabase || !restaurantId) return;
+    if (!order?.id || !supabase || !restaurantId) return;
 
-  // 1) Load latest invoice for this order
-  const { data: invoice, error: invErr } = await supabase
-    .from('invoices')
-    .select('*')
-    .eq('restaurant_id', restaurantId)
-    .eq('order_id', order.id)
-    .order('invoice_date', { ascending: false })
-    .maybeSingle();
+    // 1) Load latest invoice for this order
+    const { data: invoice, error: invErr } = await supabase
+      .from('invoices')
+      .select('*')
+      .eq('restaurant_id', restaurantId)
+      .eq('order_id', order.id)
+      .order('invoice_date', { ascending: false })
+      .maybeSingle();
 
-  if (invErr) {
-    console.error('Invoice fetch error in finalize:', invErr);
-  }
+    if (invErr) {
+      console.error('Invoice fetch error in finalize:', invErr);
+    }
 
-  // ✅ Check PAYMENT_METHOD first for credit orders
-  // If actual_payment_method is 'credit' or payment_method is 'credit'
-  const isCredit = (order?.payment_method === 'credit') || (order?.actual_payment_method === 'credit') || (order?.is_credit);
-  if (isCredit) {
-    console.log('[FINALIZE] Credit order -> completing directly'); // DEBUG
-    complete(order.id);
-    return;
-  }
+    // ✅ Check PAYMENT_METHOD first for credit orders
+    // If actual_payment_method is 'credit' or payment_method is 'credit'
+    const isCredit = (order?.payment_method === 'credit') || (order?.actual_payment_method === 'credit') || (order?.is_credit);
+    if (isCredit) {
+      console.log('[FINALIZE] Credit order -> completing directly'); // DEBUG
+      complete(order.id);
+      return;
+    }
 
-  // If invoice already exists and fully paid, skip dialog
-  // BUT: Only if remaining logic confirms it's paid. We'll do calculation first.
-  
-  // Calculate payment status
-  const orderTotal = computeOrderTotalDisplay(order);
-  const paidAmount = Number(invoice?.paid_amount || 0);
-  const remainingAmount = orderTotal - paidAmount;
-  const refundAmount = paidAmount > orderTotal ? paidAmount - orderTotal : 0;
+    // If invoice already exists and fully paid, skip dialog
+    // BUT: Only if remaining logic confirms it's paid. We'll do calculation first.
 
-  // STRICT CHECK: If invoice says "paid" AND we barely have anything left to pay, then skip.
-  // Otherwise, if there is ANY discrepancy, show dialog.
-  if (invoice?.status === 'paid' && remainingAmount <= 0.01 && refundAmount <= 0.01) {
-     console.log('[FINALIZE] Invoice paid & calcs match -> completing directly'); // DEBUG
-     complete(order.id);
-     return;
-  }
+    // Calculate payment status
+    const orderTotal = computeOrderTotalDisplay(order);
+    const paidAmount = Number(invoice?.paid_amount || 0);
+    const remainingAmount = orderTotal - paidAmount;
+    const refundAmount = paidAmount > orderTotal ? paidAmount - orderTotal : 0;
 
-  // Determine mode
-  let mode = null;
-  if (remainingAmount > 0.01) {
-    mode = 'collect'; // Need to collect remaining payment
-  } else if (refundAmount > 0.01) {
-    mode = 'refund'; // Need to refund excess payment
-  } else {
-     // Exact match, no refund needed.
-     // If we are here, it means invoice might NOT be 'paid' status but amounts match?
-     // Or it's a new order with 0 paid.
-     // If amounts match exactly (e.g. 0 total), just complete.
-     if (orderTotal <= 0.01) {
+    // STRICT CHECK: If invoice says "paid" AND we barely have anything left to pay, then skip.
+    // Otherwise, if there is ANY discrepancy, show dialog.
+    if (invoice?.status === 'paid' && remainingAmount <= 0.01 && refundAmount <= 0.01) {
+      console.log('[FINALIZE] Invoice paid & calcs match -> completing directly'); // DEBUG
+      complete(order.id);
+      return;
+    }
+
+    // Determine mode
+    let mode = null;
+    if (remainingAmount > 0.01) {
+      mode = 'collect'; // Need to collect remaining payment
+    } else if (refundAmount > 0.01) {
+      mode = 'refund'; // Need to refund excess payment
+    } else {
+      // Exact match, no refund needed.
+      // If we are here, it means invoice might NOT be 'paid' status but amounts match?
+      // Or it's a new order with 0 paid.
+      // If amounts match exactly (e.g. 0 total), just complete.
+      if (orderTotal <= 0.01) {
         complete(order.id);
         return;
-     }
-     
-     // If amounts match but invoice not paid? 
-     // We should probably just complete it if it's "Settled".
-     // But let's show dialog with 0 due just to confirm "Complete"? 
-     // No, users hate extra clicks.
-     // If remaining is 0, we can skip.
-     console.log('[FINALIZE] Amounts balanced (0 remaining) -> completing directly');
-     complete(order.id);
-     return;
-  }
+      }
 
-  console.log('[FINALIZE] Showing Dialog. Mode:', mode, 'Remaining:', remainingAmount);
-
-  // Show payment confirmation dialog with calculated amounts
-  setPaymentConfirmDialog({
-    ...order,
-    mode,
-    totalAmount: orderTotal,
-    alreadyPaidAmount: paidAmount,
-    remainingAmount: remainingAmount > 0 ? remainingAmount : 0,
-    refundAmount,
-  });
-};
-
-// Updated handler - receives payment method AND details (discount, mixed info, etc.)
-const handlePaymentConfirmed = (actualPaymentMethod, details = null) => {
-  if (!paymentConfirmDialog) return;
-  complete(paymentConfirmDialog.id, actualPaymentMethod, details);
-  setPaymentConfirmDialog(null);
-};
-
-// Updated complete function - no auto-open PDF + save payment method
-// Updated complete function - handles details object
-const complete = async (orderId, actualPaymentMethod = null, details = null) => {
-  if (!supabase) return;
-  setGeneratingInvoice(orderId);
-  try {
-    // 1. Determine Payment Method
-    let finalPaymentMethod = actualPaymentMethod;
-    if (!finalPaymentMethod) {
-      // Logic for credit orders
-      const { data: order } = await supabase.from('orders').select('payment_method, actual_payment_method, is_credit, credit_customer_id').eq('id', orderId).single();
-      finalPaymentMethod = order?.payment_method || order?.actual_payment_method || 'cash';
-      if (order?.is_credit && order?.credit_customer_id) finalPaymentMethod = 'credit';
+      // If amounts match but invoice not paid? 
+      // We should probably just complete it if it's "Settled".
+      // But let's show dialog with 0 due just to confirm "Complete"? 
+      // No, users hate extra clicks.
+      // If remaining is 0, we can skip.
+      console.log('[FINALIZE] Amounts balanced (0 remaining) -> completing directly');
+      complete(order.id);
+      return;
     }
 
-    // 2. Call Unified Backend API
-    const response = await fetch('/api/orders/complete', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        order_id: orderId,
-        restaurant_id: restaurantId,
-        payment_method: finalPaymentMethod,
-        discount_obj: details?.discount_obj,
-        round_off_amount: details?.round_off_amount,
-        updated_items: details?.updated_items,
-        mixed_payment_details: details?.mixed_payment_details,
-        base_tax_rate: details?.base_tax_rate,
-        loyalty_amount_used: details?.loyalty_amount_used,
-        loyalty_points_used: details?.loyalty_points_used
-      })
+    console.log('[FINALIZE] Showing Dialog. Mode:', mode, 'Remaining:', remainingAmount);
+
+    // Show payment confirmation dialog with calculated amounts
+    setPaymentConfirmDialog({
+      ...order,
+      mode,
+      totalAmount: orderTotal,
+      alreadyPaidAmount: paidAmount,
+      remainingAmount: remainingAmount > 0 ? remainingAmount : 0,
+      refundAmount,
     });
+  };
 
-    if (!response.ok) {
-      const err = await response.json();
-      throw new Error(err.error || 'Failed to complete order');
+  // Updated handler - receives payment method AND details (discount, mixed info, etc.)
+  const handlePaymentConfirmed = (actualPaymentMethod, details = null) => {
+    if (!paymentConfirmDialog) return;
+    complete(paymentConfirmDialog.id, actualPaymentMethod, details);
+    setPaymentConfirmDialog(null);
+  };
+
+  // Updated complete function - no auto-open PDF + save payment method
+  // Updated complete function - handles details object
+  const complete = async (orderId, actualPaymentMethod = null, details = null) => {
+    if (!supabase) return;
+    setGeneratingInvoice(orderId);
+    try {
+      // 1. Determine Payment Method
+      let finalPaymentMethod = actualPaymentMethod;
+      if (!finalPaymentMethod) {
+        // Logic for credit orders
+        const { data: order } = await supabase.from('orders').select('payment_method, actual_payment_method, is_credit, credit_customer_id').eq('id', orderId).single();
+        finalPaymentMethod = order?.payment_method || order?.actual_payment_method || 'cash';
+        if (order?.is_credit && order?.credit_customer_id) finalPaymentMethod = 'credit';
+      }
+
+      // 2. Call Unified Backend API
+      const response = await fetch('/api/orders/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          order_id: orderId,
+          restaurant_id: restaurantId,
+          payment_method: finalPaymentMethod,
+          discount_obj: details?.discount_obj,
+          round_off_amount: details?.round_off_amount,
+          updated_items: details?.updated_items,
+          mixed_payment_details: details?.mixed_payment_details,
+          base_tax_rate: details?.base_tax_rate,
+          loyalty_amount_used: details?.loyalty_amount_used,
+          loyalty_points_used: details?.loyalty_points_used
+        })
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Failed to complete order');
+      }
+
+      const result = await response.json();
+
+      // 3. Optional: Trigger auto-print of the final invoice
+      // Disabled as per user request to stop automatic bill/kot printing after payment
+      /*
+      if (result.order_for_print) {
+         // Merge detail overrides to ensure UI reflects latest input immediately
+         const finalPrintData = {
+             ...result.order_for_print,
+             bill: {
+                 ...result.order_for_print.bill,
+                 // Ensure Payment/Discount info is explicit
+                 discount_amount: details?.discount_obj?.value || result.order_for_print.discount_amount,
+                 loyalty_amount_used: details?.loyalty_amount_used || result.order_for_print.loyalty_amount_used,
+                 loyalty_points_used: details?.loyalty_points_used || result.order_for_print.loyalty_points_used,
+                 order_discount_base: result.order_for_print.bill?.order_discount_base // ensure this flows if present
+             }
+         };
+  
+         window.dispatchEvent(
+           new CustomEvent('auto-print-order', {
+             detail: {
+               ...finalPrintData,
+               autoPrint: true,
+               kind: 'invoice',
+             },
+           })
+         );
+      }
+      */
+
+      // 4. Loyalty & Print logic is now handled by backend /api/orders/complete
+      // We only need to reload orders.
+      queryClient.invalidateQueries({ queryKey: tableKeys.all });
+      await loadOrders();
+    } catch (e) {
+      console.error('[COMPLETE ORDER] Error:', e);
+      setError(e.message);
+    } finally {
+      setGeneratingInvoice(null);
     }
+  };
 
-    const result = await response.json();
 
-    // 3. Optional: Trigger auto-print of the final invoice
-    // Disabled as per user request to stop automatic bill/kot printing after payment
-    /*
-    if (result.order_for_print) {
-       // Merge detail overrides to ensure UI reflects latest input immediately
-       const finalPrintData = {
-           ...result.order_for_print,
-           bill: {
-               ...result.order_for_print.bill,
-               // Ensure Payment/Discount info is explicit
-               discount_amount: details?.discount_obj?.value || result.order_for_print.discount_amount,
-               loyalty_amount_used: details?.loyalty_amount_used || result.order_for_print.loyalty_amount_used,
-               loyalty_points_used: details?.loyalty_points_used || result.order_for_print.loyalty_points_used,
-               order_discount_base: result.order_for_print.bill?.order_discount_base // ensure this flows if present
-           }
-       };
 
-       window.dispatchEvent(
-         new CustomEvent('auto-print-order', {
-           detail: {
-             ...finalPrintData,
-             autoPrint: true,
-             kind: 'invoice',
-           },
-         })
-       );
-    }
-    */
 
-    // 4. Loyalty & Print logic is now handled by backend /api/orders/complete
-    // We only need to reload orders.
-    queryClient.invalidateQueries({ queryKey: tableKeys.all });
-    await loadOrders();
-  } catch (e) {
-    console.error('[COMPLETE ORDER] Error:', e);
-    setError(e.message);
-  } finally {
-    setGeneratingInvoice(null);
+  if (checking || restLoading) return <div style={{ padding: 16 }}>Loading…</div>;
+  if (!restaurantId) return <div style={{ padding: 16 }}>No restaurant found.</div>;
+
+  // Before rendering mobile list:
+  let mobileOrders;
+
+  if (ordersByStatus.mobileFilter === 'inprogress') {
+    // Cooking column: oldest → newest
+    mobileOrders = [
+      ...ordersByStatus.in_progress,
+      ...ordersByStatus.ready,
+    ].sort((a, b) => new Date(a.date_ordered || a.created_at) - new Date(b.date_ordered || b.created_at));
+  } else if (ordersByStatus.mobileFilter === 'completed') {
+    // Done: newest → oldest
+    mobileOrders = [...(ordersByStatus.completed || [])].sort(
+      (a, b) => new Date(b.date_ordered || b.created_at) - new Date(a.date_ordered || a.created_at)
+    );
+  } else if (ordersByStatus.mobileFilter === 'pending') {
+    // Incoming delivery orders: oldest → newest
+    mobileOrders = [...(ordersByStatus.pending_acceptance || [])].sort(
+      (a, b) => new Date(a.date_ordered || a.created_at) - new Date(b.date_ordered || b.created_at)
+    );
+  } else {
+    // New column: oldest → newest
+    mobileOrders = [...(ordersByStatus[ordersByStatus.mobileFilter] || [])].sort(
+      (a, b) => new Date(a.date_ordered || a.created_at) - new Date(b.date_ordered || b.created_at)
+    );
   }
-};
 
+  // Apply Filters
+  mobileOrders = mobileOrders.filter(o => {
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase().trim();
 
+      // Strict match for Table Number if query is short numeric
+      const isNumeric = /^\d{1,3}$/.test(q);
+      if (isNumeric) {
+        return String(o.table_number) === q;
+      }
 
-
-  if (checking || restLoading) return <div style={{ padding:16 }}>Loading…</div>;
-  if (!restaurantId) return <div style={{ padding:16 }}>No restaurant found.</div>;
-
-// Before rendering mobile list:
-let mobileOrders;
-
-if (ordersByStatus.mobileFilter === 'inprogress') {
-  // Cooking column: oldest → newest
-  mobileOrders = [
-    ...ordersByStatus.in_progress,
-    ...ordersByStatus.ready,
-  ].sort((a, b) => new Date(a.date_ordered || a.created_at) - new Date(b.date_ordered || b.created_at));
-} else if (ordersByStatus.mobileFilter === 'completed') {
-  // Done: newest → oldest
-  mobileOrders = [...(ordersByStatus.completed || [])].sort(
-    (a, b) => new Date(b.date_ordered || b.created_at) - new Date(a.date_ordered || a.created_at)
-  );
-} else {
-  // New column: oldest → newest
-  mobileOrders = [...(ordersByStatus[ordersByStatus.mobileFilter] || [])].sort(
-    (a, b) => new Date(a.date_ordered || a.created_at) - new Date(b.date_ordered || b.created_at)
-  );
-}
-
-     // Apply Filters
-     mobileOrders = mobileOrders.filter(o => {
-        if (searchQuery) {
-          const q = searchQuery.toLowerCase().trim();
-          
-          // Strict match for Table Number if query is short numeric
-          const isNumeric = /^\d{1,3}$/.test(q);
-          if (isNumeric) {
-             return String(o.table_number) === q;
-          }
-
-          const matchId = o.id.toLowerCase().includes(q);
-          const matchTable = o.table_number ? String(o.table_number).includes(q) : false;
-          const items = toDisplayItems(o);
-          const matchItem = items.some(it => it.name.toLowerCase().includes(q));
-          return matchId || matchTable || matchItem;
-        }
-        return true;
-     });
+      const matchId = o.id.toLowerCase().includes(q);
+      const matchTable = o.table_number ? String(o.table_number).includes(q) : false;
+      const items = toDisplayItems(o);
+      const matchItem = items.some(it => it.name.toLowerCase().includes(q));
+      return matchId || matchTable || matchItem;
+    }
+    return true;
+  });
 
 
 
   // // Show print modal when state is set
-   
+
   return (
-    <div 
+    <div
       className="orders-wrap"
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
@@ -1647,10 +1724,10 @@ if (ordersByStatus.mobileFilter === 'inprogress') {
         <h1>Orders Dashboard</h1>
         <div className="header-actions">
           {/* Live Order Count (New + In Progress) */}
-          {(ordersByStatus.new.length + ordersByStatus.in_progress.length) > 0 && (
-            <span 
+          {((ordersByStatus.pending_acceptance || []).length + ordersByStatus.new.length + ordersByStatus.in_progress.length) > 0 && (
+            <span
               style={{
-                color: '#f97316', 
+                color: '#f97316',
                 fontSize: 15,
                 fontWeight: 400,
                 marginRight: 8,
@@ -1660,11 +1737,16 @@ if (ordersByStatus.mobileFilter === 'inprogress') {
               }}
             >
               <PulseDot />
-              {ordersByStatus.new.length + ordersByStatus.in_progress.length} Live Orders
+              {(ordersByStatus.pending_acceptance || []).length + ordersByStatus.new.length + ordersByStatus.in_progress.length} Live Orders
+              {(ordersByStatus.pending_acceptance || []).length > 0 && (
+                <span style={{ background: '#f97316', color: 'white', borderRadius: 99, padding: '1px 8px', fontSize: 12, fontWeight: 800, marginLeft: 4 }}>
+                  {(ordersByStatus.pending_acceptance || []).length} Awaiting
+                </span>
+              )}
             </span>
           )}
-          
-           <Button variant="outline" onClick={() => { setCompletedPage(1); loadOrders(1); }}>
+
+          <Button variant="outline" onClick={() => { setCompletedPage(1); loadOrders(1); }}>
             Refresh
           </Button>
         </div>
@@ -1680,8 +1762,8 @@ if (ordersByStatus.mobileFilter === 'inprogress') {
             <circle cx="11" cy="11" r="8" />
             <path d="M21 21L16.65 16.65" />
           </svg>
-          <input 
-            placeholder="Search by Order #, Table, or Item..." 
+          <input
+            placeholder="Search by Order #, Table, or Item..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
           />
@@ -1692,322 +1774,331 @@ if (ordersByStatus.mobileFilter === 'inprogress') {
       </ControlsBar>
 
       {error && (
-        <Card padding={12} style={{ background:'#fee2e2',border:'1px solid #fecaca',margin:'0 12px 12px' }}>
-          <span style={{ color:'#b91c1c' }}>{error}</span>
+        <Card padding={12} style={{ background: '#fee2e2', border: '1px solid #fecaca', margin: '0 12px 12px' }}>
+          <span style={{ color: '#b91c1c' }}>{error}</span>
         </Card>
       )}
 
-     <div className="mobile-filters">
-  {UI_COLUMNS.map((col) => {
-    // Helper to filter a list
-    const filterList = (list) => {
-      return list.filter(o => {
-        // Search Filter
-        if (searchQuery) {
-          const q = searchQuery.toLowerCase().trim();
-          
-          // Strict match for Table Number if query is short numeric (e.g. "1")
-          // This avoids "1" matching every ID or price
-          const isNumeric = /^\d{1,3}$/.test(q);
-          if (isNumeric) {
-             // ONLY match table number. Don't match ID for short numbers (too noisy)
-             return String(o.table_number) === q;
+      <div className="mobile-filters">
+        {UI_COLUMNS.map((col) => {
+          // Helper to filter a list
+          const filterList = (list) => {
+            return list.filter(o => {
+              // Search Filter
+              if (searchQuery) {
+                const q = searchQuery.toLowerCase().trim();
+
+                // Strict match for Table Number if query is short numeric (e.g. "1")
+                // This avoids "1" matching every ID or price
+                const isNumeric = /^\d{1,3}$/.test(q);
+                if (isNumeric) {
+                  // ONLY match table number. Don't match ID for short numbers (too noisy)
+                  return String(o.table_number) === q;
+                }
+
+                // General search
+                const matchId = o.id.toLowerCase().includes(q);
+                const matchTable = o.table_number ? String(o.table_number).includes(q) : false;
+                // Check items
+                const items = toDisplayItems(o);
+                const matchItem = items.some(it => it.name.toLowerCase().includes(q));
+
+                return matchId || matchTable || matchItem;
+              }
+
+              return true;
+            });
+          };
+
+          let baseList = [];
+          if (col.id === 'inprogress') {
+            baseList = [...ordersByStatus.in_progress, ...ordersByStatus.ready];
+          } else if (col.id === 'pending') {
+            baseList = ordersByStatus.pending_acceptance || [];
+          } else {
+            baseList = ordersByStatus[col.id] || [];
           }
 
-          // General search
-          const matchId = o.id.toLowerCase().includes(q);
-          const matchTable = o.table_number ? String(o.table_number).includes(q) : false;
-          // Check items
-          const items = toDisplayItems(o);
-          const matchItem = items.some(it => it.name.toLowerCase().includes(q));
-          
-          return matchId || matchTable || matchItem;
-        }
+          const count = filterList(baseList).length;
 
-        return true;
-      });
-    };
-
-    let baseList = [];
-    if (col.id === 'inprogress') {
-       baseList = [...ordersByStatus.in_progress, ...ordersByStatus.ready];
-    } else {
-       baseList = ordersByStatus[col.id] || [];
-    }
-    
-    const count = filterList(baseList).length;
-
-    return (
-      <button
-        key={col.id}
-        className={`chip ${col.id === ordersByStatus.mobileFilter ? 'chip--active' : ''}`}
-        onClick={() => setOrdersByStatus((prev) => ({ ...prev, mobileFilter: col.id }))}
-      >
-        <span className="chip-label">{col.label}</span>
-        <span className="chip-count">{count}</span>
-      </button>
-    );
-  })}
-</div>
+          return (
+            <button
+              key={col.id}
+              className={`chip ${col.id === ordersByStatus.mobileFilter ? 'chip--active' : ''}`}
+              onClick={() => setOrdersByStatus((prev) => ({ ...prev, mobileFilter: col.id }))}
+            >
+              <span className="chip-label">{col.label}</span>
+              <span className="chip-count">{count}</span>
+            </button>
+          );
+        })}
+      </div>
 
 
 
       <div className="mobile-list orders-list">
 
-  {mobileOrders.length === 0 ? (
-    <Card className="muted" padding={12} style={{ textAlign: 'center' }}>
-      No orders found matching filters
-    </Card>
-  ) : (
-    mobileOrders.map((order) => (
-      <OrderCard
-        key={order.id}
-        canCancel={canCancel}
-        order={order}
-        statusColor={COLORS[order.status]}
-        onChangeStatus={updateStatus}
-        onComplete={finalize}
-        generatingInvoice={generatingInvoice}
-        onShowItems={(o) => setItemsModalOrder(o)}
-        onPrintKot={(orderObj) => {
-  window.dispatchEvent(
-    new CustomEvent('auto-print-order', {
-      detail: { ...orderObj, autoPrint: true, kind: 'kot' }
-    })
-  );
-}}
+        {mobileOrders.length === 0 ? (
+          <Card className="muted" padding={12} style={{ textAlign: 'center' }}>
+            No orders found matching filters
+          </Card>
+        ) : (
+          mobileOrders.map((order) => (
+            <OrderCard
+              key={order.id}
+              canCancel={canCancel}
+              order={order}
+              statusColor={COLORS[order.status] || COLORS.new}
+              onChangeStatus={updateStatus}
+              onComplete={finalize}
+              generatingInvoice={generatingInvoice}
+              onShowItems={(o) => setItemsModalOrder(o)}
+              onAcceptDelivery={handleAcceptDelivery}
+              onRejectDelivery={onCancelOrderOpen}
+              onPrintKot={(orderObj) => {
+                window.dispatchEvent(
+                  new CustomEvent('auto-print-order', {
+                    detail: { ...orderObj, autoPrint: true, kind: 'kot' }
+                  })
+                );
+              }}
 
-        onPrintBill={async (order) => {
-  try {
-    const s = getSupabase();
+              onPrintBill={async (order) => {
+                try {
+                  const s = getSupabase();
 
-    // Ensure we have items + menu_items(name)
-    const { data: fullOrder } = await s
-      .from('orders')
-      .select('*, order_items(*, menu_items(name))')
-      .eq('id', order.id)
-      .maybeSingle();
+                  // Ensure we have items + menu_items(name)
+                  const { data: fullOrder } = await s
+                    .from('orders')
+                    .select('*, order_items(*, menu_items(name))')
+                    .eq('id', order.id)
+                    .maybeSingle();
 
-    const base = fullOrder || order;
+                  const base = fullOrder || order;
 
-    const { data: invoice } = await s
-      .from('invoices')
-      .select('invoice_no')
-      .eq('order_id', order.id)
-      .order('invoice_date', { ascending: false })
-      .maybeSingle();
+                  const { data: invoice } = await s
+                    .from('invoices')
+                    .select('invoice_no')
+                    .eq('order_id', order.id)
+                    .order('invoice_date', { ascending: false })
+                    .maybeSingle();
 
-    const orderForPrint = {
-      ...base,
-      invoice_no: invoice?.invoice_no || base.invoice_no || null,
-    };
+                  const orderForPrint = {
+                    ...base,
+                    invoice_no: invoice?.invoice_no || base.invoice_no || null,
+                  };
 
-    window.dispatchEvent(
-      new CustomEvent('auto-print-order', {
-        detail: { ...orderForPrint, autoPrint: true, kind: 'bill' },
-      })
-    );
-  } catch (err) {
-    console.error('Print bill fetch failed', err);
-    window.dispatchEvent(
-      new CustomEvent('auto-print-order', {
-        detail: { ...order, autoPrint: true, kind: 'bill' },
-      })
-    );
-  }
-}}
+                  window.dispatchEvent(
+                    new CustomEvent('auto-print-order', {
+                      detail: { ...orderForPrint, autoPrint: true, kind: 'bill' },
+                    })
+                  );
+                } catch (err) {
+                  console.error('Print bill fetch failed', err);
+                  window.dispatchEvent(
+                    new CustomEvent('auto-print-order', {
+                      detail: { ...order, autoPrint: true, kind: 'bill' },
+                    })
+                  );
+                }
+              }}
 
-        onCancelOrderOpen={onCancelOrderOpen}
-        onEditOrder={async (o) => {
-          const full = await fetchFullOrder(supabase, o.id);
-          setEditingOrder(full || o);
-        }}
-        onEditPax={(order) => setPaxEditOrder(order)}
-        onEditTable={(order) => setTableEditOrder(order)}
-      />
-    ))
-  )}
-</div>
+              onCancelOrderOpen={onCancelOrderOpen}
+              onEditOrder={async (o) => {
+                const full = await fetchFullOrder(supabase, o.id);
+                setEditingOrder(full || o);
+              }}
+              onEditPax={(order) => setPaxEditOrder(order)}
+              onEditTable={(order) => setTableEditOrder(order)}
+            />
+          ))
+        )}
+      </div>
 
 
 
       {/* Kanban grid for desktop */}
-   <div className="kanban"> 
-  {UI_COLUMNS.map((col) => {
-    let rawColOrders = col.statuses.flatMap((st) => ordersByStatus[st] || []);
+      <div className="kanban">
+        {UI_COLUMNS.map((col) => {
+          let rawColOrders = col.statuses.flatMap((st) => {
+            if (st === 'pending_acceptance') return ordersByStatus.pending_acceptance || [];
+            return ordersByStatus[st] || [];
+          });
 
-    // Apply Filters for Kanban
-    let colOrders = rawColOrders.filter(o => {
-        if (searchQuery) {
-          const q = searchQuery.toLowerCase().trim();
-          
-          // Strict match for Table Number if query is short numeric
-          const isNumeric = /^\d{1,3}$/.test(q);
-          if (isNumeric) {
-             return String(o.table_number) === q;
-          }
+          // Apply Filters for Kanban
+          let colOrders = rawColOrders.filter(o => {
+            if (searchQuery) {
+              const q = searchQuery.toLowerCase().trim();
 
-          const matchId = o.id.toLowerCase().includes(q);
-          const matchTable = o.table_number ? String(o.table_number).includes(q) : false;
-          const items = toDisplayItems(o);
-          const matchItem = items.some(it => it.name.toLowerCase().includes(q));
-          return matchId || matchTable || matchItem;
-        }
-        return true;
-     });
+              // Strict match for Table Number if query is short numeric
+              const isNumeric = /^\d{1,3}$/.test(q);
+              if (isNumeric) {
+                return String(o.table_number) === q;
+              }
 
-colOrders =
-  col.id === 'completed'
-    // Done: newest → oldest
-    ? [...colOrders].sort(
-        (a, b) => new Date(b.updated_at) - new Date(a.updated_at)
-      )
-    // Other columns: oldest → newest
-    : [...colOrders].sort(
-        (a, b) => new Date(a.updated_at) - new Date(b.updated_at)
-      );
+              const matchId = o.id.toLowerCase().includes(q);
+              const matchTable = o.table_number ? String(o.table_number).includes(q) : false;
+              const items = toDisplayItems(o);
+              const matchItem = items.some(it => it.name.toLowerCase().includes(q));
+              return matchId || matchTable || matchItem;
+            }
+            return true;
+          });
+
+          colOrders =
+            col.id === 'completed'
+              // Done: newest → oldest
+              ? [...colOrders].sort(
+                (a, b) => new Date(b.updated_at) - new Date(a.updated_at)
+              )
+              // Other columns: oldest → newest
+              : [...colOrders].sort(
+                (a, b) => new Date(a.updated_at) - new Date(b.updated_at)
+              );
 
 
-    return (
-      <Card key={col.id} padding={12}>
-        <div className="kanban-col-header">
-          <strong style={{ color: COLORS[col.statuses[0]] }}>
-            {col.label}
-          </strong>
-          <span 
-            style={{
-              background: COLORS[col.statuses[0]],
-              color: 'white',
-              borderRadius: '99px',
-              padding: '2px 10px',
-              fontSize: '13px',
-              fontWeight: 700,
-              minWidth: '24px',
-              textAlign: 'center',
-              boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-            }}
-          >
-            {colOrders.length}
-          </span>
-        </div>
-        <div className="kanban-col-body">
-          {colOrders.length === 0 ? (
-            <div className="empty-col">
-              No {col.label.toLowerCase()} orders
-            </div>
-          ) : (
-            colOrders.map((order) => (
-              <OrderCard
-                key={order.id}
-                canCancel={canCancel}
-                order={order}
-                statusColor={COLORS[order.status]}
-                onChangeStatus={updateStatus}
-                onComplete={finalize}
-                generatingInvoice={generatingInvoice}
-                onPrintKot={(orderObj) => {
-  window.dispatchEvent(
-    new CustomEvent('auto-print-order', {
-      detail: { ...orderObj, autoPrint: true, kind: 'kot' }
-    })
-  );
-}}
-
-                onPrintBill={async (order) => {
-  try {
-    const s = getSupabase();
-
-    // 1. Fetch Order with items
-    const { data: fullOrder } = await s
-      .from('orders')
-      .select('*, order_items(*, menu_items(name))')
-      .eq('id', order.id)
-      .maybeSingle();
-
-    const base = fullOrder || order;
-
-    // 2. Fetch Invoice
-    const { data: invoice } = await s
-      .from('invoices')
-      .select('invoice_no')
-      .eq('order_id', order.id)
-      .order('invoice_date', { ascending: false })
-      .maybeSingle();
-    
-    // 3. Fetch Loyalty
-    const { data: loyaltyTx } = await s
-      .from('loyalty_transactions')
-      .select('txn_type, points_redeemed, amount_value')
-      .eq('order_id', order.id)
-      .eq('txn_type', 'redeem')
-      .maybeSingle();
-
-    const orderForPrint = {
-      ...base,
-      invoice_no: invoice?.invoice_no || base.invoice_no || null,
-      loyalty_amount_used: loyaltyTx?.amount_value || base.loyalty_amount_used || 0,
-      loyalty_points_used: loyaltyTx?.points_redeemed || base.loyalty_points_used || 0
-    };
-
-    window.dispatchEvent(
-      new CustomEvent('auto-print-order', {
-        detail: { ...orderForPrint, autoPrint: true, kind: 'bill' },
-      })
-    );
-  } catch (err) {
-    console.error('Print bill fetch failed', err);
-    window.dispatchEvent(
-      new CustomEvent('auto-print-order', {
-        detail: { ...order, autoPrint: true, kind: 'bill' },
-      })
-    );
-  }
-}}
-
-                onCancelOrderOpen={onCancelOrderOpen}
-                onEditOrder={async (o) => {
-          const full = await fetchFullOrder(supabase, o.id);
-          setEditingOrder(full || o);
-        }}
-                onEditPax={(order) => setPaxEditOrder(order)}
-                onEditTable={(order) => setTableEditOrder(order)}
-                onShowItems={(o) => setItemsModalOrder(o)}
-              />
-            ))
-          )}
-
-          {col.id === 'completed' && !searchQuery && (
-              <>
-                <div
+          return (
+            <Card key={col.id} padding={12}>
+              <div className="kanban-col-header">
+                <strong style={{ color: COLORS[col.statuses[0]] }}>
+                  {col.label}
+                </strong>
+                <span
                   style={{
-                    fontSize: 12,
-                    color: '#64748b',
+                    background: COLORS[col.statuses[0]],
+                    color: 'white',
+                    borderRadius: '99px',
+                    padding: '2px 10px',
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    minWidth: '24px',
                     textAlign: 'center',
-                    marginTop: 16,
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                   }}
                 >
-                  Showing latest {ordersByStatus.completed.length} completed
-                  orders
-                </div>
-                <div style={{ paddingTop: 8, display: 'flex', justifyContent: 'center' }}>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      const next = completedPage + 1;
-                      setCompletedPage(next);
-                      loadOrders(next);
-                    }}
-                  >
-                    Load more
-                  </Button>
-                </div>
-              </>
-            )}
-        </div>
-      </Card>
-    );
-  })}
-</div>
+                  {colOrders.length}
+                </span>
+              </div>
+              <div className="kanban-col-body">
+                {colOrders.length === 0 ? (
+                  <div className="empty-col">
+                    No {col.label.toLowerCase()} orders
+                  </div>
+                ) : (
+                  colOrders.map((order) => (
+                    <OrderCard
+                      key={order.id}
+                      canCancel={canCancel}
+                      order={order}
+                      statusColor={COLORS[order.status] || COLORS.new}
+                      onChangeStatus={updateStatus}
+                      onComplete={finalize}
+                      generatingInvoice={generatingInvoice}
+                      onAcceptDelivery={handleAcceptDelivery}
+                      onRejectDelivery={onCancelOrderOpen}
+                      onPrintKot={(orderObj) => {
+                        window.dispatchEvent(
+                          new CustomEvent('auto-print-order', {
+                            detail: { ...orderObj, autoPrint: true, kind: 'kot' }
+                          })
+                        );
+                      }}
+
+                      onPrintBill={async (order) => {
+                        try {
+                          const s = getSupabase();
+
+                          // 1. Fetch Order with items
+                          const { data: fullOrder } = await s
+                            .from('orders')
+                            .select('*, order_items(*, menu_items(name))')
+                            .eq('id', order.id)
+                            .maybeSingle();
+
+                          const base = fullOrder || order;
+
+                          // 2. Fetch Invoice
+                          const { data: invoice } = await s
+                            .from('invoices')
+                            .select('invoice_no')
+                            .eq('order_id', order.id)
+                            .order('invoice_date', { ascending: false })
+                            .maybeSingle();
+
+                          // 3. Fetch Loyalty
+                          const { data: loyaltyTx } = await s
+                            .from('loyalty_transactions')
+                            .select('txn_type, points_redeemed, amount_value')
+                            .eq('order_id', order.id)
+                            .eq('txn_type', 'redeem')
+                            .maybeSingle();
+
+                          const orderForPrint = {
+                            ...base,
+                            invoice_no: invoice?.invoice_no || base.invoice_no || null,
+                            loyalty_amount_used: loyaltyTx?.amount_value || base.loyalty_amount_used || 0,
+                            loyalty_points_used: loyaltyTx?.points_redeemed || base.loyalty_points_used || 0
+                          };
+
+                          window.dispatchEvent(
+                            new CustomEvent('auto-print-order', {
+                              detail: { ...orderForPrint, autoPrint: true, kind: 'bill' },
+                            })
+                          );
+                        } catch (err) {
+                          console.error('Print bill fetch failed', err);
+                          window.dispatchEvent(
+                            new CustomEvent('auto-print-order', {
+                              detail: { ...order, autoPrint: true, kind: 'bill' },
+                            })
+                          );
+                        }
+                      }}
+
+                      onCancelOrderOpen={onCancelOrderOpen}
+                      onEditOrder={async (o) => {
+                        const full = await fetchFullOrder(supabase, o.id);
+                        setEditingOrder(full || o);
+                      }}
+                      onEditPax={(order) => setPaxEditOrder(order)}
+                      onEditTable={(order) => setTableEditOrder(order)}
+                      onShowItems={(o) => setItemsModalOrder(o)}
+                    />
+                  ))
+                )}
+
+                {col.id === 'completed' && !searchQuery && (
+                  <>
+                    <div
+                      style={{
+                        fontSize: 12,
+                        color: '#64748b',
+                        textAlign: 'center',
+                        marginTop: 16,
+                      }}
+                    >
+                      Showing latest {ordersByStatus.completed.length} completed
+                      orders
+                    </div>
+                    <div style={{ paddingTop: 8, display: 'flex', justifyContent: 'center' }}>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          const next = completedPage + 1;
+                          setCompletedPage(next);
+                          loadOrders(next);
+                        }}
+                      >
+                        Load more
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </Card>
+          );
+        })}
+      </div>
 
 
 
@@ -2019,7 +2110,7 @@ colOrders =
         />
       )}
 
-        {cancelOrderDialog && canCancel && (
+      {cancelOrderDialog && canCancel && (
         <CancelConfirmDialog
           order={cancelOrderDialog}
           onConfirm={handleCancelConfirm}
@@ -2027,47 +2118,47 @@ colOrders =
         />
       )}
 
-         {editingOrder && (
-  <EditOrderPanel
-    order={editingOrder}
-    onClose={() => setEditingOrder(null)}
-    onSave={handleEditSave}
-    tablesCount={tablesCount}
-  />
-)}
+      {editingOrder && (
+        <EditOrderPanel
+          order={editingOrder}
+          onClose={() => setEditingOrder(null)}
+          onSave={handleEditSave}
+          tablesCount={tablesCount}
+        />
+      )}
 
-{paxEditOrder && (
-    <PaxEditDialog 
-        order={paxEditOrder}
-        onClose={() => setPaxEditOrder(null)}
-        onSave={(val) => {
+      {paxEditOrder && (
+        <PaxEditDialog
+          order={paxEditOrder}
+          onClose={() => setPaxEditOrder(null)}
+          onSave={(val) => {
             updateCustomerCount(paxEditOrder.id, val);
             setPaxEditOrder(null);
-        }}
-    />
-)}
+          }}
+        />
+      )}
 
-{tableEditOrder && (
-    <TableEditDialog 
-        order={tableEditOrder}
-        onClose={() => setTableEditOrder(null)}
-        tables={tables}
-        tablesCount={tablesCount}
-        onSave={(val) => {
+      {tableEditOrder && (
+        <TableEditDialog
+          order={tableEditOrder}
+          onClose={() => setTableEditOrder(null)}
+          tables={tables}
+          tablesCount={tablesCount}
+          onSave={(val) => {
             updateTableNumber(tableEditOrder.id, val);
             setTableEditOrder(null);
-        }}
-    />
-)}
+          }}
+        />
+      )}
 
-    {/* Global "Show All Items" Modal */}
-    {itemsModalOrder && (
-       <OrderItemsModal 
+      {/* Global "Show All Items" Modal */}
+      {itemsModalOrder && (
+        <OrderItemsModal
           order={itemsModalOrder}
           modalLoyalty={modalLoyalty}
           onClose={() => setItemsModalOrder(null)}
-       />
-    )}
+        />
+      )}
 
       <style jsx>{`
 .orders-wrap { padding:12px 0 32px; }
@@ -2079,11 +2170,14 @@ colOrders =
 .header-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
 .muted { color:#6b7280; font-size:14px; }
 .mobile-list { display:none; }
-.kanban { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; padding:12px 16px; }
+.kanban { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; padding:12px 16px; }
 .kanban-col-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
 .pill { background:#f3f4f6; padding:4px 10px; border-radius:9999px; font-size:12px; }
 .kanban-col-body { display:flex; flex-direction:column; gap:10px; max-height:70vh; overflow-y:auto; }
 .empty-col { text-align:center; color:#9ca3af; padding:20px; border:1px dashed #e5e7eb; border-radius:8px; }
+@media (max-width:1280px) {
+  .kanban { grid-template-columns:repeat(4,minmax(220px,1fr)); overflow-x:auto; }
+}
 @media (max-width:1023px) {
   .orders-wrap { padding:8px 0 24px; }
   .header-actions { justify-content:flex-start; }
@@ -2124,27 +2218,31 @@ function OrderCard({
   onEditOrder,
   onEditPax,
   onEditTable,
-  onShowItems, 
+  onShowItems,
+  onAcceptDelivery,
+  onRejectDelivery,
   canCancel = true
 }) {
   const items = toDisplayItems(order);
   const total = computeOrderTotalDisplay(order);
 
   const isCreditOrder = order?.is_credit && order?.credit_customer_id;
+  const isPendingDelivery = order.status === 'pending_acceptance';
   const pm = String(order.payment_method || '').toLowerCase();
-  
+
   // Choose class for accent border
-  const statusClass = 
-    order.status === 'new' ? 'is-new' : 
-    order.status === 'in_progress' ? 'is-progress' :
-    order.status === 'ready' ? 'is-ready' : 'is-completed';
+  const statusClass =
+    isPendingDelivery ? 'is-pending' :
+      order.status === 'new' ? 'is-new' :
+        order.status === 'in_progress' ? 'is-progress' :
+          order.status === 'ready' ? 'is-ready' : 'is-completed';
 
   // Calculate if order is "Late" (> 20 mins and not done)
   // Logic removed for late coloring, keeping just regular time display
 
   return (
     <OrderCardStyled
-      className={`${statusClass} order-card`} 
+      className={`${statusClass} order-card`}
       onClick={() => onShowItems && onShowItems(order)}
     >
       <OrderHeader style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
@@ -2156,140 +2254,175 @@ function OrderCard({
           </span>
         </div>
 
-        {/* Bottom Row: Metadata (Table, Pax, Credit) */}
+        {/* Bottom Row: Metadata (Table, Pax, Credit, Delivery badge) */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginTop: 2 }}>
-           <TooltipSpan 
-            data-tip={order.status !== 'completed' ? "Edit Table" : undefined}
-            style={{
-              fontSize: 13, fontWeight: 600, color: '#334155', display: 'flex', alignItems: 'center', gap: 6,
-              cursor: order.status === 'completed' ? 'default' : 'pointer',
-              padding: '2px 0'
-            }}
-            onClick={(e) => { 
-               if (order.status === 'completed') return;
-               e.stopPropagation(); 
-               onEditTable && onEditTable(order); 
-            }}
-          >
-            {getOrderTypeLabel(order)}
-            {/* Show edit icon only if not completed */}
-            {order.status !== 'completed' && <span style={{fontSize:11, opacity:0.5}}>✎</span>}
-          </TooltipSpan>
-          
-          {order.number_of_customers && (
-             <TooltipSpan 
-               data-tip={order.status !== 'completed' ? "Edit Pax" : undefined}
-               style={{
-                 fontSize: 13, color: '#64748b', display: 'flex', alignItems: 'center', gap: 4,
-                 cursor: order.status === 'completed' ? 'default' : 'pointer',
-                 padding: '2px 0'
-               }} 
-               onClick={(e) => {
-                 if (order.status === 'completed') return;
-                 e.stopPropagation();
-                 onEditPax && onEditPax(order);
-               }}
-             >
-               <span style={{fontSize:14}}>👥</span> 
-               <span style={{fontWeight:600}}>{order.number_of_customers}</span>
-               {order.status !== 'completed' && <span style={{fontSize:11, opacity:0.5}}>✎</span>}
-             </TooltipSpan>
+
+          {/* Delivery badge when awaiting approval */}
+          {isPendingDelivery && (
+            <span style={{
+              fontSize: 11, fontWeight: 800, background: '#f97316', color: 'white',
+              padding: '2px 8px', borderRadius: 6, letterSpacing: '0.03em'
+            }}>
+              📦 DELIVERY — AWAITING APPROVAL
+            </span>
           )}
 
-          {isCreditOrder && <span style={{fontSize:10, background:'#e0f2fe', color:'#0369a1', padding:'2px 6px', borderRadius:4, fontWeight: 700}}>CREDIT</span>}
+          {/* Table edit tooltip (hidden for pending delivery to reduce clutter) */}
+          {!isPendingDelivery && (
+            <TooltipSpan
+              data-tip={order.status !== 'completed' ? "Edit Table" : undefined}
+              style={{
+                fontSize: 13, fontWeight: 600, color: '#334155', display: 'flex', alignItems: 'center', gap: 6,
+                cursor: order.status === 'completed' ? 'default' : 'pointer',
+                padding: '2px 0'
+              }}
+              onClick={(e) => {
+                if (order.status === 'completed') return;
+                e.stopPropagation();
+                onEditTable && onEditTable(order);
+              }}
+            >
+              {getOrderTypeLabel(order)}
+              {/* Show edit icon only if not completed */}
+              {order.status !== 'completed' && <span style={{ fontSize: 11, opacity: 0.5 }}>✎</span>}
+            </TooltipSpan>
+          )}
+
+          {order.number_of_customers && (
+            <TooltipSpan
+              data-tip={order.status !== 'completed' ? "Edit Pax" : undefined}
+              style={{
+                fontSize: 13, color: '#64748b', display: 'flex', alignItems: 'center', gap: 4,
+                cursor: order.status === 'completed' ? 'default' : 'pointer',
+                padding: '2px 0'
+              }}
+              onClick={(e) => {
+                if (order.status === 'completed') return;
+                e.stopPropagation();
+                onEditPax && onEditPax(order);
+              }}
+            >
+              <span style={{ fontSize: 14 }}>👥</span>
+              <span style={{ fontWeight: 600 }}>{order.number_of_customers}</span>
+              {order.status !== 'completed' && <span style={{ fontSize: 11, opacity: 0.5 }}>✎</span>}
+            </TooltipSpan>
+          )}
+
+          {isCreditOrder && <span style={{ fontSize: 10, background: '#e0f2fe', color: '#0369a1', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>CREDIT</span>}
         </div>
       </OrderHeader>
 
-      <div style={{ margin:'8px 0', fontSize:14, display:'flex', flexDirection:'column', gap:4 }}>
+      <div style={{ margin: '8px 0', fontSize: 14, display: 'flex', flexDirection: 'column', gap: 4 }}>
         {/* Show fewer items by default */}
-        {items.slice(0, 3).map((it,i)=>(
+        {items.slice(0, 3).map((it, i) => (
           <div key={i} style={{ display: 'flex', justifyContent: 'space-between' }}>
-             <div>
-               <span style={{fontWeight:600}}>{formatQtyP(it.quantity, it.uom_precision ?? 0)}×</span> {(() => {
-                 let n = it.name || "Item";
-                 if (it.variant_name) {
-                   const suffix = ` (${it.variant_name})`;
-                   if (n.endsWith(suffix)) n = n.slice(0, -suffix.length);
-                 }
-                 return n;
-               })()}
-               {it.variant_name && <span style={{fontSize:12, color:'#6b7280', marginLeft:6}}>({it.variant_name})</span>}
-             </div>
+            <div>
+              <span style={{ fontWeight: 600 }}>{formatQtyP(it.quantity, it.uom_precision ?? 0)}×</span> {(() => {
+                let n = it.name || "Item";
+                if (it.variant_name) {
+                  const suffix = ` (${it.variant_name})`;
+                  if (n.endsWith(suffix)) n = n.slice(0, -suffix.length);
+                }
+                return n;
+              })()}
+              {it.variant_name && <span style={{ fontSize: 12, color: '#6b7280', marginLeft: 6 }}>({it.variant_name})</span>}
+            </div>
           </div>
         ))}
         {items.length > 3 && (
-           <div 
-             onClick={(e) => { e.stopPropagation(); onShowItems && onShowItems(order); }}
-             style={{fontSize:12, color:statusColor, cursor:'pointer', fontWeight:600, marginTop:4}}
-           >
-             Show all {items.length} items
-           </div>
+          <div
+            onClick={(e) => { e.stopPropagation(); onShowItems && onShowItems(order); }}
+            style={{ fontSize: 12, color: statusColor, cursor: 'pointer', fontWeight: 600, marginTop: 4 }}
+          >
+            Show all {items.length} items
+          </div>
         )}
       </div>
 
       <CardFooter>
         <PriceTag>{money(total)}</PriceTag>
         <div style={{ display: 'flex', gap: 6 }} onClick={(e) => e.stopPropagation()}>
-           
-            {/* New Orders */}
-            {order.status === 'new' && (
-              <>
-                <Button size="sm" onClick={() => onChangeStatus(order.id, 'in_progress')}>Start</Button>
-                <Button size="sm" variant="outline" onClick={() => onEditOrder(order)}>Edit</Button>
-{canCancel && (
-  <Button size="sm" variant="danger" onClick={() => onCancelOrderOpen(order)}>
-    Cancel
-  </Button>
-)}
-                <Button size="sm" style={{background: '#10b981', borderColor: '#10b981', color:'white'}} onClick={() => onPrintKot && onPrintKot(order)}>KOT</Button>
-              </>
-            )}
 
-            {/* In Progress */}
-            {order.status === 'in_progress' && (
-              <>
-                 <Button size="sm" onClick={() => onComplete(order)} disabled={generatingInvoice === order.id}>Done</Button>
-                 <Button size="sm" variant="outline" onClick={() => onEditOrder(order)}>Edit</Button>
-                 {/* Allow cancel if mistake */}
-{canCancel && (
-  <Button size="sm" variant="danger" onClick={() => onCancelOrderOpen(order)}>
-    Cancel
-  </Button>
-)}
-                 <Button size="sm" style={{background: '#10b981', borderColor: '#10b981', color:'white'}} onClick={() => onPrintBill && onPrintBill(order)}>Print Bill</Button>
-              </>
-            )}
+          {/* Pending Delivery — Accept / Decline */}
+          {isPendingDelivery && (
+            <>
+              <Button
+                size="sm"
+                style={{ background: '#16a34a', borderColor: '#16a34a', color: 'white', fontWeight: 700, fontSize: 13 }}
+                onClick={() => onAcceptDelivery && onAcceptDelivery(order)}
+              >
+                ✅ Accept
+              </Button>
+              <Button
+                size="sm"
+                variant="danger"
+                style={{ fontWeight: 700, fontSize: 13 }}
+                onClick={() => onRejectDelivery && onRejectDelivery(order)}
+              >
+                ❌ Decline
+              </Button>
+            </>
+          )}
 
-            {/* Ready */}
-            {order.status === 'ready' && (
-              <>
-                <Button size="sm" onClick={() => onComplete(order)} disabled={generatingInvoice === order.id}>
-                   {generatingInvoice === order.id ? '...' : 'Done'}
+          {/* New Orders */}
+          {order.status === 'new' && (
+            <>
+              <Button size="sm" onClick={() => onChangeStatus(order.id, 'in_progress')}>Start</Button>
+              <Button size="sm" variant="outline" onClick={() => onEditOrder(order)}>Edit</Button>
+              {canCancel && (
+                <Button size="sm" variant="danger" onClick={() => onCancelOrderOpen(order)}>
+                  Cancel
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => onEditOrder(order)}>Edit</Button>
-{canCancel && (
-  <Button size="sm" variant="danger" onClick={() => onCancelOrderOpen(order)}>
-    Cancel
-  </Button>
-)}
-                <Button size="sm" style={{background: '#10b981', borderColor: '#10b981', color:'white'}} onClick={() => onPrintBill && onPrintBill(order)}>Print Bill</Button>
-              </>
-            )}
+              )}
+              <Button size="sm" style={{ background: '#10b981', borderColor: '#10b981', color: 'white' }} onClick={() => onPrintKot && onPrintKot(order)}>KOT</Button>
+            </>
+          )}
 
-            {/* Completed Orders */}
-            {order.status === 'completed' && (
-              <>
-                <Button size="sm" onClick={async () => {
-                   try { await downloadInvoicePdf(order.id) } catch (e) { alert(e.message) }
-                }} disabled={generatingInvoice === order.id}>Invoice</Button>
-                <Button size="sm" style={{background: '#10b981', borderColor: '#10b981', color:'white'}} onClick={() => onPrintBill && onPrintBill(order)}>Print Bill</Button>
-{canCancel && (
-  <Button size="sm" variant="danger" onClick={() => onCancelOrderOpen(order)}>
-    Cancel
-  </Button>
-)}
-              </>
-            )}
+          {/* In Progress */}
+          {order.status === 'in_progress' && (
+            <>
+              <Button size="sm" onClick={() => onComplete(order)} disabled={generatingInvoice === order.id}>Done</Button>
+              <Button size="sm" variant="outline" onClick={() => onEditOrder(order)}>Edit</Button>
+              {/* Allow cancel if mistake */}
+              {canCancel && (
+                <Button size="sm" variant="danger" onClick={() => onCancelOrderOpen(order)}>
+                  Cancel
+                </Button>
+              )}
+              <Button size="sm" style={{ background: '#10b981', borderColor: '#10b981', color: 'white' }} onClick={() => onPrintBill && onPrintBill(order)}>Print Bill</Button>
+            </>
+          )}
+
+          {/* Ready */}
+          {order.status === 'ready' && (
+            <>
+              <Button size="sm" onClick={() => onComplete(order)} disabled={generatingInvoice === order.id}>
+                {generatingInvoice === order.id ? '...' : 'Done'}
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => onEditOrder(order)}>Edit</Button>
+              {canCancel && (
+                <Button size="sm" variant="danger" onClick={() => onCancelOrderOpen(order)}>
+                  Cancel
+                </Button>
+              )}
+              <Button size="sm" style={{ background: '#10b981', borderColor: '#10b981', color: 'white' }} onClick={() => onPrintBill && onPrintBill(order)}>Print Bill</Button>
+            </>
+          )}
+
+          {/* Completed Orders */}
+          {order.status === 'completed' && (
+            <>
+              <Button size="sm" onClick={async () => {
+                try { await downloadInvoicePdf(order.id) } catch (e) { alert(e.message) }
+              }} disabled={generatingInvoice === order.id}>Invoice</Button>
+              <Button size="sm" style={{ background: '#10b981', borderColor: '#10b981', color: 'white' }} onClick={() => onPrintBill && onPrintBill(order)}>Print Bill</Button>
+              {canCancel && (
+                <Button size="sm" variant="danger" onClick={() => onCancelOrderOpen(order)}>
+                  Cancel
+                </Button>
+              )}
+            </>
+          )}
 
         </div>
       </CardFooter>

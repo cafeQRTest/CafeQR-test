@@ -70,6 +70,7 @@ export async function sendNewOrderPush({
   orderType = null,
   tableNumber = null,
   totalAmount = null,
+  status = null, // 'new' | 'pending_acceptance'
 }) {
   if (!supabase) return { ok: false, reason: 'no_supabase' };
   if (!restaurantId || !orderId) return { ok: false, reason: 'missing_ids' };
@@ -110,17 +111,18 @@ export async function sendNewOrderPush({
     logId = logRow?.id || null;
   }
 
-  // Guard: only send for orders still in "new" status.
+  // Guard: only send for orders in 'new' or 'pending_acceptance' status.
   const { data: orderRow } = await supabase
     .from('orders')
     .select('status, table_number, order_type, total_amount, total_inc_tax, total')
     .eq('id', orderId)
     .maybeSingle();
 
-  const resolvedStatus = String(orderRow?.status || 'new').toLowerCase();
-  if (resolvedStatus !== 'new') {
+  const resolvedStatus = String(orderRow?.status || status || 'new').toLowerCase();
+  const isPendingDelivery = resolvedStatus === 'pending_acceptance';
+  if (resolvedStatus !== 'new' && !isPendingDelivery) {
     await markLogRow(supabase, logId, { status: 'skipped_not_new', success_count: 0, failure_count: 0 });
-    return { ok: true, skipped: true, reason: 'status_not_new', successCount: 0, failureCount: 0 };
+    return { ok: true, skipped: true, reason: 'status_not_actionable', successCount: 0, failureCount: 0 };
   }
 
   const resolvedTable = orderRow?.table_number ?? tableNumber;
@@ -153,22 +155,34 @@ export async function sendNewOrderPush({
 
   const shortOrderId = String(orderId).slice(0, 8).toUpperCase();
   const locationLabel = orderLocationLabel(resolvedOrderType, resolvedTable);
-  const body = `${locationLabel} • #${shortOrderId}${formatAmount(resolvedAmount)}`;
+
+  // Differentiate notification content based on order status
+  let notifTitle, notifBody, notifType;
+  if (isPendingDelivery) {
+    notifTitle = '🔔 New Delivery Order — Action Required';
+    notifBody = `Tap to Accept or Decline • #${shortOrderId}${formatAmount(resolvedAmount)}`;
+    notifType = 'delivery_pending';
+  } else {
+    notifTitle = 'New Order';
+    notifBody = `${locationLabel} • #${shortOrderId}${formatAmount(resolvedAmount)}`;
+    notifType = 'new_order';
+  }
+
   const url = `/owner/orders?highlight=${encodeURIComponent(String(orderId))}`;
 
   const message = {
     tokens: uniqueTokens,
     notification: {
-      title: 'New Order',
-      body,
+      title: notifTitle,
+      body: notifBody,
     },
     data: {
-      type: 'new_order',
+      type: notifType,
       orderId: String(orderId),
       restaurantId: String(restaurantId),
       url,
-      title: 'New Order',
-      body,
+      title: notifTitle,
+      body: notifBody,
     },
     webpush: {
       headers: {
@@ -176,12 +190,12 @@ export async function sendNewOrderPush({
       },
       fcmOptions: { link: url },
       notification: {
-        title: 'New Order',
-        body,
+        title: notifTitle,
+        body: notifBody,
         icon: '/icons/icon-192.png',
         badge: '/icons/icon-192.png',
         tag: `new-order-${orderId}`,
-        vibrate: [200, 100, 200, 100, 200],
+        vibrate: [300, 100, 300, 100, 300, 100, 300],
         requireInteraction: true,
         silent: false
       },
@@ -227,8 +241,9 @@ export async function sendNewOrderPush({
       failure_count: response.failureCount,
       token_count: uniqueTokens.length,
       payload: {
-        title: 'New Order',
-        body,
+        title: notifTitle,
+        body: notifBody,
+        type: notifType,
         orderId,
         restaurantId,
         tokenPrefixes: uniqueTokens.map((t) => tokenPrefix(t)),
