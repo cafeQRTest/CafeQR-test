@@ -195,15 +195,23 @@ export async function sendNewOrderPush({
         icon: '/icons/icon-192.png',
         badge: '/icons/icon-192.png',
         tag: `new-order-${orderId}`,
-        vibrate: [300, 100, 300, 100, 300, 100, 300],
+        vibrate: isPendingDelivery
+          ? [500, 200, 500, 200, 500, 200, 500, 200, 500]
+          : [300, 100, 300, 100, 300, 100, 300],
         requireInteraction: true,
-        silent: false
+        silent: false,
+        ...(isPendingDelivery ? {
+          actions: [
+            { action: 'accept', title: '\u2705 Accept' },
+            { action: 'decline', title: '\u274c Decline' },
+          ]
+        } : {}),
       },
     },
     android: {
       priority: 'high',
       notification: {
-        channelId: 'orders_sound_v2',
+        channelId: isPendingDelivery ? 'delivery_alerts' : 'orders_sound_v2',
         sound: 'beep',
         tag: `new-order-${orderId}`,
       },

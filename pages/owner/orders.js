@@ -1340,6 +1340,40 @@ export default function OrdersPage() {
     }
   }, [restaurantId, loadOrders]);
 
+  // Handle deep-link from notification Accept/Decline buttons
+  // URL format: /owner/orders?highlight=<orderId>&action=accept|decline
+  useEffect(() => {
+    if (!router.isReady || !restaurantId || loading) return;
+    const { action, highlight } = router.query;
+    if (!action || !highlight) return;
+
+    // Clean the URL immediately to prevent re-triggering
+    router.replace('/owner/orders', undefined, { shallow: true });
+
+    // Wait a tick for orders to load, then trigger the action
+    const timer = setTimeout(async () => {
+      if (action === 'accept') {
+        // Find the order and accept it
+        const order = (ordersByStatus.pending_acceptance || []).find(o => o.id === highlight);
+        if (order) {
+          handleAcceptDelivery(order);
+        } else {
+          // Order might not be in state yet, try direct accept
+          handleAcceptDelivery({ id: highlight });
+        }
+      } else if (action === 'decline') {
+        const order = (ordersByStatus.pending_acceptance || []).find(o => o.id === highlight);
+        if (order) {
+          onCancelOrderOpen(order);
+        } else {
+          onCancelOrderOpen({ id: highlight });
+        }
+      }
+    }, 1500);
+
+    return () => clearTimeout(timer);
+  }, [router.isReady, restaurantId, loading]);
+
   // Realtime subscription & reconnection logic
   // Realtime subscription & order state sync
   useEffect(() => {
