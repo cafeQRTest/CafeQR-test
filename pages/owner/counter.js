@@ -888,6 +888,8 @@ const getDraftOrQtyNumber = (cartId, fallbackQty, precision = 2) => {
   const [customerPhone, setCustomerPhone] = useState('');
   const [selectedCustomerId, setSelectedCustomerId] = useState(null);
   const [selectedCustomerNo, setSelectedCustomerNo] = useState(null);
+  const [allowMultipleCustomers, setAllowMultipleCustomers] = useState(false);
+  const [selectedCustomers, setSelectedCustomers] = useState([]);
   const [numberOfCustomers, setNumberOfCustomers] = useState('');
   const [orderDate, setOrderDate] = useState(() => {
     const d = new Date();
@@ -928,7 +930,8 @@ const getDraftOrQtyNumber = (cartId, fallbackQty, precision = 2) => {
 
   // Watch selected customer for Loyalty
   useEffect(() => {
-    if (!selectedCustomerId || !restaurantId) {
+    const activeLoyaltyCustomerId = allowMultipleCustomers ? (selectedCustomers[0]?.id || null) : selectedCustomerId;
+    if (!activeLoyaltyCustomerId || !restaurantId) {
         setLoyaltyProgram(null);
         setCustomerPoints({ points: 0, pointsValue: 0 });
         setLoyaltyRedeemAmount(0);
@@ -936,7 +939,7 @@ const getDraftOrQtyNumber = (cartId, fallbackQty, precision = 2) => {
         return;
     }
     const fetchLoyalty = async () => {
-        const { data: cust } = await supabase.from('v_owner_customers').select('loyalty_points, loyalty_program_id').eq('customer_id', selectedCustomerId).single();
+        const { data: cust } = await supabase.from('v_owner_customers').select('loyalty_points, loyalty_program_id').eq('customer_id', activeLoyaltyCustomerId).single();
         if (cust) {
             let progId = cust.loyalty_program_id;
             // If no specific program, check default
@@ -1257,6 +1260,7 @@ const cartTotals = useMemo(() => {
     shipping_phone,
     print_logo_rows,
     featurescustomersenabled,
+    allow_multiple_customers_per_order,
     features_menu_images_enabled,
     round_off_enabled,
     round_off_mode,
@@ -1310,6 +1314,7 @@ try {
 } catch (_) { /* non-critical */ }
 setSendToKitchenEnabled(profile?.features_counter_send_to_kitchen_enabled !== false);
 setCustomerFeatureEnabled(!!profile?.featurescustomersenabled);
+setAllowMultipleCustomers(!!profile?.allow_multiple_customers_per_order);
 setEnableMenuImages(!!profile?.features_menu_images_enabled);
 
 // after loading profile
@@ -1869,13 +1874,20 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
     
     const finalTotalVal = (cartTotals.finalTotal || 0) + manualRoundOffAdj;
 
+    const isMultiple = allowMultipleCustomers && selectedCustomers.length > 0;
+    const finalCustId = isMultiple ? selectedCustomers[0].id : selectedCustomerId;
+    const finalCustName = isMultiple ? selectedCustomers[0].name : (customerName.trim() || null);
+    const finalCustPhone = isMultiple ? selectedCustomers[0].phone : (customerPhone.trim() || null);
+    const finalCustIdsArray = isMultiple ? selectedCustomers.map(c => c.id) : (selectedCustomerId ? [selectedCustomerId] : []);
+
     const orderData = {
       restaurant_id: restaurantId,
       order_type,
       table_number,
-      customer_name: customerName.trim() || null,
-      customer_phone: customerPhone.trim() || null,
-      customer_id: selectedCustomerId,
+      customer_name: finalCustName,
+      customer_phone: finalCustPhone,
+      customer_id: finalCustId,
+      customer_ids: finalCustIdsArray,
       delivery_address_id: order_type === 'delivery' ? selectedAddressId : null,
       number_of_customers: numberOfCustomers ? Number(numberOfCustomers) : null,
       payment_method: isCredit ? 'credit' : finalPaymentMethod,
@@ -1994,6 +2006,7 @@ const res = await fetch('/api/orders/create', {
     setCustomerName(''); 
     setCustomerPhone(''); 
     setSelectedCustomerId(null);
+    setSelectedCustomers([]);
     setSelectedCustomerNo(null);
     setNumberOfCustomers(''); 
     setPaymentMethod('cash');
@@ -2068,13 +2081,20 @@ async function getBearerTokenOrThrow() {
     // Use calculated round-off from cartTotals
     const kitchenRoundOff = cartTotals.roundOffAmount;
 
+    const isMultiple = allowMultipleCustomers && selectedCustomers.length > 0;
+    const finalCustId = isMultiple ? selectedCustomers[0].id : selectedCustomerId;
+    const finalCustName = isMultiple ? selectedCustomers[0].name : (customerName.trim() || null);
+    const finalCustPhone = isMultiple ? selectedCustomers[0].phone : (customerPhone.trim() || null);
+    const finalCustIdsArray = isMultiple ? selectedCustomers.map(c => c.id) : (selectedCustomerId ? [selectedCustomerId] : []);
+
     const orderData = {
       restaurant_id: restaurantId,
       order_type,
       table_number,
-      customer_name: customerName.trim() || null,
-      customer_phone: customerPhone.trim() || null,
-      customer_id: selectedCustomerId,
+      customer_name: finalCustName,
+      customer_phone: finalCustPhone,
+      customer_id: finalCustId,
+      customer_ids: finalCustIdsArray,
       delivery_address_id: order_type === 'delivery' ? selectedAddressId : null,
       number_of_customers: numberOfCustomers ? Number(numberOfCustomers) : null,
       payment_method: isCredit ? 'credit' : 'none',
@@ -2146,6 +2166,7 @@ const orderForPrint = {
 
     setCart([]); setCustomerName(''); setCustomerPhone(''); setNumberOfCustomers(''); setPaymentMethod('cash');
     setOrderSelect(''); setIsCreditSale(false); setSelectedCreditCustomerId(''); setCreditCustomerBalance(0);
+    setSelectedCustomerId(null); setSelectedCustomers([]); setSelectedCustomerNo(null);
     setDiscount({ type: 'amount', value: 0 }); // Reset discount
     setDrawerOpen(false);
     setSuccess('Order sent to kitchen');
@@ -2797,36 +2818,63 @@ function requireTakenByName() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
 
                           <SectionLabel>Customer Name</SectionLabel>
-                          {selectedCustomerId && (() => {
-                             const c = allCustomers.find(cust => cust.customer_id === selectedCustomerId);
-                             if (!c) return null;
-                             const isVip = c.order_count >= 5 || c.total_spent >= 2000;
-                             const thirtyDaysAgo = new Date();
-                             thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-                             const isAtRisk = c.last_order_at && new Date(c.last_order_at) < thirtyDaysAgo;
-                             
-                             return (
+                          {allowMultipleCustomers ? (
+                             selectedCustomers.length > 0 && selectedCustomers.some(c => c.order_count >= 5 || c.total_spent >= 2000) && (
                                <div style={{ display: 'flex', gap: '4px', marginBottom: '6px' }}>
-                                 {isVip && <span style={{ fontSize: '10px', background: '#fef3c7', color: '#b45309', padding: '1px 6px', borderRadius: '4px', fontWeight: 800 }}>VIP</span>}
-                                 {isAtRisk && <span style={{ fontSize: '10px', background: '#fee2e2', color: '#b91c1c', padding: '1px 6px', borderRadius: '4px', fontWeight: 800 }}>AT RISK</span>}
+                                 <span style={{ fontSize: '10px', background: '#fef3c7', color: '#b45309', padding: '1px 6px', borderRadius: '4px', fontWeight: 800 }}>VIP INCLUDED</span>
                                </div>
-                             );
-                          })()}
+                             )
+                          ) : (
+                             selectedCustomerId && (() => {
+                               const c = allCustomers.find(cust => cust.customer_id === selectedCustomerId);
+                               if (!c) return null;
+                               const isVip = c.order_count >= 5 || c.total_spent >= 2000;
+                               const thirtyDaysAgo = new Date();
+                               thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+                               const isAtRisk = c.last_order_at && new Date(c.last_order_at) < thirtyDaysAgo;
+                               
+                               return (
+                                 <div style={{ display: 'flex', gap: '4px', marginBottom: '6px' }}>
+                                   {isVip && <span style={{ fontSize: '10px', background: '#fef3c7', color: '#b45309', padding: '1px 6px', borderRadius: '4px', fontWeight: 800 }}>VIP</span>}
+                                   {isAtRisk && <span style={{ fontSize: '10px', background: '#fee2e2', color: '#b91c1c', padding: '1px 6px', borderRadius: '4px', fontWeight: 800 }}>AT RISK</span>}
+                                 </div>
+                               );
+                            })()
+                          )}
                         </div>
-                        {!showNameSuggestions && !selectedCustomerId && customerName.trim() && filteredSuggestions.length === 0 && (
+                        {!showNameSuggestions && !selectedCustomerId && customerName.trim() && filteredSuggestions.length === 0 && selectedCustomers.length === 0 && (
                           <span style={{ fontSize: '10px', color: THEME.main, fontWeight: 800, background: THEME.soft, padding: '2px 8px', borderRadius: '4px', marginBottom: '4px' }}>
                             NEW
                           </span>
                         )}
                       </div>
+                      
+                      {allowMultipleCustomers && selectedCustomers.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                          {selectedCustomers.map(sc => (
+                            <div key={sc.id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: THEME.soft, border: `1px solid ${THEME.main}40`, padding: '4px 10px', borderRadius: 16 }}>
+                               <span style={{ fontSize: 13, fontWeight: 600, color: THEME.main }}>{sc.name} {sc.customer_no ? `#${sc.customer_no}` : ''}</span>
+                               <button 
+                                 type="button"
+                                 onClick={(e) => {
+                                   e.stopPropagation();
+                                   setSelectedCustomers(selectedCustomers.filter(x => x.id !== sc.id));
+                                 }}
+                                 style={{ background: 'transparent', border: 'none', color: THEME.main, cursor: 'pointer', padding: 2, display: 'flex', alignItems: 'center' }}
+                               >✕</button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
                       <input 
                         type="text" placeholder="Search name..." 
                         value={customerName} 
-                        readOnly={!!selectedCustomerId}
+                        readOnly={!allowMultipleCustomers && !!selectedCustomerId}
                         onChange={(e) => {
                            setCustomerName(e.target.value);
                            setShowNameSuggestions(true);
-                           if (selectedCustomerId) {
+                           if (!allowMultipleCustomers && selectedCustomerId) {
                               setSelectedCustomerId(null);
                               setSelectedCustomerNo(null);
                               setCustomerPhone('');
@@ -2836,16 +2884,16 @@ function requireTakenByName() {
                         onBlur={() => setTimeout(() => setShowNameSuggestions(false), 200)}
                         style={{  
                           width: '100%', padding: '12px 16px', borderRadius: '12px', outline: 'none', fontSize: '14px',
-                          background: selectedCustomerId ? (orderMode === 'kitchen' ? '#fff7ed' : '#f0fdf4') : '#ffffff', 
-                          border: selectedCustomerId 
+                          background: (!allowMultipleCustomers && selectedCustomerId) ? (orderMode === 'kitchen' ? '#fff7ed' : '#f0fdf4') : '#ffffff', 
+                          border: (!allowMultipleCustomers && selectedCustomerId) 
                             ? (orderMode === 'kitchen' ? '1.5px solid #fdba74' : '1.5px solid #4ade80') 
                             : '1.5px solid #e2e8f0',
-                          fontWeight: selectedCustomerId ? 700 : 400,
-                      color: selectedCustomerId ? (orderMode === 'kitchen' ? '#9a3412' : '#166534') : '#1e293b',
-                      cursor: selectedCustomerId ? 'not-allowed' : 'text'
+                          fontWeight: (!allowMultipleCustomers && selectedCustomerId) ? 700 : 400,
+                          color: (!allowMultipleCustomers && selectedCustomerId) ? (orderMode === 'kitchen' ? '#9a3412' : '#166534') : '#1e293b',
+                          cursor: (!allowMultipleCustomers && selectedCustomerId) ? 'not-allowed' : 'text'
                         }} 
                       />
-                      {selectedCustomerId && (
+                      {!allowMultipleCustomers && selectedCustomerId && (
                          <button
                            onClick={(e) => {
                                e.stopPropagation();
@@ -2874,12 +2922,12 @@ function requireTakenByName() {
                         type="text"
                         placeholder="ID"
                         value={selectedCustomerNo || ''}
-                        readOnly={!!selectedCustomerId}
+                        readOnly={!allowMultipleCustomers && !!selectedCustomerId}
                         onChange={(e) => {
                           const val = e.target.value.toUpperCase();
                           setSelectedCustomerNo(val);
                           setShowNameSuggestions(true);
-                          if (selectedCustomerId) {
+                          if (!allowMultipleCustomers && selectedCustomerId) {
                             setSelectedCustomerId(null);
                             setCustomerName('');
                             setCustomerPhone('');
@@ -2889,13 +2937,13 @@ function requireTakenByName() {
                         onBlur={() => setTimeout(() => setShowNameSuggestions(false), 200)}
                         style={{
                           width: '100%', padding: '12px 16px', 
-                          background: selectedCustomerId ? (orderMode === 'kitchen' ? '#fff7ed' : '#f0fdf4') : '#ffffff', 
-                          border: selectedCustomerId 
+                          background: (!allowMultipleCustomers && selectedCustomerId) ? (orderMode === 'kitchen' ? '#fff7ed' : '#f0fdf4') : '#ffffff', 
+                          border: (!allowMultipleCustomers && selectedCustomerId) 
                             ? (orderMode === 'kitchen' ? '1.5px solid #fdba74' : '1.5px solid #4ade80') 
                             : '1.5px solid #e2e8f0',
                           borderRadius: '12px', fontSize: '14px', fontWeight: 700, outline: 'none',
-                          color: selectedCustomerId ? (orderMode === 'kitchen' ? '#9a3412' : '#166534') : '#1e293b',
-                          cursor: selectedCustomerId ? 'not-allowed' : 'text'
+                          color: (!allowMultipleCustomers && selectedCustomerId) ? (orderMode === 'kitchen' ? '#9a3412' : '#166534') : '#1e293b',
+                          cursor: (!allowMultipleCustomers && selectedCustomerId) ? 'not-allowed' : 'text'
                         }}
                       />
                     </div>
@@ -2905,11 +2953,11 @@ function requireTakenByName() {
                       <input 
                         type="tel" placeholder="Phone" 
                         value={customerPhone} 
-                        readOnly={!!selectedCustomerId}
+                        readOnly={!allowMultipleCustomers && !!selectedCustomerId}
                         onChange={(e) => {
                           setCustomerPhone(e.target.value);
                           setShowNameSuggestions(true);
-                          if (selectedCustomerId) {
+                          if (!allowMultipleCustomers && selectedCustomerId) {
                             setSelectedCustomerId(null);
                             setSelectedCustomerNo(null);
                             setCustomerName('');
@@ -2919,11 +2967,11 @@ function requireTakenByName() {
                         onBlur={() => setTimeout(() => setShowNameSuggestions(false), 200)}
                         style={{ 
                           width: '100%', padding: '12px', borderRadius: '12px', outline: 'none', fontSize: '14px',
-                          background: selectedCustomerId ? (orderMode === 'kitchen' ? '#fff7ed' : '#f0fdf4') : '#ffffff', 
-                          border: selectedCustomerId 
+                          background: (!allowMultipleCustomers && selectedCustomerId) ? (orderMode === 'kitchen' ? '#fff7ed' : '#f0fdf4') : '#ffffff', 
+                          border: (!allowMultipleCustomers && selectedCustomerId) 
                             ? (orderMode === 'kitchen' ? '1.5px solid #fdba74' : '1.5px solid #4ade80') 
                             : '1.5px solid #e2e8f0',
-                          cursor: selectedCustomerId ? 'not-allowed' : 'text'
+                          cursor: (!allowMultipleCustomers && selectedCustomerId) ? 'not-allowed' : 'text'
                         }} 
                       />
                     </div>
@@ -2998,10 +3046,24 @@ function requireTakenByName() {
                            key={i}
                            onMouseDown={(e) => {
                              e.preventDefault(); 
-                             setCustomerName(c.name || '');
-                             setCustomerPhone(c.phone || '');
-                             setSelectedCustomerId(c.customer_id || c.id || null);
-                             setSelectedCustomerNo(c.customer_no || null);
+                             if (allowMultipleCustomers) {
+                               if (!selectedCustomers.some(existing => existing.id === (c.customer_id || c.id))) {
+                                  setSelectedCustomers([...selectedCustomers, {
+                                     id: c.customer_id || c.id,
+                                     name: c.name || '',
+                                     phone: c.phone || '',
+                                     customer_no: c.customer_no || ''
+                                  }]);
+                               }
+                               setCustomerName('');
+                               setCustomerPhone('');
+                               setSelectedCustomerNo(null);
+                             } else {
+                               setCustomerName(c.name || '');
+                               setCustomerPhone(c.phone || '');
+                               setSelectedCustomerId(c.customer_id || c.id || null);
+                               setSelectedCustomerNo(c.customer_no || null);
+                             }
                              setShowNameSuggestions(false);
                            }}
                            style={{

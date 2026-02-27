@@ -37,11 +37,11 @@ export default async function handler(req, res) {
       customer_id = null,
       customer_name = null,
       customer_phone = null,
-      user_id = null,
       is_credit = false,
       credit_customer_id = null,
       original_payment_method = null,
       status: incomingStatus = null,
+      customer_ids = [], // Array of customer IDs for multiple customers
       number_of_customers = null, // optional
       custom_created_at = null,
       discount_amount = 0,
@@ -414,6 +414,7 @@ export default async function handler(req, res) {
         taken_by_role: serverTakenByRole,
 
         customer_id: finalCustomerId,
+        customer_ids,
         customer_name,
         customer_phone,
         number_of_customers,

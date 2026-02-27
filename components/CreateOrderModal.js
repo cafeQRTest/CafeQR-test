@@ -1264,6 +1264,7 @@ export default function CreateOrderModal({
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerSearch, setCustomerSearch] = useState('');
   const [selectedCustomerId, setSelectedCustomerId] = useState(null);
+  const [selectedCustomers, setSelectedCustomers] = useState([]); // Array for multiple customers
   const [numberOfCustomers, setNumberOfCustomers] = useState('');
   const [creating, setCreating] = useState(false);
   
@@ -1274,6 +1275,8 @@ export default function CreateOrderModal({
   const { data: allCustomersData } = useAllCustomers(restaurantId);
   const { data: creditCustomersData } = useCreditCustomers(restaurantId);
   const { data: profileConfig } = useRestaurantProfileConfig(restaurantId);
+  
+  const allowMultipleCustomers = profileConfig?.allow_multiple_customers_per_order === true;
 
   // Round-off state (initialized from profile, but editable locally)
   const [roundOffConfig, setRoundOffConfig] = useState({
@@ -1675,10 +1678,19 @@ export default function CreateOrderModal({
   };
 
   const selectCustomer = (c) => {
-    setCustomerName(c.name || '');
-    setCustomerPhone(c.phone || '');
-    setSelectedCustomerId(c.customer_id);
-    setShowNameSuggestions(false);
+    if (allowMultipleCustomers) {
+      if (!selectedCustomers.find(existing => existing.id === c.customer_id)) {
+        setSelectedCustomers(prev => [...prev, { id: c.customer_id, name: c.name, phone: c.phone || '', loyalty_points: c.loyalty_points }]);
+      }
+      setCustomerName('');
+      setCustomerPhone('');
+      setShowNameSuggestions(false);
+    } else {
+      setCustomerName(c.name || '');
+      setCustomerPhone(c.phone || '');
+      setSelectedCustomerId(c.customer_id);
+      setShowNameSuggestions(false);
+    }
   };
 
   // --- CREDIT CUSTOMER FUNCTIONS ---
@@ -1991,6 +2003,7 @@ export default function CreateOrderModal({
     setIsCreditMode(false);
     setSelectedCreditCustomerId('');
     setCreditCustomerBalance(0);
+    setSelectedCustomers([]);
     setVegOnly(false);
     setPackagedOnly(false);
     setDiscount({ type: 'amount', value: 0 });
@@ -2058,14 +2071,21 @@ export default function CreateOrderModal({
       const finalOrderType = orderType; // 'dine-in', 'parcel', 'delivery'
       const finalTableNumber = (finalOrderType === 'dine-in' && table) ? table.identifier : null;
 
+      const isMultiple = allowMultipleCustomers && selectedCustomers.length > 0;
+      const finalCustId = isMultiple ? selectedCustomers[0].id : selectedCustomerId;
+      const finalCustName = isMultiple ? selectedCustomers[0].name : (customerName.trim() || null);
+      const finalCustPhone = isMultiple ? selectedCustomers[0].phone : (customerPhone.trim() || null);
+      const finalCustIdsArray = isMultiple ? selectedCustomers.map(c => c.id) : (selectedCustomerId ? [selectedCustomerId] : []);
+
       const orderData = {
         restaurant_id: restaurantId,
         order_type: finalOrderType,
         table_number: finalTableNumber,
         table_id: (finalOrderType === 'dine-in' && table) ? table.id : null, 
-        customer_name: customerName.trim() || null,
-        customer_phone: customerPhone.trim() || null,
-        customer_id: selectedCustomerId,
+        customer_name: finalCustName,
+        customer_phone: finalCustPhone,
+        customer_id: finalCustId,
+        customer_ids: finalCustIdsArray,
         number_of_customers: parseInt(numberOfCustomers) || null,
         status: orderMode === 'settle' ? 'completed' : 'new',
         items: items,
@@ -2346,7 +2366,20 @@ export default function CreateOrderModal({
           
           {/* Customer Details in Header */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, maxWidth: 540, position: 'relative' }}>
-            {selectedCustomerObj ? (
+            {(allowMultipleCustomers && selectedCustomers.length > 0) ? (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {selectedCustomers.map(sc => (
+                      <div key={sc.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', background: 'rgba(255,255,255,0.2)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}>
+                          <span style={{ fontSize: 13, fontWeight: 800 }}>{sc.name}</span>
+                          <button onClick={() => setSelectedCustomers(prev => prev.filter(c => c.id !== sc.id))} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: 14 }}>×</button>
+                      </div>
+                  ))}
+                  <button 
+                  onClick={() => setSelectedCustomers([])}
+                  style={{ background: 'rgba(239, 68, 68, 0.2)', border: '1px solid rgba(239, 68, 68, 0.4)', borderRadius: 12, padding: '4px 8px', color: '#fca5a5', fontWeight: 800, cursor: 'pointer', fontSize: 11 }}
+                  >Clear All</button>
+              </div>
+            ) : selectedCustomerObj ? (
               /* Detailed Selected Customer Card */
               <SlideInContainer style={{ 
                 padding: '10px 18px', 
@@ -2506,14 +2539,14 @@ export default function CreateOrderModal({
                   +
                 </button>
               </div>
-            ) : (
+            ) : ( (!allowMultipleCustomers || selectedCustomers.length === 0) &&
               /* Normal Customer Search */
               <div style={{ flex: 1, position: 'relative' }}>
                 <div style={{ position: 'relative', width: '100%' }}>
                   <span style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', opacity: 0.6, fontSize: 18 }}>👤</span>
                   <input 
                     type="text"
-                    placeholder="Search Customer / Mobile..."
+                    placeholder={allowMultipleCustomers ? "Search & add multiple customers..." : "Search Customer / Mobile..."}
                     value={customerName}
                     onChange={(e) => handleNameChange(e.target.value)}
                     onFocus={(e) => {

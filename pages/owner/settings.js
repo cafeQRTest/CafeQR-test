@@ -686,6 +686,7 @@ export default function SettingsPage() {
     features_production_enabled: false, features_counter_send_to_kitchen_enabled: false,
     swiggy_enabled: false, zomato_enabled: false,
     featurescustomersenabled: false, featuresloyaltyenabled: false,
+    allow_multiple_customers_per_order: false,
     brand_color: '#f97316', description: '', instagram_handle: '', website_url: '',
     gst_enabled: false, gstin: '', fssai_license: '', default_tax_rate: 5, prices_include_tax: false,
     swiggy_api_key: '', swiggy_api_secret: '', swiggy_webhook_secret: '',
@@ -771,7 +772,9 @@ export default function SettingsPage() {
             qr_ordering_enabled: profile.qr_ordering_enabled !== false, // Default to true if not set
             features_inventory_enabled: !!profile.features_inventory_enabled,
             features_counter_send_to_kitchen_enabled: profile.features_counter_send_to_kitchen_enabled !== false,
-            featurescustomersenabled: !!profile.featurescustomersenabled, featuresloyaltyenabled: !!profile.featuresloyaltyenabled,
+            featurescustomersenabled: !!profile.featurescustomersenabled, 
+            featuresloyaltyenabled: !!profile.featuresloyaltyenabled,
+            allow_multiple_customers_per_order: !!profile.allow_multiple_customers_per_order,
             swiggy_enabled: !!(profile.swiggy_api_key), zomato_enabled: !!(profile.zomato_api_key),
             delivery_radius_km: profile.delivery_radius_km ?? 10,
             online_payment_enabled: !!profile.online_payment_enabled,
@@ -868,7 +871,7 @@ export default function SettingsPage() {
         online_payment_enabled: form.online_payment_enabled,
         featurescustomersenabled: form.featurescustomersenabled,
         featuresloyaltyenabled: form.featuresloyaltyenabled,
-
+        allow_multiple_customers_per_order: form.allow_multiple_customers_per_order,
 
         swiggy_enabled: form.swiggy_enabled,
         swiggy_api_key: form.swiggy_api_key,
@@ -1396,6 +1399,23 @@ export default function SettingsPage() {
                   </FeatureText>
                   <Switch checked={form.featurescustomersenabled} />
                 </FeatureCard>
+
+                {form.featurescustomersenabled && (
+                  <FeatureCard
+                    style={{ marginLeft: 32, transform: 'scale(0.95)', transformOrigin: 'left center' }}
+                    checked={form.allow_multiple_customers_per_order}
+                    onClick={() =>
+                      setForm((f) => ({ ...f, allow_multiple_customers_per_order: !f.allow_multiple_customers_per_order }))
+                    }
+                  >
+                    <FeatureIcon active={form.allow_multiple_customers_per_order}>👥</FeatureIcon>
+                    <FeatureText>
+                      <FeatureTitle>Multiple Customers</FeatureTitle>
+                      <FeatureDesc>Allow assigning multiple people to a single order</FeatureDesc>
+                    </FeatureText>
+                    <Switch checked={form.allow_multiple_customers_per_order} />
+                  </FeatureCard>
+                )}
 
                 <FeatureCard
                   checked={form.featuresloyaltyenabled}

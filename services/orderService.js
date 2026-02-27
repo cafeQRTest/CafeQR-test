@@ -40,6 +40,7 @@ export class OrderService {
         payment_method = null,
         user_id = null,
         customer_id = null,
+        customer_ids = [],
         customer_name = null,
         customer_phone = null,
         number_of_customers = null,
@@ -165,6 +166,20 @@ export class OrderService {
 
       const { error: itemsErr } = await supabase.from('order_items').insert(orderItemsToInsert);
       if (itemsErr) throw itemsErr;
+
+      // 3.5 Update Order Customers Junction
+      if (Array.isArray(customer_ids) && customer_ids.length > 0) {
+         // Wipe existing junction rows for this order
+         await supabase.from('order_customers').delete().eq('order_id', finalOrderId);
+         
+         const ocToInsert = customer_ids.map((cid, idx) => ({
+             order_id: finalOrderId,
+             customer_id: cid,
+             is_primary: idx === 0 // First customer in array is primary
+         }));
+         const { error: ocErr } = await supabase.from('order_customers').insert(ocToInsert);
+         if (ocErr) throw ocErr;
+      }
 
       // 4. Upsert Invoice
       // Fetch or generate invoice number/bill number
