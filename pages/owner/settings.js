@@ -1391,31 +1391,44 @@ export default function SettingsPage() {
                   onClick={() =>
                     setForm((f) => ({ ...f, featurescustomersenabled: !f.featurescustomersenabled }))
                   }
+                  style={{ flexDirection: 'column', alignItems: 'stretch', gap: 16 }}
                 >
-                  <FeatureIcon active={form.featurescustomersenabled}>👤</FeatureIcon>
-                  <FeatureText>
-                    <FeatureTitle>Customers</FeatureTitle>
-                    <FeatureDesc>Enable customer directory / profiles</FeatureDesc>
-                  </FeatureText>
-                  <Switch checked={form.featurescustomersenabled} />
-                </FeatureCard>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: 0 }}>
+                      <FeatureIcon active={form.featurescustomersenabled}>👤</FeatureIcon>
+                      <FeatureText>
+                        <FeatureTitle>Customers</FeatureTitle>
+                        <FeatureDesc>Enable customer directory / profiles</FeatureDesc>
+                      </FeatureText>
+                    </div>
+                    <Switch checked={form.featurescustomersenabled} />
+                  </div>
 
-                {form.featurescustomersenabled && (
-                  <FeatureCard
-                    style={{ marginLeft: 32, transform: 'scale(0.95)', transformOrigin: 'left center' }}
-                    checked={form.allow_multiple_customers_per_order}
-                    onClick={() =>
-                      setForm((f) => ({ ...f, allow_multiple_customers_per_order: !f.allow_multiple_customers_per_order }))
-                    }
-                  >
-                    <FeatureIcon active={form.allow_multiple_customers_per_order}>👥</FeatureIcon>
-                    <FeatureText>
-                      <FeatureTitle>Multiple Customers</FeatureTitle>
-                      <FeatureDesc>Allow assigning multiple people to a single order</FeatureDesc>
-                    </FeatureText>
-                    <Switch checked={form.allow_multiple_customers_per_order} />
-                  </FeatureCard>
-                )}
+                  {form.featurescustomersenabled && (
+                    <div 
+                      style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'space-between', 
+                        padding: '14px 16px', 
+                        background: 'rgba(249, 115, 22, 0.05)', 
+                        border: '1px solid rgba(249, 115, 22, 0.1)',
+                        borderRadius: 14,
+                        marginLeft: 72 // Align with text
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setForm((f) => ({ ...f, allow_multiple_customers_per_order: !f.allow_multiple_customers_per_order }));
+                      }}
+                    >
+                      <FeatureText style={{ gap: 4 }}>
+                        <FeatureTitle style={{ fontSize: 14 }}>Multiple Customers for Order</FeatureTitle>
+                        <FeatureDesc style={{ fontSize: 12 }}>Allow assigning multiple people to a single order</FeatureDesc>
+                      </FeatureText>
+                      <Switch checked={form.allow_multiple_customers_per_order} style={{ transform: 'scale(0.85)', transformOrigin: 'right center' }} />
+                    </div>
+                  )}
+                </FeatureCard>
 
                 <FeatureCard
                   checked={form.featuresloyaltyenabled}
