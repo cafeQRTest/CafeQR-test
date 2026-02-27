@@ -888,8 +888,11 @@ export default function SettingsPage() {
         round_off_manual_limit: Number(form.round_off_manual_limit),
       };
 
-      await supabase.from('restaurant_profiles').upsert(payload, { onConflict: 'restaurant_id' });
-      await supabase.from('restaurants').update({ name: form.restaurant_name }).eq('id', restaurant.id);
+      const { error: upsertError } = await supabase.from('restaurant_profiles').upsert(payload, { onConflict: 'restaurant_id' });
+      if (upsertError) throw upsertError;
+
+      const { error: updateError } = await supabase.from('restaurants').update({ name: form.restaurant_name }).eq('id', restaurant.id);
+      if (updateError) throw updateError;
 
       // Refresh the context to update sidebar features immediately
       refresh();
