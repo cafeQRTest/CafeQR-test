@@ -25,12 +25,14 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
             String title = remoteMessage.getNotification() != null ? remoteMessage.getNotification().getTitle() : remoteMessage.getData().get("title");
             String body = remoteMessage.getNotification() != null ? remoteMessage.getNotification().getBody() : remoteMessage.getData().get("body");
             String orderId = remoteMessage.getData().get("orderId");
+            String type = remoteMessage.getData().get("type"); // 'new_order' or 'delivery_pending'
 
             if (title != null && body != null && orderId != null) {
                 Intent foregroundServiceIntent = new Intent(this, MyForegroundService.class);
                 foregroundServiceIntent.putExtra("title", title);
                 foregroundServiceIntent.putExtra("body", body);
                 foregroundServiceIntent.putExtra("orderId", orderId);
+                foregroundServiceIntent.putExtra("type", type != null ? type : "new_order");
                 ContextCompat.startForegroundService(this, foregroundServiceIntent);
             } else {
                 Log.e(TAG, "Notification title, body, or orderId missing in payload.");

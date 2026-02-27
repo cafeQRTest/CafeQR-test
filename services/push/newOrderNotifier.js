@@ -70,6 +70,7 @@ export async function sendNewOrderPush({
   orderType = null,
   tableNumber = null,
   totalAmount = null,
+  status = null, // 'new' | 'pending_acceptance'
 }) {
   if (!supabase) return { ok: false, reason: 'no_supabase' };
   if (!restaurantId || !orderId) return { ok: false, reason: 'missing_ids' };
@@ -110,17 +111,18 @@ export async function sendNewOrderPush({
     logId = logRow?.id || null;
   }
 
-  // Guard: only send for orders still in "new" status.
+  // Guard: only send for orders in 'new' or 'pending_acceptance' status.
   const { data: orderRow } = await supabase
     .from('orders')
     .select('status, table_number, order_type, total_amount, total_inc_tax, total')
     .eq('id', orderId)
     .maybeSingle();
 
-  const resolvedStatus = String(orderRow?.status || 'new').toLowerCase();
-  if (resolvedStatus !== 'new') {
+  const resolvedStatus = String(orderRow?.status || status || 'new').toLowerCase();
+  const isPendingDelivery = resolvedStatus === 'pending_acceptance';
+  if (resolvedStatus !== 'new' && !isPendingDelivery) {
     await markLogRow(supabase, logId, { status: 'skipped_not_new', success_count: 0, failure_count: 0 });
-    return { ok: true, skipped: true, reason: 'status_not_new', successCount: 0, failureCount: 0 };
+    return { ok: true, skipped: true, reason: 'status_not_actionable', successCount: 0, failureCount: 0 };
   }
 
   const resolvedTable = orderRow?.table_number ?? tableNumber;
@@ -153,52 +155,115 @@ export async function sendNewOrderPush({
 
   const shortOrderId = String(orderId).slice(0, 8).toUpperCase();
   const locationLabel = orderLocationLabel(resolvedOrderType, resolvedTable);
-  const body = `${locationLabel} • #${shortOrderId}${formatAmount(resolvedAmount)}`;
+
+  // Differentiate notification content based on order status
+  let notifTitle, notifBody, notifType;
+  if (isPendingDelivery) {
+    notifTitle = '🔔 New Delivery Order — Action Required';
+    notifBody = `Tap to Accept or Decline • #${shortOrderId}${formatAmount(resolvedAmount)}`;
+    notifType = 'delivery_pending';
+  } else {
+    notifTitle = 'New Order';
+    notifBody = `${locationLabel} • #${shortOrderId}${formatAmount(resolvedAmount)}`;
+    notifType = 'new_order';
+  }
+
   const url = `/owner/orders?highlight=${encodeURIComponent(String(orderId))}`;
 
-  const message = {
-    tokens: uniqueTokens,
-    notification: {
-      title: 'New Order',
-      body,
-    },
-    data: {
-      type: 'new_order',
-      orderId: String(orderId),
-      restaurantId: String(restaurantId),
-      url,
-      title: 'New Order',
-      body,
-    },
-    webpush: {
-      headers: {
-        Urgency: 'high'
+  let message;
+
+  if (isPendingDelivery) {
+    // DATA-ONLY message for delivery orders.
+    // This ensures onMessageReceived ALWAYS fires (even when app is killed),
+    // so our custom ForegroundService with FLAG_INSISTENT (looping sound) runs.
+    message = {
+      tokens: uniqueTokens,
+      // NO top-level "notification" key — critical for background delivery
+      data: {
+        type: notifType,
+        orderId: String(orderId),
+        restaurantId: String(restaurantId),
+        url,
+        title: notifTitle,
+        body: notifBody,
       },
-      fcmOptions: { link: url },
+      webpush: {
+        headers: { Urgency: 'high' },
+        fcmOptions: { link: url },
+        notification: {
+          title: notifTitle,
+          body: notifBody,
+          icon: '/icons/icon-192.png',
+          badge: '/icons/icon-192.png',
+          tag: `new-order-${orderId}`,
+          vibrate: [500, 200, 500, 200, 500, 200, 500, 200, 500],
+          requireInteraction: true,
+          silent: false,
+          actions: [
+            { action: 'accept', title: '\u2705 Accept' },
+            { action: 'decline', title: '\u274c Decline' },
+          ],
+        },
+      },
+      android: {
+        priority: 'high',
+        // NO "notification" sub-key — forces data-only on Android
+      },
+      apns: {
+        headers: { 'apns-priority': '10' },
+        payload: {
+          aps: {
+            'content-available': 1,
+            sound: 'beep.wav',
+            alert: { title: notifTitle, body: notifBody },
+          },
+        },
+      },
+    };
+  } else {
+    // Regular orders: standard notification+data message
+    message = {
+      tokens: uniqueTokens,
       notification: {
-        title: 'New Order',
-        body,
-        icon: '/icons/icon-192.png',
-        badge: '/icons/icon-192.png',
-        tag: `new-order-${orderId}`,
-        vibrate: [200, 100, 200, 100, 200],
-        requireInteraction: true,
-        silent: false
+        title: notifTitle,
+        body: notifBody,
       },
-    },
-    android: {
-      priority: 'high',
-      notification: {
-        channelId: 'orders_sound_v2',
-        sound: 'beep',
-        tag: `new-order-${orderId}`,
+      data: {
+        type: notifType,
+        orderId: String(orderId),
+        restaurantId: String(restaurantId),
+        url,
+        title: notifTitle,
+        body: notifBody,
       },
-    },
-    apns: {
-      headers: { 'apns-priority': '10' },
-      payload: { aps: { sound: 'beep.wav' } },
-    },
-  };
+      webpush: {
+        headers: { Urgency: 'high' },
+        fcmOptions: { link: url },
+        notification: {
+          title: notifTitle,
+          body: notifBody,
+          icon: '/icons/icon-192.png',
+          badge: '/icons/icon-192.png',
+          tag: `new-order-${orderId}`,
+          vibrate: [300, 100, 300, 100, 300, 100, 300],
+          requireInteraction: true,
+          silent: false,
+        },
+      },
+      android: {
+        priority: 'high',
+        notification: {
+          channelId: 'orders_sound_v2',
+          sound: 'beep',
+          tag: `new-order-${orderId}`,
+        },
+      },
+      apns: {
+        headers: { 'apns-priority': '10' },
+        payload: { aps: { sound: 'beep.wav' } },
+      },
+    };
+  }
 
   try {
     const response = await admin.messaging().sendEachForMulticast(message);
@@ -227,8 +292,9 @@ export async function sendNewOrderPush({
       failure_count: response.failureCount,
       token_count: uniqueTokens.length,
       payload: {
-        title: 'New Order',
-        body,
+        title: notifTitle,
+        body: notifBody,
+        type: notifType,
         orderId,
         restaurantId,
         tokenPrefixes: uniqueTokens.map((t) => tokenPrefix(t)),

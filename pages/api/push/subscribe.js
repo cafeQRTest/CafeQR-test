@@ -74,6 +74,17 @@ export default async function handler(req, res) {
       console.log('[subscribe] upsert begin', { rid: restaurantId, tokenPrefix, platform });
     }
 
+    // Clean up this device token from any other restaurants to prevent cross-restaurant bleed
+    const { error: deletionErr } = await supabase
+      .from('push_subscription_restaurants')
+      .delete()
+      .eq('device_token', deviceToken)
+      .neq('restaurant_id', restaurantId);
+
+    if (deletionErr) {
+      console.warn('[subscribe] warning: fail to cleanup old tokens', deletionErr);
+    }
+
     const { data, error } = await supabase
       .from('push_subscription_restaurants')
       .upsert(payload, {

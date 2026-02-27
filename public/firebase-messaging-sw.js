@@ -59,17 +59,30 @@ try {
       const url = payload?.data?.url || '/owner/orders';
       const orderId = payload?.data?.orderId || '';
       const restaurantId = payload?.data?.restaurantId || '';
+      const type = payload?.data?.type || 'new_order';
       const notificationTag = orderId ? `new-order-${orderId}` : 'new-order';
+      const isDeliveryPending = type === 'delivery_pending';
 
       const options = {
         body,
         icon: '/icons/icon-192.png',
         badge: '/icons/icon-192.png',
         tag: notificationTag,
-        vibrate: [200, 100, 200, 100, 200],
+        vibrate: isDeliveryPending
+          ? [500, 200, 500, 200, 500, 200, 500, 200, 500]
+          : [200, 100, 200, 100, 200],
         silent: false,
-        data: { url, orderId, restaurantId, ...payload?.data }
+        requireInteraction: true,
+        data: { url, orderId, restaurantId, type, ...payload?.data },
       };
+
+      // Add Accept/Decline action buttons for delivery orders
+      if (isDeliveryPending) {
+        options.actions = [
+          { action: 'accept', title: '\u2705 Accept' },
+          { action: 'decline', title: '\u274c Decline' },
+        ];
+      }
 
       // In some browsers, playing audio in the background SW context might be blocked without interaction.
       // But we can still attempt it or rely on the OS's native webpush sound when sent by FCM.
@@ -90,10 +103,21 @@ try {
   console.warn('[fcm-sw] registering background listener failed:', e?.message || e);
 }
 
-// Click → focus or open
+// Click → focus or open (handles action buttons too)
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const relativeUrl = event?.notification?.data?.url || '/owner/orders';
+
+  const data = event?.notification?.data || {};
+  const orderId = data.orderId || '';
+  const type = data.type || '';
+  const action = event.action; // 'accept', 'decline', or '' (body click)
+
+  // Build URL with action if it's a delivery notification button tap
+  let relativeUrl = data.url || '/owner/orders';
+  if (type === 'delivery_pending' && action) {
+    relativeUrl = `/owner/orders?highlight=${encodeURIComponent(orderId)}&action=${action}`;
+  }
+
   const urlToOpen = new URL(relativeUrl, self.location.origin).toString();
 
   event.waitUntil(

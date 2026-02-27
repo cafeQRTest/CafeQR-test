@@ -76,5 +76,15 @@
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="orders_sound_v2" />
 
+        <!-- Delivery order Accept/Decline action handler -->
+        <receiver
+            android:name=".DeliveryActionReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.cafeqr.test.ACTION_ACCEPT" />
+                <action android:name="com.cafeqr.test.ACTION_DECLINE" />
+            </intent-filter>
+        </receiver>
+
     </application>
 </manifest>
