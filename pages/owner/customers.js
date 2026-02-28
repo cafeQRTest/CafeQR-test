@@ -320,6 +320,12 @@ export default function OwnerCustomersPage() {
 
       if (moveErr) throw moveErr;
 
+      // 1b. Update junction table
+      await supabase
+        .from('order_customers')
+        .update({ customer_id: c1.customer_id })
+        .eq('customer_id', c2.customer_id);
+
       // 2. Move Loyalty Transactions
       await supabase
         .from('loyalty_transactions')

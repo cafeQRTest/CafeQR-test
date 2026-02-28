@@ -174,21 +174,38 @@ export default function OrderItemsModal({ order, onClose, modalLoyalty }) {
               >✕</div>
             </div>
 
-            {(order.customer_name || order.customer_phone) && (
+            {((order.customer_name || order.customer_phone) || (order.customers && order.customers.length > 0)) && (
               <div style={{ 
                 padding: '12px', background: '#f8fafc', borderRadius: 12, border: '1px solid #f1f5f9',
-                marginBottom: 16, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12
+                marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 12
               }}>
-                {order.customer_name && (
-                  <div>
-                    <div style={{ fontSize: 8, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>Customer</div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{order.customer_name}</div>
-                  </div>
-                )}
-                {order.customer_phone && (
-                  <div>
-                    <div style={{ fontSize: 8, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>Contact</div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{order.customer_phone}</div>
+                {order.customers && order.customers.length > 0 ? (
+                  order.customers.map((c, idx) => (
+                    <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, borderBottom: idx < order.customers.length - 1 ? '1px solid #f1f5f9' : 'none', paddingBottom: idx < order.customers.length - 1 ? 8 : 0 }}>
+                      <div>
+                        <div style={{ fontSize: 8, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>Customer</div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{c.name || c.customer_name}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 8, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>Contact</div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{c.phone || c.customer_phone || '-'}</div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    {order.customer_name && (
+                      <div>
+                        <div style={{ fontSize: 8, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>Customer</div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{order.customer_name}</div>
+                      </div>
+                    )}
+                    {order.customer_phone && (
+                      <div>
+                        <div style={{ fontSize: 8, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>Contact</div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{order.customer_phone}</div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

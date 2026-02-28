@@ -2819,10 +2819,26 @@ const handleModalResend = async (table) => {
   async function fetchFullOrder(orderId) {
     const { data, error } = await supabase
       .from('orders')
-      .select('*, order_items(*, menu_items(name, uom:unit_of_measures(precision)))')
+      .select('*, order_items(*, menu_items(name, uom:unit_of_measures(precision))), order_customers(*, restaurant_customers(name, phone))')
       .eq('id', orderId)
       .single();
-    if (!error && data) return data;
+    if (!error && data) {
+      if (data.order_customers && data.order_customers.length > 0) {
+        data.customers = data.order_customers.map(link => ({
+          id: link.customer_id,
+          name: link.restaurant_customers?.name,
+          phone: link.restaurant_customers?.phone,
+          is_primary: link.is_primary
+        }));
+      } else if (data.customer_name || data.customer_phone) {
+        data.customers = [{
+          name: data.customer_name,
+          phone: data.customer_phone,
+          is_primary: true
+        }];
+      }
+      return data;
+    }
     return null;
   }
 
@@ -3023,19 +3039,45 @@ const handleModalResend = async (table) => {
       // Fetch full order details including items
       const { data, error } = await supabase
         .from('orders')
-        .select('*, order_items(*, menu_items(name))')
+        .select('*, order_items(*, menu_items(name, uom:unit_of_measures(precision)))')
         .eq('id', orderId)
         .single();
 
       if (error) throw error;
       
+      // Fetch attached customers from junction table
+      const { data: customerLinks, error: linkError } = await supabase
+        .from('order_customers')
+        .select('*, restaurant_customers(name, phone)')
+        .eq('order_id', orderId);
+
+      if (!linkError && customerLinks && customerLinks.length > 0) {
+        data.customers = customerLinks.map(link => ({
+          id: link.customer_id,
+          name: link.restaurant_customers?.name,
+          phone: link.restaurant_customers?.phone,
+          is_primary: link.is_primary
+        }));
+      } else {
+        // Fallback for older orders or single-customer flow
+        data.customers = [];
+        if (data.customer_name || data.customer_phone) {
+          data.customers.push({
+            name: data.customer_name,
+            phone: data.customer_phone,
+            is_primary: true
+          });
+        }
+      }
+
       // Transform items to match expected format if needed
       if (data.order_items) {
           data.items = data.order_items.map(item => ({
               ...item,
               name: item.menu_items?.name || 'Unknown Item',
               price: item.price,
-              quantity: item.quantity
+              quantity: item.quantity,
+              uom_precision: item.menu_items?.uom?.precision ?? 0
           }));
       }
       
@@ -4056,8 +4098,18 @@ const handleModalResend = async (table) => {
                   >
                     <div style={{ fontWeight: 700, fontSize: '12.5px', color: '#000000' }}>Order #{order.id.slice(0, 8)}</div>
                     <div>
-                      <div style={{ fontWeight: 600 }}>{order.customer_name || 'Guest'}</div>
-                      <div style={{ fontSize: '12px', color: '#64748b' }}>{order.customer_phone || '-'}</div>
+                      <div style={{ fontWeight: 600 }}>
+                        {order.order_customers && order.order_customers.length > 0
+                          ? order.order_customers.map(c => c.restaurant_customers?.name).filter(Boolean).join(', ')
+                          : (order.customer_name || 'Guest')
+                        }
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#64748b' }}>
+                        {order.order_customers && order.order_customers.length > 0
+                          ? order.order_customers.map(c => c.restaurant_customers?.phone).filter(Boolean).join(', ')
+                          : (order.customer_phone || '-')
+                        }
+                      </div>
                     </div>
                     <div><StatusBadge status={order.status === 'ready' ? 'available' : (order.status === 'in_progress' ? 'cleaning' : 'occupied')} minimal>{order.status}</StatusBadge></div>
                     <div style={{ fontSize: '13px' }}>{order.order_items?.length || 0} items</div>

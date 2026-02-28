@@ -782,10 +782,28 @@ function TableEditDialog({ order, onSave, onClose, tables = [], tablesCount = 0 
 async function fetchFullOrder(supabase, orderId) {
   const { data, error } = await supabase
     .from('orders')
-    .select('*, order_items(*, menu_items(name, uom:unit_of_measures(precision)))')
+    .select('*, order_items(*, menu_items(name, uom:unit_of_measures(precision))), order_customers(*, restaurant_customers(name, phone))')
     .eq('id', orderId)
     .single();
-  if (!error && data) return data;
+  
+  if (!error && data) {
+    // Transform order_customers to a simpler customers array
+    if (data.order_customers && data.order_customers.length > 0) {
+      data.customers = data.order_customers.map(link => ({
+        id: link.customer_id,
+        name: link.restaurant_customers?.name,
+        phone: link.restaurant_customers?.phone,
+        is_primary: link.is_primary
+      }));
+    } else if (data.customer_name || data.customer_phone) {
+      data.customers = [{
+        name: data.customer_name,
+        phone: data.customer_phone,
+        is_primary: true
+      }];
+    }
+    return data;
+  }
   return null;
 }
 
@@ -1282,7 +1300,7 @@ export default function OrdersPage() {
     if (!supabase || !restaurantId) return [];
     let q = supabase
       .from('orders')
-      .select('*, order_items(*, menu_items(name, uom:unit_of_measures(precision)))')
+      .select('*, order_items(*, menu_items(name, uom:unit_of_measures(precision))), order_customers(*, restaurant_customers(name, phone))')
       .eq('restaurant_id', restaurantId)
       .eq('status', status);
 

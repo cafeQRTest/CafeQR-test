@@ -258,12 +258,19 @@ export default function SalesPage() {
           discount_amount,
           round_off_amount,
           prices_include_tax,
-    invoices (
-      invoice_no,
-      payment_method,
-      mixed_payment_details,
-      status
-    )
+          order_customers (
+            is_primary,
+            restaurant_customers (
+              name,
+              phone
+            )
+          ),
+          invoices (
+            invoice_no,
+            payment_method,
+            mixed_payment_details,
+            status
+          )
         `)
         .eq('restaurant_id', restaurantId)
         .gte('date_ordered', startUtc)
@@ -788,7 +795,16 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
                     )},
                     { header: 'Grand Total', accessor: 'total_inc_tax', cell: (r) => formatCurrency(r.total_inc_tax ?? r.total_amount) },
                     { header: 'Total Tax', accessor: 'total_tax', cell: (r) => formatCurrency(r.total_tax) },
-                    { header: 'Customer', accessor: 'customer_name', cell: (r) => r.customer_name || '' }
+                    { 
+                      header: 'Customer', 
+                      accessor: 'customer_name', 
+                      cell: (r) => {
+                        if (r.order_customers && r.order_customers.length > 0) {
+                          return r.order_customers.map(c => c.restaurant_customers?.name).filter(Boolean).join(', ')
+                        }
+                        return r.customer_name || ''
+                      }
+                    }
                   ]}
                   data={ordersList.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)}
                 />
