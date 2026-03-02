@@ -6,7 +6,7 @@ export class InvoiceService {
     try {
       // 1. Setup Supabase
       const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL,
+        process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL,
         process.env.SUPABASE_SERVICE_ROLE_KEY
       );
 
@@ -133,7 +133,7 @@ export class InvoiceService {
 
   static async generateInvoiceNumber(restaurantId) {
     const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL,
       process.env.SUPABASE_SERVICE_ROLE_KEY
     );
 
@@ -171,7 +171,7 @@ export class InvoiceService {
 
   static async generateBillNumber(restaurantId) {
     const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL,
       process.env.SUPABASE_SERVICE_ROLE_KEY
     );
 
