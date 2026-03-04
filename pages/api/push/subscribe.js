@@ -4,19 +4,46 @@ import { createClient } from '@supabase/supabase-js';
 function prefix(s = '', n = 24) { return String(s).slice(0, n); }
 const isDev = process.env.NODE_ENV !== 'production';
 
-function requireEnv(name) {
-  const v = process.env[name];
-  if (!v) throw new Error(`[subscribe] missing env ${name}`);
-  return v;
+function readEnv(...keys) {
+  for (const key of keys) {
+    const value = process.env[key];
+    if (value) return value;
+  }
+  return '';
 }
 
-const supabase = createClient(
-  requireEnv('SUPABASE_URL'),
-  requireEnv('SUPABASE_SERVICE_ROLE_KEY') // must be service role to bypass RLS
-);
+function getAdminSupabase() {
+  const url = readEnv('SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_URL');
+  const serviceRoleKey = readEnv('SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SERVICE_KEY');
+
+  if (!url || !serviceRoleKey) {
+    return {
+      client: null,
+      error: 'Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY',
+    };
+  }
+
+  try {
+    return {
+      client: createClient(url, serviceRoleKey),
+      error: null,
+    };
+  } catch (e) {
+    return {
+      client: null,
+      error: e?.message || 'failed_to_create_supabase_client',
+    };
+  }
+}
 
 export default async function handler(req, res) {
   try {
+    const { client: supabase, error: supabaseError } = getAdminSupabase();
+    if (!supabase) {
+      console.error('[subscribe] admin client unavailable:', supabaseError);
+      return res.status(500).json({ error: supabaseError || 'supabase_not_configured' });
+    }
+
     // Allow quick GET snapshots while testing
     if (req.method === 'GET') {
       const rid = req.query.rid || req.query.restaurantId;

@@ -382,11 +382,9 @@ const TooltipSpan = styled.span`
 
 // Constants
 const STATUSES = ['pending_acceptance', 'new', 'in_progress', 'ready', 'completed'];
-const LABELS = { pending_acceptance: 'Incoming', new: 'New', in_progress: 'Cooking', ready: 'Ready', completed: 'Done' };
 const COLORS = { pending_acceptance: '#f97316', new: '#3b82f6', in_progress: '#f59e0b', ready: '#10b981', completed: '#10b981' };
 const PAGE_SIZE = 20;
 const UI_COLUMNS = [
-  { id: 'pending', label: 'Incoming 🚀', statuses: ['pending_acceptance'] },
   { id: 'new', label: 'New', statuses: ['new'] },
   { id: 'inprogress', label: 'In Progress', statuses: ['in_progress', 'ready'] },
   { id: 'completed', label: 'Done', statuses: ['completed'] },
@@ -641,6 +639,72 @@ function CancelConfirmDialog({ order, onConfirm, onCancel }) {
   );
 }
 
+function DeliveryDecisionDialog({ orderId, onAccept, onDecline, onClose, canDecline }) {
+  const [busy, setBusy] = useState(false);
+
+  const runAction = async (fn) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await fn?.();
+      onClose?.();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0,
+      backgroundColor: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(5px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: 12
+    }}>
+      <div style={{
+        backgroundColor: 'white', padding: 20, borderRadius: 16, maxWidth: 360, width: '100%',
+        boxShadow: '0 12px 24px -10px rgba(0, 0, 0, 0.15)',
+        animation: 'fadeIn 0.2s ease-out'
+      }}>
+        <h3 style={{ fontSize: 17, fontWeight: 800, color: '#0f172a', margin: '0 0 8px 0', letterSpacing: '-0.01em' }}>
+          Delivery Order Decision
+        </h3>
+        <p style={{ fontSize: 12, color: '#64748b', lineHeight: 1.4, marginBottom: 16 }}>
+          Choose what to do with delivery order <strong>#{String(orderId || '').slice(0, 8)}</strong>.
+        </p>
+
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Button
+            onClick={() => runAction(onAccept)}
+            style={{ flex: 1, height: 38, borderRadius: 10, fontSize: 13, background: '#16a34a', borderColor: '#16a34a', color: '#fff' }}
+            disabled={busy}
+          >
+            {busy ? '...' : 'Accept'}
+          </Button>
+          {canDecline && (
+            <Button
+              onClick={() => runAction(onDecline)}
+              variant="danger"
+              style={{ flex: 1, height: 38, borderRadius: 10, fontSize: 13 }}
+              disabled={busy}
+            >
+              {busy ? '...' : 'Decline'}
+            </Button>
+          )}
+          {!canDecline && (
+            <Button
+              onClick={onClose}
+              variant="outline"
+              style={{ flex: 1, height: 38, borderRadius: 10, fontSize: 13 }}
+              disabled={busy}
+            >
+              Close
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PaxEditDialog({ order, onSave, onClose }) {
   const [val, setVal] = useState(order.number_of_customers || '');
   return (
@@ -818,15 +882,18 @@ export default function OrdersPage() {
 
   // NEW: state for showing the print modal
   const [cancelOrderDialog, setCancelOrderDialog] = useState(null);
+  const [deliveryDecisionOrderId, setDeliveryDecisionOrderId] = useState(null);
   const [editingOrder, setEditingOrder] = useState(null);
   const [paxEditOrder, setPaxEditOrder] = useState(null);
   const [tableEditOrder, setTableEditOrder] = useState(null);
+  const notifiedDeliveryPushIdsRef = useRef(new Set());
+  const handledDeepLinkActionKeysRef = useRef(new Set());
 
   // Ref to store realtime channel for broadcasting
   const channelRef = useRef(null);
 
   const [ordersByStatus, setOrdersByStatus] = useState({
-    pending_acceptance: [], new: [], in_progress: [], ready: [], completed: [], mobileFilter: 'pending'
+    pending_acceptance: [], new: [], in_progress: [], ready: [], completed: [], mobileFilter: 'new'
   });
 
   const [tablesCount, setTablesCount] = useState(0);
@@ -1039,6 +1106,60 @@ export default function OrdersPage() {
     }
   }, []);
 
+  const notifyPendingDeliveryViaBanner = useCallback((order) => {
+    if (typeof window === 'undefined' || !order?.id) return;
+    if (String(order.status || '') !== 'pending_acceptance') return;
+
+    const notifiedSet = notifiedDeliveryPushIdsRef.current;
+    const orderId = String(order.id);
+    if (notifiedSet.has(orderId)) return;
+    notifiedSet.add(orderId);
+
+    // Keep dedupe set bounded to avoid unbounded growth.
+    if (notifiedSet.size > 500) {
+      const trimCount = Math.max(100, notifiedSet.size - 350);
+      let idx = 0;
+      for (const id of notifiedSet) {
+        notifiedSet.delete(id);
+        idx += 1;
+        if (idx >= trimCount) break;
+      }
+    }
+
+    const total = computeOrderTotalDisplay(order);
+    const title = '🔔 New Delivery Order — Action Required';
+    const body = `Tap to Accept or Decline • #${orderId.slice(0, 8).toUpperCase()}${Number.isFinite(total) ? ` • ${money(total)}` : ''}`;
+    const url = `/owner/orders?highlight=${encodeURIComponent(orderId)}`;
+
+    window.dispatchEvent(
+      new CustomEvent('new-order-push', {
+        detail: {
+          title,
+          body,
+          url,
+          orderId,
+          restaurantId: String(restaurantId || ''),
+          type: 'delivery_pending',
+          data: {
+            title,
+            body,
+            url,
+            orderId,
+            restaurantId: String(restaurantId || ''),
+            type: 'delivery_pending',
+          },
+        },
+      })
+    );
+  }, [restaurantId]);
+
+
+  const isPendingDeliveryOrder = (order) => {
+    if (!order) return false;
+    const orderType = String(order.order_type || '').toLowerCase();
+    const table = String(order.table_number || '').toUpperCase();
+    return order.status === 'pending_acceptance' && (orderType === 'delivery' || table === 'DELIVERY');
+  };
 
   const onCancelOrderOpen = (order) => {
     if (!canCancel) {
@@ -1048,23 +1169,44 @@ export default function OrdersPage() {
     setCancelOrderDialog(order);
   };
 
-  const handleCancelConfirm = async (reason) => {
-    if (!cancelOrderDialog) return;
-    console.log('[CANCEL ORDER] Starting cancellation for order:', cancelOrderDialog.id);
+  async function cancelOrderById(orderId, reason, options = {}) {
+    if (!supabase || !restaurantId || !orderId) return { ok: false, reason: 'missing_context' };
+    const { requirePendingDelivery = false } = options;
+    const finalReason = String(reason || '').trim() || 'Cancelled by owner';
+    console.log('[CANCEL ORDER] Starting cancellation for order:', orderId, { requirePendingDelivery });
+
     try {
       // Get full order with items before cancelling
-      const fullOrder = await fetchFullOrder(supabase, cancelOrderDialog.id);
+      const fullOrder = await fetchFullOrder(supabase, orderId);
+      if (!fullOrder) throw new Error('Order not found');
+
+      if (requirePendingDelivery && !isPendingDeliveryOrder(fullOrder)) {
+        await loadOrders();
+        return { ok: false, reason: 'not_pending_delivery' };
+      }
+
       console.log('[CANCEL ORDER] Full order fetched:', fullOrder);
       console.log('[CANCEL ORDER] order_items:', fullOrder?.order_items);
       console.log('[CANCEL ORDER] order_items length:', fullOrder?.order_items?.length);
       console.log('[CANCEL ORDER] order_items is array?', Array.isArray(fullOrder?.order_items));
 
       // Cancel the order
-      await supabase
+      let updateQuery = supabase
         .from('orders')
-        .update({ status: 'cancelled', description: reason })
-        .eq('id', cancelOrderDialog.id)
+        .update({ status: 'cancelled', description: finalReason })
+        .eq('id', orderId)
         .eq('restaurant_id', restaurantId);
+      if (requirePendingDelivery) {
+        updateQuery = updateQuery.eq('status', 'pending_acceptance');
+      }
+      const { data: cancelledOrder, error: cancelUpdateErr } = await updateQuery
+        .select('id')
+        .maybeSingle();
+      if (cancelUpdateErr) throw cancelUpdateErr;
+      if (requirePendingDelivery && !cancelledOrder) {
+        await loadOrders();
+        return { ok: false, reason: 'already_processed' };
+      }
       console.log('[CANCEL ORDER] Order status updated to cancelled');
 
       if (fullOrder?.table_number) {
@@ -1080,7 +1222,7 @@ export default function OrdersPage() {
       const { data: invoice } = await supabase
         .from('invoices')
         .select('id')
-        .eq('order_id', cancelOrderDialog.id)
+        .eq('order_id', orderId)
         .eq('restaurant_id', restaurantId)
         .maybeSingle();
 
@@ -1092,7 +1234,7 @@ export default function OrdersPage() {
           body: JSON.stringify({
             invoice_id: invoice.id,
             restaurant_id: restaurantId,
-            reason: reason,
+            reason: finalReason,
           }),
         });
         if (!res.ok) {
@@ -1111,7 +1253,7 @@ export default function OrdersPage() {
           try {
             await LoyaltyService.handleOrderReversal(supabase, {
               restaurant_id: restaurantId,
-              order_id: cancelOrderDialog.id
+              order_id: orderId
             });
             console.log('[CANCEL ORDER] Manual Loyalty Reversal Checked/Completed');
           } catch (error) {
@@ -1173,51 +1315,91 @@ export default function OrdersPage() {
         console.warn('[CANCEL ORDER] No order items found to restore stock. Full order:', JSON.stringify(fullOrder, null, 2));
       }
 
-      loadOrders();
-      setCancelOrderDialog(null);
+      await loadOrders();
+      return { ok: true };
     } catch (error) {
       console.error('[CANCEL ORDER] Error:', error);
       setError(error.message);
+      return { ok: false, reason: error.message || 'cancel_failed' };
+    }
+  }
+
+  const handleCancelConfirm = async (reason) => {
+    if (!cancelOrderDialog) return;
+    const result = await cancelOrderById(cancelOrderDialog.id, reason);
+    if (result?.ok) {
+      setCancelOrderDialog(null);
     }
   };
   const handleCancelDismiss = () => setCancelOrderDialog(null);
 
   // Accept a delivery order: promote to 'new', trigger KOT print
   const handleAcceptDelivery = async (order) => {
-    if (!supabase || !restaurantId || !order?.id) return;
+    const orderId = typeof order === 'string' ? order : order?.id;
+    if (!supabase || !restaurantId || !orderId) return;
     try {
-      // 1. Promote status to 'new'
-      const { error: updateErr } = await supabase
+      // Primary path: server-side atomic accept (avoids client-RLS/race mismatches).
+      const response = await fetch('/api/orders/accept-delivery/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          order_id: orderId,
+          restaurant_id: restaurantId,
+        }),
+      });
+
+      if (response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        const orderForPrint = payload?.order_for_print;
+        if (orderForPrint?.id) {
+          window.dispatchEvent(
+            new CustomEvent('auto-print-order', {
+              detail: { ...orderForPrint, autoPrint: true, kind: 'kot' },
+            })
+          );
+        }
+        await loadOrders();
+        return;
+      }
+
+      // Fallback path: local client update (kept for resilience in dev outages).
+      const fullOrder = await fetchFullOrder(supabase, orderId);
+      if (!fullOrder || !isPendingDeliveryOrder(fullOrder)) {
+        await loadOrders();
+        return;
+      }
+
+      const { data: promotedOrder, error: updateErr } = await supabase
         .from('orders')
         .update({ status: 'new' })
-        .eq('id', order.id)
-        .eq('restaurant_id', restaurantId);
+        .eq('id', orderId)
+        .eq('restaurant_id', restaurantId)
+        .eq('status', 'pending_acceptance')
+        .select('id')
+        .maybeSingle();
       if (updateErr) throw updateErr;
+      if (!promotedOrder) {
+        await loadOrders();
+        return;
+      }
 
-      // 2. Fetch full order for printing
-      const fullOrder = await fetchFullOrder(supabase, order.id);
-      const orderForPrint = fullOrder || order;
-
-      // 3. Insert into print queue for cross-device KOT
+      const orderForPrint = { ...fullOrder, status: 'new' };
       try {
         await supabase.from('kot_print_queue').insert({
           restaurant_id: restaurantId,
-          order_id: order.id,
+          order_id: orderId,
           print_data: orderForPrint,
           processed: false,
         });
       } catch (qErr) {
-        console.warn('[ACCEPT DELIVERY] kot_print_queue insert failed (non-critical):', qErr);
+        console.warn('[ACCEPT DELIVERY] kot_print_queue insert failed (fallback path):', qErr);
       }
 
-      // 4. Dispatch local KOT print event
       window.dispatchEvent(
         new CustomEvent('auto-print-order', {
           detail: { ...orderForPrint, autoPrint: true, kind: 'kot' },
         })
       );
-
-      // 5. Reload orders
       await loadOrders();
     } catch (e) {
       console.error('[ACCEPT DELIVERY] Error:', e);
@@ -1339,7 +1521,7 @@ export default function OrdersPage() {
           in_progress: i,
           ready: r,
           completed: c,
-          mobileFilter: prev.mobileFilter || 'pending',
+          mobileFilter: prev.mobileFilter || 'new',
         }));
       } catch (e) {
         setError(e.message);
@@ -1362,35 +1544,56 @@ export default function OrdersPage() {
   // URL format: /owner/orders?highlight=<orderId>&action=accept|decline
   useEffect(() => {
     if (!router.isReady || !restaurantId || loading) return;
-    const { action, highlight } = router.query;
-    if (!action || !highlight) return;
+    const action = String(router.query.action || '').toLowerCase();
+    const highlight = String(router.query.highlight || '');
+    if (!highlight) return;
 
-    // Clean the URL immediately to prevent re-triggering
-    router.replace('/owner/orders', undefined, { shallow: true });
+    const actionKey = `${highlight}:${action || 'view'}`;
+    const handled = handledDeepLinkActionKeysRef.current;
+    if (handled.has(actionKey)) return;
+    handled.add(actionKey);
 
-    // Wait a tick for orders to load, then trigger the action
-    const timer = setTimeout(async () => {
-      if (action === 'accept') {
-        // Find the order and accept it
-        const order = (ordersByStatus.pending_acceptance || []).find(o => o.id === highlight);
-        if (order) {
-          handleAcceptDelivery(order);
+    // Keep dedupe set bounded.
+    if (handled.size > 500) {
+      const trimCount = Math.max(100, handled.size - 350);
+      let idx = 0;
+      for (const key of handled) {
+        handled.delete(key);
+        idx += 1;
+        if (idx >= trimCount) break;
+      }
+    }
+
+    setDeliveryDecisionOrderId(null);
+    let canceled = false;
+
+    (async () => {
+      try {
+        if (action === 'accept') {
+          await handleAcceptDelivery(highlight);
+        } else if (action === 'decline') {
+          if (!canCancel) {
+            setError('Staff accounts cannot cancel/decline delivery orders.');
+            return;
+          }
+          await cancelOrderById(highlight, 'Declined from push notification banner', { requirePendingDelivery: true });
         } else {
-          // Order might not be in state yet, try direct accept
-          handleAcceptDelivery({ id: highlight });
+          const fullOrder = await fetchFullOrder(supabase, highlight);
+          if (!canceled && isPendingDeliveryOrder(fullOrder)) {
+            setDeliveryDecisionOrderId(highlight);
+          }
         }
-      } else if (action === 'decline') {
-        const order = (ordersByStatus.pending_acceptance || []).find(o => o.id === highlight);
-        if (order) {
-          onCancelOrderOpen(order);
-        } else {
-          onCancelOrderOpen({ id: highlight });
+      } finally {
+        if (!canceled) {
+          router.replace('/owner/orders', undefined, { shallow: true });
         }
       }
-    }, 1500);
+    })();
 
-    return () => clearTimeout(timer);
-  }, [router.isReady, restaurantId, loading]);
+    return () => {
+      canceled = true;
+    };
+  }, [router.isReady, restaurantId, loading, canCancel, router.query.action, router.query.highlight, supabase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Realtime subscription & reconnection logic
   // Realtime subscription & order state sync
@@ -1425,9 +1628,13 @@ export default function OrdersPage() {
                 }
                 return updated;
               });
-              // Play sound for new regular orders AND incoming delivery orders
-              if (payload.eventType === 'INSERT' && (fullOrder.status === 'new' || fullOrder.status === 'pending_acceptance')) {
-                playNotificationSound();
+              // New regular orders: short alert. Pending delivery: banner + looping alarm.
+              if (payload.eventType === 'INSERT') {
+                if (fullOrder.status === 'pending_acceptance') {
+                  notifyPendingDeliveryViaBanner(fullOrder);
+                } else if (fullOrder.status === 'new') {
+                  playNotificationSound();
+                }
               }
             });
         }
@@ -1465,6 +1672,11 @@ export default function OrdersPage() {
                 ? [...data, ...prev.new].filter((o, idx, arr) => arr.findIndex((x) => x.id === o.id) === idx)
                 : prev.new,
             }));
+
+            // If FCM/WebPush was missed (common in localhost dev), still raise in-app banner+alarm.
+            if (Array.isArray(pa) && pa.length) {
+              pa.forEach((order) => notifyPendingDeliveryViaBanner(order));
+            }
           } catch (e) {
             console.warn('Visibility catch-up error:', e);
           }
@@ -1477,7 +1689,7 @@ export default function OrdersPage() {
       window.removeEventListener('visibilitychange', onVisible);
       if (supabase) supabase.removeChannel(channel);
     };
-  }, [supabase, restaurantId, playNotificationSound]);
+  }, [supabase, restaurantId, playNotificationSound, notifyPendingDeliveryViaBanner]);
 
 
   // All remaining functions and JSX unchanged
@@ -1729,11 +1941,6 @@ export default function OrdersPage() {
     mobileOrders = [...(ordersByStatus.completed || [])].sort(
       (a, b) => new Date(b.date_ordered || b.created_at) - new Date(a.date_ordered || a.created_at)
     );
-  } else if (ordersByStatus.mobileFilter === 'pending') {
-    // Incoming delivery orders: oldest → newest
-    mobileOrders = [...(ordersByStatus.pending_acceptance || [])].sort(
-      (a, b) => new Date(a.date_ordered || a.created_at) - new Date(b.date_ordered || b.created_at)
-    );
   } else {
     // New column: oldest → newest
     mobileOrders = [...(ordersByStatus[ordersByStatus.mobileFilter] || [])].sort(
@@ -1776,7 +1983,7 @@ export default function OrdersPage() {
         <h1>Orders Dashboard</h1>
         <div className="header-actions">
           {/* Live Order Count (New + In Progress) */}
-          {((ordersByStatus.pending_acceptance || []).length + ordersByStatus.new.length + ordersByStatus.in_progress.length) > 0 && (
+          {(ordersByStatus.new.length + ordersByStatus.in_progress.length) > 0 && (
             <span
               style={{
                 color: '#f97316',
@@ -1789,12 +1996,7 @@ export default function OrdersPage() {
               }}
             >
               <PulseDot />
-              {(ordersByStatus.pending_acceptance || []).length + ordersByStatus.new.length + ordersByStatus.in_progress.length} Live Orders
-              {(ordersByStatus.pending_acceptance || []).length > 0 && (
-                <span style={{ background: '#f97316', color: 'white', borderRadius: 99, padding: '1px 8px', fontSize: 12, fontWeight: 800, marginLeft: 4 }}>
-                  {(ordersByStatus.pending_acceptance || []).length} Awaiting
-                </span>
-              )}
+              {ordersByStatus.new.length + ordersByStatus.in_progress.length} Live Orders
             </span>
           )}
 
@@ -1865,8 +2067,6 @@ export default function OrdersPage() {
           let baseList = [];
           if (col.id === 'inprogress') {
             baseList = [...ordersByStatus.in_progress, ...ordersByStatus.ready];
-          } else if (col.id === 'pending') {
-            baseList = ordersByStatus.pending_acceptance || [];
           } else {
             baseList = ordersByStatus[col.id] || [];
           }
@@ -1905,8 +2105,6 @@ export default function OrdersPage() {
               onComplete={finalize}
               generatingInvoice={generatingInvoice}
               onShowItems={(o) => setItemsModalOrder(o)}
-              onAcceptDelivery={handleAcceptDelivery}
-              onRejectDelivery={onCancelOrderOpen}
               onPrintKot={(orderObj) => {
                 window.dispatchEvent(
                   new CustomEvent('auto-print-order', {
@@ -2046,8 +2244,6 @@ export default function OrdersPage() {
                       onChangeStatus={updateStatus}
                       onComplete={finalize}
                       generatingInvoice={generatingInvoice}
-                      onAcceptDelivery={handleAcceptDelivery}
-                      onRejectDelivery={onCancelOrderOpen}
                       onPrintKot={(orderObj) => {
                         window.dispatchEvent(
                           new CustomEvent('auto-print-order', {
@@ -2162,6 +2358,24 @@ export default function OrdersPage() {
         />
       )}
 
+      {deliveryDecisionOrderId && (
+        <DeliveryDecisionDialog
+          orderId={deliveryDecisionOrderId}
+          canDecline={canCancel}
+          onClose={() => setDeliveryDecisionOrderId(null)}
+          onAccept={async () => {
+            await handleAcceptDelivery(deliveryDecisionOrderId);
+          }}
+          onDecline={async () => {
+            if (!canCancel) {
+              setError('Staff accounts cannot cancel/decline delivery orders.');
+              return;
+            }
+            await cancelOrderById(deliveryDecisionOrderId, 'Declined from push notification banner', { requirePendingDelivery: true });
+          }}
+        />
+      )}
+
       {cancelOrderDialog && canCancel && (
         <CancelConfirmDialog
           order={cancelOrderDialog}
@@ -2271,8 +2485,6 @@ function OrderCard({
   onEditPax,
   onEditTable,
   onShowItems,
-  onAcceptDelivery,
-  onRejectDelivery,
   canCancel = true
 }) {
   const items = toDisplayItems(order);
@@ -2394,27 +2606,6 @@ function OrderCard({
       <CardFooter>
         <PriceTag>{money(total)}</PriceTag>
         <div style={{ display: 'flex', gap: 6 }} onClick={(e) => e.stopPropagation()}>
-
-          {/* Pending Delivery — Accept / Decline */}
-          {isPendingDelivery && (
-            <>
-              <Button
-                size="sm"
-                style={{ background: '#16a34a', borderColor: '#16a34a', color: 'white', fontWeight: 700, fontSize: 13 }}
-                onClick={() => onAcceptDelivery && onAcceptDelivery(order)}
-              >
-                ✅ Accept
-              </Button>
-              <Button
-                size="sm"
-                variant="danger"
-                style={{ fontWeight: 700, fontSize: 13 }}
-                onClick={() => onRejectDelivery && onRejectDelivery(order)}
-              >
-                ❌ Decline
-              </Button>
-            </>
-          )}
 
           {/* New Orders */}
           {order.status === 'new' && (

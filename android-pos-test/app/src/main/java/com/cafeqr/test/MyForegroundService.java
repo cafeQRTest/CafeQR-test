@@ -25,6 +25,11 @@ public class MyForegroundService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        if (intent == null) {
+            stopSelf();
+            return START_NOT_STICKY;
+        }
+
         String type = intent.getStringExtra("type");
         boolean isDelivery = "delivery_pending".equals(type);
 
@@ -46,7 +51,7 @@ public class MyForegroundService extends Service {
         } else {
             stopSelf();
         }
-        return START_STICKY;
+        return START_NOT_STICKY;
     }
 
     private void createNotificationChannel() {

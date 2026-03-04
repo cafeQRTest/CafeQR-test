@@ -24,6 +24,9 @@ export default async function handler(req, res) {
   const supabase = createClient(supabaseUrl, supabaseKey);
 
   try {
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    const clientUserId = body.user_id ?? null;
+
     const {
       restaurant_id,
       table_number,
@@ -55,7 +58,7 @@ export default async function handler(req, res) {
       taken_by_user_id: client_taken_by_user_id = null,
       taken_by_email: client_taken_by_email = null,
       taken_by_role: client_taken_by_role = null,
-    } = req.body;
+    } = body;
 
     // --- Customer Resolution Logic ---
     let finalCustomerId = customer_id || null;
@@ -410,7 +413,7 @@ export default async function handler(req, res) {
         payment_status: finalPaymentStatus,
         payment_method: processedPaymentMethod,
         // Use verified auth user when available (don’t trust client user_id)
-        user_id: authUserId || user_id,
+        user_id: authUserId || clientUserId,
 
         // ✅ NEW attribution fields (store on the order)
         taken_by_name: serverTakenByName,

@@ -8,6 +8,8 @@
 
     <!-- Notifications (optional, Android 13+ runtime permission) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
     <!-- USB Host printing (optional capability) -->
     <uses-feature android:name="android.hardware.usb.host" android:required="false" />
@@ -30,6 +32,7 @@
         android:maxSdkVersion="30" />
 
     <application
+        android:name=".MainApplication"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
@@ -75,6 +78,19 @@
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
             android:value="orders_sound_v2" />
+
+        <service
+            android:name=".MyFirebaseMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <service
+            android:name=".MyForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
 
         <!-- Delivery order Accept/Decline action handler -->
         <receiver

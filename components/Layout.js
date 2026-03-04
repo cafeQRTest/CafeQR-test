@@ -82,11 +82,7 @@ export default function Layout({
   // If landing/login/signup page or delivery app routes, render raw children (allows full screen control)
   const fullScreenRoutes = ['/', '/login', '/signup', '/forgot-password'];
   const isDeliveryApp = router.pathname.startsWith('/app');
-  if (fullScreenRoutes.includes(router.pathname) || isDeliveryApp) {
-    return <>{children}</>;
-  }
-
-  if (hideChrome) return <main style={{ padding: 20 }}>{children}</main>;
+  const isRawLayout = fullScreenRoutes.includes(router.pathname) || isDeliveryApp;
 
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -96,14 +92,16 @@ export default function Layout({
   const [signingOut, setSigningOut] = useState(false);
 
   useEffect(() => {
+    if (isRawLayout || hideChrome) return;
     const onResize = () => setCollapsed(window.innerWidth < 1160);
     onResize();
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
-  }, []);
+  }, [isRawLayout, hideChrome]);
 
   // Verify push token to prevent cross-restaurant bleed on unclean swaps
   useEffect(() => {
+    if (isRawLayout || hideChrome) return;
     if (typeof window !== 'undefined' && restaurant?.id) {
       const token = localStorage.getItem('fcmtoken') || localStorage.getItem('fcm_token');
       if (token) {
@@ -114,7 +112,7 @@ export default function Layout({
         }).catch(e => console.warn('Silently failed to verify push token:', e));
       }
     }
-  }, [restaurant?.id]);
+  }, [restaurant?.id, isRawLayout, hideChrome]);
 
   // Sync scroll lock
   useEffect(() => {
@@ -179,6 +177,12 @@ export default function Layout({
     }
     touchStartRef.current = null;
   };
+
+  if (isRawLayout) {
+    return <>{children}</>;
+  }
+
+  if (hideChrome) return <main style={{ padding: 20 }}>{children}</main>;
 
   return (
     <div

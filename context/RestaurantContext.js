@@ -216,6 +216,22 @@ found = { ...found, features, ...prof };
     };
   }, [supabase, ridFromUrlOrStorage, router.pathname, refreshKey]);
 
+  // Keep active restaurant id globally accessible for push subscription routing.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const rid = restaurant?.id ? String(restaurant.id) : '';
+    if (rid) {
+      window.__activeRestaurantId = rid;
+      localStorage.setItem('active_restaurant_id', rid);
+    } else if (!router.pathname?.startsWith('/owner')) {
+      // Avoid clearing owner context during transient loads, but cleanup outside owner app.
+      try {
+        delete window.__activeRestaurantId;
+      } catch { }
+      localStorage.removeItem('active_restaurant_id');
+    }
+  }, [restaurant?.id, router.pathname]);
+
   const value = useMemo(() => {
     const role = restaurant?.role || 'guest';
     return {
@@ -232,7 +248,7 @@ found = { ...found, features, ...prof };
         setRefreshKey(prev => prev + 1);
       },
     };
-  }, [restaurant, loading, error, router]);
+  }, [restaurant, loading, error]);
 
   return (
     <RestaurantCtx.Provider value={value}>
