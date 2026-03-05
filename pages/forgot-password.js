@@ -36,8 +36,14 @@ export default function ForgotPassword() {
       });
 
       if (error) {
+        console.error("Supabase Reset Password Error:", error);
         setMsgType("error");
-        setMsg(`Error: ${error.message}`);
+        // If it's a 500, provide more context
+        if (error.status === 500) {
+          setMsg(`Error: ${error.message} (This is usually an SMTP or Configuration issue in Supabase Dashboard)`);
+        } else {
+          setMsg(`Error: ${error.message}`);
+        }
       } else {
         setMsgType("success");
         setMsg("✅ If this email exists, a password reset link has been sent. Check your inbox and spam folder.");

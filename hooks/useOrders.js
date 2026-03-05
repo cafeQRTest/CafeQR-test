@@ -20,7 +20,8 @@ async function fetchOrders(restaurantId, type) {
     `)
     .eq('restaurant_id', restaurantId)
     .neq('status', 'completed')
-    .neq('status', 'cancelled');
+    .neq('status', 'cancelled')
+    .neq('status', 'pending_acceptance');
 
   if (type && type !== 'all') {
     query = query.eq('order_type', type);
