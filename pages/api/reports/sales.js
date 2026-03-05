@@ -32,6 +32,7 @@ export default async function handler(req, res) {
         igst,
         total_inc_tax,
         status,
+        regeneration_reason,
         mixed_payment_details,
         invoice_items (
           line_no,
@@ -103,20 +104,23 @@ export default async function handler(req, res) {
 
       const common = {
         'Invoice No': inv.invoice_no,
-  'Date & Time': new Date(inv.date_ordered || inv.invoice_date).toLocaleString('en-IN', {
-    timeZone: 'Asia/Kolkata',
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: true,
-  }),
+        'Date & Time': new Date(inv.date_ordered || inv.invoice_date).toLocaleString('en-IN', {
+          timeZone: 'Asia/Kolkata',
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+        }),
         'Customer Name': inv.customer_name || 'Walk-in',
         'Customer GSTIN': inv.customer_gstin || '',
         'Place of Supply': inv.place_of_supply || '',
         'Payment Method': paymentMethodDisplay,
         'Status': inv.status || 'paid',
+        'Void Reason': String(inv.status || '').toLowerCase() === 'void' && inv.regeneration_reason
+          ? inv.regeneration_reason.replace(/^void:\s*/i, '')
+          : '',
       };
 
       const items = inv.invoice_items || [];
@@ -214,6 +218,7 @@ export default async function handler(req, res) {
       'Line Total Incl Tax',
       'Payment Method',
       'Status',
+      'Void Reason',
     ];
 
     const parser = new Parser({ fields });

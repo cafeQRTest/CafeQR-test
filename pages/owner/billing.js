@@ -15,11 +15,11 @@ import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import { downloadInvoicePdf } from '../../lib/downloadInvoicePdf';
 import { formatQtyP } from '../../lib/qty';
-import { 
-  FaFileDownload, 
-  FaChartBar, 
-  FaClipboardList, 
-  FaFileAlt, 
+import {
+  FaFileDownload,
+  FaChartBar,
+  FaClipboardList,
+  FaFileAlt,
   FaFileInvoice,
   FaMoneyBillWave,
   FaReceipt,
@@ -43,7 +43,7 @@ export default function BillingPage() {
   const supabase = getSupabase();
   const { checking } = useRequireAuth(supabase);
   const { restaurant, loading: restLoading } = useRestaurant();
-  
+
   const [range, setRange] = useState({
     start: new Date(new Date().setHours(0, 0, 0, 0)),
     end: new Date(),
@@ -66,12 +66,12 @@ export default function BillingPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [expandedInvoice, setExpandedInvoice] = useState(null);
-  
+
   // Void Modal State
   const [voidTarget, setVoidTarget] = useState(null);
   const [voidLoading, setVoidLoading] = useState(false);
   const [voidError, setVoidError] = useState('');
-  
+
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [invoiceItems, setInvoiceItems] = useState([]);
   const [detailsLoading, setDetailsLoading] = useState(false);
@@ -92,32 +92,32 @@ export default function BillingPage() {
 
   const formatMoney = (n) => `₹${Number(n || 0).toFixed(2)}`;
 
-const getPayMethod = (inv) =>
-  String(inv?.payment_method ?? inv?.paymentmethod ?? inv?.paymentMethod ?? '').toLowerCase();
+  const getPayMethod = (inv) =>
+    String(inv?.payment_method ?? inv?.paymentmethod ?? inv?.paymentMethod ?? '').toLowerCase();
 
-const getMixedDetails = (inv) =>
-  inv?.mixed_payment_details ?? inv?.mixedpaymentdetails ?? inv?.mixedPaymentDetails ?? null;
+  const getMixedDetails = (inv) =>
+    inv?.mixed_payment_details ?? inv?.mixedpaymentdetails ?? inv?.mixedPaymentDetails ?? null;
 
-const pickNum = (obj, keys, fallback = 0) => {
-  for (const k of keys) {
-    const v = obj?.[k];
-    if (v !== undefined && v !== null && v !== '') {
-      const n = Number(v);
-      if (Number.isFinite(n)) return n;
+  const pickNum = (obj, keys, fallback = 0) => {
+    for (const k of keys) {
+      const v = obj?.[k];
+      if (v !== undefined && v !== null && v !== '') {
+        const n = Number(v);
+        if (Number.isFinite(n)) return n;
+      }
     }
-  }
-  return fallback;
-};
-
-const getMixedSplit = (inv) => {
-  const d = getMixedDetails(inv);
-  return {
-    cash: pickNum(d, ['cash_amount', 'cashAmount', 'cashamount'], 0),
-    online: pickNum(d, ['online_amount', 'onlineAmount', 'onlineamount'], 0),
+    return fallback;
   };
-};
 
-const isMixed = (inv) => getPayMethod(inv) === 'mixed' && !!getMixedDetails(inv);
+  const getMixedSplit = (inv) => {
+    const d = getMixedDetails(inv);
+    return {
+      cash: pickNum(d, ['cash_amount', 'cashAmount', 'cashamount'], 0),
+      online: pickNum(d, ['online_amount', 'onlineAmount', 'onlineamount'], 0),
+    };
+  };
+
+  const isMixed = (inv) => getPayMethod(inv) === 'mixed' && !!getMixedDetails(inv);
 
 
   const prettyMethod = (method) => {
@@ -147,8 +147,8 @@ const isMixed = (inv) => getPayMethod(inv) === 'mixed' && !!getMixedDetails(inv)
     if (s === 'void') return 'Void';
     return status || 'Unassigned';
   };
-   
-  
+
+
   const loadInvoices = async () => {
     if (!restaurant?.id || !supabase || restLoading || checking) return;
 
@@ -157,7 +157,7 @@ const isMixed = (inv) => getPayMethod(inv) === 'mixed' && !!getMixedDetails(inv)
     try {
       // Convert IST date range to UTC for database query
       const { startUtc, endUtc } = istSpanFromDateTimesUtcISO(range.start, range.startTime || '00:00', range.end, range.endTime || '23:59');
-      
+
       const { data, error } = await supabase
         .from('invoices')
         .select('*')
@@ -208,18 +208,18 @@ const isMixed = (inv) => getPayMethod(inv) === 'mixed' && !!getMixedDetails(inv)
         total_sgst: list.reduce((s, inv) => s + (parseFloat(inv.sgst) || 0), 0),
         total_igst: list.reduce((s, inv) => s + (parseFloat(inv.igst) || 0), 0),
         cash_sales: list.reduce((sum, inv) => {
-  const pm = getPayMethod(inv);
-  if (pm === 'cash') return sum + getInvoiceTotal(inv);
-  if (isMixed(inv)) return sum + getMixedSplit(inv).cash;
-  return sum;
-}, 0),
+          const pm = getPayMethod(inv);
+          if (pm === 'cash') return sum + getInvoiceTotal(inv);
+          if (isMixed(inv)) return sum + getMixedSplit(inv).cash;
+          return sum;
+        }, 0),
 
-online_sales: list.reduce((sum, inv) => {
-  const pm = getPayMethod(inv);
-  if (['online', 'upi', 'card'].includes(pm)) return sum + getInvoiceTotal(inv);
-  if (isMixed(inv)) return sum + getMixedSplit(inv).online;
-  return sum;
-}, 0),
+        online_sales: list.reduce((sum, inv) => {
+          const pm = getPayMethod(inv);
+          if (['online', 'upi', 'card'].includes(pm)) return sum + getInvoiceTotal(inv);
+          if (isMixed(inv)) return sum + getMixedSplit(inv).online;
+          return sum;
+        }, 0),
 
         credit_sales: list
           .filter(inv => inv.payment_method === 'credit')
@@ -243,115 +243,115 @@ online_sales: list.reduce((sum, inv) => {
   }, [restaurant?.id, range, reportType, supabase, restLoading, checking]);
 
   const exportCSV = async (type) => {
-  if (!restaurant?.id) return;
-  const { startUtc, endUtc } = istSpanFromDateTimesUtcISO(
-    range.start, 
-    range.startTime || '00:00', 
-    range.end, 
-    range.endTime || '23:59'
-  );
+    if (!restaurant?.id) return;
+    const { startUtc, endUtc } = istSpanFromDateTimesUtcISO(
+      range.start,
+      range.startTime || '00:00',
+      range.end,
+      range.endTime || '23:59'
+    );
 
-  const qs = new URLSearchParams({
-    from: startUtc,
-    to: endUtc,
-    restaurant_id: restaurant.id,
-    report_type: type,
-  }).toString();
-  const relUrl = `/api/reports/sales?${qs}`;
+    const qs = new URLSearchParams({
+      from: startUtc,
+      to: endUtc,
+      restaurant_id: restaurant.id,
+      report_type: type,
+    }).toString();
+    const relUrl = `/api/reports/sales?${qs}`;
 
-  const dateTag = `${range.start.toISOString().slice(0, 10)}_to_${range.end.toISOString().slice(0, 10)}`;
+    const dateTag = `${range.start.toISOString().slice(0, 10)}_to_${range.end.toISOString().slice(0, 10)}`;
 
-  // Web: existing download behavior
-  if (!Capacitor.isNativePlatform()) {
-    window.location.href = relUrl;
-    return;
-  }
+    // Web: existing download behavior
+    if (!Capacitor.isNativePlatform()) {
+      window.location.href = relUrl;
+      return;
+    }
 
-  try {
-    const res = await fetch(relUrl);
-    if (!res.ok) throw new Error('Failed to generate CSV');
-    const csv = await res.text();
+    try {
+      const res = await fetch(relUrl);
+      if (!res.ok) throw new Error('Failed to generate CSV');
+      const csv = await res.text();
 
-    const fileName = `Invoices_${type}_${dateTag}.csv`;
+      const fileName = `Invoices_${type}_${dateTag}.csv`;
 
-    await Filesystem.writeFile({
-      directory: Directory.Cache,
-      path: fileName,
-      data: csv,
-      encoding: 'utf8',
-    });
+      await Filesystem.writeFile({
+        directory: Directory.Cache,
+        path: fileName,
+        data: csv,
+        encoding: 'utf8',
+      });
 
-    const { uri } = await Filesystem.getUri({
-      directory: Directory.Cache,
-      path: fileName,
-    });
+      const { uri } = await Filesystem.getUri({
+        directory: Directory.Cache,
+        path: fileName,
+      });
 
-    await Share.share({
-      title: fileName,
-      text: 'Cafe QR billing CSV export',
-      url: uri,               // share the CSV file
-      dialogTitle: 'Share billing CSV',
-    });
-  } catch (e) {
-    console.error('Billing CSV export failed', e);
-    alert(e.message || 'Failed to export CSV');
-  }
-};
+      await Share.share({
+        title: fileName,
+        text: 'Cafe QR billing CSV export',
+        url: uri,               // share the CSV file
+        dialogTitle: 'Share billing CSV',
+      });
+    } catch (e) {
+      console.error('Billing CSV export failed', e);
+      alert(e.message || 'Failed to export CSV');
+    }
+  };
 
-const exportHsnSummary = async () => {
-  if (!restaurant?.id) return;
-  const { startUtc, endUtc } = istSpanFromDateTimesUtcISO(
-    range.start, 
-    range.startTime || '00:00', 
-    range.end, 
-    range.endTime || '23:59'
-  );
+  const exportHsnSummary = async () => {
+    if (!restaurant?.id) return;
+    const { startUtc, endUtc } = istSpanFromDateTimesUtcISO(
+      range.start,
+      range.startTime || '00:00',
+      range.end,
+      range.endTime || '23:59'
+    );
 
-  const qs = new URLSearchParams({
-    from: startUtc,
-    to: endUtc,
-    restaurant_id: restaurant.id,
-  }).toString();
+    const qs = new URLSearchParams({
+      from: startUtc,
+      to: endUtc,
+      restaurant_id: restaurant.id,
+    }).toString();
 
-  const relUrl = `/api/reports/gst-hsn-summary?${qs}`;
+    const relUrl = `/api/reports/gst-hsn-summary?${qs}`;
 
-  const dateTag = `${range.start.toISOString().slice(0, 10)}_to_${range.end.toISOString().slice(0, 10)}`;
+    const dateTag = `${range.start.toISOString().slice(0, 10)}_to_${range.end.toISOString().slice(0, 10)}`;
 
-  if (!Capacitor.isNativePlatform()) {
-    window.location.href = relUrl;
-    return;
-  }
+    if (!Capacitor.isNativePlatform()) {
+      window.location.href = relUrl;
+      return;
+    }
 
-  try {
-    const res = await fetch(relUrl);
-    if (!res.ok) throw new Error('Failed to generate HSN summary CSV');
-    const csv = await res.text();
+    try {
+      const res = await fetch(relUrl);
+      if (!res.ok) throw new Error('Failed to generate HSN summary CSV');
+      const csv = await res.text();
 
-    const fileName = `GST_HSN_Summary_${dateTag}.csv`;
+      const fileName = `GST_HSN_Summary_${dateTag}.csv`;
 
-    await Filesystem.writeFile({
-      directory: Directory.Cache,
-      path: fileName,
-      data: csv,
-      encoding: 'utf8',
-    });
+      await Filesystem.writeFile({
+        directory: Directory.Cache,
+        path: fileName,
+        data: csv,
+        encoding: 'utf8',
+      });
 
-    const { uri } = await Filesystem.getUri({
-      directory: Directory.Cache,
-      path: fileName,
-    });
+      const { uri } = await Filesystem.getUri({
+        directory: Directory.Cache,
+        path: fileName,
+      });
 
-    await Share.share({
-      title: fileName,
-      text: 'Cafe QR GST HSN summary CSV export',
-      url: uri,
-      dialogTitle: 'Share billing CSV',
-    });
-  } catch (e) {
-    console.error('HSN summary CSV export failed', e);
-    alert(e.message || 'Failed to export HSN summary CSV');
-  }
-};
+      await Share.share({
+        title: fileName,
+        text: 'Cafe QR GST HSN summary CSV export',
+        url: uri,
+        dialogTitle: 'Share billing CSV',
+      });
+    } catch (e) {
+      console.error('HSN summary CSV export failed', e);
+      alert(e.message || 'Failed to export HSN summary CSV');
+    }
+  };
 
 
   const handleViewInvoice = async (invoice) => {
@@ -375,7 +375,7 @@ const exportHsnSummary = async () => {
         .from('order_items')
         .select('*, menu_items(name)')
         .eq('order_id', invoice.order_id);
-      
+
       if (error) throw error;
       setInvoiceItems(data || []);
     } catch (err) {
@@ -494,24 +494,24 @@ const exportHsnSummary = async () => {
 
           {/* Export Section - Horizontal Strip */}
           <div className="export-reports-strip">
-             <div className="strip-info">
-                <FaFileDownload className="info-icon" />
-                <span>Export Reports</span>
-             </div>
-             <div className="export-actions">
-                <button className="exp-pill" onClick={() => exportCSV('sales')} disabled={loading || stats.total_invoices === 0}>
-                   <FaChartBar /> Export Sales CSV
-                </button>
-                <button className="exp-pill" onClick={() => exportCSV('credit')} disabled={loading || stats.total_invoices === 0}>
-                   <FaClipboardList /> Export Credit CSV
-                </button>
-                <button className="exp-pill" onClick={() => exportCSV('all')} disabled={loading || stats.total_invoices === 0}>
-                   <FaFileAlt /> Export All CSV
-                </button>
-                <button className="exp-pill" onClick={exportHsnSummary} disabled={loading || stats.total_invoices === 0}>
-                   <FaFileInvoice /> HSN Summary CSV
-                </button>
-             </div>
+            <div className="strip-info">
+              <FaFileDownload className="info-icon" />
+              <span>Export Reports</span>
+            </div>
+            <div className="export-actions">
+              <button className="exp-pill" onClick={() => exportCSV('sales')} disabled={loading || stats.total_invoices === 0}>
+                <FaChartBar /> Export Sales CSV
+              </button>
+              <button className="exp-pill" onClick={() => exportCSV('credit')} disabled={loading || stats.total_invoices === 0}>
+                <FaClipboardList /> Export Credit CSV
+              </button>
+              <button className="exp-pill" onClick={() => exportCSV('all')} disabled={loading || stats.total_invoices === 0}>
+                <FaFileAlt /> Export All CSV
+              </button>
+              <button className="exp-pill" onClick={exportHsnSummary} disabled={loading || stats.total_invoices === 0}>
+                <FaFileInvoice /> HSN Summary CSV
+              </button>
+            </div>
           </div>
 
           <Card className="expenses-card">
@@ -532,43 +532,43 @@ const exportHsnSummary = async () => {
             <div className="expenses-table-wrapper">
               <Table
                 columns={[
-                  { 
-                    header: 'No.', 
-                    accessor: 'invoice_no', 
+                  {
+                    header: 'No.',
+                    accessor: 'invoice_no',
                     cell: (r) => (
                       <button className="id-bubble" onClick={() => handleViewDetails(r)}>
                         {r.invoice_no}
                       </button>
-                    ) 
+                    )
                   },
                   {
-  header: 'Date & Time',
-  accessor: 'date_ordered',
-  cell: (r) =>
-    new Date(r.date_ordered || r.invoice_date).toLocaleString('en-IN', {
-      timeZone: 'Asia/Kolkata',
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true,
-    }),
-},
+                    header: 'Date & Time',
+                    accessor: 'date_ordered',
+                    cell: (r) =>
+                      new Date(r.date_ordered || r.invoice_date).toLocaleString('en-IN', {
+                        timeZone: 'Asia/Kolkata',
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: true,
+                      }),
+                  },
 
                   { header: 'Customer', accessor: 'customer_name', cell: (r) => r.customer_name || '' },
                   { header: 'Taxable', accessor: 'taxable_amount', cell: (r) => formatMoney(r.taxable_amount) },
                   { header: 'Tax', accessor: 'total_tax', cell: (r) => <span style={{ color: '#dc2626', fontWeight: 600 }}>{formatMoney(r.total_tax)}</span> },
                   { header: 'Total', accessor: 'total_inc_tax', cell: (r) => <span style={{ fontWeight: 800, color: '#0f172a' }}>{formatMoney(getInvoiceTotal(r))}</span> },
                   { header: 'Payment', accessor: 'payment_method', cell: (r) => <span className={`status-pill ${r.payment_method}`}>{prettyMethod(r.payment_method)}</span> },
-                   { header: 'Status', accessor: 'status', cell: (r) => <span className={`status-pill status-${r.status}`}>{getStatusLabel(r.status)}</span> },
+                  { header: 'Status', accessor: 'status', cell: (r) => <span className={`status-pill status-${r.status}`}>{getStatusLabel(r.status)}</span> },
                   {
                     header: 'Actions',
                     accessor: 'actions',
                     cell: (r) => (
                       <div className="expenses-actions" style={{ display: 'flex', gap: '8px' }}>
                         <button className="action-bubble pdf" onClick={() => handleViewInvoice(r)}>
-                           <FaFilePdf size={12} /> PDF
+                          <FaFilePdf size={12} /> PDF
                         </button>
                         <button
                           className="action-bubble void"
@@ -586,7 +586,7 @@ const exportHsnSummary = async () => {
 
               {invoices.length > itemsPerPage && (
                 <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: 24 }}>
-                  <Button 
+                  <Button
                     variant="outline"
                     onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                     disabled={currentPage === 1}
@@ -595,9 +595,9 @@ const exportHsnSummary = async () => {
                     Previous
                   </Button>
                   <span style={{ fontSize: 14, fontWeight: 600, color: '#64748b' }}>
-                     Page {currentPage} of {Math.ceil(invoices.length / itemsPerPage)}
+                    Page {currentPage} of {Math.ceil(invoices.length / itemsPerPage)}
                   </span>
-                  <Button 
+                  <Button
                     variant="outline"
                     onClick={() => setCurrentPage(p => Math.min(Math.ceil(invoices.length / itemsPerPage), p + 1))}
                     disabled={currentPage >= Math.ceil(invoices.length / itemsPerPage)}
@@ -635,16 +635,16 @@ const exportHsnSummary = async () => {
                     <div className="detail-item">
                       <div className="d-label"><FaCalendarDay /> Date</div>
                       <div className="d-value">{new Date(selectedInvoice.date_ordered || selectedInvoice.invoice_date)
-  .toLocaleString('en-IN', {
-    timeZone: 'Asia/Kolkata',
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: true,
-  })
-}</div>
+                        .toLocaleString('en-IN', {
+                          timeZone: 'Asia/Kolkata',
+                          day: '2-digit',
+                          month: 'long',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          hour12: true,
+                        })
+                      }</div>
                     </div>
                     {prettyMethod(selectedInvoice.payment_method) && (
                       <div className="detail-item">
@@ -659,11 +659,23 @@ const exportHsnSummary = async () => {
                     <div className="detail-item">
                       <div className="d-label"><FaCheckCircle /> Status</div>
                       <div className="d-value">
-                          <span className={`status-pill status-${selectedInvoice.status}`}>
-                            {getStatusLabel(selectedInvoice.status)}
-                          </span>
+                        <span className={`status-pill status-${selectedInvoice.status}`}>
+                          {getStatusLabel(selectedInvoice.status)}
+                        </span>
                       </div>
                     </div>
+                    {String(selectedInvoice.status || '').toLowerCase() === 'void' && selectedInvoice.regeneration_reason && (
+                      <div className="detail-item" style={{ gridColumn: '1 / -1' }}>
+                        <div className="d-label"><FaBan /> Cancellation Reason</div>
+                        <div className="d-value" style={{
+                          background: '#fef2f2', color: '#dc2626', padding: '8px 12px',
+                          borderRadius: 8, fontSize: 13, fontWeight: 600, lineHeight: 1.5,
+                          border: '1px solid #fee2e2'
+                        }}>
+                          {selectedInvoice.regeneration_reason.replace(/^void:\s*/i, '')}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="items-section">
@@ -675,11 +687,11 @@ const exportHsnSummary = async () => {
                         {invoiceItems.map((item, idx) => {
                           // Very robust fallback for price keys across different versions
                           const price = Number(
-                            item.price ?? 
-                            item.unit_price ?? 
-                            item.price_at_order ?? 
-                            item.unit_price_inc_tax ?? 
-                            item.unit_price_ex_tax ?? 
+                            item.price ??
+                            item.unit_price ??
+                            item.price_at_order ??
+                            item.unit_price_inc_tax ??
+                            item.unit_price_ex_tax ??
                             0
                           );
                           return (
@@ -700,15 +712,15 @@ const exportHsnSummary = async () => {
                               <div className="item-price" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
                                 <span>{formatMoney(price * item.quantity)}</span>
                                 {(() => {
-                                   const lDisc = Number(item.line_discount_amount || 0);
-                                   // Fallback if line_discount_amount is missing (calc as Total - Order Share)
-                                   const displayDisc = lDisc > 0 ? lDisc : Math.max(0, Number(item.discount_amount || 0) - Number(item.order_discount_share || 0));
-                                   
-                                   return displayDisc > 0 ? (
-                                      <span style={{ fontSize: '0.75rem', color: '#ef4444', fontWeight: 600 }}>
-                                        -{formatMoney(displayDisc)}
-                                      </span>
-                                   ) : null;
+                                  const lDisc = Number(item.line_discount_amount || 0);
+                                  // Fallback if line_discount_amount is missing (calc as Total - Order Share)
+                                  const displayDisc = lDisc > 0 ? lDisc : Math.max(0, Number(item.discount_amount || 0) - Number(item.order_discount_share || 0));
+
+                                  return displayDisc > 0 ? (
+                                    <span style={{ fontSize: '0.75rem', color: '#ef4444', fontWeight: 600 }}>
+                                      -{formatMoney(displayDisc)}
+                                    </span>
+                                  ) : null;
                                 })()}
                               </div>
                             </div>
@@ -732,23 +744,23 @@ const exportHsnSummary = async () => {
                       </div>
                     )}
                     {(() => {
-                       // Robust Round-off Calculation
-                       const rAmt = Number(selectedInvoice.round_off_amount || 0);
-                       const finalTotal = getInvoiceTotal(selectedInvoice);
-                       const preRound = Number(selectedInvoice.total_inc_tax || 0);
-                       
-                       // If explicit round-off is 0, but there's a difference, use derived
-                       const displayRoundOff = rAmt !== 0 ? rAmt : (finalTotal - preRound);
-                       
-                       if (Math.abs(displayRoundOff) > 0.01) {
-                         return (
+                      // Robust Round-off Calculation
+                      const rAmt = Number(selectedInvoice.round_off_amount || 0);
+                      const finalTotal = getInvoiceTotal(selectedInvoice);
+                      const preRound = Number(selectedInvoice.total_inc_tax || 0);
+
+                      // If explicit round-off is 0, but there's a difference, use derived
+                      const displayRoundOff = rAmt !== 0 ? rAmt : (finalTotal - preRound);
+
+                      if (Math.abs(displayRoundOff) > 0.01) {
+                        return (
                           <div className="sum-row" style={{ color: displayRoundOff > 0 ? '#10b981' : '#ef4444' }}>
                             <span>Round-off</span>
                             <span>{displayRoundOff > 0 ? '+' : ''}{formatMoney(displayRoundOff)}</span>
                           </div>
-                         );
-                       }
-                       return null;
+                        );
+                      }
+                      return null;
                     })()}
 
                     <div className="sum-row grand">
@@ -759,8 +771,8 @@ const exportHsnSummary = async () => {
                 </div>
 
                 <div className="modal-footer">
-                   <Button variant="outline" onClick={() => setSelectedInvoice(null)}>Close</Button>
-                   <Button onClick={() => handleViewInvoice(selectedInvoice)}>Download PDF</Button>
+                  <Button variant="outline" onClick={() => setSelectedInvoice(null)}>Close</Button>
+                  <Button onClick={() => handleViewInvoice(selectedInvoice)}>Download PDF</Button>
                 </div>
               </div>
             </div>
@@ -786,7 +798,7 @@ const exportHsnSummary = async () => {
               <p style={{ color: '#475569', margin: '0 0 16px', lineHeight: 1.5 }}>
                 Are you sure you want to void this invoice? This action cannot be undone and the linked order will be cancelled.
               </p>
-              
+
               {voidError && (
                 <div style={{ background: '#fef2f2', color: '#dc2626', padding: '12px', borderRadius: '8px', fontSize: '13px', marginBottom: '16px' }}>
                   {voidError}
@@ -794,14 +806,14 @@ const exportHsnSummary = async () => {
               )}
 
               <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
-                 <Button variant="outline" onClick={() => setVoidTarget(null)} disabled={voidLoading}>Cancel</Button>
-                 <Button 
-                    onClick={handleConfirmVoid} 
-                    disabled={voidLoading}
-                    style={{ background: '#dc2626', borderColor: '#dc2626', color: 'white' }}
-                 >
-                   {voidLoading ? 'Voiding...' : 'Confirm Void'}
-                 </Button>
+                <Button variant="outline" onClick={() => setVoidTarget(null)} disabled={voidLoading}>Cancel</Button>
+                <Button
+                  onClick={handleConfirmVoid}
+                  disabled={voidLoading}
+                  style={{ background: '#dc2626', borderColor: '#dc2626', color: 'white' }}
+                >
+                  {voidLoading ? 'Voiding...' : 'Confirm Void'}
+                </Button>
               </div>
             </div>
           </div>
