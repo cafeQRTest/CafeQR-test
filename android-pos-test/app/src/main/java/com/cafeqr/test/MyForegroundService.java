@@ -130,6 +130,7 @@ public class MyForegroundService extends Service {
         String title = intent.getStringExtra("title");
         String body = intent.getStringExtra("body");
         String orderId = intent.getStringExtra("orderId");
+        String restaurantId = intent.getStringExtra("restaurantId");
 
         // Tap body → open orders page
         Intent notificationIntent = new Intent(this, MainActivity.class);
@@ -144,6 +145,7 @@ public class MyForegroundService extends Service {
         Intent acceptIntent = new Intent(this, DeliveryActionReceiver.class);
         acceptIntent.setAction("com.cafeqr.test.ACTION_ACCEPT");
         acceptIntent.putExtra("orderId", orderId);
+        acceptIntent.putExtra("restaurantId", restaurantId != null ? restaurantId : "");
         PendingIntent acceptPending = PendingIntent.getBroadcast(
             this, 200, acceptIntent,
             PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
@@ -153,6 +155,7 @@ public class MyForegroundService extends Service {
         Intent declineIntent = new Intent(this, DeliveryActionReceiver.class);
         declineIntent.setAction("com.cafeqr.test.ACTION_DECLINE");
         declineIntent.putExtra("orderId", orderId);
+        declineIntent.putExtra("restaurantId", restaurantId != null ? restaurantId : "");
         PendingIntent declinePending = PendingIntent.getBroadcast(
             this, 300, declineIntent,
             PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE

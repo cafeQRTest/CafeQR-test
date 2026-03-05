@@ -7,19 +7,28 @@ import android.content.Context;
 import android.content.Intent;
 import android.util.Log;
 
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+
 /**
  * Handles Accept / Decline action button taps from the persistent
- * delivery order notification. Dismisses the notification and
- * launches MainActivity with the appropriate action query parameter.
+ * delivery order notification. Calls the accept/decline API directly
+ * (works even on cold start), dismisses the notification, and
+ * launches MainActivity.
  */
 public class DeliveryActionReceiver extends BroadcastReceiver {
     private static final String TAG = "DeliveryAction";
+    // Use the deployed Vercel URL for API calls
+    private static final String API_BASE = "https://test-cafeqr.vercel.app";
 
     @Override
     public void onReceive(Context context, Intent intent) {
         String action = intent.getAction();
         String orderId = intent.getStringExtra("orderId");
-        Log.d(TAG, "Action received: " + action + ", orderId: " + orderId);
+        String restaurantId = intent.getStringExtra("restaurantId");
+        Log.d(TAG, "Action received: " + action + ", orderId: " + orderId + ", restaurantId: " + restaurantId);
 
         // Dismiss the persistent delivery notification
         NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
@@ -32,21 +41,90 @@ public class DeliveryActionReceiver extends BroadcastReceiver {
         context.stopService(stopService);
 
         // Determine action type
-        String actionParam = "accept";
-        if ("com.cafeqr.test.ACTION_DECLINE".equals(action)) {
-            actionParam = "decline";
-        }
+        boolean isAccept = "com.cafeqr.test.ACTION_ACCEPT".equals(action);
+        String actionParam = isAccept ? "accept" : "decline";
 
-        // Launch MainActivity with deep-link URL containing the action
-        Intent launchIntent = new Intent(context, MainActivity.class);
-        launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-        launchIntent.putExtra("orderId", orderId);
-        launchIntent.putExtra("action", actionParam);
-        // The WebView/Capacitor will pick up these extras or the URL
-        launchIntent.setData(
-            android.net.Uri.parse("https://test-cafeqr.vercel.app/owner/orders?highlight=" +
-                (orderId != null ? orderId : "") + "&action=" + actionParam)
-        );
-        context.startActivity(launchIntent);
+        // Call the API directly on a background thread using goAsync()
+        final PendingResult pendingResult = goAsync();
+
+        new Thread(() -> {
+            try {
+                if (orderId != null && restaurantId != null && !restaurantId.isEmpty()) {
+                    if (isAccept) {
+                        callAcceptApi(orderId, restaurantId);
+                    } else {
+                        callDeclineApi(orderId, restaurantId);
+                    }
+                } else {
+                    Log.w(TAG, "Missing orderId or restaurantId, skipping API call");
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "API call failed: " + e.getMessage(), e);
+            } finally {
+                // Launch MainActivity after API call (regardless of result)
+                try {
+                    Intent launchIntent = new Intent(context, MainActivity.class);
+                    launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                    launchIntent.putExtra("orderId", orderId);
+                    launchIntent.putExtra("action", actionParam);
+                    launchIntent.setData(
+                        android.net.Uri.parse(API_BASE + "/owner/orders?highlight=" +
+                            (orderId != null ? orderId : "") + "&action=" + actionParam)
+                    );
+                    context.startActivity(launchIntent);
+                } catch (Exception e) {
+                    Log.e(TAG, "Failed to launch MainActivity: " + e.getMessage(), e);
+                }
+                pendingResult.finish();
+            }
+        }).start();
+    }
+
+    private void callAcceptApi(String orderId, String restaurantId) throws Exception {
+        URL url = new URL(API_BASE + "/api/orders/accept-delivery/");
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        try {
+            conn.setRequestMethod("POST");
+            conn.setRequestProperty("Content-Type", "application/json");
+            conn.setDoOutput(true);
+            conn.setConnectTimeout(8000);
+            conn.setReadTimeout(8000);
+
+            String json = "{\"order_id\":\"" + orderId + "\",\"restaurant_id\":\"" + restaurantId + "\"}";
+            try (OutputStream os = conn.getOutputStream()) {
+                os.write(json.getBytes(StandardCharsets.UTF_8));
+            }
+
+            int code = conn.getResponseCode();
+            Log.d(TAG, "Accept API response code: " + code);
+        } finally {
+            conn.disconnect();
+        }
+    }
+
+    private void callDeclineApi(String orderId, String restaurantId) throws Exception {
+        // Use Supabase service role to cancel — but since we don't have service key on device,
+        // we'll use a dedicated decline endpoint. For now, call accept-delivery with a
+        // decline action via a query parameter, or use a separate endpoint.
+        // The simplest approach: create a decline-delivery API endpoint.
+        URL url = new URL(API_BASE + "/api/orders/decline-delivery/");
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        try {
+            conn.setRequestMethod("POST");
+            conn.setRequestProperty("Content-Type", "application/json");
+            conn.setDoOutput(true);
+            conn.setConnectTimeout(8000);
+            conn.setReadTimeout(8000);
+
+            String json = "{\"order_id\":\"" + orderId + "\",\"restaurant_id\":\"" + restaurantId + "\"}";
+            try (OutputStream os = conn.getOutputStream()) {
+                os.write(json.getBytes(StandardCharsets.UTF_8));
+            }
+
+            int code = conn.getResponseCode();
+            Log.d(TAG, "Decline API response code: " + code);
+        } finally {
+            conn.disconnect();
+        }
     }
 }
