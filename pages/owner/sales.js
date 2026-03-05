@@ -42,8 +42,8 @@ function toDisplayItems(order) {
         let n = oi.item_name || oi.menu_items?.name || 'Item';
         const vName = oi.variant_name || null;
         if (vName) {
-           const suffix = ` (${vName})`;
-           if (n.endsWith(suffix)) n = n.slice(0, -suffix.length);
+          const suffix = ` (${vName})`;
+          if (n.endsWith(suffix)) n = n.slice(0, -suffix.length);
         }
         return n;
       })(),
@@ -77,7 +77,7 @@ function toDisplayItems(order) {
 function getOrderTypeLabel(order) {
   if (!order) return '';
   if (order.table_number && order.table_number !== null) {
-     return `Table ${order.table_number}`;
+    return `Table ${order.table_number}`;
   }
   if (order.order_type === 'parcel' || order.order_type === 'takeaway') return 'Takeaway';
   return '';
@@ -117,7 +117,7 @@ function prettyMixed(method, mixedDetails) {
   const onlineAmt = Number(pick(mixedDetails, ['online_amount', 'onlineAmount'], 0) || 0).toFixed(2);
   const onlineMethod = String(pick(mixedDetails, ['online_method', 'onlineMethod'], 'online') || 'online').toUpperCase();
 
- return `Mixed (Cash ₹${cash} + ₹${onlineAmt} Online)`;
+  return `Mixed (Cash ₹${cash} + ₹${onlineAmt} Online)`;
 }
 
 
@@ -158,7 +158,7 @@ export default function SalesPage() {
   const [restaurantProfile, setRestaurantProfile] = useState(null)
   const [ordersList, setOrdersList] = useState([])
   const [itemsModalOrder, setItemsModalOrder] = useState(null)
-  
+
   // Pagination
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 15
@@ -167,36 +167,36 @@ export default function SalesPage() {
 
   useEffect(() => {
     if (!restaurantId || !supabase) return
-    
+
     const fetchData = async () => {
-    // Fetch restaurant data from 'restaurants' table
-    const { data: restaurantData } = await supabase
-      .from('restaurants')
-      .select('name')
-      .eq('id', restaurantId)
-      .single()
-    
-    if (restaurantData) {
-      setRestaurantProfile(prev => ({
-        ...prev,
-        restaurant_name: restaurantData.name
-      }))
+      // Fetch restaurant data from 'restaurants' table
+      const { data: restaurantData } = await supabase
+        .from('restaurants')
+        .select('name')
+        .eq('id', restaurantId)
+        .single()
+
+      if (restaurantData) {
+        setRestaurantProfile(prev => ({
+          ...prev,
+          restaurant_name: restaurantData.name
+        }))
+      }
+
+      const { data: items } = await supabase
+        .from('menu_items')
+        .select('category')
+        .eq('restaurant_id', restaurantId)
+        .neq('category', null)
+
+      if (items) {
+        const uniqueCats = [...new Set(items.map(m => m.category))]
+        setMenuCategories(uniqueCats.filter(c => c && c.trim() !== ''))
+      }
     }
 
-    const { data: items } = await supabase
-      .from('menu_items')
-      .select('category')
-      .eq('restaurant_id', restaurantId)
-      .neq('category', null)
-    
-    if (items) {
-      const uniqueCats = [...new Set(items.map(m => m.category))]
-      setMenuCategories(uniqueCats.filter(c => c && c.trim() !== ''))
-    }
-  }
-  
-  fetchData()
-}, [restaurantId, supabase])
+    fetchData()
+  }, [restaurantId, supabase])
 
   useEffect(() => {
     if (checking || restLoading || !restaurantId || !supabase) return
@@ -230,7 +230,7 @@ export default function SalesPage() {
           itemCategoryMap[item.name] = item.category || 'Uncategorized'
         })
       }
-   
+
       const { startUtc, endUtc } = istSpanFromDateTimesUtcISO(range.start, range.startTime, range.end, range.endTime)
       const { data: orders, error: ordersError } = await supabase
         .from('orders')
@@ -260,7 +260,7 @@ export default function SalesPage() {
           prices_include_tax,
           order_customers (
             is_primary,
-            restaurant_customers (
+            restaurant_customer (
               name,
               phone
             )
@@ -280,7 +280,7 @@ export default function SalesPage() {
       if (ordersError) throw ordersError
       const orderData = Array.isArray(orders) ? orders : []
       // Sort orders by date_ordered desc initially if not already
-      orderData.sort((a,b) => new Date(b.date_ordered || b.created_at) - new Date(a.date_ordered || a.created_at))
+      orderData.sort((a, b) => new Date(b.date_ordered || b.created_at) - new Date(a.date_ordered || a.created_at))
       setOrdersList(orderData)
       setCurrentPage(1) // Reset to page 1 on new data
 
@@ -297,7 +297,7 @@ export default function SalesPage() {
       orderData.forEach(o => {
         const revenue = Number(o.total_inc_tax ?? o.total_amount ?? 0)
         const taxVal = Number(o.total_tax ?? 0)
-        
+
         // Calculate rounded components per order
         const c = Math.round((taxVal / 2) * 100) / 100
         const s = Math.round((taxVal / 2) * 100) / 100
@@ -318,7 +318,7 @@ export default function SalesPage() {
             }
             return n;
           })();
-          
+
           const itemCategory = itemCategoryMap[baseName] || item.category || 'Uncategorized';
           const quantity = Number(item.quantity) || 0;
           const price = Number(item.price) || 0;
@@ -348,107 +348,107 @@ export default function SalesPage() {
           quantity_sold: quantity,
           revenue: itemRevenue[name] || 0,
           category: itemCategoryMap[(() => {
-             // Extract base name for category lookup
-             const match = name.match(/^(.*?)\s*\((.*)\)$/);
-             return match ? match[1] : name;
+            // Extract base name for category lookup
+            const match = name.match(/^(.*?)\s*\((.*)\)$/);
+            return match ? match[1] : name;
           })()] || 'Uncategorized'
         }))
         .sort((a, b) => b.revenue - a.revenue)
-      
+
       setAllSalesData(itemsArray)
       setSalesData(itemsArray)
 
       // In loadAllReportsData function, update payment breakdown logic:
 
-const paymentMap = {};
-orderData.forEach(o => {
-  let method = o.actual_payment_method || o.payment_method || 'unknown';
-  const amount = Number(o.total_inc_tax ?? o.total_amount ?? 0);
-  
-  // Handle mixed payments - show separately
-  if (method === 'mixed' && o.mixed_payment_details) {
-    const { cash_amount, online_amount, online_method } = o.mixed_payment_details;
-    
-    // Add cash portion
-    const cashKey = 'cash';
-    if (!paymentMap[cashKey]) paymentMap[cashKey] = { count: 0, amount: 0 };
-    paymentMap[cashKey].count += 1;
-    paymentMap[cashKey].amount += Number(cash_amount);
-    
-    // Add online portion
-    const onlineKey = online_method || 'online';
-    if (!paymentMap[onlineKey]) paymentMap[onlineKey] = { count: 0, amount: 0 };
-    paymentMap[onlineKey].count += 1;
-    paymentMap[onlineKey].amount += Number(online_amount);
-  } else {
-    if (!paymentMap[method]) paymentMap[method] = { count: 0, amount: 0 };
-    paymentMap[method].count += 1;
-    paymentMap[method].amount += amount;
-  }
-});
+      const paymentMap = {};
+      orderData.forEach(o => {
+        let method = o.actual_payment_method || o.payment_method || 'unknown';
+        const amount = Number(o.total_inc_tax ?? o.total_amount ?? 0);
 
-setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
-  payment_method: method,
-  order_count: data.count,
-  total_amount: data.amount,
-  percentage: totalRevenue > 0 ? ((data.amount / totalRevenue) * 100).toFixed(1) : '0.0'
-})));
+        // Handle mixed payments - show separately
+        if (method === 'mixed' && o.mixed_payment_details) {
+          const { cash_amount, online_amount, online_method } = o.mixed_payment_details;
 
-// Hourly in IST
-     const fmtHour = new Intl.DateTimeFormat('en-GB', {
-       timeZone: 'Asia/Kolkata', hour: '2-digit', hour12: false
-     })
-     const hourlyMap = {}
-     orderData.forEach(o => {
-       const key = fmtHour.format(new Date(o.date_ordered || o.created_at)) // "06", "17", etc.
-       const amount = Number(o.total_inc_tax ?? o.total_amount ?? 0)
-       if (!hourlyMap[key]) hourlyMap[key] = { count: 0, amount: 0 }
-       hourlyMap[key].count += 1
-       hourlyMap[key].amount += amount
-     })
-     setHourlyBreakdown(
-       Object.keys(hourlyMap).sort().map(h => ({
-         hour: `${h}:00`,
-         order_count: hourlyMap[h].count,
-         total_amount: hourlyMap[h].amount
-       }))
-     )
+          // Add cash portion
+          const cashKey = 'cash';
+          if (!paymentMap[cashKey]) paymentMap[cashKey] = { count: 0, amount: 0 };
+          paymentMap[cashKey].count += 1;
+          paymentMap[cashKey].amount += Number(cash_amount);
+
+          // Add online portion
+          const onlineKey = online_method || 'online';
+          if (!paymentMap[onlineKey]) paymentMap[onlineKey] = { count: 0, amount: 0 };
+          paymentMap[onlineKey].count += 1;
+          paymentMap[onlineKey].amount += Number(online_amount);
+        } else {
+          if (!paymentMap[method]) paymentMap[method] = { count: 0, amount: 0 };
+          paymentMap[method].count += 1;
+          paymentMap[method].amount += amount;
+        }
+      });
+
+      setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
+        payment_method: method,
+        order_count: data.count,
+        total_amount: data.amount,
+        percentage: totalRevenue > 0 ? ((data.amount / totalRevenue) * 100).toFixed(1) : '0.0'
+      })));
+
+      // Hourly in IST
+      const fmtHour = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Kolkata', hour: '2-digit', hour12: false
+      })
+      const hourlyMap = {}
+      orderData.forEach(o => {
+        const key = fmtHour.format(new Date(o.date_ordered || o.created_at)) // "06", "17", etc.
+        const amount = Number(o.total_inc_tax ?? o.total_amount ?? 0)
+        if (!hourlyMap[key]) hourlyMap[key] = { count: 0, amount: 0 }
+        hourlyMap[key].count += 1
+        hourlyMap[key].amount += amount
+      })
+      setHourlyBreakdown(
+        Object.keys(hourlyMap).sort().map(h => ({
+          hour: `${h}:00`,
+          order_count: hourlyMap[h].count,
+          total_amount: hourlyMap[h].amount
+        }))
+      )
 
       const orderTypeMap = {}
       orderData.forEach(o => {
         let type = o.order_type || 'counter'
         const table = o.table_number ? String(o.table_number).trim() : null
-        
+
         // Logic:
         // 1. If it's parcel/takeaway, keep as is (ignore table if any, usually 0)
         // 2. If it has a VALID table number (and not parcel), categorize as Table X
         // 3. Else fallback to original type (counter/dashboard/etc.)
-        
+
         const isParcel = type.toLowerCase().includes('parcel') || type.toLowerCase().includes('takeaway')
 
         if (!isParcel && table && table !== '0') {
-           type = `Table ${table}`
+          type = `Table ${table}`
         } else if (type === 'dashboard') {
-           type = 'QR (No Table)'
+          type = 'QR (No Table)'
         }
-        
+
         const amount = Number(o.total_inc_tax ?? o.total_amount ?? 0)
         if (!orderTypeMap[type]) orderTypeMap[type] = { count: 0, amount: 0 }
         orderTypeMap[type].count += 1
         orderTypeMap[type].amount += amount
       })
-      
+
       const typeArray = Object.entries(orderTypeMap).map(([type, data]) => ({
         order_type: type,
         order_count: data.count,
         total_amount: data.amount,
         percentage: totalRevenue > 0 ? ((data.amount / totalRevenue) * 100).toFixed(1) : '0.0'
       }))
-      
+
       // Sort: maybe group Tables together if possible, or just amount desc
       // Let's sort by amount descending
-      typeArray.sort((a,b) => b.total_amount - a.total_amount)
-      
+      typeArray.sort((a, b) => b.total_amount - a.total_amount)
+
       setOrderTypeBreakdown(typeArray)
 
       setTaxBreakdown([
@@ -457,7 +457,7 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
         { tax_type: 'Total Tax', amount: totalTax }
       ])
 
-      
+
       setCategoryBreakdown(Object.entries(categoryMap)
         .map(([cat, amount]) => ({
           category: cat || 'Uncategorized',
@@ -650,81 +650,81 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
 
           {activeReport === 0 && (
             <div style={{ background: 'white', borderRadius: '16px', border: '1px solid #e5e7eb', padding: '24px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
-               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', borderBottom: '1px solid #f3f4f6', paddingBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
-                 <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#1f2937', fontWeight: 700 }}>Sales Summary</h3>
-                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center', background: '#fff7ed', color: '#ea580c', padding: '6px 16px', borderRadius: '20px', fontSize: '0.9rem', fontWeight: 600 }}>
-                   <FaCalendarAlt style={{ color: '#f97316' }} /> {range.start.toLocaleDateString('en-GB').replace(/\//g, '-')} - {range.end.toLocaleDateString('en-GB').replace(/\//g, '-')}
-                 </div>
-               </div>
-               
-               {/* Hero Revenue Card */}
-               <div className="summary-card summary-card-hero">
-                 <div style={{ fontSize: '0.85rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px', fontWeight: 600 }}>Total Revenue</div>
-                 <div style={{ fontSize: '2.5rem', fontWeight: 800, color: '#1f2937', lineHeight: 1 }}>{formatCurrency(summaryStats.totalRevenue)}</div>
-               </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', borderBottom: '1px solid #f3f4f6', paddingBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+                <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#1f2937', fontWeight: 700 }}>Sales Summary</h3>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', background: '#fff7ed', color: '#ea580c', padding: '6px 16px', borderRadius: '20px', fontSize: '0.9rem', fontWeight: 600 }}>
+                  <FaCalendarAlt style={{ color: '#f97316' }} /> {range.start.toLocaleDateString('en-GB').replace(/\//g, '-')} - {range.end.toLocaleDateString('en-GB').replace(/\//g, '-')}
+                </div>
+              </div>
 
-               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
-                 
-                 {/* Orders */}
-                 <div 
-                    className="summary-card"
-                    onClick={() => setActiveReport(1)}
-                    style={{ cursor: 'pointer' }}
-                 >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>
-                         <span style={{ fontSize: '0.75rem', color: '#6b7280', textTransform: 'uppercase', fontWeight: 700, marginBottom: '2px' }}>Orders</span>
-                         <span style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1f2937', letterSpacing: '-0.02em' }}>{summaryStats.totalOrders}</span>
-                      </div>
-                      <div style={{ fontSize: '1.5rem', color: '#fed7aa' }}><FaReceipt /></div>
-                    </div>
-                 </div>
+              {/* Hero Revenue Card */}
+              <div className="summary-card summary-card-hero">
+                <div style={{ fontSize: '0.85rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px', fontWeight: 600 }}>Total Revenue</div>
+                <div style={{ fontSize: '2.5rem', fontWeight: 800, color: '#1f2937', lineHeight: 1 }}>{formatCurrency(summaryStats.totalRevenue)}</div>
+              </div>
 
-                 {/* Avg Order */}
-                 <div 
-                    className="summary-card"
-                    onClick={() => setActiveReport(6)}
-                    style={{ cursor: 'pointer' }}
-                 >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>
-                         <span style={{ fontSize: '0.75rem', color: '#6b7280', textTransform: 'uppercase', fontWeight: 700, marginBottom: '2px' }}>Avg Order</span>
-                         <span style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1f2937', letterSpacing: '-0.02em' }}>{formatCurrency(summaryStats.avgOrderValue)}</span>
-                      </div>
-                      <div style={{ fontSize: '1.5rem', color: '#fed7aa' }}><FaPercentage /></div>
-                    </div>
-                 </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
 
-                 {/* Tax */}
-                 <div 
-                    className="summary-card"
-                    onClick={() => setActiveReport(5)}
-                    style={{ cursor: 'pointer' }}
-                 >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>
-                         <span style={{ fontSize: '0.75rem', color: '#6b7280', textTransform: 'uppercase', fontWeight: 700, marginBottom: '2px' }}>Tax Collected</span>
-                         <span style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1f2937', letterSpacing: '-0.02em' }}>{formatCurrency(summaryStats.totalTax)}</span>
-                      </div>
-                      <div style={{ fontSize: '1.5rem', color: '#fed7aa' }}><FaMoneyBillWave /></div>
+                {/* Orders */}
+                <div
+                  className="summary-card"
+                  onClick={() => setActiveReport(1)}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontSize: '0.75rem', color: '#6b7280', textTransform: 'uppercase', fontWeight: 700, marginBottom: '2px' }}>Orders</span>
+                      <span style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1f2937', letterSpacing: '-0.02em' }}>{summaryStats.totalOrders}</span>
                     </div>
-                 </div>
+                    <div style={{ fontSize: '1.5rem', color: '#fed7aa' }}><FaReceipt /></div>
+                  </div>
+                </div>
 
-                 {/* Items */}
-                 <div 
-                    className="summary-card"
-                    onClick={() => setActiveReport(2)}
-                    style={{ cursor: 'pointer' }}
-                 >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>
-                         <span style={{ fontSize: '0.75rem', color: '#6b7280', textTransform: 'uppercase', fontWeight: 700, marginBottom: '2px' }}>Items Sold</span>
-                         <span style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1f2937', letterSpacing: '-0.02em' }}>{summaryStats.totalItems}</span>
-                      </div>
-                      <div style={{ fontSize: '1.5rem', color: '#fed7aa' }}><FaShoppingBag /></div>
+                {/* Avg Order */}
+                <div
+                  className="summary-card"
+                  onClick={() => setActiveReport(6)}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontSize: '0.75rem', color: '#6b7280', textTransform: 'uppercase', fontWeight: 700, marginBottom: '2px' }}>Avg Order</span>
+                      <span style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1f2937', letterSpacing: '-0.02em' }}>{formatCurrency(summaryStats.avgOrderValue)}</span>
                     </div>
-                 </div>
-               </div>
+                    <div style={{ fontSize: '1.5rem', color: '#fed7aa' }}><FaPercentage /></div>
+                  </div>
+                </div>
+
+                {/* Tax */}
+                <div
+                  className="summary-card"
+                  onClick={() => setActiveReport(5)}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontSize: '0.75rem', color: '#6b7280', textTransform: 'uppercase', fontWeight: 700, marginBottom: '2px' }}>Tax Collected</span>
+                      <span style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1f2937', letterSpacing: '-0.02em' }}>{formatCurrency(summaryStats.totalTax)}</span>
+                    </div>
+                    <div style={{ fontSize: '1.5rem', color: '#fed7aa' }}><FaMoneyBillWave /></div>
+                  </div>
+                </div>
+
+                {/* Items */}
+                <div
+                  className="summary-card"
+                  onClick={() => setActiveReport(2)}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span style={{ fontSize: '0.75rem', color: '#6b7280', textTransform: 'uppercase', fontWeight: 700, marginBottom: '2px' }}>Items Sold</span>
+                      <span style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1f2937', letterSpacing: '-0.02em' }}>{summaryStats.totalItems}</span>
+                    </div>
+                    <div style={{ fontSize: '1.5rem', color: '#fed7aa' }}><FaShoppingBag /></div>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -734,11 +734,11 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
               <div className="sales-table-wrapper">
                 <Table
                   columns={[
-                    { 
-                      header: 'Order ID', 
-                      accessor: 'id', 
+                    {
+                      header: 'Order ID',
+                      accessor: 'id',
                       cell: (r) => (
-                        <span 
+                        <span
                           onClick={() => setItemsModalOrder(r)}
                           style={{ color: '#334155', cursor: 'pointer', fontWeight: 700 }}
                         >
@@ -746,61 +746,63 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
                         </span>
                       )
                     },
-{
-  header: 'Invoice No',
-  accessor: 'invoice_no',
-  cell: (r) => {
-    const inv = getOrderInvoice(r);
-    return pick(inv, ['invoice_no', 'invoiceNo'], '-') || '-';
-  },
-},
-{
-  header: 'Payment',
-  accessor: 'payment_method',
-  cell: (r) => {
-    const inv = getOrderInvoice(r);
+                    {
+                      header: 'Invoice No',
+                      accessor: 'invoice_no',
+                      cell: (r) => {
+                        const inv = getOrderInvoice(r);
+                        return pick(inv, ['invoice_no', 'invoiceNo'], '-') || '-';
+                      },
+                    },
+                    {
+                      header: 'Payment',
+                      accessor: 'payment_method',
+                      cell: (r) => {
+                        const inv = getOrderInvoice(r);
 
-    const method =
-      pick(inv, ['payment_method', 'paymentMethod'], null) ||
-      pick(r, ['actual_payment_method', 'actualPaymentMethod'], null) ||
-      pick(r, ['payment_method', 'paymentMethod'], 'unknown');
+                        const method =
+                          pick(inv, ['payment_method', 'paymentMethod'], null) ||
+                          pick(r, ['actual_payment_method', 'actualPaymentMethod'], null) ||
+                          pick(r, ['payment_method', 'paymentMethod'], 'unknown');
 
-    const mixed =
-      pick(inv, ['mixed_payment_details', 'mixedPaymentDetails'], null) ||
-      pick(r, ['mixed_payment_details', 'mixedPaymentDetails'], null);
+                        const mixed =
+                          pick(inv, ['mixed_payment_details', 'mixedPaymentDetails'], null) ||
+                          pick(r, ['mixed_payment_details', 'mixedPaymentDetails'], null);
 
-    return prettyMixed(method, mixed);
-  },
-},
-                    { 
-                      header: 'Ordered Date', 
-                      accessor: 'date_ordered', 
+                        return prettyMixed(method, mixed);
+                      },
+                    },
+                    {
+                      header: 'Ordered Date',
+                      accessor: 'date_ordered',
                       cell: (r) => new Date(r.date_ordered || r.created_at).toLocaleString('en-IN', {
                         day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true
                       })
                     },
-                    { 
-                      header: 'Edited Date', 
-                      accessor: 'updated_at', 
+                    {
+                      header: 'Edited Date',
+                      accessor: 'updated_at',
                       cell: (r) => new Date(r.updated_at).toLocaleString('en-IN', {
                         day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true
                       })
                     },
-                    { header: 'Status', accessor: 'status', cell: (r) => (
-                      <span style={{ 
-                        textTransform: 'capitalize', 
-                        color: r.status === 'completed' ? '#10b981' : '#f97316',
-                        fontWeight: 600
-                      }}>{r.status}</span>
-                    )},
+                    {
+                      header: 'Status', accessor: 'status', cell: (r) => (
+                        <span style={{
+                          textTransform: 'capitalize',
+                          color: r.status === 'completed' ? '#10b981' : '#f97316',
+                          fontWeight: 600
+                        }}>{r.status}</span>
+                      )
+                    },
                     { header: 'Grand Total', accessor: 'total_inc_tax', cell: (r) => formatCurrency(r.total_inc_tax ?? r.total_amount) },
                     { header: 'Total Tax', accessor: 'total_tax', cell: (r) => formatCurrency(r.total_tax) },
-                    { 
-                      header: 'Customer', 
-                      accessor: 'customer_name', 
+                    {
+                      header: 'Customer',
+                      accessor: 'customer_name',
                       cell: (r) => {
                         if (r.order_customers && r.order_customers.length > 0) {
-                          return r.order_customers.map(c => c.restaurant_customers?.name).filter(Boolean).join(', ')
+                          return r.order_customers.map(c => c.restaurant_customer?.name).filter(Boolean).join(', ')
                         }
                         return r.customer_name || ''
                       }
@@ -811,7 +813,7 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
 
                 {ordersList.length > itemsPerPage && (
                   <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16, marginTop: 16 }}>
-                    <Button 
+                    <Button
                       onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                       disabled={currentPage === 1}
                       variant="outline"
@@ -822,7 +824,7 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
                     <span style={{ fontSize: '0.9rem', color: '#64748b', fontWeight: 600 }}>
                       Page {currentPage} of {Math.ceil(ordersList.length / itemsPerPage)}
                     </span>
-                    <Button 
+                    <Button
                       onClick={() => setCurrentPage(p => Math.min(Math.ceil(ordersList.length / itemsPerPage), p + 1))}
                       disabled={currentPage >= Math.ceil(ordersList.length / itemsPerPage)}
                       variant="outline"
@@ -951,36 +953,36 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
       )}
 
       {/* Global "Show All Items" Modal */}
-    {itemsModalOrder && (
-      <div 
-        style={{
-          position:'fixed', inset: 0,
-          background:'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(5px)', 
-          display:'flex', alignItems:'center', justifyContent:'center', zIndex:10000,
-          padding: 12
-        }}
-        onClick={(e) => { e.stopPropagation(); setItemsModalOrder(null); }}
-      >
-        <div 
+      {itemsModalOrder && (
+        <div
           style={{
-            background:'white', width:'100%', maxWidth:400, borderRadius:12, padding: 24,
-            boxShadow:'0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-            maxHeight:'90vh', display:'flex', flexDirection:'column', position: 'relative'
+            position: 'fixed', inset: 0,
+            background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(5px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000,
+            padding: 12
           }}
-          onClick={e => e.stopPropagation()}
+          onClick={(e) => { e.stopPropagation(); setItemsModalOrder(null); }}
         >
+          <div
+            style={{
+              background: 'white', width: '100%', maxWidth: 400, borderRadius: 12, padding: 24,
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+              maxHeight: '90vh', display: 'flex', flexDirection: 'column', position: 'relative'
+            }}
+            onClick={e => e.stopPropagation()}
+          >
             {/* Header */}
-            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20}}>
-              <h3 style={{fontSize: 18, fontWeight: 700, color:'#0f172a', margin:0}}>
-                Order Details #{itemsModalOrder.id.slice(0,8)}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h3 style={{ fontSize: 18, fontWeight: 700, color: '#0f172a', margin: 0 }}>
+                Order Details #{itemsModalOrder.id.slice(0, 8)}
               </h3>
-              <div 
+              <div
                 onClick={() => setItemsModalOrder(null)}
                 onMouseEnter={(e) => e.currentTarget.style.opacity = '0.7'}
                 onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
                 style={{
-                    cursor:'pointer', color: BRAND.orange, fontSize: 18, fontWeight: 900,
-                    lineHeight: 1, transition: 'opacity 0.2s'
+                  cursor: 'pointer', color: BRAND.orange, fontSize: 18, fontWeight: 900,
+                  lineHeight: 1, transition: 'opacity 0.2s'
                 }}
               >X</div>
             </div>
@@ -1015,8 +1017,8 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
                   <div>
                     <div style={{ fontSize: 14, fontWeight: 700, color: '#1e293b' }}>{it.name}</div>
                     <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
-                       ₹{Number(it.price).toFixed(2)} x {it.quantity}
-                       {it.variant_name && <span style={{ marginLeft: 8, fontStyle: 'italic' }}>({it.variant_name})</span>}
+                      ₹{Number(it.price).toFixed(2)} x {it.quantity}
+                      {it.variant_name && <span style={{ marginLeft: 8, fontStyle: 'italic' }}>({it.variant_name})</span>}
                     </div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
@@ -1024,13 +1026,13 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
                       ₹{((it.quantity || 1) * (it.price || 0)).toFixed(2)}
                     </div>
                     {(() => {
-                        const lDisc = Number(it.line_discount_amount || 0);
-                        const displayDisc = lDisc > 0 ? lDisc : Math.max(0, Number(it.discount_amount || 0) - Number(it.order_discount_share || 0));
-                        return displayDisc > 0 ? (
-                          <div style={{ fontSize: 10, color: '#ef4444', fontWeight: 600, marginTop: 2 }}>
-                            - ₹{displayDisc.toFixed(2)}
-                          </div>
-                        ) : null;
+                      const lDisc = Number(it.line_discount_amount || 0);
+                      const displayDisc = lDisc > 0 ? lDisc : Math.max(0, Number(it.discount_amount || 0) - Number(it.order_discount_share || 0));
+                      return displayDisc > 0 ? (
+                        <div style={{ fontSize: 10, color: '#ef4444', fontWeight: 600, marginTop: 2 }}>
+                          - ₹{displayDisc.toFixed(2)}
+                        </div>
+                      ) : null;
                     })()}
                   </div>
                 </div>
@@ -1054,19 +1056,19 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
               )}
 
               {Number(itemsModalOrder.round_off_amount || 0) !== 0 && (
-                <div style={{ 
-                  display: 'flex', 
-                  justifyContent: 'space-between', 
-                  marginBottom: 8, 
-                  fontSize: 13, 
-                  fontWeight: 600, 
-                  color: Number(itemsModalOrder.round_off_amount) > 0 ? '#10b981' : '#ef4444' 
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  marginBottom: 8,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: Number(itemsModalOrder.round_off_amount) > 0 ? '#10b981' : '#ef4444'
                 }}>
                   <span>Round-off</span>
                   <span>{Number(itemsModalOrder.round_off_amount) > 0 ? '+' : ''}₹{Number(itemsModalOrder.round_off_amount).toFixed(2)}</span>
                 </div>
               )}
-              
+
               <div style={{ borderTop: '1px dashed #fdba74', margin: '8px 0 12px 0' }}></div>
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1076,9 +1078,9 @@ setPaymentBreakdown(Object.entries(paymentMap).map(([method, data]) => ({
                 </span>
               </div>
             </div>
+          </div>
         </div>
-      </div>
-    )}
+      )}
 
     </div>
   )

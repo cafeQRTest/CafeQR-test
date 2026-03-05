@@ -22,12 +22,12 @@ import PaymentConfirmDialog from '../../components/PaymentConfirmDialog';
 import CreateOrderModal from '../../components/CreateOrderModal';
 import { calculateOrderTotals } from '../../utils/orderCalculations';
 import { useAlert } from '../../context/AlertContext';
-import { 
-  useTables, 
-  useSections, 
-  useFloors, 
-  useTableMutation, 
-  useDeleteTable, 
+import {
+  useTables,
+  useSections,
+  useFloors,
+  useTableMutation,
+  useDeleteTable,
   useUpdateTableStatus,
   useAddSection,
   useDeleteSection,
@@ -1003,7 +1003,7 @@ const StatusBadge = styled.div`
   
   ${props => {
     const minimal = props.minimal;
-    switch(props.status) {
+    switch (props.status) {
       case 'available': return `
         background: ${minimal ? 'transparent' : 'rgba(16, 185, 129, 0.12)'}; color: ${minimal ? 'inherit' : '#065f46'};
       `;
@@ -1221,10 +1221,10 @@ const TableListRow = styled.div`
   
   &:hover {
     background: ${props => {
-      if (props.billed) return '#ebfff2';
-      if (props.status === 'occupied') return '#fff8f0';
-      return '#f8fafc';
-    }};
+    if (props.billed) return '#ebfff2';
+    if (props.status === 'occupied') return '#fff8f0';
+    return '#f8fafc';
+  }};
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
     z-index: 1;
   }
@@ -1297,13 +1297,13 @@ const VisualTable = styled.div`
   height: ${props => props.shape === 'round' ? '100px' : '80px'};
   left: ${props => props.x || 0}px;
   top: ${props => props.y || 0}px;
-  background: ${props => 
+  background: ${props =>
     props.billed ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' :
-    props.status === 'available' ? 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)' :
-    props.status === 'occupied' ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)' :
-    props.status === 'reserved' ? 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)' :
-    props.status === 'cleaning' ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' :
-    'linear-gradient(135deg, #64748b 0%, #475569 100%)'
+      props.status === 'available' ? 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)' :
+        props.status === 'occupied' ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)' :
+          props.status === 'reserved' ? 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)' :
+            props.status === 'cleaning' ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' :
+              'linear-gradient(135deg, #64748b 0%, #475569 100%)'
   };
   border-radius: ${props => props.shape === 'round' ? '50%' : '16px'};
   box-shadow: ${props => props.status === 'available' ? '0 2px 10px rgba(0,0,0,0.04)' : '0 10px 25px -5px rgba(0, 0, 0, 0.2)'};
@@ -1572,7 +1572,7 @@ async function restoreStockForOrder(supabase, restaurantId, orderItems) {
 
   for (const oi of orderItems) {
     console.log('[STOCK RESTORE] Processing item:', { menu_item_id: oi.menu_item_id, quantity: oi.quantity, is_packaged: oi.is_packaged_good });
-    
+
     if (!oi.menu_item_id || !oi.quantity) {
       console.log('[STOCK RESTORE] Skipping - no menu_item_id or quantity');
       continue;
@@ -1585,7 +1585,7 @@ async function restoreStockForOrder(supabase, restaurantId, orderItems) {
       .eq('restaurant_id', restaurantId);
 
     const { data: potentialRecipes, error: recipeErr } = await recipeQuery;
-    
+
     if (recipeErr || !potentialRecipes?.length) {
       console.log('[STOCK RESTORE] No recipes found or error');
       continue;
@@ -1598,12 +1598,12 @@ async function restoreStockForOrder(supabase, restaurantId, orderItems) {
         .from('variant_pricing')
         .select('variant_options!inner(id, name)')
         .eq('menu_item_id', oi.menu_item_id);
-      
+
       if (vpData) {
         const normName = oi.variant_name.trim().toLowerCase();
         const match = vpData.find(v => v.variant_options?.name?.trim().toLowerCase() === normName);
         if (match && match.variant_options?.id) {
-            targetVariantId = match.variant_options.id;
+          targetVariantId = match.variant_options.id;
         }
       }
     }
@@ -1614,13 +1614,13 @@ async function restoreStockForOrder(supabase, restaurantId, orderItems) {
       if (!rId || !targetVariantId) return false;
       return String(rId) === String(targetVariantId);
     });
-    
+
     if (!recipe && targetVariantId) {
       recipe = potentialRecipes.find(r => r.variant_option_id === null);
     }
 
     if (!recipe && !targetVariantId && potentialRecipes.length > 0) {
-        recipe = potentialRecipes.find(r => r.variant_option_id === null);
+      recipe = potentialRecipes.find(r => r.variant_option_id === null);
     }
 
     if (!recipe?.recipe_items?.length) continue;
@@ -1632,7 +1632,7 @@ async function restoreStockForOrder(supabase, restaurantId, orderItems) {
         .eq('id', ri.ingredient_id)
         .eq('restaurant_id', restaurantId)
         .single();
-      
+
       if (ingErr || !ing) continue;
 
       const precision = ing.uom?.precision ?? 2;
@@ -1640,7 +1640,7 @@ async function restoreStockForOrder(supabase, restaurantId, orderItems) {
 
       const oldStock = Number(ing.current_stock || 0);
       const newStock = roundP(oldStock + addBack, precision);
-      
+
       await supabase
         .from('ingredients')
         .update({ current_stock: newStock, updated_at: new Date().toISOString() })
@@ -1666,7 +1666,7 @@ function CancelConfirmDialog({ order, onConfirm, onCancel }) {
       backgroundColor: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(5px)',
       display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, padding: 12
     }}>
-      <div style={{ 
+      <div style={{
         backgroundColor: 'white', padding: 20, borderRadius: 16, maxWidth: 320, width: '100%',
         boxShadow: '0 12px 24px -10px rgba(0, 0, 0, 0.15)',
       }}>
@@ -1674,19 +1674,19 @@ function CancelConfirmDialog({ order, onConfirm, onCancel }) {
         <p style={{ fontSize: 12, color: '#64748b', lineHeight: 1.4, marginBottom: 16 }}>
           Are you sure you want to cancel order <strong>#{order.id.slice(0, 8)}</strong>? This will release the table and restore stock.
         </p>
-        
+
         <label style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Reason</label>
         <textarea
           value={reason}
           onChange={e => setReason(e.target.value)}
           rows={2}
-          style={{ 
+          style={{
             width: '100%', padding: '10px', fontSize: 12, borderRadius: 10, border: '1.5px solid #e2e8f0',
             outline: 'none', background: '#f8fafc', color: '#1e293b', marginBottom: 20
           }}
           placeholder="e.g. Guest changed mind"
         />
-        
+
         <div style={{ display: 'flex', gap: 8 }}>
           <UiButton onClick={onCancel} variant="outline" style={{ flex: 1, padding: '8px', fontSize: 13 }} disabled={submitting}>
             Keep
@@ -1703,11 +1703,11 @@ function CancelConfirmDialog({ order, onConfirm, onCancel }) {
 function MoveOrderDialog({ order, sourceTable, tables, onConfirm, onCancel }) {
   const [selectedTableId, setSelectedTableId] = useState('');
   const [search, setSearch] = useState('');
-  
-  const availableTables = tables.filter(t => 
-    t.status === 'available' && 
-    (t.identifier.toLowerCase().includes(search.toLowerCase()) || 
-     t.section?.toLowerCase().includes(search.toLowerCase()))
+
+  const availableTables = tables.filter(t =>
+    t.status === 'available' &&
+    (t.identifier.toLowerCase().includes(search.toLowerCase()) ||
+      t.section?.toLowerCase().includes(search.toLowerCase()))
   );
 
   return (
@@ -1720,7 +1720,7 @@ function MoveOrderDialog({ order, sourceTable, tables, onConfirm, onCancel }) {
 
         <div style={{ margin: '20px 0' }}>
           <div style={{ position: 'relative', marginBottom: '16px' }}>
-            <input 
+            <input
               type="text"
               placeholder="Search table number or section..."
               value={search}
@@ -1738,7 +1738,7 @@ function MoveOrderDialog({ order, sourceTable, tables, onConfirm, onCancel }) {
               onFocus={e => e.target.style.borderColor = '#10b981'}
               onBlur={e => e.target.style.borderColor = '#e2e8f0'}
             />
-            <svg 
+            <svg
               width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.5"
               style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)' }}
             >
@@ -1749,18 +1749,18 @@ function MoveOrderDialog({ order, sourceTable, tables, onConfirm, onCancel }) {
 
           <TablePickerGrid>
             {availableTables.map(t => (
-              <SelectableTable 
-                key={t.id} 
+              <SelectableTable
+                key={t.id}
                 selected={selectedTableId === t.id}
                 onClick={() => setSelectedTableId(t.id)}
               >
                 <div className="number">{t.identifier}</div>
                 <div className="info">{t.capacity} seats</div>
-                <div className="info" style={{fontSize: '8px', opacity: 0.7}}>{t.section}</div>
+                <div className="info" style={{ fontSize: '8px', opacity: 0.7 }}>{t.section}</div>
               </SelectableTable>
             ))}
           </TablePickerGrid>
-          
+
           {availableTables.length === 0 && (
             <div style={{ padding: '32px', textAlign: 'center', color: '#64748b' }}>
               <div style={{ fontSize: '40px', marginBottom: '12px' }}>🪑</div>
@@ -1772,8 +1772,8 @@ function MoveOrderDialog({ order, sourceTable, tables, onConfirm, onCancel }) {
 
         <ModalActions>
           <UiButton onClick={onCancel} style={{ borderRadius: '12px', background: 'white', border: '1.5px solid #e2e8f0', color: '#64748b' }}>Cancel</UiButton>
-          <UiButton 
-            primary 
+          <UiButton
+            primary
             disabled={!selectedTableId}
             onClick={() => onConfirm(selectedTableId)}
             style={{ borderRadius: '12px', background: '#059669' }}
@@ -2239,13 +2239,13 @@ const OrderHistoryView = ({ onBack, orders, onPrint, onCancel, loading, onOrderC
 
         {/* Left: back button + title */}
         <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-          <button 
+          <button
             onClick={onBack}
-            style={{ 
-              background: 'white', 
-              border: '1px solid #e2e8f0', 
-              borderRadius: '14px', 
-              padding: '12px', 
+            style={{
+              background: 'white',
+              border: '1px solid #e2e8f0',
+              borderRadius: '14px',
+              padding: '12px',
               marginRight: '20px',
               cursor: 'pointer',
               display: 'flex',
@@ -2279,7 +2279,7 @@ const OrderHistoryView = ({ onBack, orders, onPrint, onCancel, loading, onOrderC
           minWidth: 0
         }}>
           {orderTypes.map(type => (
-            <FilterPill 
+            <FilterPill
               key={type.id}
               active={filterType === type.id}
               onClick={() => setFilterType(type.id)}
@@ -2320,14 +2320,14 @@ const OrderHistoryView = ({ onBack, orders, onPrint, onCancel, loading, onOrderC
 
       <div style={{ background: 'white', borderRadius: '24px', border: '1px solid #f1f5f9', overflow: 'hidden', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.05)' }}>
         {loading ? (
-             <div style={{ padding: 120, textAlign: 'center', color: '#94a3b8' }}>
-               <div style={{ fontSize: 14, fontWeight: 500, letterSpacing: '0.5px' }}>Accessing cloud archives...</div>
-             </div>
+          <div style={{ padding: 120, textAlign: 'center', color: '#94a3b8' }}>
+            <div style={{ fontSize: 14, fontWeight: 500, letterSpacing: '0.5px' }}>Accessing cloud archives...</div>
+          </div>
         ) : filteredOrders.length === 0 ? (
-             <div style={{ padding: 120, textAlign: 'center' }}>
-               <div style={{ fontSize: 18, fontWeight: 600, color: '#0f172a', marginBottom: 12 }}>No records found</div>
-               <div style={{ fontSize: 14, color: '#94a3b8' }}>Try adjusting your filters or complete a new checkout.</div>
-             </div>
+          <div style={{ padding: 120, textAlign: 'center' }}>
+            <div style={{ fontSize: 18, fontWeight: 600, color: '#0f172a', marginBottom: 12 }}>No records found</div>
+            <div style={{ fontSize: 14, color: '#94a3b8' }}>Try adjusting your filters or complete a new checkout.</div>
+          </div>
         ) : (
           <>
             <Table
@@ -2336,7 +2336,7 @@ const OrderHistoryView = ({ onBack, orders, onPrint, onCancel, loading, onOrderC
                   header: 'Order ID',
                   accessor: 'id',
                   cell: (order) => (
-                    <span 
+                    <span
                       style={{ fontWeight: 700, color: '#94a3b8', fontSize: '11px', letterSpacing: '0.5px', cursor: 'pointer' }}
                       onClick={(e) => { e.stopPropagation(); onOrderClick(order); }}
                       title="Click to view order details"
@@ -2362,14 +2362,14 @@ const OrderHistoryView = ({ onBack, orders, onPrint, onCancel, loading, onOrderC
                   accessor: 'created_at',
                   cell: (order) => (
                     <span style={{ fontWeight: 600, color: '#334155', fontSize: '13px' }}>
-                      {new Date(order.created_at).toLocaleString('en-IN', { 
-                        timeZone: 'Asia/Kolkata', 
-                        day: '2-digit', 
-                        month: 'short', 
+                      {new Date(order.created_at).toLocaleString('en-IN', {
+                        timeZone: 'Asia/Kolkata',
+                        day: '2-digit',
+                        month: 'short',
                         year: 'numeric',
-                        hour: '2-digit', 
-                        minute: '2-digit', 
-                        hour12: true 
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: true
                       })}
                     </span>
                   )
@@ -2420,10 +2420,10 @@ const OrderHistoryView = ({ onBack, orders, onPrint, onCancel, loading, onOrderC
                     const method = order.payment_method || '—';
                     const isCredit = order.is_credit || method === 'credit';
                     const colors = {
-                      credit:  { bg: '#f3e8ff', color: '#7c3aed', border: '#ddd6fe' },
-                      cash:    { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' },
-                      online:  { bg: '#eff6ff', color: '#2563eb', border: '#bfdbfe' },
-                      mixed:   { bg: '#fff7ed', color: '#ea580c', border: '#fed7aa' },
+                      credit: { bg: '#f3e8ff', color: '#7c3aed', border: '#ddd6fe' },
+                      cash: { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' },
+                      online: { bg: '#eff6ff', color: '#2563eb', border: '#bfdbfe' },
+                      mixed: { bg: '#fff7ed', color: '#ea580c', border: '#fed7aa' },
                     };
                     const c = colors[method] || { bg: '#f8fafc', color: '#64748b', border: '#e2e8f0' };
                     return (
@@ -2452,19 +2452,19 @@ const OrderHistoryView = ({ onBack, orders, onPrint, onCancel, loading, onOrderC
                   accessor: 'actions',
                   cell: (order) => (
                     <div style={{ display: 'flex', gap: 10 }}>
-                       <HistoryActionButton className="print" onClick={() => onPrint(order.id)}>
-                         Print Bill
-                       </HistoryActionButton>
-                       <HistoryActionButton className="invoice" onClick={async () => {
-                          try { await downloadInvoicePdf(order.id) } catch (e) { alert(e.message) }
-                       }}>
-                         Invoice
-                       </HistoryActionButton>
-                       {order.status !== 'cancelled' && (
-                         <HistoryActionButton className="cancel" onClick={() => onCancel(order)}>
-                           Cancel
-                         </HistoryActionButton>
-                       )}
+                      <HistoryActionButton className="print" onClick={() => onPrint(order.id)}>
+                        Print Bill
+                      </HistoryActionButton>
+                      <HistoryActionButton className="invoice" onClick={async () => {
+                        try { await downloadInvoicePdf(order.id) } catch (e) { alert(e.message) }
+                      }}>
+                        Invoice
+                      </HistoryActionButton>
+                      {order.status !== 'cancelled' && (
+                        <HistoryActionButton className="cancel" onClick={() => onCancel(order)}>
+                          Cancel
+                        </HistoryActionButton>
+                      )}
                     </div>
                   )
                 }
@@ -2477,33 +2477,33 @@ const OrderHistoryView = ({ onBack, orders, onPrint, onCancel, loading, onOrderC
                 Showing {(currentPage - 1) * itemsPerPage + 1}-{Math.min(currentPage * itemsPerPage, filteredOrders.length)} of {filteredOrders.length}
               </PaginationInfo>
               <PaginationActions>
-                 <NavButton
-                   disabled={currentPage === 1}
-                   onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                 >
-                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                     <path d="M15 18l-6-6 6-6" />
-                   </svg>
-                 </NavButton>
+                <NavButton
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M15 18l-6-6 6-6" />
+                  </svg>
+                </NavButton>
 
-                 {[...Array(totalPages)].map((_, i) => (
-                   <PageButton
-                     key={i}
-                     active={currentPage === i + 1}
-                     onClick={() => setCurrentPage(i + 1)}
-                   >
-                     {i + 1}
-                   </PageButton>
-                 ))}
+                {[...Array(totalPages)].map((_, i) => (
+                  <PageButton
+                    key={i}
+                    active={currentPage === i + 1}
+                    onClick={() => setCurrentPage(i + 1)}
+                  >
+                    {i + 1}
+                  </PageButton>
+                ))}
 
-                 <NavButton
-                   disabled={currentPage === totalPages || totalPages === 0}
-                   onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                 >
-                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                     <path d="M9 18l6-6-6-6" />
-                   </svg>
-                 </NavButton>
+                <NavButton
+                  disabled={currentPage === totalPages || totalPages === 0}
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M9 18l6-6-6-6" />
+                  </svg>
+                </NavButton>
               </PaginationActions>
             </PaginationWrapper>
           </>
@@ -2519,7 +2519,7 @@ export default function TableManagement() {
   const { restaurant, loading: loadingRestaurant } = useRestaurant();
   const router = useRouter();
   const { showAlert, showConfirm } = useAlert();
-  
+
   // Component State
   const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list' or 'visual'
   const [serviceMode, setServiceMode] = useState('dine-in'); // 'dine-in' or 'takeaway' or 'delivery'
@@ -2537,7 +2537,7 @@ export default function TableManagement() {
   const [historyInvoiceItems, setHistoryInvoiceItems] = useState([]);
   const [historyInvoiceLoading, setHistoryInvoiceLoading] = useState(false);
   const [cancelOrderDialog, setCancelOrderDialog] = useState(null);
-   const [billedOrders, setBilledOrders] = useState(() => {
+  const [billedOrders, setBilledOrders] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('cafeqr_billed_orders');
       if (saved) {
@@ -2561,49 +2561,49 @@ export default function TableManagement() {
       localStorage.setItem('cafeqr_billed_orders', JSON.stringify(Array.from(billedOrders)));
     }
   }, [billedOrders]);
-  
+
   // React Query hooks for data fetching
   const { data: tables = [], isLoading: loading, error, refetch } = useTables(restaurant?.id);
   const { data: sections = [] } = useSections(restaurant?.id);
   const { data: floors = [] } = useFloors(restaurant?.id, tables);
   // Consolidate order fetching to 'all' so we have everything for filtering in JS
   const { data: orders = [], isLoading: loadingOrders, refetch: refetchOrders } = useOrders(
-    restaurant?.id, 
+    restaurant?.id,
     'all'
   );
 
   const { data: completedOrders = [], isLoading: loadingHistory, refetch: refetchHistory } = useCompletedOrders(restaurant?.id);
-  
+
   // React Query mutations
   const tableMutation = useTableMutation();
   const deleteTableMutation = useDeleteTable();
   const updateStatusMutation = useUpdateTableStatus();
-  
+
   const addSectionMutation = useAddSection();
   const deleteSectionMutation = useDeleteSection();
   const addFloorMutation = useAddFloor();
   const deleteFloorMutation = useDeleteFloor();
-  
+
   // Status Note Modal State
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [noteTableData, setNoteTableData] = useState({ id: null, status: null, title: '', placeholder: '' });
   const [tempNote, setTempNote] = useState('');
-  
+
   // QR Code state
   const [sendingQr, setSendingQr] = useState({});
   const [newSectionName, setNewSectionName] = useState('');
   const [newFloorName, setNewFloorName] = useState('');
   const [modalQrSent, setModalQrSent] = useState(false);
   const [modalQrError, setModalQrError] = useState(null);
-  
+
   // Visual view popover state
   const [activeVisualTable, setActiveVisualTable] = useState(null);
   const [popoverPosition, setPopoverPosition] = useState({ x: 0, y: 0 });
-  
+
   // Create Order Modal State
   const [showCreateOrderModal, setShowCreateOrderModal] = useState(false);
   const [createOrderTable, setCreateOrderTable] = useState(null);
-  
+
   // Form state
   const [formData, setFormData] = useState({
     identifier: '',
@@ -2618,10 +2618,10 @@ export default function TableManagement() {
     tableCount: 1,
     sendEmail: false
   });
-  
+
   // Dynamic Page Info
   const pageInfo = useMemo(() => {
-    switch(serviceMode) {
+    switch (serviceMode) {
       case 'takeaway':
         return {
           title: 'Takeaway',
@@ -2646,11 +2646,11 @@ export default function TableManagement() {
         };
     }
   }, [serviceMode]);
-  
+
   const handleSendQrCode = async (table) => {
     try {
       setSendingQr(prev => ({ ...prev, [table.id]: true }));
-      
+
       // Prepare restaurant data for the email
       const restaurantData = {
         restaurantName: restaurant.restaurant_name || restaurant.name,
@@ -2677,13 +2677,13 @@ export default function TableManagement() {
           restaurantData
         })
       });
-      
+
       const data = await response.json();
-      
+
       if (!response.ok) {
         throw new Error(data.error || 'Failed to send QR code');
       }
-      
+
       showAlert(`QR code email sent successfully for table ${table.identifier}!`);
     } catch (error) {
       console.error('Error sending QR code:', error);
@@ -2693,141 +2693,141 @@ export default function TableManagement() {
     }
   };
 
-const handleSendBulkQrCodes = async (newTables) => {
-  try {
-    // Set a global sending state if needed, or just individual tables
-    const tableIds = newTables.map(t => t.id);
-    setSendingQr(prev => {
-      const next = { ...prev };
-      tableIds.forEach(id => next[id] = true);
-      return next;
-    });
+  const handleSendBulkQrCodes = async (newTables) => {
+    try {
+      // Set a global sending state if needed, or just individual tables
+      const tableIds = newTables.map(t => t.id);
+      setSendingQr(prev => {
+        const next = { ...prev };
+        tableIds.forEach(id => next[id] = true);
+        return next;
+      });
 
-    const restaurantData = {
-      restaurantName: restaurant.restaurant_name || restaurant.name,
-      email: restaurant.support_email || restaurant.owner_email || restaurant.email,
-      recipientName: restaurant.legal_name,
-      recipientPhone: restaurant.phone,
-      address: [
-        restaurant.shipping_address_line1,
-        restaurant.shipping_address_line2,
-        restaurant.shipping_city,
-        restaurant.shipping_state,
-        restaurant.shipping_pincode
-      ].filter(Boolean).join(', ')
-    };
+      const restaurantData = {
+        restaurantName: restaurant.restaurant_name || restaurant.name,
+        email: restaurant.support_email || restaurant.owner_email || restaurant.email,
+        recipientName: restaurant.legal_name,
+        recipientPhone: restaurant.phone,
+        address: [
+          restaurant.shipping_address_line1,
+          restaurant.shipping_address_line2,
+          restaurant.shipping_city,
+          restaurant.shipping_state,
+          restaurant.shipping_pincode
+        ].filter(Boolean).join(', ')
+      };
 
-    const qrCodes = newTables.map(t => ({
-      tableNumber: t.identifier,
-      qrUrl: t.qr_code_url
-    }));
+      const qrCodes = newTables.map(t => ({
+        tableNumber: t.identifier,
+        qrUrl: t.qr_code_url
+      }));
 
-    const response = await fetch('/api/send-qr-email', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        qrCodes,
-        restaurantData,
-        restaurantId: restaurant.id,
-        isIncremental: true // Creating new tables, so incremental is appropriate
-      })
-    });
+      const response = await fetch('/api/send-qr-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          qrCodes,
+          restaurantData,
+          restaurantId: restaurant.id,
+          isIncremental: true // Creating new tables, so incremental is appropriate
+        })
+      });
 
-    const data = await response.json();
+      const data = await response.json();
 
-    if (!response.ok) {
-      throw new Error(data.error || 'Failed to send bulk QR codes');
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to send bulk QR codes');
+      }
+
+      showAlert(`Single email with ${newTables.length} QR codes sent successfully to ${restaurantData.email}!`);
+    } catch (error) {
+      console.error('Error sending bulk QR codes:', error);
+      showAlert(`Failed to send consolidated QR email: ${error.message}`);
+    } finally {
+      const tableIds = newTables.map(t => t.id);
+      setSendingQr(prev => {
+        const next = { ...prev };
+        tableIds.forEach(id => next[id] = false);
+        return next;
+      });
     }
+  };
 
-    showAlert(`Single email with ${newTables.length} QR codes sent successfully to ${restaurantData.email}!`);
-  } catch (error) {
-    console.error('Error sending bulk QR codes:', error);
-    showAlert(`Failed to send consolidated QR email: ${error.message}`);
-  } finally {
-    const tableIds = newTables.map(t => t.id);
-    setSendingQr(prev => {
-      const next = { ...prev };
-      tableIds.forEach(id => next[id] = false);
-      return next;
-    });
-  }
-};
+  const handleModalResend = async (table) => {
+    if (!table) return;
+    try {
+      setModalQrSent(false);
+      setModalQrError(null);
+      setSendingQr(prev => ({ ...prev, [table.id]: true }));
 
-const handleModalResend = async (table) => {
-  if (!table) return;
-  try {
-    setModalQrSent(false);
-    setModalQrError(null);
-    setSendingQr(prev => ({ ...prev, [table.id]: true }));
-    
-    // Prepare restaurant data for the email
-    const restaurantData = {
-      restaurantName: restaurant.restaurant_name || restaurant.name,
-      email: restaurant.support_email || restaurant.owner_email || restaurant.email,
-      recipientName: restaurant.legal_name,
-      recipientPhone: restaurant.phone,
-      address: [
-        restaurant.shipping_address_line1,
-        restaurant.shipping_address_line2,
-        restaurant.shipping_city,
-        restaurant.shipping_state,
-        restaurant.shipping_pincode
-      ].filter(Boolean).join(', ')
-    };
+      // Prepare restaurant data for the email
+      const restaurantData = {
+        restaurantName: restaurant.restaurant_name || restaurant.name,
+        email: restaurant.support_email || restaurant.owner_email || restaurant.email,
+        recipientName: restaurant.legal_name,
+        recipientPhone: restaurant.phone,
+        address: [
+          restaurant.shipping_address_line1,
+          restaurant.shipping_address_line2,
+          restaurant.shipping_city,
+          restaurant.shipping_state,
+          restaurant.shipping_pincode
+        ].filter(Boolean).join(', ')
+      };
 
-    console.log('📧 Sending QR email with data:', {
-      tableId: table.id,
-      identifier: table.identifier,
-      qrUrl: table.qr_code_url,
-      restaurantId: restaurant.id,
-      restaurantData
-    });
-
-    const response = await fetch('/api/tables/send-qr-email', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+      console.log('📧 Sending QR email with data:', {
         tableId: table.id,
         identifier: table.identifier,
         qrUrl: table.qr_code_url,
         restaurantId: restaurant.id,
         restaurantData
-      })
-    });
-    
-    const data = await response.json();
-    
-    console.log('📧 Email API response:', { status: response.status, data });
-    
-    if (!response.ok) throw new Error(data.error || 'Failed to send QR code');
-    
-    setModalQrSent(true);
-    showAlert('QR code email sent successfully!');
-    // Auto-reset "Sent" indication after 5 seconds
-    setTimeout(() => setModalQrSent(false), 5000);
-    
-  } catch (error) {
-    console.error('❌ Error in modal QR resend:', error);
-    setModalQrError(error.message);
-    showAlert(`Failed to send email: ${error.message}`);
-  } finally {
-    setSendingQr(prev => ({ ...prev, [table.id]: false }));
-  }
-};
+      });
+
+      const response = await fetch('/api/tables/send-qr-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tableId: table.id,
+          identifier: table.identifier,
+          qrUrl: table.qr_code_url,
+          restaurantId: restaurant.id,
+          restaurantData
+        })
+      });
+
+      const data = await response.json();
+
+      console.log('📧 Email API response:', { status: response.status, data });
+
+      if (!response.ok) throw new Error(data.error || 'Failed to send QR code');
+
+      setModalQrSent(true);
+      showAlert('QR code email sent successfully!');
+      // Auto-reset "Sent" indication after 5 seconds
+      setTimeout(() => setModalQrSent(false), 5000);
+
+    } catch (error) {
+      console.error('❌ Error in modal QR resend:', error);
+      setModalQrError(error.message);
+      showAlert(`Failed to send email: ${error.message}`);
+    } finally {
+      setSendingQr(prev => ({ ...prev, [table.id]: false }));
+    }
+  };
 
   // Helper to fetch full order for actions
   async function fetchFullOrder(orderId) {
     const { data, error } = await supabase
       .from('orders')
-      .select('*, order_items(*, menu_items(name, uom:unit_of_measures(precision))), order_customers(*, restaurant_customers(name, phone))')
+      .select('*, order_items(*, menu_items(name, uom:unit_of_measures(precision))), order_customers(*, restaurant_customer(name, phone))')
       .eq('id', orderId)
       .single();
     if (!error && data) {
       if (data.order_customers && data.order_customers.length > 0) {
         data.customers = data.order_customers.map(link => ({
           id: link.customer_id,
-          name: link.restaurant_customers?.name,
-          phone: link.restaurant_customers?.phone,
+          name: link.restaurant_customer?.name,
+          phone: link.restaurant_customer?.phone,
           is_primary: link.is_primary
         }));
       } else if (data.customer_name || data.customer_phone) {
@@ -2856,7 +2856,7 @@ const handleModalResend = async (table) => {
         .select('*, menu_items(name)')
         .eq('order_id', order.id);
       if (!error) setHistoryInvoiceItems(data || []);
-    } catch (_) {}
+    } catch (_) { }
     finally { setHistoryInvoiceLoading(false); }
   };
 
@@ -2916,56 +2916,56 @@ const handleModalResend = async (table) => {
       setPaymentTotals(totals);
       setShowPaymentModal(true);
     } catch (error) {
-       console.error(error);
-       showAlert("Failed to load order for payment");
+      console.error(error);
+      showAlert("Failed to load order for payment");
     }
   };
 
   const handlePaymentConfirm = async (method, details) => {
-     if (!paymentOrder || !restaurant?.id) return;
-     
-     try {
-       const response = await fetch('/api/orders/complete', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            order_id: paymentOrder.id,
-            restaurant_id: restaurant.id,
-            payment_method: method,
-            discount_obj: details?.discount_obj,
-            round_off_amount: details?.round_off_amount,
-            updated_items: details?.updated_items,
-            mixed_payment_details: details?.mixed_payment_details,
-            base_tax_rate: details?.base_tax_rate,
-            loyalty_amount_used: details?.loyalty_amount_used,
-            loyalty_points_used: details?.loyalty_points_used
-          })
-       });
+    if (!paymentOrder || !restaurant?.id) return;
 
-       if (!response.ok) {
-          const err = await response.json();
-          throw new Error(err.error || 'Payment failed');
-       }
+    try {
+      const response = await fetch('/api/orders/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          order_id: paymentOrder.id,
+          restaurant_id: restaurant.id,
+          payment_method: method,
+          discount_obj: details?.discount_obj,
+          round_off_amount: details?.round_off_amount,
+          updated_items: details?.updated_items,
+          mixed_payment_details: details?.mixed_payment_details,
+          base_tax_rate: details?.base_tax_rate,
+          loyalty_amount_used: details?.loyalty_amount_used,
+          loyalty_points_used: details?.loyalty_points_used
+        })
+      });
 
-       // Success
-       setShowPaymentModal(false);
-       setPaymentOrder(null);
-       setPaymentTotals(null);
-       refetch(); // Reload to see table as available
-       
-       // Clear billed status for this order
-       if (paymentOrder?.id) {
-         setBilledOrders(prev => {
-           const next = new Set(prev);
-           next.delete(paymentOrder.id);
-           return next;
-         });
-       }
-       
-       // Alert updated order? No, just finish.
-     } catch (e) {
-       showAlert(e.message);
-     }
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Payment failed');
+      }
+
+      // Success
+      setShowPaymentModal(false);
+      setPaymentOrder(null);
+      setPaymentTotals(null);
+      refetch(); // Reload to see table as available
+
+      // Clear billed status for this order
+      if (paymentOrder?.id) {
+        setBilledOrders(prev => {
+          const next = new Set(prev);
+          next.delete(paymentOrder.id);
+          return next;
+        });
+      }
+
+      // Alert updated order? No, just finish.
+    } catch (e) {
+      showAlert(e.message);
+    }
   };
 
   const [editingOrder, setEditingOrder] = useState(null);
@@ -2996,7 +2996,7 @@ const handleModalResend = async (table) => {
         showAlert(data.error || 'Failed to edit order');
         return;
       }
-  
+
       // Insert into print queue for cross-device KOT printing
       if (data.order_for_print) {
         try {
@@ -3027,7 +3027,7 @@ const handleModalResend = async (table) => {
       // Refresh & close
       await refetch();
       setEditingOrder(null);
-     
+
     } catch (e) {
       showAlert(e.message || 'Failed to save order changes');
     }
@@ -3044,18 +3044,18 @@ const handleModalResend = async (table) => {
         .single();
 
       if (error) throw error;
-      
+
       // Fetch attached customers from junction table
       const { data: customerLinks, error: linkError } = await supabase
         .from('order_customers')
-        .select('*, restaurant_customers(name, phone)')
+        .select('*, restaurant_customer(name, phone)')
         .eq('order_id', orderId);
 
       if (!linkError && customerLinks && customerLinks.length > 0) {
         data.customers = customerLinks.map(link => ({
           id: link.customer_id,
-          name: link.restaurant_customers?.name,
-          phone: link.restaurant_customers?.phone,
+          name: link.restaurant_customer?.name,
+          phone: link.restaurant_customer?.phone,
           is_primary: link.is_primary
         }));
       } else {
@@ -3072,15 +3072,15 @@ const handleModalResend = async (table) => {
 
       // Transform items to match expected format if needed
       if (data.order_items) {
-          data.items = data.order_items.map(item => ({
-              ...item,
-              name: item.menu_items?.name || 'Unknown Item',
-              price: item.price,
-              quantity: item.quantity,
-              uom_precision: item.menu_items?.uom?.precision ?? 0
-          }));
+        data.items = data.order_items.map(item => ({
+          ...item,
+          name: item.menu_items?.name || 'Unknown Item',
+          price: item.price,
+          quantity: item.quantity,
+          uom_precision: item.menu_items?.uom?.precision ?? 0
+        }));
       }
-      
+
       setViewOrder(data);
     } catch (err) {
       console.error('Error fetching order details:', err);
@@ -3089,23 +3089,23 @@ const handleModalResend = async (table) => {
   };
 
   const handleOrderStatusChange = async (orderId, newStatus) => {
-      try {
-          const { error } = await supabase
-            .from('orders')
-            .update({ status: newStatus })
-            .eq('id', orderId);
-            
-          if (error) throw error;
-          
-          // Refresh data using React Query
-          refetch();
-          if (viewOrder && viewOrder.id === orderId) {
-             setViewOrder(prev => ({ ...prev, status: newStatus }));
-          }
-      } catch (err) {
-          console.error('Error updating order status:', err);
-          showAlert('Failed to update order status');
+    try {
+      const { error } = await supabase
+        .from('orders')
+        .update({ status: newStatus })
+        .eq('id', orderId);
+
+      if (error) throw error;
+
+      // Refresh data using React Query
+      refetch();
+      if (viewOrder && viewOrder.id === orderId) {
+        setViewOrder(prev => ({ ...prev, status: newStatus }));
       }
+    } catch (err) {
+      console.error('Error updating order status:', err);
+      showAlert('Failed to update order status');
+    }
   };
 
   const handleCancelConfirm = async (reason) => {
@@ -3113,131 +3113,131 @@ const handleModalResend = async (table) => {
     const orderId = cancelOrderDialog.id;
     const tableId = cancelOrderDialog.table_id;
     console.log('[CANCEL ORDER] Starting cancellation for order:', orderId);
-    
+
     try {
-        // 1. Get full order with items (to restore stock)
-        const { data: fullOrder, error: fetchErr } = await supabase
-            .from('orders')
-            .select('*, order_items(*, menu_items(name, uom:unit_of_measures(precision)))')
-            .eq('id', orderId)
-            .single();
-        
-        if (fetchErr || !fullOrder) throw new Error('Order not found');
+      // 1. Get full order with items (to restore stock)
+      const { data: fullOrder, error: fetchErr } = await supabase
+        .from('orders')
+        .select('*, order_items(*, menu_items(name, uom:unit_of_measures(precision)))')
+        .eq('id', orderId)
+        .single();
 
-        // 2. Mark order as cancelled
-        const { error: cancelErr } = await supabase
-            .from('orders')
-            .update({ 
-                status: 'cancelled', 
-                description: reason,
-                updated_at: new Date().toISOString()
-            })
-            .eq('id', orderId);
-        
-        if (cancelErr) throw cancelErr;
+      if (fetchErr || !fullOrder) throw new Error('Order not found');
 
-        // 3. Void invoice if it exists
-        const { data: invoice } = await supabase
-            .from('invoices')
-            .select('id')
-            .eq('order_id', orderId)
-            .maybeSingle();
+      // 2. Mark order as cancelled
+      const { error: cancelErr } = await supabase
+        .from('orders')
+        .update({
+          status: 'cancelled',
+          description: reason,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', orderId);
 
-        if (invoice) {
-            console.log('[CANCEL ORDER] Voiding invoice:', invoice.id);
-            const res = await fetch('/api/invoices/void', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    invoice_id: invoice.id,
-                    restaurant_id: restaurant.id,
-                    reason: reason,
-                }),
-            });
-            if (!res.ok) {
-                const j = await res.json().catch(() => ({}));
-                console.warn('[CANCEL ORDER] Invoice void failed:', j?.error);
-            }
-        } else if (restaurant?.loyalty_enabled) {
-            // Reversal for non-invoiced orders
-            try {
-                await LoyaltyService.handleOrderReversal(supabase, {
-                    restaurant_id: restaurant.id,
-                    order_id: orderId
-                });
-            } catch (lErr) {
-                console.error('[CANCEL ORDER] Loyalty reversal failed:', lErr);
-            }
+      if (cancelErr) throw cancelErr;
+
+      // 3. Void invoice if it exists
+      const { data: invoice } = await supabase
+        .from('invoices')
+        .select('id')
+        .eq('order_id', orderId)
+        .maybeSingle();
+
+      if (invoice) {
+        console.log('[CANCEL ORDER] Voiding invoice:', invoice.id);
+        const res = await fetch('/api/invoices/void', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            invoice_id: invoice.id,
+            restaurant_id: restaurant.id,
+            reason: reason,
+          }),
+        });
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}));
+          console.warn('[CANCEL ORDER] Invoice void failed:', j?.error);
         }
-
-        // 4. Restore stock
-        let itemsToRestore = fullOrder.order_items;
-        if ((!itemsToRestore || itemsToRestore.length === 0) && fullOrder.items && Array.isArray(fullOrder.items)) {
-            // Convert JSONB items if necessary
-            const itemsToConvert = [];
-            for (const item of fullOrder.items) {
-                let menuItemId = item.id || item.menu_item_id || null;
-                if (!menuItemId && item.name) {
-                    const { data: menuItem } = await supabase
-                        .from('menu_items')
-                        .select('id')
-                        .eq('restaurant_id', restaurant.id)
-                        .ilike('name', item.name)
-                        .maybeSingle();
-                    if (menuItem) menuItemId = menuItem.id;
-                }
-                itemsToConvert.push({
-                    menu_item_id: menuItemId,
-                    quantity: item.quantity || item.qty || 1,
-                    variant_option_id: item.variant_id || item.variant_option_id || null,
-                    variant_name: item.variant_name || null
-                });
-            }
-            itemsToRestore = itemsToConvert;
+      } else if (restaurant?.loyalty_enabled) {
+        // Reversal for non-invoiced orders
+        try {
+          await LoyaltyService.handleOrderReversal(supabase, {
+            restaurant_id: restaurant.id,
+            order_id: orderId
+          });
+        } catch (lErr) {
+          console.error('[CANCEL ORDER] Loyalty reversal failed:', lErr);
         }
+      }
 
-        if (itemsToRestore && itemsToRestore.length > 0) {
-            await restoreStockForOrder(supabase, restaurant.id, itemsToRestore);
+      // 4. Restore stock
+      let itemsToRestore = fullOrder.order_items;
+      if ((!itemsToRestore || itemsToRestore.length === 0) && fullOrder.items && Array.isArray(fullOrder.items)) {
+        // Convert JSONB items if necessary
+        const itemsToConvert = [];
+        for (const item of fullOrder.items) {
+          let menuItemId = item.id || item.menu_item_id || null;
+          if (!menuItemId && item.name) {
+            const { data: menuItem } = await supabase
+              .from('menu_items')
+              .select('id')
+              .eq('restaurant_id', restaurant.id)
+              .ilike('name', item.name)
+              .maybeSingle();
+            if (menuItem) menuItemId = menuItem.id;
+          }
+          itemsToConvert.push({
+            menu_item_id: menuItemId,
+            quantity: item.quantity || item.qty || 1,
+            variant_option_id: item.variant_id || item.variant_option_id || null,
+            variant_name: item.variant_name || null
+          });
         }
+        itemsToRestore = itemsToConvert;
+      }
 
-        // 5. Release table if it was a dine-in order
-        if (fullOrder.table_id) {
-            await supabase
-                .from('tables')
-                .update({ status: 'available', current_order_id: null })
-                .eq('id', fullOrder.table_id);
-        } else if (fullOrder.table_number) {
-            // Find table by identifier if table_id is missing
-            const { data: tableObj } = await supabase
-                .from('tables')
-                .select('id')
-                .eq('restaurant_id', restaurant.id)
-                .ilike('identifier', fullOrder.table_number)
-                .maybeSingle();
+      if (itemsToRestore && itemsToRestore.length > 0) {
+        await restoreStockForOrder(supabase, restaurant.id, itemsToRestore);
+      }
 
-            if (tableObj) {
-                await supabase
-                    .from('tables')
-                    .update({ status: 'available', current_order_id: null })
-                    .eq('id', tableObj.id);
-            }
+      // 5. Release table if it was a dine-in order
+      if (fullOrder.table_id) {
+        await supabase
+          .from('tables')
+          .update({ status: 'available', current_order_id: null })
+          .eq('id', fullOrder.table_id);
+      } else if (fullOrder.table_number) {
+        // Find table by identifier if table_id is missing
+        const { data: tableObj } = await supabase
+          .from('tables')
+          .select('id')
+          .eq('restaurant_id', restaurant.id)
+          .ilike('identifier', fullOrder.table_number)
+          .maybeSingle();
+
+        if (tableObj) {
+          await supabase
+            .from('tables')
+            .update({ status: 'available', current_order_id: null })
+            .eq('id', tableObj.id);
         }
+      }
 
-        showAlert('Order cancelled successfully');
-        setCancelOrderDialog(null);
-        refetch(); // Refresh tables and orders
+      showAlert('Order cancelled successfully');
+      setCancelOrderDialog(null);
+      refetch(); // Refresh tables and orders
     } catch (err) {
-        console.error('[CANCEL ORDER] Error:', err);
-        showAlert(`Failed to cancel order: ${err.message}`);
+      console.error('[CANCEL ORDER] Error:', err);
+      showAlert(`Failed to cancel order: ${err.message}`);
     }
   };
 
   const handleMoveOrder = async (targetTableId) => {
     if (!movingOrder || !targetTableId) return;
-    
+
     const sourceTableId = movingOrder.table_id || (sourceTable?.id);
     const targetTable = tables.find(t => t.id === targetTableId);
-    
+
     if (!targetTable) return;
 
     try {
@@ -3247,7 +3247,7 @@ const handleModalResend = async (table) => {
           .from('tables')
           .update({ status: 'available', current_order_id: null })
           .eq('id', sourceTableId);
-          
+
         if (err1) throw err1;
       }
 
@@ -3256,18 +3256,18 @@ const handleModalResend = async (table) => {
         .from('tables')
         .update({ status: 'occupied', current_order_id: movingOrder.id })
         .eq('id', targetTableId);
-        
+
       if (err2) throw err2;
 
       // 3. Update order record
       const { error: err3 } = await supabase
         .from('orders')
-        .update({ 
+        .update({
           table_id: targetTableId,
-          table_number: targetTable.identifier 
+          table_number: targetTable.identifier
         })
         .eq('id', movingOrder.id);
-        
+
       if (err3) throw err3;
 
       showAlert(`Order successfully moved to Table ${targetTable.identifier}`);
@@ -3279,7 +3279,7 @@ const handleModalResend = async (table) => {
       showAlert(`Failed to transfer order: ${err.message}`);
     }
   };
-  
+
   // Real-time subscription - refetch when tables or orders change
   useEffect(() => {
     if (!restaurant?.id) return;
@@ -3336,8 +3336,8 @@ const handleModalResend = async (table) => {
       supabase.removeChannel(channel);
     };
   }, [restaurant?.id, supabase, refetch, refetchOrders, refetchHistory]);
-  
-  
+
+
   // Statistics
   const stats = useMemo(() => {
     const total = tables.length;
@@ -3345,36 +3345,36 @@ const handleModalResend = async (table) => {
     const occupied = tables.filter(t => t.status === 'occupied').length;
     const reserved = tables.filter(t => t.status === 'reserved').length;
     const cleaning = tables.filter(t => t.status === 'cleaning').length;
-    
+
     return { total, available, occupied, reserved, cleaning };
   }, [tables]);
-  
+
   // Filtered tables
   const filteredTables = useMemo(() => {
     const filtered = tables.filter(table => {
-      const matchesSearch = searchQuery === '' || 
+      const matchesSearch = searchQuery === '' ||
         table.identifier.toLowerCase().includes(searchQuery.toLowerCase());
-      
+
       const matchesSection = filterSection === 'all' || table.section === filterSection;
       const matchesStatus = filterStatus === 'all' || table.status === filterStatus;
       const matchesFloor = filterFloor === 'all' || table.floor_level === filterFloor;
-      
+
       return matchesSearch && matchesSection && matchesStatus && matchesFloor;
     });
 
-    return filtered.sort((a, b) => 
+    return filtered.sort((a, b) =>
       a.identifier.localeCompare(b.identifier, undefined, { numeric: true, sensitivity: 'base' })
     );
   }, [tables, searchQuery, filterSection, filterStatus, filterFloor]);
 
   // Filtered orders for non-dine-in modes
-   const filteredOrders = useMemo(() => {
+  const filteredOrders = useMemo(() => {
     if (serviceMode === 'dine-in') return [];
-    
+
     return orders.filter(order => {
       // 1. Filter by order_type based on serviceMode
       const type = (order.order_type || '').toLowerCase();
-      
+
       if (serviceMode === 'takeaway') {
         // Takeaway orders are usually 'parcel' or 'takeaway'
         if (type !== 'parcel' && type !== 'takeaway' && type !== 'parcel_service') return false;
@@ -3385,18 +3385,18 @@ const handleModalResend = async (table) => {
       }
 
       // 2. Search filter
-      const matchesSearch = !searchQuery || 
-        (order.customer_name?.toLowerCase().includes(searchQuery.toLowerCase()) || 
-         order.customer_phone?.includes(searchQuery) ||
-         order.id.toLowerCase().includes(searchQuery.toLowerCase()));
-      
+      const matchesSearch = !searchQuery ||
+        (order.customer_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          order.customer_phone?.includes(searchQuery) ||
+          order.id.toLowerCase().includes(searchQuery.toLowerCase()));
+
       // 3. Status filter
       const matchesStatus = filterStatus === 'all' || order.status === filterStatus;
-      
+
       return matchesSearch && matchesStatus;
     });
   }, [orders, searchQuery, filterStatus, serviceMode]);
-  
+
   const handleAddTable = () => {
     setEditingTable(null);
     setFormData({
@@ -3416,7 +3416,7 @@ const handleModalResend = async (table) => {
     setModalQrError(null);
     setShowModal(true);
   };
-  
+
   const handleEditTable = (table) => {
     setEditingTable(table);
     setFormData({
@@ -3436,7 +3436,7 @@ const handleModalResend = async (table) => {
     setModalQrError(null);
     setShowModal(true);
   };
-  
+
   const handleSaveTable = async () => {
     try {
       if (!formData.identifier.trim()) {
@@ -3451,7 +3451,7 @@ const handleModalResend = async (table) => {
         // Prepare multiple tables
         for (let i = 1; i <= formData.tableCount; i++) {
           const identifier = `${baseIdentifier}${i}`;
-          
+
           // Case-insensitive duplicate check (active tables in UI state)
           const isDuplicate = tables.some(t => t.identifier.toLowerCase().trim() === identifier.toLowerCase().trim());
           if (isDuplicate) {
@@ -3497,7 +3497,7 @@ const handleModalResend = async (table) => {
           qr_code_url: `/order?r=${restaurant.id}&t=${baseIdentifier}`
         });
       }
-      
+
       let data;
       if (editingTable) {
         // Update existing table
@@ -3523,7 +3523,7 @@ const handleModalResend = async (table) => {
           }
         }
       }
-      
+
       setShowModal(false);
       setEditingTable(null); // Clear editing state
     } catch (error) {
@@ -3531,7 +3531,7 @@ const handleModalResend = async (table) => {
       showAlert(error.message || 'Failed to save table');
     }
   };
-  
+
   const openNoteModal = (tableId, status, title = 'Enter Details', placeholder = '') => {
     setNoteTableData({ id: tableId, status, title, placeholder });
     setTempNote('');
@@ -3543,9 +3543,9 @@ const handleModalResend = async (table) => {
     if (!table) return;
 
     const blockedStatuses = {
-      occupied:    `Table "${table.identifier}" is currently OCCUPIED. Clear the order before deleting.`,
-      reserved:    `Table "${table.identifier}" is RESERVED. Cancel the reservation before deleting.`,
-      cleaning:    `Table "${table.identifier}" is marked as CLEANING. Mark it available before deleting.`,
+      occupied: `Table "${table.identifier}" is currently OCCUPIED. Clear the order before deleting.`,
+      reserved: `Table "${table.identifier}" is RESERVED. Cancel the reservation before deleting.`,
+      cleaning: `Table "${table.identifier}" is marked as CLEANING. Mark it available before deleting.`,
       maintenance: `Table "${table.identifier}" is under MAINTENANCE. Mark it available before deleting.`,
     };
     if (blockedStatuses[table.status]) {
@@ -3554,13 +3554,13 @@ const handleModalResend = async (table) => {
     }
 
     if (!await showConfirm(`Are you sure you want to delete Table "${table.identifier}"? This will remove it from the floor plan.`)) return;
-    
+
     try {
-      await deleteTableMutation.mutateAsync({ 
-        tableId, 
-        restaurantId: restaurant.id 
+      await deleteTableMutation.mutateAsync({
+        tableId,
+        restaurantId: restaurant.id
       });
-      
+
       setShowModal(false);
       setEditingTable(null);
     } catch (error) {
@@ -3600,8 +3600,8 @@ const handleModalResend = async (table) => {
     try {
       await addFloorMutation.mutateAsync({ name: name.trim(), restaurantId: restaurant.id });
     } catch (error) {
-       console.error(error);
-       showAlert(error.message || "Failed to add floor level.");
+      console.error(error);
+      showAlert(error.message || "Failed to add floor level.");
     }
   };
 
@@ -3623,18 +3623,18 @@ const handleModalResend = async (table) => {
       showAlert(error.message || 'Failed to delete floor level');
     }
   };
-  
+
   const handleChangeStatus = async (tableId, newStatus, extraUpdates = {}) => {
     try {
       console.log('Changing status:', { tableId, newStatus, extraUpdates });
-      
+
       await updateStatusMutation.mutateAsync({
         tableId,
         restaurantId: restaurant.id,
         status: newStatus,
         extraUpdates
       });
-      
+
       console.log('Status updated successfully');
     } catch (error) {
       console.error('Error changing status:', error);
@@ -3678,63 +3678,63 @@ const handleModalResend = async (table) => {
   const handlePrintBill = async (orderId) => {
     if (!orderId) return;
     try {
-        const { data: fullOrder, error } = await supabase
-            .from('orders')
-            .select('*, order_items(*, menu_items(name, uom:unit_of_measures(precision)))')
-            .eq('id', orderId)
-            .single();
+      const { data: fullOrder, error } = await supabase
+        .from('orders')
+        .select('*, order_items(*, menu_items(name, uom:unit_of_measures(precision)))')
+        .eq('id', orderId)
+        .single();
 
-        if (error || !fullOrder) {
-            console.error('Error fetching order for print:', error);
-            showAlert('Failed to fetch order details for printing');
-            return;
+      if (error || !fullOrder) {
+        console.error('Error fetching order for print:', error);
+        showAlert('Failed to fetch order details for printing');
+        return;
+      }
+
+      const { data: profile } = await supabase
+        .from('restaurant_profiles')
+        .select('*')
+        .eq('restaurant_id', restaurant.id)
+        .maybeSingle();
+
+      const orderForPrint = {
+        ...fullOrder,
+        restaurant_name: restaurant.name,
+        _profile: profile,
+        bill: {
+          grand_total: fullOrder.total_amount,
+          subtotal: fullOrder.subtotal,
+          tax_total: fullOrder.total_tax,
+          order_discount_total: fullOrder.discount_amount,
+          discount_amount: fullOrder.discount_amount,
+          round_off_amount: fullOrder.round_off_amount,
+          invoice_no: fullOrder.invoice_no,
+          bill_no: fullOrder.bill_no
         }
+      };
 
-        const { data: profile } = await supabase
-            .from('restaurant_profiles')
-            .select('*')
-            .eq('restaurant_id', restaurant.id)
-            .maybeSingle();
+      window.dispatchEvent(
+        new CustomEvent('auto-print-order', {
+          detail: {
+            ...orderForPrint,
+            autoPrint: true,
+            kind: 'bill',
+          },
+        })
+      );
 
-        const orderForPrint = {
-            ...fullOrder,
-            restaurant_name: restaurant.name,
-            _profile: profile,
-             bill: {
-                grand_total: fullOrder.total_amount,
-                subtotal: fullOrder.subtotal, 
-                tax_total: fullOrder.total_tax,
-                order_discount_total: fullOrder.discount_amount,
-                discount_amount: fullOrder.discount_amount,
-                round_off_amount: fullOrder.round_off_amount,
-                invoice_no: fullOrder.invoice_no,
-                bill_no: fullOrder.bill_no
-            }
-        };
+      // Mark as billed
+      setBilledOrders(prev => {
+        const next = new Set(prev);
+        next.add(orderId);
+        return next;
+      });
 
-        window.dispatchEvent(
-            new CustomEvent('auto-print-order', {
-                detail: {
-                    ...orderForPrint,
-                    autoPrint: true,
-                    kind: 'bill',
-                },
-            })
-        );
-
-       // Mark as billed
-       setBilledOrders(prev => {
-          const next = new Set(prev);
-          next.add(orderId);
-          return next;
-       });
-        
     } catch (err) {
-        console.error('Print bill error:', err);
-        showAlert('Failed to trigger print');
+      console.error('Print bill error:', err);
+      showAlert('Failed to trigger print');
     }
   };
-  
+
   if (checking || loadingRestaurant || loading) {
     return (
       <PageContainer>
@@ -3745,7 +3745,7 @@ const handleModalResend = async (table) => {
       </PageContainer>
     );
   }
-  
+
   return (
     <PageContainer>
       <MainLayout>
@@ -3759,8 +3759,8 @@ const handleModalResend = async (table) => {
                   { id: 'takeaway', label: 'Takeaway', icon: '🥡' },
                   { id: 'delivery', label: 'Delivery', icon: '🚲' }
                 ].map(mode => (
-                  <FilterPill 
-                    key={mode.id} 
+                  <FilterPill
+                    key={mode.id}
                     active={serviceMode === mode.id}
                     onClick={() => setServiceMode(mode.id)}
                   >
@@ -3770,7 +3770,7 @@ const handleModalResend = async (table) => {
                 ))}
               </SidebarFilterList>
               {(serviceMode === 'takeaway' || serviceMode === 'delivery') && (
-                <AddOrderButton 
+                <AddOrderButton
                   onClick={() => {
                     setCreateOrderTable(null);
                     setShowCreateOrderModal(true);
@@ -3791,20 +3791,20 @@ const handleModalResend = async (table) => {
                   <SidebarLabel>Status</SidebarLabel>
                   <SidebarFilterList>
                     {['all', 'available', 'occupied', 'reserved', 'cleaning', 'maintenance'].map(status => (
-                      <FilterPill 
-                        key={status} 
+                      <FilterPill
+                        key={status}
                         active={filterStatus === status}
                         onClick={() => setFilterStatus(status)}
                       >
-                        <div style={{ 
-                          width: '8px', 
-                          height: '8px', 
-                          borderRadius: '50%', 
-                          background: status === 'available' ? '#ffffff' : 
-                                    status === 'occupied' ? '#ef4444' : 
-                                    status === 'reserved' ? '#3b82f6' : 
-                                    status === 'cleaning' ? '#f59e0b' : 
-                                    status === 'maintenance' ? '#64748b' : '#cbd5e1',
+                        <div style={{
+                          width: '8px',
+                          height: '8px',
+                          borderRadius: '50%',
+                          background: status === 'available' ? '#ffffff' :
+                            status === 'occupied' ? '#ef4444' :
+                              status === 'reserved' ? '#3b82f6' :
+                                status === 'cleaning' ? '#f59e0b' :
+                                  status === 'maintenance' ? '#64748b' : '#cbd5e1',
                           border: status === 'available' ? '1px solid #e2e8f0' : 'none',
                           boxShadow: status === 'available' ? 'inset 0 1px 3px rgba(0,0,0,0.06)' : 'none'
                         }} />
@@ -3817,15 +3817,15 @@ const handleModalResend = async (table) => {
                 <SidebarGroup>
                   <SidebarLabel>Section</SidebarLabel>
                   <SidebarFilterList>
-                    <FilterPill 
-                      active={filterSection === 'all'} 
+                    <FilterPill
+                      active={filterSection === 'all'}
                       onClick={() => setFilterSection('all')}
                     >
                       All Sections
                     </FilterPill>
                     {sections.map(s => (
-                      <FilterPill 
-                        key={s.id} 
+                      <FilterPill
+                        key={s.id}
                         active={filterSection === s.section_name}
                         onClick={() => setFilterSection(s.section_name)}
                       >
@@ -3838,15 +3838,15 @@ const handleModalResend = async (table) => {
                 <SidebarGroup>
                   <SidebarLabel>Floor</SidebarLabel>
                   <SidebarFilterList>
-                    <FilterPill 
-                      active={filterFloor === 'all'} 
+                    <FilterPill
+                      active={filterFloor === 'all'}
                       onClick={() => setFilterFloor('all')}
                     >
                       All Floors
                     </FilterPill>
                     {floors.map(f => (
-                      <FilterPill 
-                        key={f.id} 
+                      <FilterPill
+                        key={f.id}
                         active={filterFloor === f.floor_name}
                         onClick={() => setFilterFloor(f.floor_name)}
                       >
@@ -3862,7 +3862,7 @@ const handleModalResend = async (table) => {
 
         <MainContent>
           {activeSubView === 'history' ? (
-            <OrderHistoryView 
+            <OrderHistoryView
               onBack={() => setActiveSubView('tables')}
               orders={completedOrders}
               onPrint={handlePrintBill}
@@ -3875,424 +3875,712 @@ const handleModalResend = async (table) => {
             <>
               <Header>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '20px' }}>
-              <TitleBlock>
-                <Title>{pageInfo.title} <span>{pageInfo.accent}</span></Title>
-                <Subtitle>{pageInfo.subtitle}</Subtitle>
-              </TitleBlock>
-              
-              <HeaderActions>
-                <HistoryButton onClick={() => setActiveSubView('history')}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"></path>
-                  </svg>
-                  Order History
-                </HistoryButton>
+                  <TitleBlock>
+                    <Title>{pageInfo.title} <span>{pageInfo.accent}</span></Title>
+                    <Subtitle>{pageInfo.subtitle}</Subtitle>
+                  </TitleBlock>
 
-                {serviceMode === 'dine-in' && (
-                  <>
-                    <ConfigButton onClick={() => setShowSectionsModal(true)}>
+                  <HeaderActions>
+                    <HistoryButton onClick={() => setActiveSubView('history')}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M12 3H3v18h18V12"></path>
-                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                        <path d="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"></path>
                       </svg>
-                      Manage Sections
-                    </ConfigButton>
-                    <ConfigButton onClick={() => setShowFloorsModal(true)}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M3 9h18"></path>
-                        <path d="M3 15h18"></path>
-                        <path d="M3 3v18"></path>
-                        <path d="M21 3v18"></path>
-                      </svg>
-                      Manage Floors
-                    </ConfigButton>
-                  </>
-                )}
-              </HeaderActions>
-            </div>
-            
-            {serviceMode === 'dine-in' ? (
-              <StatsScroll>
-                <StatCard accent="linear-gradient(135deg, #f97316 0%, #ea580c 100%)">
-                  <StatLabel>Total Tables</StatLabel>
-                  <StatValue>{stats.total}</StatValue>
-                </StatCard>
-                <StatCard accent="linear-gradient(135deg, #10b981 0%, #059669 100%)">
-                  <StatLabel>Available</StatLabel>
-                  <StatValue style={{color: '#059669'}}>{stats.available}</StatValue>
-                </StatCard>
-                <StatCard accent="linear-gradient(135deg, #ef4444 0%, #dc2626 100%)">
-                  <StatLabel>Occupied</StatLabel>
-                  <StatValue style={{color: '#dc2626'}}>{stats.occupied}</StatValue>
-                </StatCard>
-                <StatCard accent="linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)">
-                  <StatLabel>Reserved</StatLabel>
-                  <StatValue style={{color: '#2563eb'}}>{stats.reserved}</StatValue>
-                </StatCard>
-              </StatsScroll>
-            ) : (
-              <StatsScroll>
-                <StatCard accent="linear-gradient(135deg, #f97316 0%, #ea580c 100%)">
-                  <StatLabel>{pageInfo.primaryStat}</StatLabel>
-                  <StatValue>
-                    {filteredOrders.filter(o => ['new', 'pending', 'in_progress'].includes(o.status)).length}
-                  </StatValue>
-                </StatCard>
-                <StatCard accent="linear-gradient(135deg, #10b981 0%, #059669 100%)">
-                  <StatLabel>{pageInfo.secondaryStat}</StatLabel>
-                  <StatValue style={{color: '#059669'}}>
-                    {filteredOrders.filter(o => o.status === 'ready').length}
-                  </StatValue>
-                </StatCard>
-              </StatsScroll>
-            )}
-            
-            <Toolbar>
-              <ToolbarLeft>
-                <SearchInput 
-                  placeholder={serviceMode === 'dine-in' ? "Search tables..." : `Search ${serviceMode} orders...`}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </ToolbarLeft>
-              <ToolbarRight>
-                <ViewToggle>
-                  <ViewButton active={viewMode === 'grid'} onClick={() => setViewMode('grid')}>
-                    Grid
-                  </ViewButton>
-                  <ViewButton active={viewMode === 'list'} onClick={() => setViewMode('list')}>
-                    List
-                  </ViewButton>
-                  {serviceMode === 'dine-in' && (
-                    <ViewButton active={viewMode === 'visual'} onClick={() => setViewMode('visual')}>
-                      Visual
-                    </ViewButton>
-                  )}
-                </ViewToggle>
-                {serviceMode === 'dine-in' && (
-                  <UiButton primary onClick={handleAddTable}>
-                    <span style={{fontSize: '18px', fontWeight: 300}}>+</span> Add Table
-                  </UiButton>
-                )}
-              </ToolbarRight>
-            </Toolbar>
-          </Header>
-          
-          {serviceMode !== 'dine-in' ? (
-            filteredOrders.length === 0 ? (
-              <EmptyState>
-                <EmptyIcon>{serviceMode === 'takeaway' ? '🥡' : '🚲'}</EmptyIcon>
-                <EmptyTitle>No {serviceMode === 'takeaway' ? 'Takeaway' : 'Delivery'} Orders Found</EmptyTitle>
-                <EmptyText>
-                  {searchQuery || filterStatus !== 'all' 
-                    ? 'Try adjusting your search or filters' 
-                    : `Active ${serviceMode} orders will appear here`}
-                </EmptyText>
-              </EmptyState>
-            ) : viewMode === 'grid' ? (
-              <TableGrid>
-                {filteredOrders.map(order => (
-                  <TableCard 
-                    key={order.id} 
-                    status={order.status === 'ready' ? 'available' : (order.status === 'in_progress' ? 'cleaning' : 'occupied')}
-                    billed={billedOrders.has(order.id)}
-                    onClick={() => handleViewOrder(order.id)}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <TableCardHeader>
-                      <TableNumber>
-                        {serviceMode === 'takeaway' ? 'Takeaway' : (serviceMode === 'delivery' ? 'Delivery' : 'Counter Order')}
-                        <span>{order.customer_name || 'Guest'}</span>
-                      </TableNumber>
-                      <StatusBadge status={order.status === 'ready' ? 'available' : (order.status === 'in_progress' ? 'cleaning' : 'occupied')}>
-                        {order.status}
-                      </StatusBadge>
-                    </TableCardHeader>
-                    
-                    <TableInfo>
-                      <InfoRow>
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{color: '#1e293b'}}>
-                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                          <polyline points="14 2 14 8 20 8"></polyline>
-                          <line x1="16" y1="13" x2="8" y2="13"></line>
-                          <line x1="16" y1="17" x2="8" y2="17"></line>
-                          <polyline points="10 9 9 9 8 9"></polyline>
-                        </svg>
-                        <InfoText style={{fontWeight: 700, color: '#000000', fontSize: '12.5px'}}>Order #{order.id.slice(0, 8)}</InfoText>
-                      </InfoRow>
-                      <InfoRow>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{color: '#94a3b8'}}>
-                          <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"></path>
-                          <path d="M3 6h18"></path>
-                          <path d="M16 10a4 4 0 0 1-8 0"></path>
-                        </svg>
-                        <InfoText>{order.order_items?.length || 0} Items • ₹{(order.total_amount || 0).toFixed(2)}</InfoText>
-                      </InfoRow>
+                      Order History
+                    </HistoryButton>
 
-                    </TableInfo>
-                    
-                    <TableActions onClick={(e) => e.stopPropagation()}>
-                      <ActionButton variant="primary" onClick={() => handlePrintBill(order.id)}>Bill</ActionButton>
-                      <ActionButton variant="warning" onClick={async () => {
-                         const full = await fetchFullOrder(order.id);
-                         if(full) {
-                           window.dispatchEvent(
-                             new CustomEvent('auto-print-order', {
-                               detail: { ...full, autoPrint: true, kind: 'kot' }
-                             })
-                           );
-                         }
-                      }}>KOT</ActionButton>
-                      <div style={{ display: 'flex', gap: 8, width: '100%' }}>
-                        <ActionButton 
-                          variant="success" 
-                          style={{ flex: 1.5, height: 48 }} 
-                          onClick={async () => {
-                            const full = await fetchFullOrder(order.id);
-                            if(full) setEditingOrder(full);
-                          }}
-                        >Edit</ActionButton>
-                        <ActionButton 
-                          variant="danger" 
-                          style={{ flex: 1, height: 48 }} 
-                          onClick={async () => {
-                            const full = await fetchFullOrder(order.id);
-                            if(full) setCancelOrderDialog(full);
-                          }}
-                        >Cancel</ActionButton>
-                      </div>
-                      {order.is_credit && order.credit_customer_id ? (
-                        <ActionButton 
-                          variant="danger" 
-                          fullWidth 
-                          onClick={(e) => handleFinishCreditOrder(e, order.id)}
-                        >Finish</ActionButton>
-                      ) : (
-                        <ActionButton 
-                          variant="danger" 
-                          fullWidth 
-                          onClick={(e) => handlePaymentClick(e, { current_order: { id: order.id } })}
-                        >Pay & Finish</ActionButton>
+                    {serviceMode === 'dine-in' && (
+                      <>
+                        <ConfigButton onClick={() => setShowSectionsModal(true)}>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M12 3H3v18h18V12"></path>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                          </svg>
+                          Manage Sections
+                        </ConfigButton>
+                        <ConfigButton onClick={() => setShowFloorsModal(true)}>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M3 9h18"></path>
+                            <path d="M3 15h18"></path>
+                            <path d="M3 3v18"></path>
+                            <path d="M21 3v18"></path>
+                          </svg>
+                          Manage Floors
+                        </ConfigButton>
+                      </>
+                    )}
+                  </HeaderActions>
+                </div>
+
+                {serviceMode === 'dine-in' ? (
+                  <StatsScroll>
+                    <StatCard accent="linear-gradient(135deg, #f97316 0%, #ea580c 100%)">
+                      <StatLabel>Total Tables</StatLabel>
+                      <StatValue>{stats.total}</StatValue>
+                    </StatCard>
+                    <StatCard accent="linear-gradient(135deg, #10b981 0%, #059669 100%)">
+                      <StatLabel>Available</StatLabel>
+                      <StatValue style={{ color: '#059669' }}>{stats.available}</StatValue>
+                    </StatCard>
+                    <StatCard accent="linear-gradient(135deg, #ef4444 0%, #dc2626 100%)">
+                      <StatLabel>Occupied</StatLabel>
+                      <StatValue style={{ color: '#dc2626' }}>{stats.occupied}</StatValue>
+                    </StatCard>
+                    <StatCard accent="linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)">
+                      <StatLabel>Reserved</StatLabel>
+                      <StatValue style={{ color: '#2563eb' }}>{stats.reserved}</StatValue>
+                    </StatCard>
+                  </StatsScroll>
+                ) : (
+                  <StatsScroll>
+                    <StatCard accent="linear-gradient(135deg, #f97316 0%, #ea580c 100%)">
+                      <StatLabel>{pageInfo.primaryStat}</StatLabel>
+                      <StatValue>
+                        {filteredOrders.filter(o => ['new', 'pending', 'in_progress'].includes(o.status)).length}
+                      </StatValue>
+                    </StatCard>
+                    <StatCard accent="linear-gradient(135deg, #10b981 0%, #059669 100%)">
+                      <StatLabel>{pageInfo.secondaryStat}</StatLabel>
+                      <StatValue style={{ color: '#059669' }}>
+                        {filteredOrders.filter(o => o.status === 'ready').length}
+                      </StatValue>
+                    </StatCard>
+                  </StatsScroll>
+                )}
+
+                <Toolbar>
+                  <ToolbarLeft>
+                    <SearchInput
+                      placeholder={serviceMode === 'dine-in' ? "Search tables..." : `Search ${serviceMode} orders...`}
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                  </ToolbarLeft>
+                  <ToolbarRight>
+                    <ViewToggle>
+                      <ViewButton active={viewMode === 'grid'} onClick={() => setViewMode('grid')}>
+                        Grid
+                      </ViewButton>
+                      <ViewButton active={viewMode === 'list'} onClick={() => setViewMode('list')}>
+                        List
+                      </ViewButton>
+                      {serviceMode === 'dine-in' && (
+                        <ViewButton active={viewMode === 'visual'} onClick={() => setViewMode('visual')}>
+                          Visual
+                        </ViewButton>
                       )}
-                    </TableActions>
-                  </TableCard>
-                ))}
-              </TableGrid>
-            ) : (
-              <TableList>
-                <TableListHeader>
-                  <div>Order ID</div>
-                  <div>Customer</div>
-                  <div>Status</div>
-                  <div>Items</div>
-                  <div>Total</div>
-                  <div>Actions</div>
-                </TableListHeader>
-                {filteredOrders.map(order => (
-                  <TableListRow 
-                    key={order.id} 
-                    status={order.status === 'ready' ? 'available' : (order.status === 'in_progress' ? 'cleaning' : 'occupied')}
-                    billed={billedOrders.has(order.id)}
-                    onClick={() => handleViewOrder(order.id)}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <div style={{ fontWeight: 700, fontSize: '12.5px', color: '#000000' }}>Order #{order.id.slice(0, 8)}</div>
-                    <div>
-                      <div style={{ fontWeight: 600 }}>
-                        {order.order_customers && order.order_customers.length > 0
-                          ? order.order_customers.map(c => c.restaurant_customers?.name).filter(Boolean).join(', ')
-                          : (order.customer_name || 'Guest')
-                        }
-                      </div>
-                      <div style={{ fontSize: '12px', color: '#64748b' }}>
-                        {order.order_customers && order.order_customers.length > 0
-                          ? order.order_customers.map(c => c.restaurant_customers?.phone).filter(Boolean).join(', ')
-                          : (order.customer_phone || '-')
-                        }
-                      </div>
-                    </div>
-                    <div><StatusBadge status={order.status === 'ready' ? 'available' : (order.status === 'in_progress' ? 'cleaning' : 'occupied')} minimal>{order.status}</StatusBadge></div>
-                    <div style={{ fontSize: '13px' }}>{order.order_items?.length || 0} items</div>
-                    <div style={{ fontWeight: 700 }}>₹{(order.total_amount || 0).toFixed(2)}</div>
-                    <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                      <ActionButton variant="primary" onClick={() => handlePrintBill(order.id)} style={{ padding: '6px 12px', height: '32px' }}>Bill</ActionButton>
-                      <ActionButton variant="warning" onClick={async () => {
-                         const full = await fetchFullOrder(order.id);
-                         if(full) {
-                           window.dispatchEvent(
-                             new CustomEvent('auto-print-order', {
-                               detail: { ...full, autoPrint: true, kind: 'kot' }
-                             })
-                           );
-                         }
-                      }} style={{ padding: '6px 12px', height: '32px' }}>KOT</ActionButton>
-                      <ActionButton variant="success" onClick={async () => {
-                         const full = await fetchFullOrder(order.id);
-                         if(full) setEditingOrder(full);
-                      }} style={{ padding: '6px 12px', height: '32px' }}>Edit</ActionButton>
-                      <ActionButton variant="danger" onClick={async () => {
-                         const full = await fetchFullOrder(order.id);
-                         if(full) setCancelOrderDialog(full);
-                      }} style={{ padding: '6px 12px', height: '32px' }}>Cancel</ActionButton>
-                       {order.is_credit && order.credit_customer_id ? (
-                         <ActionButton variant="danger" onClick={(e) => handleFinishCreditOrder(e, order.id)} style={{ padding: '6px 12px', height: '32px' }}>Finish</ActionButton>
-                       ) : (
-                         <ActionButton variant="danger" onClick={(e) => handlePaymentClick(e, { current_order: { id: order.id } })} style={{ padding: '6px 12px', height: '32px' }}>Pay</ActionButton>
-                       )}
-                    </div>
-                  </TableListRow>
-                ))}
-              </TableList>
-            )
-          ) : filteredTables.length === 0 ? (
-            <EmptyState>
-              <EmptyTitle>No Tables Found</EmptyTitle>
-              <EmptyText>
-                {searchQuery || filterSection !== 'all' || filterStatus !== 'all' 
-                  ? 'Try adjusting your filters' 
-                  : 'Get started by adding your first table'}
-              </EmptyText>
-              {!searchQuery && filterSection === 'all' && filterStatus === 'all' && (
-                <Button primary onClick={handleAddTable}>
-                  + Add Your First Table
-                </Button>
-              )}
-            </EmptyState>
-          ) : viewMode === 'visual' ? (
-            <>
-              <FloorPlanContainer>
-                <FloorPlanLegend>
-                  <LegendItem>
-                    <LegendDot color="#ffffff" style={{ border: '1px solid #e2e8f0', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.06)' }} />
-                    Available
-                  </LegendItem>
-                  <LegendItem>
-                    <LegendDot color="#ef4444" style={{ boxShadow: '0 2px 4px rgba(239, 68, 68, 0.2)' }} />
-                    Occupied
-                  </LegendItem>
-                  <LegendItem>
-                    <LegendDot color="#10b981" style={{ boxShadow: '0 2px 4px rgba(16, 185, 129, 0.2)' }} />
-                    Billed
-                  </LegendItem>
-                  <LegendItem>
-                    <LegendDot color="#3b82f6" />
-                    Reserved
-                  </LegendItem>
-                  <LegendItem>
-                    <LegendDot color="#f59e0b" />
-                    Cleaning
-                  </LegendItem>
-                  <LegendItem>
-                    <LegendDot color="#64748b" />
-                    Maintenance
-                  </LegendItem>
-                </FloorPlanLegend>
-                
-                {filteredTables.map((table, index) => {
-                  // Responsive grid layout
-                  const isMobile = window.innerWidth <= 768;
-                  const cols = isMobile ? 3 : 5; // 3 columns on mobile, 5 on desktop
-                  const spacingX = isMobile ? 100 : 150; // Tighter spacing on mobile
-                  const spacingY = isMobile ? 85 : 130;
-                  const offsetX = isMobile ? 10 : 50;
-                  const offsetY = isMobile ? 10 : 50;
-                  
-                  // Use position_x and position_y from database, or auto-arrange
-                  const x = table.position_x || (index % cols) * spacingX + offsetX;
-                  const y = table.position_y || Math.floor(index / cols) * spacingY + offsetY;
-                  
-                  return (
-                    <VisualTable
+                    </ViewToggle>
+                    {serviceMode === 'dine-in' && (
+                      <UiButton primary onClick={handleAddTable}>
+                        <span style={{ fontSize: '18px', fontWeight: 300 }}>+</span> Add Table
+                      </UiButton>
+                    )}
+                  </ToolbarRight>
+                </Toolbar>
+              </Header>
+
+              {serviceMode !== 'dine-in' ? (
+                filteredOrders.length === 0 ? (
+                  <EmptyState>
+                    <EmptyIcon>{serviceMode === 'takeaway' ? '🥡' : '🚲'}</EmptyIcon>
+                    <EmptyTitle>No {serviceMode === 'takeaway' ? 'Takeaway' : 'Delivery'} Orders Found</EmptyTitle>
+                    <EmptyText>
+                      {searchQuery || filterStatus !== 'all'
+                        ? 'Try adjusting your search or filters'
+                        : `Active ${serviceMode} orders will appear here`}
+                    </EmptyText>
+                  </EmptyState>
+                ) : viewMode === 'grid' ? (
+                  <TableGrid>
+                    {filteredOrders.map(order => (
+                      <TableCard
+                        key={order.id}
+                        status={order.status === 'ready' ? 'available' : (order.status === 'in_progress' ? 'cleaning' : 'occupied')}
+                        billed={billedOrders.has(order.id)}
+                        onClick={() => handleViewOrder(order.id)}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <TableCardHeader>
+                          <TableNumber>
+                            {serviceMode === 'takeaway' ? 'Takeaway' : (serviceMode === 'delivery' ? 'Delivery' : 'Counter Order')}
+                            <span>{order.customer_name || 'Guest'}</span>
+                          </TableNumber>
+                          <StatusBadge status={order.status === 'ready' ? 'available' : (order.status === 'in_progress' ? 'cleaning' : 'occupied')}>
+                            {order.status}
+                          </StatusBadge>
+                        </TableCardHeader>
+
+                        <TableInfo>
+                          <InfoRow>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#1e293b' }}>
+                              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                              <polyline points="14 2 14 8 20 8"></polyline>
+                              <line x1="16" y1="13" x2="8" y2="13"></line>
+                              <line x1="16" y1="17" x2="8" y2="17"></line>
+                              <polyline points="10 9 9 9 8 9"></polyline>
+                            </svg>
+                            <InfoText style={{ fontWeight: 700, color: '#000000', fontSize: '12.5px' }}>Order #{order.id.slice(0, 8)}</InfoText>
+                          </InfoRow>
+                          <InfoRow>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#94a3b8' }}>
+                              <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"></path>
+                              <path d="M3 6h18"></path>
+                              <path d="M16 10a4 4 0 0 1-8 0"></path>
+                            </svg>
+                            <InfoText>{order.order_items?.length || 0} Items • ₹{(order.total_amount || 0).toFixed(2)}</InfoText>
+                          </InfoRow>
+
+                        </TableInfo>
+
+                        <TableActions onClick={(e) => e.stopPropagation()}>
+                          <ActionButton variant="primary" onClick={() => handlePrintBill(order.id)}>Bill</ActionButton>
+                          <ActionButton variant="warning" onClick={async () => {
+                            const full = await fetchFullOrder(order.id);
+                            if (full) {
+                              window.dispatchEvent(
+                                new CustomEvent('auto-print-order', {
+                                  detail: { ...full, autoPrint: true, kind: 'kot' }
+                                })
+                              );
+                            }
+                          }}>KOT</ActionButton>
+                          <div style={{ display: 'flex', gap: 8, width: '100%' }}>
+                            <ActionButton
+                              variant="success"
+                              style={{ flex: 1.5, height: 48 }}
+                              onClick={async () => {
+                                const full = await fetchFullOrder(order.id);
+                                if (full) setEditingOrder(full);
+                              }}
+                            >Edit</ActionButton>
+                            <ActionButton
+                              variant="danger"
+                              style={{ flex: 1, height: 48 }}
+                              onClick={async () => {
+                                const full = await fetchFullOrder(order.id);
+                                if (full) setCancelOrderDialog(full);
+                              }}
+                            >Cancel</ActionButton>
+                          </div>
+                          {order.is_credit && order.credit_customer_id ? (
+                            <ActionButton
+                              variant="danger"
+                              fullWidth
+                              onClick={(e) => handleFinishCreditOrder(e, order.id)}
+                            >Finish</ActionButton>
+                          ) : (
+                            <ActionButton
+                              variant="danger"
+                              fullWidth
+                              onClick={(e) => handlePaymentClick(e, { current_order: { id: order.id } })}
+                            >Pay & Finish</ActionButton>
+                          )}
+                        </TableActions>
+                      </TableCard>
+                    ))}
+                  </TableGrid>
+                ) : (
+                  <TableList>
+                    <TableListHeader>
+                      <div>Order ID</div>
+                      <div>Customer</div>
+                      <div>Status</div>
+                      <div>Items</div>
+                      <div>Total</div>
+                      <div>Actions</div>
+                    </TableListHeader>
+                    {filteredOrders.map(order => (
+                      <TableListRow
+                        key={order.id}
+                        status={order.status === 'ready' ? 'available' : (order.status === 'in_progress' ? 'cleaning' : 'occupied')}
+                        billed={billedOrders.has(order.id)}
+                        onClick={() => handleViewOrder(order.id)}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <div style={{ fontWeight: 700, fontSize: '12.5px', color: '#000000' }}>Order #{order.id.slice(0, 8)}</div>
+                        <div>
+                          <div style={{ fontWeight: 600 }}>
+                            {order.order_customers && order.order_customers.length > 0
+                              ? order.order_customers.map(c => c.restaurant_customer?.name).filter(Boolean).join(', ')
+                              : (order.customer_name || 'Guest')
+                            }
+                          </div>
+                          <div style={{ fontSize: '12px', color: '#64748b' }}>
+                            {order.order_customers && order.order_customers.length > 0
+                              ? order.order_customers.map(c => c.restaurant_customer?.phone).filter(Boolean).join(', ')
+                              : (order.customer_phone || '-')
+                            }
+                          </div>
+                        </div>
+                        <div><StatusBadge status={order.status === 'ready' ? 'available' : (order.status === 'in_progress' ? 'cleaning' : 'occupied')} minimal>{order.status}</StatusBadge></div>
+                        <div style={{ fontSize: '13px' }}>{order.order_items?.length || 0} items</div>
+                        <div style={{ fontWeight: 700 }}>₹{(order.total_amount || 0).toFixed(2)}</div>
+                        <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                          <ActionButton variant="primary" onClick={() => handlePrintBill(order.id)} style={{ padding: '6px 12px', height: '32px' }}>Bill</ActionButton>
+                          <ActionButton variant="warning" onClick={async () => {
+                            const full = await fetchFullOrder(order.id);
+                            if (full) {
+                              window.dispatchEvent(
+                                new CustomEvent('auto-print-order', {
+                                  detail: { ...full, autoPrint: true, kind: 'kot' }
+                                })
+                              );
+                            }
+                          }} style={{ padding: '6px 12px', height: '32px' }}>KOT</ActionButton>
+                          <ActionButton variant="success" onClick={async () => {
+                            const full = await fetchFullOrder(order.id);
+                            if (full) setEditingOrder(full);
+                          }} style={{ padding: '6px 12px', height: '32px' }}>Edit</ActionButton>
+                          <ActionButton variant="danger" onClick={async () => {
+                            const full = await fetchFullOrder(order.id);
+                            if (full) setCancelOrderDialog(full);
+                          }} style={{ padding: '6px 12px', height: '32px' }}>Cancel</ActionButton>
+                          {order.is_credit && order.credit_customer_id ? (
+                            <ActionButton variant="danger" onClick={(e) => handleFinishCreditOrder(e, order.id)} style={{ padding: '6px 12px', height: '32px' }}>Finish</ActionButton>
+                          ) : (
+                            <ActionButton variant="danger" onClick={(e) => handlePaymentClick(e, { current_order: { id: order.id } })} style={{ padding: '6px 12px', height: '32px' }}>Pay</ActionButton>
+                          )}
+                        </div>
+                      </TableListRow>
+                    ))}
+                  </TableList>
+                )
+              ) : filteredTables.length === 0 ? (
+                <EmptyState>
+                  <EmptyTitle>No Tables Found</EmptyTitle>
+                  <EmptyText>
+                    {searchQuery || filterSection !== 'all' || filterStatus !== 'all'
+                      ? 'Try adjusting your filters'
+                      : 'Get started by adding your first table'}
+                  </EmptyText>
+                  {!searchQuery && filterSection === 'all' && filterStatus === 'all' && (
+                    <Button primary onClick={handleAddTable}>
+                      + Add Your First Table
+                    </Button>
+                  )}
+                </EmptyState>
+              ) : viewMode === 'visual' ? (
+                <>
+                  <FloorPlanContainer>
+                    <FloorPlanLegend>
+                      <LegendItem>
+                        <LegendDot color="#ffffff" style={{ border: '1px solid #e2e8f0', boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.06)' }} />
+                        Available
+                      </LegendItem>
+                      <LegendItem>
+                        <LegendDot color="#ef4444" style={{ boxShadow: '0 2px 4px rgba(239, 68, 68, 0.2)' }} />
+                        Occupied
+                      </LegendItem>
+                      <LegendItem>
+                        <LegendDot color="#10b981" style={{ boxShadow: '0 2px 4px rgba(16, 185, 129, 0.2)' }} />
+                        Billed
+                      </LegendItem>
+                      <LegendItem>
+                        <LegendDot color="#3b82f6" />
+                        Reserved
+                      </LegendItem>
+                      <LegendItem>
+                        <LegendDot color="#f59e0b" />
+                        Cleaning
+                      </LegendItem>
+                      <LegendItem>
+                        <LegendDot color="#64748b" />
+                        Maintenance
+                      </LegendItem>
+                    </FloorPlanLegend>
+
+                    {filteredTables.map((table, index) => {
+                      // Responsive grid layout
+                      const isMobile = window.innerWidth <= 768;
+                      const cols = isMobile ? 3 : 5; // 3 columns on mobile, 5 on desktop
+                      const spacingX = isMobile ? 100 : 150; // Tighter spacing on mobile
+                      const spacingY = isMobile ? 85 : 130;
+                      const offsetX = isMobile ? 10 : 50;
+                      const offsetY = isMobile ? 10 : 50;
+
+                      // Use position_x and position_y from database, or auto-arrange
+                      const x = table.position_x || (index % cols) * spacingX + offsetX;
+                      const y = table.position_y || Math.floor(index / cols) * spacingY + offsetY;
+
+                      return (
+                        <VisualTable
+                          key={table.id}
+                          x={x}
+                          y={y}
+                          status={table.status}
+                          billed={table.current_order && billedOrders.has(table.current_order.id)}
+                          shape={table.shape}
+                          onClick={(e) => {
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            setPopoverPosition({
+                              x: rect.left + rect.width / 2,
+                              y: rect.top
+                            });
+                            setActiveVisualTable(table);
+                          }}
+                          title={`Table ${table.identifier} - ${table.status}\n${table.capacity} seats - ${table.section}`}
+                        >
+                          <VisualTableNumber>{table.identifier}</VisualTableNumber>
+                          <VisualTableCapacity>{table.capacity} seats</VisualTableCapacity>
+                        </VisualTable>
+                      );
+                    })}
+                  </FloorPlanContainer>
+
+                  {/* Visual Table Popover */}
+                  {activeVisualTable && (
+                    <>
+                      <PopoverBackdrop onClick={() => setActiveVisualTable(null)} />
+                      <VisualTablePopover x={popoverPosition.x} y={popoverPosition.y}>
+                        <PopoverHeader>
+                          <PopoverTitle>
+                            <PopoverTableNumber>Table {activeVisualTable.identifier}</PopoverTableNumber>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <StatusBadge status={activeVisualTable.status}>{activeVisualTable.status}</StatusBadge>
+                              <span style={{ fontSize: '13px', color: '#64748b', fontWeight: 600 }}>
+                                {activeVisualTable.capacity} Seats
+                              </span>
+                            </div>
+                          </PopoverTitle>
+                          <PopoverCloseButton onClick={() => setActiveVisualTable(null)}>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M18 6L6 18M6 6l12 12"></path>
+                            </svg>
+                          </PopoverCloseButton>
+                        </PopoverHeader>
+
+                        <PopoverContent>
+                          <InfoRow>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#94a3b8' }}>
+                              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                              <circle cx="12" cy="10" r="3"></circle>
+                            </svg>
+                            <InfoText>{activeVisualTable.section}</InfoText>
+                          </InfoRow>
+
+                          {activeVisualTable.current_order && (
+                            <InfoRow
+                              onClick={() => {
+                                handleViewOrder(activeVisualTable.current_order.id);
+                              }}
+                              style={{
+                                cursor: 'pointer',
+                                transition: 'all 0.2s',
+                                padding: '8px 12px',
+                                borderRadius: '10px',
+                                margin: '-4px -12px'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.background = 'transparent';
+                              }}
+                            >
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#1e293b' }}>
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                <polyline points="14 2 14 8 20 8"></polyline>
+                                <line x1="16" y1="13" x2="8" y2="13"></line>
+                                <line x1="16" y1="17" x2="8" y2="17"></line>
+                                <polyline points="10 9 9 9 8 9"></polyline>
+                              </svg>
+                              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                <InfoText style={{ fontWeight: 700, color: '#000000', fontSize: '12.5px' }}>Order #{activeVisualTable.current_order.id.substr(0, 8)}</InfoText>
+                                <MoveLink onClick={async (e) => {
+                                  e.stopPropagation();
+                                  const full = await fetchFullOrder(activeVisualTable.current_order.id);
+                                  if (full) {
+                                    setMovingOrder(full);
+                                    setSourceTable(activeVisualTable);
+                                  }
+                                  setActiveVisualTable(null);
+                                }}>
+                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                    <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"></path>
+                                  </svg>
+                                  Change Table
+                                </MoveLink>
+                              </div>
+                            </InfoRow>
+                          )}
+
+                          {activeVisualTable.notes && (activeVisualTable.status === 'reserved' || activeVisualTable.status === 'cleaning' || activeVisualTable.status === 'maintenance') && (
+                            <InfoRow style={{
+                              color: activeVisualTable.status === 'reserved' ? '#1d4ed8' :
+                                activeVisualTable.status === 'cleaning' ? '#c2410c' : '#475569',
+                              background: activeVisualTable.status === 'reserved' ? 'rgba(59, 130, 246, 0.05)' :
+                                activeVisualTable.status === 'cleaning' ? 'rgba(249, 115, 22, 0.05)' : 'rgba(0,0,0,0.03)',
+                              padding: '8px 12px',
+                              borderRadius: '12px',
+                              border: '1px solid rgba(0,0,0,0.02)'
+                            }}>
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                              </svg>
+                              <InfoText style={{ fontWeight: 600, fontSize: '12px' }}>{activeVisualTable.notes}</InfoText>
+                            </InfoRow>
+                          )}
+                        </PopoverContent>
+
+                        <PopoverActions>
+                          {/* Occupied table actions */}
+                          {activeVisualTable.status === 'occupied' && activeVisualTable.current_order && (
+                            <>
+                              <div style={{ display: 'flex', gap: '8px' }}>
+                                <ActionButton
+                                  variant="primary"
+                                  onClick={() => {
+                                    handlePrintBill(activeVisualTable.current_order.id);
+                                    setActiveVisualTable(null);
+                                  }}
+                                >
+                                  Bill
+                                </ActionButton>
+
+                                <ActionButton
+                                  variant="warning"
+                                  onClick={async () => {
+                                    const full = await fetchFullOrder(activeVisualTable.current_order.id);
+                                    if (full) {
+                                      window.dispatchEvent(
+                                        new CustomEvent('auto-print-order', {
+                                          detail: { ...full, autoPrint: true, kind: 'kot' }
+                                        })
+                                      );
+                                    }
+                                    setActiveVisualTable(null);
+                                  }}
+                                >
+                                  KOT
+                                </ActionButton>
+                              </div>
+
+                              <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
+                                <ActionButton
+                                  variant="success"
+                                  style={{ flex: 1, height: '48px' }}
+                                  onClick={async () => {
+                                    const full = await fetchFullOrder(activeVisualTable.current_order.id);
+                                    if (full) setEditingOrder(full);
+                                    setActiveVisualTable(null);
+                                  }}
+                                >
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                  </svg>
+                                  Edit
+                                </ActionButton>
+
+                                <ActionButton
+                                  variant="danger"
+                                  style={{ flex: 1, height: '48px' }}
+                                  onClick={async () => {
+                                    const full = await fetchFullOrder(activeVisualTable.current_order.id);
+                                    if (full) setCancelOrderDialog(full);
+                                    setActiveVisualTable(null);
+                                  }}
+                                >
+                                  Cancel
+                                </ActionButton>
+                              </div>
+
+
+                              {activeVisualTable.current_order?.is_credit && activeVisualTable.current_order?.credit_customer_id ? (
+                                <ActionButton
+                                  variant="danger"
+                                  fullWidth
+                                  onClick={(e) => {
+                                    handleFinishCreditOrder(e, activeVisualTable.current_order.id);
+                                    setActiveVisualTable(null);
+                                  }}
+                                >
+                                  Finish
+                                </ActionButton>
+                              ) : (
+                                <ActionButton
+                                  variant="danger"
+                                  fullWidth
+                                  onClick={(e) => {
+                                    handlePaymentClick(e, activeVisualTable);
+                                    setActiveVisualTable(null);
+                                  }}
+                                >
+                                  Pay & Finish
+                                </ActionButton>
+                              )}
+                            </>
+                          )}
+
+                          {/* Available table actions */}
+                          {activeVisualTable.status === 'available' && (
+                            <>
+                              <ActionButton
+                                variant="success"
+                                fullWidth
+                                style={{ marginBottom: '8px', background: '#0f172a', border: 'none' }}
+                                onClick={() => {
+                                  setCreateOrderTable(activeVisualTable);
+                                  setShowCreateOrderModal(true);
+                                  setActiveVisualTable(null);
+                                }}
+                              >
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
+                                  <path d="M12 5v14M5 12h14"></path>
+                                </svg>
+                                Create Order
+                              </ActionButton>
+                              <div style={{ display: 'flex', gap: '8px' }}>
+                                <ActionButton
+                                  variant="primary"
+                                  onClick={() => {
+                                    openNoteModal(activeVisualTable.id, 'reserved', 'Reservation Details', 'e.g. Reserved for John at 7 PM');
+                                    setActiveVisualTable(null);
+                                  }}
+                                >
+                                  Reservation
+                                </ActionButton>
+                                <ActionButton
+                                  variant="warning"
+                                  onClick={() => {
+                                    handleChangeStatus(activeVisualTable.id, 'cleaning');
+                                    setActiveVisualTable(null);
+                                  }}
+                                >
+                                  Cleaning
+                                </ActionButton>
+                              </div>
+                              <ActionButton
+                                variant="warning"
+                                fullWidth
+                                onClick={() => {
+                                  handleChangeStatus(activeVisualTable.id, 'maintenance');
+                                  setActiveVisualTable(null);
+                                }}
+                              >
+                                Maintenance
+                              </ActionButton>
+                            </>
+                          )}
+
+                          {/* Status-specific actions */}
+                          {activeVisualTable.status === 'cleaning' && (
+                            <ActionButton
+                              variant="warning"
+                              fullWidth
+                              onClick={() => {
+                                handleChangeStatus(activeVisualTable.id, 'available', { notes: '' });
+                                setActiveVisualTable(null);
+                              }}
+                            >
+                              Finish Cleaning
+                            </ActionButton>
+                          )}
+
+                          {activeVisualTable.status === 'maintenance' && (
+                            <ActionButton
+                              variant="warning"
+                              fullWidth
+                              onClick={() => {
+                                handleChangeStatus(activeVisualTable.id, 'available', { notes: '' });
+                                setActiveVisualTable(null);
+                              }}
+                            >
+                              Finish Maintenance
+                            </ActionButton>
+                          )}
+
+                          {activeVisualTable.status === 'reserved' && (
+                            <ActionButton
+                              variant="warning"
+                              fullWidth
+                              onClick={() => {
+                                handleChangeStatus(activeVisualTable.id, 'available', { notes: '' });
+                                setActiveVisualTable(null);
+                              }}
+                            >
+                              Cancel Reservation
+                            </ActionButton>
+                          )}
+
+                          {/* Edit table settings (available for all statuses) */}
+                          <ActionButton
+                            variant="secondary"
+                            fullWidth
+                            onClick={() => {
+                              handleEditTable(activeVisualTable);
+                              setActiveVisualTable(null);
+                            }}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
+                              <circle cx="12" cy="12" r="3"></circle>
+                              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                            </svg>
+                            Edit Table Settings
+                          </ActionButton>
+                        </PopoverActions>
+                      </VisualTablePopover>
+                    </>
+                  )}
+                </>
+              ) : viewMode === 'grid' ? (
+                <TableGrid>
+                  {filteredTables.map(table => (
+                    <TableCard
                       key={table.id}
-                      x={x}
-                      y={y}
                       status={table.status}
                       billed={table.current_order && billedOrders.has(table.current_order.id)}
-                      shape={table.shape}
-                      onClick={(e) => {
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        setPopoverPosition({
-                          x: rect.left + rect.width / 2,
-                          y: rect.top
-                        });
-                        setActiveVisualTable(table);
+                      onClick={() => {
+                        if (table.current_order?.id) {
+                          handleViewOrder(table.current_order.id);
+                        } else if (table.status === 'available') {
+                          setCreateOrderTable(table);
+                          setShowCreateOrderModal(true);
+                        }
                       }}
-                      title={`Table ${table.identifier} - ${table.status}\n${table.capacity} seats - ${table.section}`}
+                      style={{ cursor: (table.current_order || table.status === 'available') ? 'pointer' : 'default' }}
                     >
-                      <VisualTableNumber>{table.identifier}</VisualTableNumber>
-                      <VisualTableCapacity>{table.capacity} seats</VisualTableCapacity>
-                    </VisualTable>
-                  );
-                })}
-              </FloorPlanContainer>
-              
-              {/* Visual Table Popover */}
-              {activeVisualTable && (
-                <>
-                  <PopoverBackdrop onClick={() => setActiveVisualTable(null)} />
-                  <VisualTablePopover x={popoverPosition.x} y={popoverPosition.y}>
-                    <PopoverHeader>
-                      <PopoverTitle>
-                        <PopoverTableNumber>Table {activeVisualTable.identifier}</PopoverTableNumber>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <StatusBadge status={activeVisualTable.status}>{activeVisualTable.status}</StatusBadge>
-                          <span style={{ fontSize: '13px', color: '#64748b', fontWeight: 600 }}>
-                            {activeVisualTable.capacity} Seats
-                          </span>
+                      <TableCardHeader>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <TableNumber>
+                            {table.identifier}
+                            <span>{table.capacity} Seats</span>
+                          </TableNumber>
+                          <StatusBadge status={table.status}>{table.status}</StatusBadge>
                         </div>
-                      </PopoverTitle>
-                      <PopoverCloseButton onClick={() => setActiveVisualTable(null)}>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M18 6L6 18M6 6l12 12"></path>
-                        </svg>
-                      </PopoverCloseButton>
-                    </PopoverHeader>
-                    
-                    <PopoverContent>
-                      <InfoRow>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{color: '#94a3b8'}}>
-                          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
-                          <circle cx="12" cy="10" r="3"></circle>
-                        </svg>
-                        <InfoText>{activeVisualTable.section}</InfoText>
-                      </InfoRow>
-                      
-                      {activeVisualTable.current_order && (
-                        <InfoRow 
-                          onClick={() => {
-                            handleViewOrder(activeVisualTable.current_order.id);
-                          }}
-                          style={{ 
-                            cursor: 'pointer',
-                            transition: 'all 0.2s',
-                            padding: '8px 12px',
-                            borderRadius: '10px',
-                            margin: '-4px -12px'
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.background = 'transparent';
-                          }}
-                        >
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{color: '#1e293b'}}>
-                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                            <polyline points="14 2 14 8 20 8"></polyline>
-                            <line x1="16" y1="13" x2="8" y2="13"></line>
-                            <line x1="16" y1="17" x2="8" y2="17"></line>
-                            <polyline points="10 9 9 9 8 9"></polyline>
+                        <EditIcon onClick={(e) => { e.stopPropagation(); handleEditTable(table); }} title="Edit Table Settings">
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="12" r="3"></circle>
+                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
                           </svg>
+                        </EditIcon>
+                      </TableCardHeader>
+
+                      <TableInfo>
+                        <InfoRow>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#94a3b8' }}>
+                            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                            <circle cx="12" cy="10" r="3"></circle>
+                          </svg>
+                          <InfoText>{table.section}</InfoText>
+                        </InfoRow>
+                        {table.current_order && (
+                          <InfoRow>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#1e293b' }}>
+                              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                              <polyline points="14 2 14 8 20 8"></polyline>
+                              <line x1="16" y1="13" x2="8" y2="13"></line>
+                              <line x1="16" y1="17" x2="8" y2="17"></line>
+                              <polyline points="10 9 9 9 8 9"></polyline>
+                            </svg>
                             <div style={{ display: 'flex', flexDirection: 'column' }}>
-                              <InfoText style={{fontWeight: 700, color: '#000000', fontSize: '12.5px'}}>Order #{activeVisualTable.current_order.id.substr(0, 8)}</InfoText>
+                              <InfoText style={{ fontWeight: 700, color: '#000000', fontSize: '12.5px' }}>Order #{table.current_order.id.substr(0, 8)}</InfoText>
                               <MoveLink onClick={async (e) => {
                                 e.stopPropagation();
-                                const full = await fetchFullOrder(activeVisualTable.current_order.id);
-                                if(full) {
+                                const full = await fetchFullOrder(table.current_order.id);
+                                if (full) {
                                   setMovingOrder(full);
-                                  setSourceTable(activeVisualTable);
+                                  setSourceTable(table);
                                 }
-                                setActiveVisualTable(null);
                               }}>
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                                   <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"></path>
@@ -4301,631 +4589,343 @@ const handleModalResend = async (table) => {
                               </MoveLink>
                             </div>
                           </InfoRow>
-                      )}
-                      
-                      {activeVisualTable.notes && (activeVisualTable.status === 'reserved' || activeVisualTable.status === 'cleaning' || activeVisualTable.status === 'maintenance') && (
-                        <InfoRow style={{ 
-                          color: activeVisualTable.status === 'reserved' ? '#1d4ed8' : 
-                                activeVisualTable.status === 'cleaning' ? '#c2410c' : '#475569',
-                          background: activeVisualTable.status === 'reserved' ? 'rgba(59, 130, 246, 0.05)' : 
-                                     activeVisualTable.status === 'cleaning' ? 'rgba(249, 115, 22, 0.05)' : 'rgba(0,0,0,0.03)',
-                          padding: '8px 12px',
-                          borderRadius: '12px',
-                          border: '1px solid rgba(0,0,0,0.02)'
-                        }}>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-                          </svg>
-                          <InfoText style={{ fontWeight: 600, fontSize: '12px' }}>{activeVisualTable.notes}</InfoText>
-                        </InfoRow>
-                      )}
-                    </PopoverContent>
-                    
-                    <PopoverActions>
-                      {/* Occupied table actions */}
-                      {activeVisualTable.status === 'occupied' && activeVisualTable.current_order && (
-                        <>
-                          <div style={{ display: 'flex', gap: '8px' }}>
-                            <ActionButton 
+                        )}
+                        {table.status === 'available' && (
+                          <InfoRow style={{ opacity: 0.6 }}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                              <circle cx="12" cy="12" r="10"></circle>
+                              <polyline points="12 6 12 12 16 14"></polyline>
+                            </svg>
+                            <InfoText>Ready for guests</InfoText>
+                          </InfoRow>
+                        )}
+                        {table.notes && (table.status === 'reserved' || table.status === 'cleaning' || table.status === 'maintenance') && (
+                          <InfoRow style={{
+                            color: table.status === 'reserved' ? '#1d4ed8' :
+                              table.status === 'cleaning' ? '#c2410c' : '#475569',
+                            background: table.status === 'reserved' ? 'rgba(59, 130, 246, 0.05)' :
+                              table.status === 'cleaning' ? 'rgba(249, 115, 22, 0.05)' : 'rgba(0,0,0,0.03)',
+                            padding: '8px 12px',
+                            borderRadius: '12px',
+                            marginTop: '4px',
+                            border: '1px solid rgba(0,0,0,0.02)'
+                          }}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                            </svg>
+                            <InfoText style={{ fontWeight: 600, fontSize: '12px' }}>{table.notes}</InfoText>
+                          </InfoRow>
+                        )}
+                      </TableInfo>
+
+                      <TableActions onClick={(e) => e.stopPropagation()}>
+                        {table.status === 'occupied' && table.current_order && (
+                          <>
+                            <ActionButton
                               variant="primary"
-                              onClick={() => {
-                                handlePrintBill(activeVisualTable.current_order.id);
-                                setActiveVisualTable(null);
-                              }}
+                              onClick={() => handlePrintBill(table.current_order.id)}
                             >
                               Bill
                             </ActionButton>
-                            
-                            <ActionButton 
+
+                            <ActionButton
                               variant="warning"
                               onClick={async () => {
-                                const full = await fetchFullOrder(activeVisualTable.current_order.id);
-                                if(full) {
+                                const full = await fetchFullOrder(table.current_order.id);
+                                if (full) {
                                   window.dispatchEvent(
                                     new CustomEvent('auto-print-order', {
                                       detail: { ...full, autoPrint: true, kind: 'kot' }
                                     })
                                   );
                                 }
-                                setActiveVisualTable(null);
                               }}
                             >
                               KOT
                             </ActionButton>
-                          </div>
-                          
-                          <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
-                            <ActionButton 
+
+                            <div style={{ display: 'flex', gap: 8, width: '100%' }}>
+                              <ActionButton
+                                variant="success"
+                                style={{ flex: 1.5, height: 48 }}
+                                onClick={async () => {
+                                  const full = await fetchFullOrder(table.current_order.id);
+                                  if (full) setEditingOrder(full);
+                                }}
+                              >
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                </svg>
+                                Edit
+                              </ActionButton>
+                              <ActionButton
+                                variant="danger"
+                                style={{ flex: 1, height: 48 }}
+                                onClick={async () => {
+                                  const full = await fetchFullOrder(table.current_order.id);
+                                  if (full) setCancelOrderDialog(full);
+                                }}
+                              >
+                                Cancel
+                              </ActionButton>
+                            </div>
+                          </>
+                        )}
+
+                        {table.status === 'available' && (
+                          <>
+                            <div style={{ display: 'flex', gap: 8, width: '100%' }}>
+                              <ActionButton
+                                variant="primary"
+                                onClick={() => openNoteModal(table.id, 'reserved', 'Reservation Details', 'e.g. Reserved for John at 7 PM')}
+                              >
+                                Reservation
+                              </ActionButton>
+                              <ActionButton
+                                variant="warning"
+                                onClick={() => handleChangeStatus(table.id, 'cleaning')}
+                              >
+                                Cleaning
+                              </ActionButton>
+                            </div>
+                            <ActionButton
+                              variant="warning"
+                              fullWidth
+                              onClick={() => handleChangeStatus(table.id, 'maintenance')}
+                            >
+                              Maintenance
+                            </ActionButton>
+                          </>
+                        )}
+
+                        {table.status === 'cleaning' && (
+                          <ActionButton variant="warning" fullWidth onClick={() => handleChangeStatus(table.id, 'available', { notes: '' })}>
+                            Finish Cleaning
+                          </ActionButton>
+                        )}
+
+                        {table.status === 'maintenance' && (
+                          <ActionButton variant="warning" fullWidth onClick={() => handleChangeStatus(table.id, 'available', { notes: '' })}>
+                            Finish Maintenance
+                          </ActionButton>
+                        )}
+
+                        {table.status === 'reserved' && (
+                          <ActionButton variant="warning" fullWidth onClick={() => handleChangeStatus(table.id, 'available', { notes: '' })}>
+                            Cancel Reservation
+                          </ActionButton>
+                        )}
+
+                        {table.status === 'occupied' && (
+                          <>
+                            {table.current_order?.is_credit && table.current_order?.credit_customer_id ? (
+                              <ActionButton
+                                variant="success"
+                                fullWidth
+                                onClick={(e) => handleFinishCreditOrder(e, table.current_order.id)}
+                                style={{ background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)', border: 'none' }}
+                              >
+                                ✓ Finish
+                              </ActionButton>
+                            ) : (
+                              <ActionButton
+                                variant="danger"
+                                fullWidth
+                                onClick={(e) => handlePaymentClick(e, table)}
+                              >
+                                Pay & Finish
+                              </ActionButton>
+                            )}
+                          </>
+                        )}
+                      </TableActions>
+                    </TableCard>
+                  ))}
+                </TableGrid>
+              ) : (
+                <TableList>
+                  <TableListHeader>
+                    <div>Identifier</div>
+                    <div>Section</div>
+                    <div>Capacity</div>
+                    <div>Status</div>
+                    <div>Current Order</div>
+                    <div>Actions</div>
+                  </TableListHeader>
+                  {filteredTables.map(table => (
+                    <TableListRow
+                      key={table.id}
+                      status={table.status}
+                      billed={table.current_order && billedOrders.has(table.current_order.id)}
+                      onClick={() => {
+                        if (table.current_order?.id) {
+                          handleViewOrder(table.current_order.id);
+                        } else if (table.status === 'available') {
+                          setCreateOrderTable(table);
+                          setShowCreateOrderModal(true);
+                        }
+                      }}
+                      style={{ cursor: (table.current_order || table.status === 'available') ? 'pointer' : 'default' }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <EditIcon onClick={(e) => { e.stopPropagation(); handleEditTable(table); }} title="Edit Table Settings">
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="12" r="3"></circle>
+                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                          </svg>
+                        </EditIcon>
+                        <div style={{ fontWeight: 700, fontSize: '15px' }}>
+                          {table.identifier}
+                          {table.notes && (table.status === 'reserved' || table.status === 'cleaning' || table.status === 'maintenance') && (
+                            <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 400, fontStyle: 'italic', marginTop: '2px' }}>
+                              {table.notes}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div>{table.section}</div>
+                      <div>{table.capacity} seats</div>
+                      <div><StatusBadge status={table.status} minimal>{table.status}</StatusBadge></div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        {table.current_order ? (
+                          <>
+                            <span style={{ fontWeight: 700, color: '#000000', fontSize: '12.5px' }}>Order #{table.current_order.id.substr(0, 8)}</span>
+                            <MoveLink onClick={async (e) => {
+                              e.stopPropagation();
+                              const full = await fetchFullOrder(table.current_order.id);
+                              if (full) {
+                                setMovingOrder(full);
+                                setSourceTable(table);
+                              }
+                            }}>
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"></path>
+                              </svg>
+                              Change Table
+                            </MoveLink>
+                          </>
+                        ) : '-'}
+                      </div>
+                      <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        {/* Print Bill */}
+                        {table.current_order && (
+                          <ActionButton
+                            variant="primary"
+                            onClick={() => handlePrintBill(table.current_order.id)}
+                          >
+                            Bill
+                          </ActionButton>
+                        )}
+
+                        {/* Print KOT */}
+                        {table.current_order && (
+                          <ActionButton
+                            variant="warning"
+                            onClick={async () => {
+                              const full = await fetchFullOrder(table.current_order.id);
+                              if (full) {
+                                window.dispatchEvent(
+                                  new CustomEvent('auto-print-order', {
+                                    detail: { ...full, autoPrint: true, kind: 'kot' }
+                                  })
+                                );
+                              }
+                            }}
+                          >
+                            KOT
+                          </ActionButton>
+                        )}
+
+                        {/* Edit Order */}
+                        {table.current_order && (
+                          <>
+                            <ActionButton
                               variant="success"
-                              style={{ flex: 1, height: '48px' }}
                               onClick={async () => {
-                                const full = await fetchFullOrder(activeVisualTable.current_order.id);
-                                if(full) setEditingOrder(full);
-                                setActiveVisualTable(null);
+                                const full = await fetchFullOrder(table.current_order.id);
+                                if (full) setEditingOrder(full);
                               }}
                             >
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                                 <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                               </svg>
                               Edit
                             </ActionButton>
-
-                            <ActionButton 
+                            <ActionButton
                               variant="danger"
-                              style={{ flex: 1, height: '48px' }}
                               onClick={async () => {
-                                const full = await fetchFullOrder(activeVisualTable.current_order.id);
-                                if(full) setCancelOrderDialog(full);
-                                setActiveVisualTable(null);
+                                const full = await fetchFullOrder(table.current_order.id);
+                                if (full) setCancelOrderDialog(full);
                               }}
                             >
                               Cancel
                             </ActionButton>
-                          </div>
-                          
+                          </>
+                        )}
 
-                          {activeVisualTable.current_order?.is_credit && activeVisualTable.current_order?.credit_customer_id ? (
-                            <ActionButton 
-                              variant="danger"
-                              fullWidth
-                              onClick={(e) => {
-                                handleFinishCreditOrder(e, activeVisualTable.current_order.id);
-                                setActiveVisualTable(null);
-                              }}
-                            >
-                              Finish
-                            </ActionButton>
-                          ) : (
-                            <ActionButton 
-                              variant="danger"
-                              fullWidth
-                              onClick={(e) => {
-                                handlePaymentClick(e, activeVisualTable);
-                                setActiveVisualTable(null);
-                              }}
-                            >
-                              Pay & Finish
-                            </ActionButton>
-                          )}
-                        </>
-                      )}
-                      
-                      {/* Available table actions */}
-                      {activeVisualTable.status === 'available' && (
-                        <>
-                          <ActionButton 
-                            variant="success"
-                            fullWidth
-                            style={{ marginBottom: '8px', background: '#0f172a', border: 'none' }}
-                            onClick={() => {
-                              setCreateOrderTable(activeVisualTable);
-                              setShowCreateOrderModal(true);
-                              setActiveVisualTable(null);
-                            }}
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
-                              <path d="M12 5v14M5 12h14"></path>
-                            </svg>
-                            Create Order
+                        {table.status === 'available' && (
+                          <>
+                            <ActionButton variant="primary" onClick={() => openNoteModal(table.id, 'reserved', 'Reservation Details', 'Reservation name/time...')}>Reservation</ActionButton>
+                            <ActionButton variant="warning" onClick={() => handleChangeStatus(table.id, 'cleaning')}>Cleaning</ActionButton>
+                            <ActionButton variant="warning" onClick={() => handleChangeStatus(table.id, 'maintenance')}>Maintenance</ActionButton>
+                          </>
+                        )}
+
+                        {table.status === 'cleaning' && (
+                          <ActionButton variant="warning" onClick={() => handleChangeStatus(table.id, 'available', { notes: '' })}>
+                            Finish Cleaning
                           </ActionButton>
-                          <div style={{ display: 'flex', gap: '8px' }}>
-                            <ActionButton 
-                              variant="primary"
-                              onClick={() => {
-                                openNoteModal(activeVisualTable.id, 'reserved', 'Reservation Details', 'e.g. Reserved for John at 7 PM');
-                                setActiveVisualTable(null);
-                              }}
-                            >
-                              Reservation
-                            </ActionButton>
-                            <ActionButton 
-                              variant="warning"
-                              onClick={() => {
-                                handleChangeStatus(activeVisualTable.id, 'cleaning');
-                                setActiveVisualTable(null);
-                              }}
-                            >
-                              Cleaning
-                            </ActionButton>
-                          </div>
-                          <ActionButton 
-                            variant="warning"
-                            fullWidth
-                            onClick={() => {
-                              handleChangeStatus(activeVisualTable.id, 'maintenance');
-                              setActiveVisualTable(null);
-                            }}
-                          >
-                            Maintenance
+                        )}
+
+                        {table.status === 'maintenance' && (
+                          <ActionButton variant="warning" onClick={() => handleChangeStatus(table.id, 'available', { notes: '' })}>
+                            Finish Maintenance
                           </ActionButton>
-                        </>
-                      )}
-                      
-                      {/* Status-specific actions */}
-                      {activeVisualTable.status === 'cleaning' && (
-                        <ActionButton 
-                          variant="warning" 
-                          fullWidth 
-                          onClick={() => {
-                            handleChangeStatus(activeVisualTable.id, 'available', { notes: '' });
-                            setActiveVisualTable(null);
-                          }}
-                        >
-                          Finish Cleaning
-                        </ActionButton>
-                      )}
-                      
-                      {activeVisualTable.status === 'maintenance' && (
-                        <ActionButton 
-                          variant="warning" 
-                          fullWidth 
-                          onClick={() => {
-                            handleChangeStatus(activeVisualTable.id, 'available', { notes: '' });
-                            setActiveVisualTable(null);
-                          }}
-                        >
-                          Finish Maintenance
-                        </ActionButton>
-                      )}
-                      
-                      {activeVisualTable.status === 'reserved' && (
-                        <ActionButton 
-                          variant="warning" 
-                          fullWidth 
-                          onClick={() => {
-                            handleChangeStatus(activeVisualTable.id, 'available', { notes: '' });
-                            setActiveVisualTable(null);
-                          }}
-                        >
-                          Cancel Reservation
-                        </ActionButton>
-                      )}
-                      
-                      {/* Edit table settings (available for all statuses) */}
-                      <ActionButton 
-                        variant="secondary"
-                        fullWidth
-                        onClick={() => {
-                          handleEditTable(activeVisualTable);
-                          setActiveVisualTable(null);
-                        }}
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '6px' }}>
-                          <circle cx="12" cy="12" r="3"></circle>
-                          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-                        </svg>
-                        Edit Table Settings
-                      </ActionButton>
-                    </PopoverActions>
-                  </VisualTablePopover>
-                </>
+                        )}
+
+                        {table.status === 'reserved' && (
+                          <ActionButton variant="warning" onClick={() => handleChangeStatus(table.id, 'available', { notes: '' })}>
+                            Cancel Reservation
+                          </ActionButton>
+                        )}
+
+                        {table.status === 'occupied' && (
+                          <>
+                            {table.current_order?.is_credit && table.current_order?.credit_customer_id ? (
+                              <ActionButton
+                                variant="danger"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleFinishCreditOrder(e, table.current_order.id);
+                                }}
+                              >
+                                Finish
+                              </ActionButton>
+                            ) : (
+                              <ActionButton
+                                variant="danger"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handlePaymentClick(e, table);
+                                }}
+                              >
+                                Pay & Finish
+                              </ActionButton>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </TableListRow>
+                  ))}
+                </TableList>
               )}
             </>
-          ) : viewMode === 'grid' ? (
-            <TableGrid>
-          {filteredTables.map(table => (
-            <TableCard 
-              key={table.id} 
-              status={table.status}
-              billed={table.current_order && billedOrders.has(table.current_order.id)}
-              onClick={() => {
-                if (table.current_order?.id) {
-                   handleViewOrder(table.current_order.id);
-                } else if (table.status === 'available') {
-                   setCreateOrderTable(table);
-                   setShowCreateOrderModal(true);
-                }
-              }}
-              style={{ cursor: (table.current_order || table.status === 'available') ? 'pointer' : 'default' }}
-            >
-                <TableCardHeader>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <TableNumber>
-                      {table.identifier}
-                      <span>{table.capacity} Seats</span>
-                    </TableNumber>
-                    <StatusBadge status={table.status}>{table.status}</StatusBadge>
-                  </div>
-                  <EditIcon onClick={(e) => { e.stopPropagation(); handleEditTable(table); }} title="Edit Table Settings">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="12" cy="12" r="3"></circle>
-                      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-                    </svg>
-                  </EditIcon>
-                </TableCardHeader>
-              
-              <TableInfo>
-                <InfoRow>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{color: '#94a3b8'}}>
-                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
-                    <circle cx="12" cy="10" r="3"></circle>
-                  </svg>
-                  <InfoText>{table.section}</InfoText>
-                </InfoRow>
-                {table.current_order && (
-                  <InfoRow>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{color: '#1e293b'}}>
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                      <polyline points="14 2 14 8 20 8"></polyline>
-                      <line x1="16" y1="13" x2="8" y2="13"></line>
-                      <line x1="16" y1="17" x2="8" y2="17"></line>
-                      <polyline points="10 9 9 9 8 9"></polyline>
-                    </svg>
-                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      <InfoText style={{fontWeight: 700, color: '#000000', fontSize: '12.5px'}}>Order #{table.current_order.id.substr(0, 8)}</InfoText>
-                      <MoveLink onClick={async (e) => {
-                        e.stopPropagation();
-                        const full = await fetchFullOrder(table.current_order.id);
-                        if(full) {
-                          setMovingOrder(full);
-                          setSourceTable(table);
-                        }
-                      }}>
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                           <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"></path>
-                        </svg>
-                        Change Table
-                      </MoveLink>
-                    </div>
-                  </InfoRow>
-                )}
-                {table.status === 'available' && (
-                  <InfoRow style={{ opacity: 0.6 }}>
-                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                       <circle cx="12" cy="12" r="10"></circle>
-                       <polyline points="12 6 12 12 16 14"></polyline>
-                     </svg>
-                     <InfoText>Ready for guests</InfoText>
-                  </InfoRow>
-                )}
-                {table.notes && (table.status === 'reserved' || table.status === 'cleaning' || table.status === 'maintenance') && (
-                  <InfoRow style={{ 
-                    color: table.status === 'reserved' ? '#1d4ed8' : 
-                          table.status === 'cleaning' ? '#c2410c' : '#475569',
-                    background: table.status === 'reserved' ? 'rgba(59, 130, 246, 0.05)' : 
-                               table.status === 'cleaning' ? 'rgba(249, 115, 22, 0.05)' : 'rgba(0,0,0,0.03)',
-                    padding: '8px 12px',
-                    borderRadius: '12px',
-                    marginTop: '4px',
-                    border: '1px solid rgba(0,0,0,0.02)'
-                  }}>
-                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-                     </svg>
-                     <InfoText style={{ fontWeight: 600, fontSize: '12px' }}>{table.notes}</InfoText>
-                  </InfoRow>
-                )}
-              </TableInfo>
-              
-               <TableActions onClick={(e) => e.stopPropagation()}>
-                 {table.status === 'occupied' && table.current_order && (
-                   <>
-                    <ActionButton 
-                      variant="primary"
-                      onClick={() => handlePrintBill(table.current_order.id)}
-                    >
-                       Bill
-                    </ActionButton>
-
-                    <ActionButton 
-                      variant="warning"
-                      onClick={async () => {
-                        const full = await fetchFullOrder(table.current_order.id);
-                        if(full) {
-                          window.dispatchEvent(
-                            new CustomEvent('auto-print-order', {
-                              detail: { ...full, autoPrint: true, kind: 'kot' }
-                            })
-                          );
-                        }
-                      }}
-                    >
-                       KOT
-                    </ActionButton>
-
-                    <div style={{ display: 'flex', gap: 8, width: '100%' }}>
-                      <ActionButton 
-                        variant="success"
-                        style={{ flex: 1.5, height: 48 }}
-                        onClick={async () => {
-                          const full = await fetchFullOrder(table.current_order.id);
-                          if(full) setEditingOrder(full);
-                        }}
-                      >
-                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                           <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                           <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                         </svg>
-                         Edit
-                      </ActionButton>
-                      <ActionButton 
-                        variant="danger"
-                        style={{ flex: 1, height: 48 }}
-                        onClick={async () => {
-                          const full = await fetchFullOrder(table.current_order.id);
-                          if(full) setCancelOrderDialog(full);
-                        }}
-                      >
-                         Cancel
-                      </ActionButton>
-                    </div>
-                  </>
-                )}
-                
-                {table.status === 'available' && (
-                   <>
-                     <div style={{ display: 'flex', gap: 8, width: '100%' }}>
-                       <ActionButton 
-                         variant="primary" 
-                         onClick={() => openNoteModal(table.id, 'reserved', 'Reservation Details', 'e.g. Reserved for John at 7 PM')}
-                       >
-                         Reservation
-                       </ActionButton>
-                       <ActionButton 
-                         variant="warning" 
-                         onClick={() => handleChangeStatus(table.id, 'cleaning')}
-                       >
-                         Cleaning
-                       </ActionButton>
-                     </div>
-                     <ActionButton 
-                       variant="warning" 
-                       fullWidth
-                       onClick={() => handleChangeStatus(table.id, 'maintenance')}
-                     >
-                       Maintenance
-                     </ActionButton>
-                   </>
-                 )}
-
-                 {table.status === 'cleaning' && (
-                    <ActionButton variant="warning" fullWidth onClick={() => handleChangeStatus(table.id, 'available', { notes: '' })}>
-                       Finish Cleaning
-                    </ActionButton>
-                 )}
-
-                 {table.status === 'maintenance' && (
-                    <ActionButton variant="warning" fullWidth onClick={() => handleChangeStatus(table.id, 'available', { notes: '' })}>
-                       Finish Maintenance
-                    </ActionButton>
-                 )}
-
-                 {table.status === 'reserved' && (
-                    <ActionButton variant="warning" fullWidth onClick={() => handleChangeStatus(table.id, 'available', { notes: '' })}>
-                       Cancel Reservation
-                    </ActionButton>
-                 )}
-
-                 {table.status === 'occupied' && (
-                   <>
-                     {table.current_order?.is_credit && table.current_order?.credit_customer_id ? (
-                       <ActionButton 
-                         variant="success"
-                         fullWidth
-                         onClick={(e) => handleFinishCreditOrder(e, table.current_order.id)}
-                         style={{ background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)', border: 'none' }}
-                       >
-                         ✓ Finish
-                       </ActionButton>
-                     ) : (
-                       <ActionButton 
-                         variant="danger"
-                         fullWidth
-                         onClick={(e) => handlePaymentClick(e, table)}
-                       >
-                         Pay & Finish
-                       </ActionButton>
-                     )}
-                   </>
-                 )}
-              </TableActions>
-            </TableCard>
-          ))}
-        </TableGrid>
-      ) : (
-        <TableList>
-          <TableListHeader>
-            <div>Identifier</div>
-            <div>Section</div>
-            <div>Capacity</div>
-            <div>Status</div>
-            <div>Current Order</div>
-            <div>Actions</div>
-          </TableListHeader>
-          {filteredTables.map(table => (
-            <TableListRow 
-              key={table.id}
-              status={table.status}
-              billed={table.current_order && billedOrders.has(table.current_order.id)}
-              onClick={() => {
-                if (table.current_order?.id) {
-                   handleViewOrder(table.current_order.id);
-                } else if (table.status === 'available') {
-                   setCreateOrderTable(table);
-                   setShowCreateOrderModal(true);
-                }
-              }}
-              style={{ cursor: (table.current_order || table.status === 'available') ? 'pointer' : 'default' }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <EditIcon onClick={(e) => { e.stopPropagation(); handleEditTable(table); }} title="Edit Table Settings">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="3"></circle>
-                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-                  </svg>
-                </EditIcon>
-                <div style={{ fontWeight: 700, fontSize: '15px' }}>
-                  {table.identifier}
-                  {table.notes && (table.status === 'reserved' || table.status === 'cleaning' || table.status === 'maintenance') && (
-                    <div style={{ fontSize: '11px', color: '#64748b', fontWeight: 400, fontStyle: 'italic', marginTop: '2px' }}>
-                      {table.notes}
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div>{table.section}</div>
-              <div>{table.capacity} seats</div>
-              <div><StatusBadge status={table.status} minimal>{table.status}</StatusBadge></div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                {table.current_order ? (
-                  <>
-                    <span style={{ fontWeight: 700, color: '#000000', fontSize: '12.5px' }}>Order #{table.current_order.id.substr(0, 8)}</span>
-                    <MoveLink onClick={async (e) => {
-                      e.stopPropagation();
-                      const full = await fetchFullOrder(table.current_order.id);
-                      if(full) {
-                        setMovingOrder(full);
-                        setSourceTable(table);
-                      }
-                    }}>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                        <path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"></path>
-                      </svg>
-                      Change Table
-                    </MoveLink>
-                  </>
-                ) : '-'}
-              </div>
-              <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                {/* Print Bill */}
-                {table.current_order && (
-                   <ActionButton 
-                      variant="primary"
-                      onClick={() => handlePrintBill(table.current_order.id)}
-                   >
-                     Bill
-                   </ActionButton>
-                )}
-
-                {/* Print KOT */}
-                {table.current_order && (
-                   <ActionButton 
-                      variant="warning"
-                      onClick={async () => {
-                         const full = await fetchFullOrder(table.current_order.id);
-                         if(full) {
-                           window.dispatchEvent(
-                             new CustomEvent('auto-print-order', {
-                               detail: { ...full, autoPrint: true, kind: 'kot' }
-                             })
-                           );
-                         }
-                      }}
-                   >
-                     KOT
-                   </ActionButton>
-                )}
-
-                {/* Edit Order */}
-                {table.current_order && (
-                   <>
-                    <ActionButton 
-                       variant="success"
-                       onClick={async () => {
-                          const full = await fetchFullOrder(table.current_order.id);
-                          if(full) setEditingOrder(full);
-                       }}
-                    >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                      </svg>
-                      Edit
-                    </ActionButton>
-                    <ActionButton 
-                       variant="danger"
-                       onClick={async () => {
-                          const full = await fetchFullOrder(table.current_order.id);
-                          if(full) setCancelOrderDialog(full);
-                       }}
-                    >
-                      Cancel
-                    </ActionButton>
-                   </>
-                )}
-
-                {table.status === 'available' && (
-                  <>
-                    <ActionButton variant="primary" onClick={() => openNoteModal(table.id, 'reserved', 'Reservation Details', 'Reservation name/time...')}>Reservation</ActionButton>
-                    <ActionButton variant="warning" onClick={() => handleChangeStatus(table.id, 'cleaning')}>Cleaning</ActionButton>
-                    <ActionButton variant="warning" onClick={() => handleChangeStatus(table.id, 'maintenance')}>Maintenance</ActionButton>
-                  </>
-                )}
-
-                {table.status === 'cleaning' && (
-                  <ActionButton variant="warning" onClick={() => handleChangeStatus(table.id, 'available', { notes: '' })}>
-                    Finish Cleaning
-                  </ActionButton>
-                )}
-
-                {table.status === 'maintenance' && (
-                  <ActionButton variant="warning" onClick={() => handleChangeStatus(table.id, 'available', { notes: '' })}>
-                    Finish Maintenance
-                  </ActionButton>
-                )}
-
-                {table.status === 'reserved' && (
-                  <ActionButton variant="warning" onClick={() => handleChangeStatus(table.id, 'available', { notes: '' })}>
-                    Cancel Reservation
-                  </ActionButton>
-                )}
-
-                {table.status === 'occupied' && (
-                  <>
-                    {table.current_order?.is_credit && table.current_order?.credit_customer_id ? (
-                      <ActionButton 
-                        variant="danger"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleFinishCreditOrder(e, table.current_order.id);
-                        }}
-                      >
-                        Finish
-                      </ActionButton>
-                    ) : (
-                      <ActionButton 
-                        variant="danger"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handlePaymentClick(e, table);
-                        }}
-                      >
-                        Pay & Finish
-                      </ActionButton>
-                    )}
-                  </>
-                )}
-              </div>
-            </TableListRow>
-          ))}
-        </TableList>
-      ) }
-            </>
-          ) }
+          )}
         </MainContent>
       </MainLayout>
-      
+
       {showModal && (
         <Modal onClick={() => {
           setShowModal(false);
@@ -4934,10 +4934,10 @@ const handleModalResend = async (table) => {
           <ModalContent onClick={(e) => e.stopPropagation()} style={{ maxWidth: '650px' }}>
             <ModalHeader>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-                <div style={{ 
-                  width: '40px', 
-                  height: '40px', 
-                  borderRadius: '12px', 
+                <div style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '12px',
                   background: 'linear-gradient(135deg, #ea580c 0%, #f97316 100%)',
                   display: 'flex',
                   alignItems: 'center',
@@ -4956,12 +4956,12 @@ const handleModalResend = async (table) => {
                 </div>
               </div>
             </ModalHeader>
-            
+
             <ToggleCardGrid style={{ gridTemplateColumns: editingTable ? '1fr' : 'repeat(2, 1fr)' }}>
               {!editingTable && (
-                <ToggleCard 
+                <ToggleCard
                   active={formData.createMultiple}
-                  onClick={() => setFormData({...formData, createMultiple: !formData.createMultiple})}
+                  onClick={() => setFormData({ ...formData, createMultiple: !formData.createMultiple })}
                 >
                   <ToggleCardIcon active={formData.createMultiple}>
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -4984,10 +4984,10 @@ const handleModalResend = async (table) => {
 
               {restaurant?.features?.qr_ordering_enabled && (
                 editingTable ? (
-                  <ToggleCard 
+                  <ToggleCard
                     active={modalQrSent}
                     onClick={() => !modalQrSent && !sendingQr[editingTable.id] && handleModalResend(editingTable)}
-                    style={{ 
+                    style={{
                       cursor: (sendingQr[editingTable.id] || modalQrSent) ? 'not-allowed' : 'pointer',
                       opacity: (sendingQr[editingTable.id] || modalQrSent) ? 0.8 : 1,
                       transition: 'all 0.3s ease',
@@ -5020,13 +5020,13 @@ const handleModalResend = async (table) => {
                       </ToggleCardDescription>
                     </ToggleCardContent>
                     {!sendingQr[editingTable.id] && !modalQrSent && (
-                       <div style={{ color: '#ea580c', fontWeight: 700, fontSize: '13px', whiteSpace: 'nowrap' }}>Send Now →</div>
+                      <div style={{ color: '#ea580c', fontWeight: 700, fontSize: '13px', whiteSpace: 'nowrap' }}>Send Now →</div>
                     )}
                   </ToggleCard>
                 ) : (
-                  <ToggleCard 
+                  <ToggleCard
                     active={formData.sendEmail}
-                    onClick={() => setFormData({...formData, sendEmail: !formData.sendEmail})}
+                    onClick={() => setFormData({ ...formData, sendEmail: !formData.sendEmail })}
                   >
                     <ToggleCardIcon active={formData.sendEmail}>
                       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -5050,61 +5050,61 @@ const handleModalResend = async (table) => {
             <FormGrid>
               <FormField span={formData.createMultiple ? 1 : 2}>
                 <Label>{formData.createMultiple ? 'Identifier Prefix *' : 'Table Identifier *'}</Label>
-                <Input 
+                <Input
                   value={formData.identifier}
-                  onChange={(e) => setFormData({...formData, identifier: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, identifier: e.target.value })}
                   placeholder={formData.createMultiple ? 'e.g., T, A, B' : 'e.g., T1, A5, Window-1'}
                 />
               </FormField>
-              
+
               {formData.createMultiple && (
                 <FormField>
                   <Label>Table Count</Label>
-                  <Input 
+                  <Input
                     type="number"
                     min="2"
                     max="50"
                     value={formData.tableCount}
-                    onChange={(e) => setFormData({...formData, tableCount: parseInt(e.target.value) || 2})}
+                    onChange={(e) => setFormData({ ...formData, tableCount: parseInt(e.target.value) || 2 })}
                     placeholder="Number of tables"
                   />
                 </FormField>
               )}
-              
+
               <FormField>
                 <Label>Capacity (Seats)</Label>
-                <Input 
+                <Input
                   type="number"
                   min="1"
                   max="20"
                   value={formData.capacity}
-                  onChange={(e) => setFormData({...formData, capacity: parseInt(e.target.value) || ''})}
+                  onChange={(e) => setFormData({ ...formData, capacity: parseInt(e.target.value) || '' })}
                 />
               </FormField>
-              
+
               <FormField>
                 <Label>Section</Label>
-                <NiceSelect 
+                <NiceSelect
                   value={formData.section}
-                  onChange={(value) => setFormData({...formData, section: value})}
+                  onChange={(value) => setFormData({ ...formData, section: value })}
                   options={sections.map(s => ({ label: s.section_name, value: s.section_name }))}
                 />
               </FormField>
-              
+
               <FormField>
                 <Label>Floor Level</Label>
-                <NiceSelect 
+                <NiceSelect
                   value={formData.floor_level}
-                  onChange={(value) => setFormData({...formData, floor_level: value})}
+                  onChange={(value) => setFormData({ ...formData, floor_level: value })}
                   options={floors.map(f => ({ label: f.floor_name, value: f.floor_name }))}
                 />
               </FormField>
-              
+
               <FormField>
                 <Label>Status</Label>
-                <NiceSelect 
+                <NiceSelect
                   value={formData.status}
-                  onChange={(value) => setFormData({...formData, status: value})}
+                  onChange={(value) => setFormData({ ...formData, status: value })}
                   options={[
                     { label: 'Available', value: 'available' },
                     { label: 'Occupied', value: 'occupied' },
@@ -5117,9 +5117,9 @@ const handleModalResend = async (table) => {
 
               <FormField>
                 <Label>Visual Shape</Label>
-                <NiceSelect 
+                <NiceSelect
                   value={formData.shape}
-                  onChange={(value) => setFormData({...formData, shape: value})}
+                  onChange={(value) => setFormData({ ...formData, shape: value })}
                   options={[
                     { label: 'Rectangle', value: 'rectangle' },
                     { label: 'Square', value: 'square' },
@@ -5132,18 +5132,18 @@ const handleModalResend = async (table) => {
             <FormGrid>
               <FormField span={2}>
                 <Label>Internal Notes</Label>
-                <Textarea 
+                <Textarea
                   value={formData.notes}
-                  onChange={e => setFormData({...formData, notes: e.target.value})}
+                  onChange={e => setFormData({ ...formData, notes: e.target.value })}
                   placeholder="Any special notes about this table's location or usage..."
                   style={{ minHeight: '80px' }}
                 />
               </FormField>
             </FormGrid>
-        
+
             <ModalActions split={!!editingTable}>
               {editingTable ? (
-                <DangerButton 
+                <DangerButton
                   onClick={() => handleDeleteTable(editingTable.id)}
                   disabled={editingTable.status === 'occupied' || editingTable.status === 'reserved'}
                   title={editingTable.status === 'occupied' || editingTable.status === 'reserved' ? 'Cannot delete active tables' : 'Delete this table'}
@@ -5154,7 +5154,7 @@ const handleModalResend = async (table) => {
                   Delete Table
                 </DangerButton>
               ) : <div />}
-              
+
               <div style={{ display: 'flex', gap: '12px' }}>
                 <UiButton secondary onClick={() => {
                   setShowModal(false);
@@ -5235,7 +5235,7 @@ const handleModalResend = async (table) => {
                 )}
                 <div style={{ background: '#f8fafc', borderRadius: 10, padding: '10px 14px' }}>
                   <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>Status</div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: String(historyInvoice.status||'').toLowerCase() === 'void' ? '#dc2626' : '#10b981', textTransform: 'capitalize' }}>{historyInvoice.status || 'Paid'}</div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: String(historyInvoice.status || '').toLowerCase() === 'void' ? '#dc2626' : '#10b981', textTransform: 'capitalize' }}>{historyInvoice.status || 'Paid'}</div>
                 </div>
               </div>
 
@@ -5303,12 +5303,12 @@ const handleModalResend = async (table) => {
       )}
 
       {editingOrder && (
-         <EditOrderPanel 
-            order={editingOrder} 
-            onClose={() => setEditingOrder(null)}
-            onSave={handleEditSave}
-            tablesCount={10} 
-         />
+        <EditOrderPanel
+          order={editingOrder}
+          onClose={() => setEditingOrder(null)}
+          onSave={handleEditSave}
+          tablesCount={10}
+        />
       )}
 
       {showPaymentModal && paymentOrder && (
@@ -5325,10 +5325,10 @@ const handleModalResend = async (table) => {
               <Title style={{ fontSize: '24px' }}>{noteTableData.title}</Title>
               <Subtitle>Please enter a brief note for this state change.</Subtitle>
             </ModalHeader>
-            
+
             <FormField style={{ marginBottom: '24px' }}>
               <Label>Note / Description</Label>
-              <Textarea 
+              <Textarea
                 autoFocus
                 value={tempNote}
                 onChange={e => setTempNote(e.target.value)}
@@ -5355,12 +5355,12 @@ const handleModalResend = async (table) => {
               <ModalTitle>Manage Sections</ModalTitle>
               <ModalSubtitle>Create and organize dining areas</ModalSubtitle>
             </ModalHeader>
-            
+
             <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-              <Input 
-                value={newSectionName} 
-                onChange={e => setNewSectionName(e.target.value)} 
-                placeholder="New section name..." 
+              <Input
+                value={newSectionName}
+                onChange={e => setNewSectionName(e.target.value)}
+                placeholder="New section name..."
               />
               <UiButton primary onClick={() => {
                 if (newSectionName.trim()) {
@@ -5369,7 +5369,7 @@ const handleModalResend = async (table) => {
                 }
               }}>Add</UiButton>
             </div>
-            
+
             <ManageList>
               {sections.map((section) => {
                 const tableCount = tables.filter(t => t.section === section.section_name).length;
@@ -5380,7 +5380,7 @@ const handleModalResend = async (table) => {
                       <span style={{ fontSize: '11px', color: '#64748b', fontWeight: 600 }}>{tableCount} {tableCount === 1 ? 'Table' : 'Tables'}</span>
                     </ItemInfo>
                     <ItemActions>
-                      <TrashButton 
+                      <TrashButton
                         onClick={() => handleDeleteSection(section.id)}
                         title={tableCount > 0 ? "Cannot delete section with active tables" : "Delete section"}
                         style={{ opacity: tableCount > 0 ? 0.4 : 1 }}
@@ -5394,7 +5394,7 @@ const handleModalResend = async (table) => {
                 );
               })}
             </ManageList>
-            
+
             <ModalActions>
               <UiButton secondary onClick={() => setShowSectionsModal(false)}>Close</UiButton>
             </ModalActions>
@@ -5409,12 +5409,12 @@ const handleModalResend = async (table) => {
               <ModalTitle>Manage Floors</ModalTitle>
               <ModalSubtitle>Define floor levels for your restaurant</ModalSubtitle>
             </ModalHeader>
-            
+
             <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-              <Input 
-                value={newFloorName} 
-                onChange={e => setNewFloorName(e.target.value)} 
-                placeholder="New floor level..." 
+              <Input
+                value={newFloorName}
+                onChange={e => setNewFloorName(e.target.value)}
+                placeholder="New floor level..."
               />
               <UiButton primary onClick={() => {
                 if (newFloorName.trim()) {
@@ -5423,7 +5423,7 @@ const handleModalResend = async (table) => {
                 }
               }}>Add</UiButton>
             </div>
-            
+
             <ManageList>
               {floors.map((floor) => {
                 const tableCount = tables.filter(t => t.floor_level === floor.floor_name).length;
@@ -5435,7 +5435,7 @@ const handleModalResend = async (table) => {
                     </ItemInfo>
                     <ItemActions>
                       {!floor.fallback && (
-                        <TrashButton 
+                        <TrashButton
                           onClick={() => handleDeleteFloor(floor.id)}
                           title={tableCount > 0 ? "Cannot delete floor with active tables" : "Delete floor"}
                           style={{ opacity: tableCount > 0 ? 0.4 : 1 }}
@@ -5450,7 +5450,7 @@ const handleModalResend = async (table) => {
                 );
               })}
             </ManageList>
-            
+
             <ModalActions>
               <UiButton secondary onClick={() => setShowFloorsModal(false)}>Close</UiButton>
             </ModalActions>
@@ -5473,10 +5473,10 @@ const handleModalResend = async (table) => {
         orderType={serviceMode === 'dine-in' ? 'dine-in' : (serviceMode === 'takeaway' ? 'takeaway' : 'delivery')}
       />
       {cancelOrderDialog && (
-        <CancelConfirmDialog 
-          order={cancelOrderDialog} 
-          onConfirm={handleCancelConfirm} 
-          onCancel={() => setCancelOrderDialog(null)} 
+        <CancelConfirmDialog
+          order={cancelOrderDialog}
+          onConfirm={handleCancelConfirm}
+          onCancel={() => setCancelOrderDialog(null)}
         />
       )}
 
