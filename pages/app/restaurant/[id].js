@@ -28,6 +28,10 @@ export default function DeliveryRestaurantMenu() {
   const [isDesktop, setIsDesktop] = useState(false);
   const [showToast, setShowToast] = useState(false);
 
+  // Delivery availability state
+  const [isDeliveryClosed, setIsDeliveryClosed] = useState(false);
+  const [deliveryClosedMessage, setDeliveryClosedMessage] = useState("");
+
   useEffect(() => {
     const check = () => setIsDesktop(window.innerWidth > 768);
     check();
@@ -52,11 +56,54 @@ export default function DeliveryRestaurantMenu() {
       setLoading(true);
       const { data } = await supabase
         .from("restaurants")
-        .select("id, name, restaurant_profiles(brand_color, gst_enabled, default_tax_rate, prices_include_tax)")
+        .select("id, name, delivery_paused, restaurant_profiles(brand_color, gst_enabled, default_tax_rate, prices_include_tax)")
         .eq("id", restaurantId)
         .single();
 
       setRestaurant(data || null);
+
+      // Check delivery availability
+      if (data) {
+        if (data.delivery_paused) {
+          setIsDeliveryClosed(true);
+          setDeliveryClosedMessage("Delivery is currently paused");
+          setLoading(false);
+          return;
+        }
+
+        const { data: dHours } = await supabase
+          .from("delivery_hours")
+          .select("dow, open_time, close_time, enabled")
+          .eq("restaurant_id", restaurantId);
+
+        if (dHours && dHours.length > 0) {
+          const now = new Date();
+          const currentDOW = now.getDay() === 0 ? 7 : now.getDay();
+          const currentTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+          const todayHours = dHours.find((h) => h.dow === currentDOW);
+
+          if (!todayHours || !todayHours.enabled) {
+            setIsDeliveryClosed(true);
+            setDeliveryClosedMessage("Delivery is not available today");
+            setLoading(false);
+            return;
+          }
+
+          if (todayHours.open_time && todayHours.close_time) {
+            const openTime = todayHours.open_time.substring(0, 5);
+            const closeTime = todayHours.close_time.substring(0, 5);
+            if (currentTime < openTime || currentTime > closeTime) {
+              setIsDeliveryClosed(true);
+              setDeliveryClosedMessage(`Delivery is closed. Opens at ${openTime}, closes at ${closeTime}`);
+              setLoading(false);
+              return;
+            }
+          }
+        }
+        // No delivery_hours rows → default to always open
+        setIsDeliveryClosed(false);
+      }
+
       setLoading(false);
     };
 
@@ -204,6 +251,35 @@ export default function DeliveryRestaurantMenu() {
 
   if (loading) return <div className="p-4 text-center text-gray-500">Loading...</div>;
   if (!restaurantId) return <div style={{ padding: 40, textAlign: "center" }}>Missing restaurant.</div>;
+
+  if (isDeliveryClosed) {
+    return (
+      <div style={{
+        minHeight: '100vh', display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        background: '#f8fafc', padding: 24, textAlign: 'center',
+        fontFamily: 'system-ui, -apple-system, sans-serif'
+      }}>
+        <div style={{ fontSize: 48, marginBottom: 16 }}>🕐</div>
+        <h2 style={{ margin: '0 0 8px', fontSize: 22, fontWeight: 800, color: '#1e293b' }}>
+          {deliveryClosedMessage}
+        </h2>
+        <p style={{ fontSize: 15, color: '#64748b', maxWidth: 320, lineHeight: 1.6, margin: '0 0 24px' }}>
+          Please check back during delivery hours.
+        </p>
+        <button
+          onClick={() => router.back()}
+          style={{
+            padding: '12px 24px', borderRadius: 12,
+            background: '#f97316', color: '#fff', border: 'none',
+            fontWeight: 700, fontSize: 15, cursor: 'pointer'
+          }}
+        >
+          Go Back
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="delivery-menu-page">

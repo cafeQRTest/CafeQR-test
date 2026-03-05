@@ -22,6 +22,7 @@ import {
   FaIdBadge,
   FaFileAlt,
   FaBookOpen,
+  FaTruck,
 } from 'react-icons/fa';
 import { signOutAndRedirect } from '../lib/authActions';
 import { getSupabase } from '../services/supabase';
@@ -37,6 +38,7 @@ const ROLE_ALLOWED_PREFIXES = {
     '/owner/counter',
     '/owner/inventory',
     '/owner/availability',
+    '/owner/delivery-availability',
     '/owner/production',
     '/owner/credit-customers',
     '/owner/credit-sales-report',
@@ -602,8 +604,11 @@ function Sidebar({ collapsed, onSignOut, isSigningOut }) {
     ...(feature.table_ordering_enabled
       ? [
         { href: '/owner/tables', label: 'Tables', icon: <FaUtensils /> },
-        ...(feature.qr_ordering_enabled !== false ? [{ href: '/owner/availability', label: 'Availability', icon: <FaClock /> }] : [])
+        ...(feature.qr_ordering_enabled !== false ? [{ href: '/owner/availability', label: 'QR Availability', icon: <FaClock /> }] : [])
       ]
+      : []),
+    ...(feature.delivery_enabled
+      ? [{ href: '/owner/delivery-availability', label: 'Delivery Hours', icon: <FaTruck /> }]
       : []),
     ...(feature.production_enabled
       ? [{ href: '/owner/production', label: 'Production', icon: <FaIndustry /> }]
@@ -937,9 +942,10 @@ function MobileSidebar({ onNavigate, onSignOut, isSigningOut }) {
     ...(feature.table_ordering_enabled
       ? [
         { href: '/owner/tables', label: 'Tables', icon: <FaUtensils /> },
-        ...(feature.qr_ordering_enabled !== false ? [{ href: '/owner/availability', label: 'Availability', icon: <FaClock /> }] : [])
+        ...(feature.qr_ordering_enabled !== false ? [{ href: '/owner/availability', label: 'QR Availability', icon: <FaClock /> }] : [])
       ]
       : []),
+    { href: '/owner/delivery-availability', label: 'Delivery Hours', icon: <FaTruck /> },
     ...(feature.production_enabled
       ? [{ href: '/owner/production', label: 'Production', icon: <FaIndustry /> }]
       : []),

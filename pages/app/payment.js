@@ -33,6 +33,10 @@ export default function DeliveryPayment() {
   const [custStreet, setCustStreet] = useState("");
   const [note, setNote] = useState("");
 
+  // Delivery availability state (defense-in-depth)
+  const [isDeliveryClosed, setIsDeliveryClosed] = useState(false);
+  const [deliveryClosedMessage, setDeliveryClosedMessage] = useState("");
+
   const isNameValid = custName.trim().length > 0;
   const isPhoneValid = custPhone.length >= 10;
   const isAddrValid = custHouseNo.trim().length > 0;
@@ -50,6 +54,7 @@ export default function DeliveryPayment() {
           `
           id,
           name,
+          delivery_paused,
           restaurant_profiles(
             brand_color,
             online_payment_enabled,
@@ -105,6 +110,38 @@ export default function DeliveryPayment() {
       }
 
       setLoading(false);
+
+      // Check delivery availability (defense-in-depth)
+      if (rest) {
+        if (rest.delivery_paused) {
+          setIsDeliveryClosed(true);
+          setDeliveryClosedMessage("Delivery is currently paused");
+        } else {
+          const { data: dHours } = await supabase
+            .from("delivery_hours")
+            .select("dow, open_time, close_time, enabled")
+            .eq("restaurant_id", restaurantId);
+
+          if (dHours && dHours.length > 0) {
+            const now = new Date();
+            const currentDOW = now.getDay() === 0 ? 7 : now.getDay();
+            const currentTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+            const todayHours = dHours.find((h) => h.dow === currentDOW);
+
+            if (!todayHours || !todayHours.enabled) {
+              setIsDeliveryClosed(true);
+              setDeliveryClosedMessage("Delivery is not available today");
+            } else if (todayHours.open_time && todayHours.close_time) {
+              const openTime = todayHours.open_time.substring(0, 5);
+              const closeTime = todayHours.close_time.substring(0, 5);
+              if (currentTime < openTime || currentTime > closeTime) {
+                setIsDeliveryClosed(true);
+                setDeliveryClosedMessage(`Delivery is closed. Opens at ${openTime}, closes at ${closeTime}`);
+              }
+            }
+          }
+        }
+      }
     };
 
     load();
@@ -582,6 +619,17 @@ export default function DeliveryPayment() {
         <div style={{ fontWeight: 900, flex: 1 }}>Delivery details</div>
       </header>
 
+      {isDeliveryClosed && (
+        <div style={{
+          margin: '12px 16px', padding: '14px 18px', borderRadius: 12,
+          background: '#fef2f2', border: '1px solid #fee2e2',
+          display: 'flex', alignItems: 'center', gap: 10,
+          fontSize: 14, fontWeight: 600, color: '#dc2626'
+        }}>
+          🕐 {deliveryClosedMessage}
+        </div>
+      )}
+
       <div style={{ padding: 16, display: "grid", gap: 12 }}>
         <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: 14 }}>
           <div style={{ fontWeight: 900, marginBottom: 10 }}>Customer info</div>
@@ -785,11 +833,11 @@ export default function DeliveryPayment() {
         }}
       >
         <button
-          disabled={placing || !isFormValid}
+          disabled={placing || !isFormValid || isDeliveryClosed}
           onClick={() => (payMode === "online" ? payOnlineRazorpay() : placeCOD())}
           style={{
             width: "100%",
-            background: placing || !isFormValid ? "#d1d5db" : brandColor,
+            background: placing || !isFormValid || isDeliveryClosed ? "#d1d5db" : brandColor,
             color: "#fff",
             padding: 16,
             borderRadius: 14,

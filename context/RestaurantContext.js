@@ -18,7 +18,7 @@ const RestaurantCtx = createContext({
   isManager: false,
   isStaff: false,
   staffName: null,
-  refresh: async () => {},
+  refresh: async () => { },
 });
 
 export function RestaurantProvider({ children }) {
@@ -92,7 +92,7 @@ export function RestaurantProvider({ children }) {
         if (!found && userEmail) {
           const { data: staffRow, error: staffErr } = await supabase
             .from('restaurant_staff')
-	    .select('restaurant_id, role, staff_name')
+            .select('restaurant_id, role, staff_name')
             .eq('staff_email', userEmail.toLowerCase())
             .maybeSingle();
           if (staffErr) {
@@ -107,7 +107,7 @@ export function RestaurantProvider({ children }) {
             if (restErr) throw restErr;
             if (rest) {
               // Attach the bound staff role temporarily
-	      found = { ...rest, _staffRole: staffRow.role, _staffName: staffRow.staff_name };
+              found = { ...rest, _staffRole: staffRow.role, _staffName: staffRow.staff_name };
             }
           }
         }
@@ -116,36 +116,41 @@ export function RestaurantProvider({ children }) {
         if (found?.id) {
           try {
             const { data: prof } = await supabase
-  .from('restaurant_profiles')
-  .select(
-    'features_credit_enabled,features_production_enabled,features_inventory_enabled,features_table_ordering_enabled,qr_ordering_enabled,' +
-    'featurescustomersenabled,featuresloyaltyenabled,' +
-    'round_off_enabled,round_off_mode,round_off_auto_factor,round_off_manual_limit,' +
-    'gst_enabled,gstin,fssai_license,prices_include_tax,default_tax_rate'
-  )
-  .eq('restaurant_id', found.id)
-  .maybeSingle();
+              .from('restaurant_profiles')
+              .select(
+                'features_credit_enabled,features_production_enabled,features_inventory_enabled,features_table_ordering_enabled,qr_ordering_enabled,' +
+                'featurescustomersenabled,featuresloyaltyenabled,' +
+                'delivery_enabled,delivery_webpage_enabled,delivery_app_enabled,' +
+                'round_off_enabled,round_off_mode,round_off_auto_factor,round_off_manual_limit,' +
+                'gst_enabled,gstin,fssai_license,prices_include_tax,default_tax_rate'
+              )
+              .eq('restaurant_id', found.id)
+              .maybeSingle();
 
 
             const features = {
-  credit_enabled: !!prof?.features_credit_enabled,
-  production_enabled: !!prof?.features_production_enabled,
-  inventory_enabled: !!prof?.features_inventory_enabled,
-  table_ordering_enabled: !!prof?.features_table_ordering_enabled,
-  qr_ordering_enabled: prof?.qr_ordering_enabled !== false, // Default to true if not set
+              credit_enabled: !!prof?.features_credit_enabled,
+              production_enabled: !!prof?.features_production_enabled,
+              inventory_enabled: !!prof?.features_inventory_enabled,
+              table_ordering_enabled: !!prof?.features_table_ordering_enabled,
+              qr_ordering_enabled: prof?.qr_ordering_enabled !== false, // Default to true if not set
 
-  customers_enabled: !!prof?.featurescustomersenabled,
-  loyalty_enabled: !!prof?.featuresloyaltyenabled,
+              customers_enabled: !!prof?.featurescustomersenabled,
+              loyalty_enabled: !!prof?.featuresloyaltyenabled,
 
-  round_off: {
-    enabled: !!prof?.round_off_enabled,
-    mode: prof?.round_off_mode || 'automatic',
-    factor: Number(prof?.round_off_auto_factor || 1),
-    limit: Number(prof?.round_off_manual_limit || 10),
-  },
-};
+              delivery_enabled: !!prof?.delivery_enabled,
+              delivery_webpage_enabled: prof?.delivery_webpage_enabled !== false,
+              delivery_app_enabled: !!prof?.delivery_app_enabled,
 
-found = { ...found, features, ...prof };
+              round_off: {
+                enabled: !!prof?.round_off_enabled,
+                mode: prof?.round_off_mode || 'automatic',
+                factor: Number(prof?.round_off_auto_factor || 1),
+                limit: Number(prof?.round_off_manual_limit || 10),
+              },
+            };
+
+            found = { ...found, features, ...prof };
 
           } catch {
             // ignore profile read errors; leave features undefined/absent
@@ -165,13 +170,13 @@ found = { ...found, features, ...prof };
             try {
               const { data: staffRow2 } = await supabase
                 .from('restaurant_staff')
-		.select('role, staff_name')
+                .select('role, staff_name')
                 .eq('restaurant_id', found.id)
                 .eq('staff_email', userEmail.toLowerCase())
                 .maybeSingle();
               if (staffRow2?.role === 'manager' || staffRow2?.role === 'staff') {
                 role = staffRow2.role;
-	        found = { ...found, _staffName: staffRow2.staff_name };
+                found = { ...found, _staffName: staffRow2.staff_name };
 
               }
             } catch {
@@ -181,13 +186,13 @@ found = { ...found, features, ...prof };
         }
 
         if (found) {
-	  const staffName = found._staffName || null;
+          const staffName = found._staffName || null;
 
-	  delete found._staffRole;
- 	  delete found._staffName;
+          delete found._staffRole;
+          delete found._staffName;
 
-	  found = { ...found, role, staff_name: staffName };
-	}
+          found = { ...found, role, staff_name: staffName };
+        }
 
 
         if (!cancelled) setRestaurant(found);
@@ -242,7 +247,7 @@ found = { ...found, features, ...prof };
       isAdmin: role === 'admin',
       isManager: role === 'manager',
       isStaff: role === 'staff',
-    staffName: restaurant?.staff_name || null,
+      staffName: restaurant?.staff_name || null,
 
       refresh: async () => {
         setRefreshKey(prev => prev + 1);

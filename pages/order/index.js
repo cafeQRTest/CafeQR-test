@@ -31,7 +31,7 @@ export default function OrderPage() {
   const menuMapRef = useRef(new Map())
   const cacheMenuIntoMap = (list) => {
     const m = new Map()
-    ;(list || []).forEach((row) => m.set(row.id, row))
+      ; (list || []).forEach((row) => m.set(row.id, row))
     menuMapRef.current = m
   }
   const [justAddedItem, setJustAddedItem] = useState('')
@@ -44,9 +44,9 @@ export default function OrderPage() {
   const [showVariantSelector, setShowVariantSelector] = useState(false)
   const [selectedItem, setSelectedItem] = useState(null)
   const [editingVariantItem, setEditingVariantItem] = useState(null)
-  
+
   const [dismissedNotice, setDismissedNotice] = useState(false);
-  
+
   // Carousel Logic
   const carouselRef = useRef(null);
   const [showLeftArrow, setShowLeftArrow] = useState(false);
@@ -86,33 +86,33 @@ export default function OrderPage() {
     if (typeof window === 'undefined') return
     if (!('serviceWorker' in navigator)) return
 
-    ;(async () => {
-      try {
-        // 1. Unregister any old app-wide service workers (keep FCM worker if present)
-        const regs = await navigator.serviceWorker.getRegistrations()
-        await Promise.all(
-          regs.map(async (reg) => {
-            const scriptUrl = reg.active?.scriptURL || reg.installing?.scriptURL || reg.waiting?.scriptURL || ''
-            // Keep the dedicated Firebase messaging SW (used for owner alerts)
-            if (scriptUrl.includes('firebase-messaging-sw.js')) return
-            try {
-              await reg.unregister()
-            } catch {
-              // ignore – better to fail silently than block the page
-            }
-          })
-        )
+      ; (async () => {
+        try {
+          // 1. Unregister any old app-wide service workers (keep FCM worker if present)
+          const regs = await navigator.serviceWorker.getRegistrations()
+          await Promise.all(
+            regs.map(async (reg) => {
+              const scriptUrl = reg.active?.scriptURL || reg.installing?.scriptURL || reg.waiting?.scriptURL || ''
+              // Keep the dedicated Firebase messaging SW (used for owner alerts)
+              if (scriptUrl.includes('firebase-messaging-sw.js')) return
+              try {
+                await reg.unregister()
+              } catch {
+                // ignore – better to fail silently than block the page
+              }
+            })
+          )
 
-        // 2. Clear all HTTP caches for this origin (same as clearing site data caches)
-        if (window.caches) {
-          const keys = await caches.keys()
-          await Promise.all(keys.map((key) => caches.delete(key)))
+          // 2. Clear all HTTP caches for this origin (same as clearing site data caches)
+          if (window.caches) {
+            const keys = await caches.keys()
+            await Promise.all(keys.map((key) => caches.delete(key)))
+          }
+        } catch (e) {
+          // Failing to clean up should never break ordering
+          console.warn('[order] cache cleanup skipped:', e?.message || e)
         }
-      } catch (e) {
-        // Failing to clean up should never break ordering
-        console.warn('[order] cache cleanup skipped:', e?.message || e)
-      }
-    })()
+      })()
   }, [])
 
   useEffect(() => {
@@ -154,36 +154,105 @@ export default function OrderPage() {
         // 1. Fetch Restaurant Info
         const { data: rest, error: restErr } = await supabase
           .from('restaurants')
-          .select('id, name, online_paused, store_notice_enabled, store_notice_msg, restaurant_profiles(brand_color, phone, features_menu_images_enabled)')
+          .select('id, name, online_paused, delivery_paused, store_notice_enabled, store_notice_msg, restaurant_profiles(brand_color, phone, features_menu_images_enabled)')
           .eq('id', restaurantId)
           .single()
-        
+
         if (restErr) throw restErr
         if (!rest) throw new Error('Restaurant not found')
 
-        // 2. Check Hours
-        if (rest.online_paused) {
-          if (!cancelled) {
-            setIsOutsideHours(true)
-            setHoursMessage('Restaurant is currently closed')
-            setRestaurant(rest)
-            setLoading(false)
+        // 2. Check Hours — use delivery_hours for DELIVERY, restaurant_hours for QR
+        const isDeliveryOrder = String(tableNumber).toUpperCase() === 'DELIVERY'
+
+        if (isDeliveryOrder) {
+          // Check if delivery webpage is enabled for this restaurant
+          const { data: delProfile } = await supabase
+            .from('restaurant_profiles')
+            .select('delivery_enabled, delivery_webpage_enabled')
+            .eq('restaurant_id', restaurantId)
+            .maybeSingle()
+
+          if (!delProfile?.delivery_enabled || !delProfile?.delivery_webpage_enabled) {
+            if (!cancelled) {
+              setIsOutsideHours(true)
+              setHoursMessage('Delivery ordering is not available for this restaurant')
+              setRestaurant(rest)
+              setLoading(false)
+            }
+            return
           }
-          return
-        }
 
-        const { data: hours } = await supabase
-          .from('restaurant_hours')
-          .select('dow, open_time, close_time, enabled')
-          .eq('restaurant_id', restaurantId)
+          // Delivery-specific availability
+          if (rest.delivery_paused) {
+            if (!cancelled) {
+              setIsOutsideHours(true)
+              setHoursMessage('Delivery is currently paused')
+              setRestaurant(rest)
+              setLoading(false)
+            }
+            return
+          }
 
-        if (hours && hours.length > 0) {
-           const now = new Date()
-           const currentDOW = now.getDay() === 0 ? 7 : now.getDay()
-           const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-           const todayHours = hours.find(h => h.dow === currentDOW)
+          const { data: dHours } = await supabase
+            .from('delivery_hours')
+            .select('dow, open_time, close_time, enabled')
+            .eq('restaurant_id', restaurantId)
 
-           if (!todayHours || !todayHours.enabled) {
+          if (dHours && dHours.length > 0) {
+            const now = new Date()
+            const currentDOW = now.getDay() === 0 ? 7 : now.getDay()
+            const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+            const todayHours = dHours.find(h => h.dow === currentDOW)
+
+            if (!todayHours || !todayHours.enabled) {
+              if (!cancelled) {
+                setIsOutsideHours(true)
+                setHoursMessage('Delivery is not available today')
+                setRestaurant(rest)
+                setLoading(false)
+              }
+              return
+            }
+
+            if (todayHours.open_time && todayHours.close_time) {
+              const openTime = todayHours.open_time.substring(0, 5)
+              const closeTime = todayHours.close_time.substring(0, 5)
+              if (currentTime < openTime || currentTime > closeTime) {
+                if (!cancelled) {
+                  setIsOutsideHours(true)
+                  setHoursMessage(`Delivery is closed. Opens at ${openTime}, closes at ${closeTime}`)
+                  setRestaurant(rest)
+                  setLoading(false)
+                }
+                return
+              }
+            }
+          }
+          // If no delivery_hours rows → default to always open (no blocking)
+        } else {
+          // QR / Dine-in ordering availability (existing logic)
+          if (rest.online_paused) {
+            if (!cancelled) {
+              setIsOutsideHours(true)
+              setHoursMessage('Restaurant is currently closed')
+              setRestaurant(rest)
+              setLoading(false)
+            }
+            return
+          }
+
+          const { data: hours } = await supabase
+            .from('restaurant_hours')
+            .select('dow, open_time, close_time, enabled')
+            .eq('restaurant_id', restaurantId)
+
+          if (hours && hours.length > 0) {
+            const now = new Date()
+            const currentDOW = now.getDay() === 0 ? 7 : now.getDay()
+            const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+            const todayHours = hours.find(h => h.dow === currentDOW)
+
+            if (!todayHours || !todayHours.enabled) {
               if (!cancelled) {
                 setIsOutsideHours(true)
                 setHoursMessage('Restaurant is closed today')
@@ -191,12 +260,12 @@ export default function OrderPage() {
                 setLoading(false)
               }
               return
-           }
+            }
 
-           if (todayHours.open_time && todayHours.close_time) {
-             const openTime = todayHours.open_time.substring(0, 5)
-             const closeTime = todayHours.close_time.substring(0, 5)
-             if (currentTime < openTime || currentTime > closeTime) {
+            if (todayHours.open_time && todayHours.close_time) {
+              const openTime = todayHours.open_time.substring(0, 5)
+              const closeTime = todayHours.close_time.substring(0, 5)
+              if (currentTime < openTime || currentTime > closeTime) {
                 if (!cancelled) {
                   setIsOutsideHours(true)
                   setHoursMessage(`Restaurant is closed. Opens at ${openTime}, closes at ${closeTime}`)
@@ -204,8 +273,9 @@ export default function OrderPage() {
                   setLoading(false)
                 }
                 return
-             }
-           }
+              }
+            }
+          }
         }
 
         // 3. Fetch table status if a tableNumber is present
@@ -248,12 +318,12 @@ export default function OrderPage() {
         // 4. Normalize and Fetch Variant Pricing
         // Handle case where uom might be returned as an array
         const finalItems = (rawItems || []).map(i => {
-           const uomObj = Array.isArray(i.uom) ? i.uom[0] : i.uom;
-           return { 
+          const uomObj = Array.isArray(i.uom) ? i.uom[0] : i.uom;
+          return {
             ...i,
             uom: uomObj,
             uom_precision: uomObj?.precision ?? 2
-           };
+          };
         });
 
         // Filter only valid items with explicit IDs
@@ -261,33 +331,33 @@ export default function OrderPage() {
 
         const vMap = new Map();
         if (variantItemIds.length > 0) {
-           // Use simpler join syntax. Supabase usually auto-detects if there's one FK.
-           // If that fails, we can reference the column name explicitly if needed.
-           const { data: vpData, error: vpErr } = await supabase
-             .from('variant_pricing')
-             .select(`
+          // Use simpler join syntax. Supabase usually auto-detects if there's one FK.
+          // If that fails, we can reference the column name explicitly if needed.
+          const { data: vpData, error: vpErr } = await supabase
+            .from('variant_pricing')
+            .select(`
                 menu_item_id, price, is_available,
                 variant_options (id, name, display_order, template_id)
              `)
-             .in('menu_item_id', variantItemIds);
-           
-           if (vpErr) {
-             console.error('Variant pricing load error:', vpErr);
-             // Don't crash entire menu, just log
-           } else {
-             (vpData || []).forEach(vp => {
-                if (!vp.menu_item_id || !vp.variant_options) return;
-                
-                if (!vMap.has(vp.menu_item_id)) vMap.set(vp.menu_item_id, []);
-                 vMap.get(vp.menu_item_id).push({
-                   variant_id: vp.variant_options.id,
-                   variant_name: vp.variant_options.name,
-                   price: vp.price,
-                   is_available: vp.is_available,
-                   display_order: vp.variant_options.display_order
-                 });
+            .in('menu_item_id', variantItemIds);
+
+          if (vpErr) {
+            console.error('Variant pricing load error:', vpErr);
+            // Don't crash entire menu, just log
+          } else {
+            (vpData || []).forEach(vp => {
+              if (!vp.menu_item_id || !vp.variant_options) return;
+
+              if (!vMap.has(vp.menu_item_id)) vMap.set(vp.menu_item_id, []);
+              vMap.get(vp.menu_item_id).push({
+                variant_id: vp.variant_options.id,
+                variant_name: vp.variant_options.name,
+                price: vp.price,
+                is_available: vp.is_available,
+                display_order: vp.variant_options.display_order
               });
-           }
+            });
+          }
         }
 
         // 5. Fetch Upsells (Add-ons)
@@ -295,59 +365,59 @@ export default function OrderPage() {
           .from('menu_items_with_upsells')
           .select('menu_item_id, upsells')
           .in('menu_item_id', finalItems.map(i => i.id));
-        
+
         const upsellMap = new Map();
         (upsellsData || []).forEach(row => {
-            upsellMap.set(row.menu_item_id, row.upsells);
+          upsellMap.set(row.menu_item_id, row.upsells);
         });
 
         // 6. Merge Variants and Upsells
         finalItems.forEach(item => {
-            if (vMap.has(item.id)) {
-                // Attach variants
-                item.variants = vMap.get(item.id).sort((a,b) => (a.display_order || 0) - (b.display_order || 0));
-            }
-            // Attach upsells (treat as addon_groups for compatibility if VariantSelector expects it, or update it)
-            // The new Upsells view returns [{ id, name, price, ... }]
-            // VariantSelector might need update. For now, let's map it to a "Suggested Extras" group.
-            const rawUpsells = upsellMap.get(item.id) || [];
-            if (rawUpsells.length > 0) {
-               item.addon_groups = [{
-                 id: 'upsells-group',
-                 name: 'Suggested Extras',
-                 min_selections: 0,
-                 max_selections: null,
-                 options: rawUpsells.map(u => ({
-                    id: u.id,
-                    name: u.name,
-                    price: u.price,
-                    is_active: u.status === 'available',
-                    veg: u.veg,
-                    image_url: u.image_url
-                 }))
-               }];
-               item.has_addons = true;
-            } else {
-               item.addon_groups = [];
-               item.has_addons = false;
-            }
+          if (vMap.has(item.id)) {
+            // Attach variants
+            item.variants = vMap.get(item.id).sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
+          }
+          // Attach upsells (treat as addon_groups for compatibility if VariantSelector expects it, or update it)
+          // The new Upsells view returns [{ id, name, price, ... }]
+          // VariantSelector might need update. For now, let's map it to a "Suggested Extras" group.
+          const rawUpsells = upsellMap.get(item.id) || [];
+          if (rawUpsells.length > 0) {
+            item.addon_groups = [{
+              id: 'upsells-group',
+              name: 'Suggested Extras',
+              min_selections: 0,
+              max_selections: null,
+              options: rawUpsells.map(u => ({
+                id: u.id,
+                name: u.name,
+                price: u.price,
+                is_active: u.status === 'available',
+                veg: u.veg,
+                image_url: u.image_url
+              }))
+            }];
+            item.has_addons = true;
+          } else {
+            item.addon_groups = [];
+            item.has_addons = false;
+          }
         });
 
         // 7. Transform (add static data, etc.)
         const transformed = finalItems.map(item => {
-           if (!item) return null;
-           
-           let tName = 'Options';
-           if (item.menu_item_variants && item.menu_item_variants[0] && item.menu_item_variants[0].variant_templates) {
-              tName = item.menu_item_variants[0].variant_templates.name;
-           }
+          if (!item) return null;
 
-           return {
-             ...item,
-             variant_template_name: item.has_variants ? tName : null,
-             rating: 4.8, // Static rating to prevent hydration mismatch errors
-             popular: !!item.ispopular
-           };
+          let tName = 'Options';
+          if (item.menu_item_variants && item.menu_item_variants[0] && item.menu_item_variants[0].variant_templates) {
+            tName = item.menu_item_variants[0].variant_templates.name;
+          }
+
+          return {
+            ...item,
+            variant_template_name: item.has_variants ? tName : null,
+            rating: 4.8, // Static rating to prevent hydration mismatch errors
+            popular: !!item.ispopular
+          };
         }).filter(Boolean); // remove any nulls
 
         if (!cancelled) {
@@ -414,7 +484,7 @@ export default function OrderPage() {
 
     return () => { supabase.removeChannel(channel) }
   }, [restaurantId, supabase])
-  
+
   // Handle adding variant from modal
   const handleVariantAdd = (variantItem) => {
     // variantItem already has quantity, price, selectedVariant
@@ -422,15 +492,15 @@ export default function OrderPage() {
       // Logic for variants: treat as distinct based on variant_id
       // Check if this exact variant is already in cart
       const existingIdx = prev.findIndex(c => c.id === variantItem.id && c.selectedVariant?.variant_id === variantItem.selectedVariant?.variant_id)
-      
+
       if (existingIdx >= 0) {
-         const copy = [...prev]
-         copy[existingIdx].quantity += variantItem.quantity
-         return copy
+        const copy = [...prev]
+        copy[existingIdx].quantity += variantItem.quantity
+        return copy
       }
       return [...prev, variantItem]
     })
-    
+
     // Feedback
     const name = variantItem.displayName || variantItem.name
     setJustAddedItem(name)
@@ -478,7 +548,7 @@ export default function OrderPage() {
       setShowVariantSelector(true)
     } else {
       addToCart(item)
-      
+
       // Show simple toast feedback
       const toast = document.getElementById('toast-feedback');
       if (toast) {
@@ -486,22 +556,22 @@ export default function OrderPage() {
         toast.className = "show";
         // Clear existing timeout to restart duration
         if (addToastTimeoutRef.current) clearTimeout(addToastTimeoutRef.current);
-        addToastTimeoutRef.current = setTimeout(() => { 
-          toast.className = toast.className.replace("show", ""); 
+        addToastTimeoutRef.current = setTimeout(() => {
+          toast.className = toast.className.replace("show", "");
         }, 2000);
       }
     }
   }
   const updateCartItem = (itemId, quantity, itemObj) => {
     setCart(prev => {
-       const exists = prev.find(c => c.id === itemId && !c.selectedVariant);
-       if (quantity <= 0) {
-          return prev.filter(c => !(c.id === itemId && !c.selectedVariant));
-       }
-       if (!exists && itemObj) {
-          return [...prev, { ...itemObj, quantity }];
-       }
-       return prev.map(c => (c.id === itemId && !c.selectedVariant) ? { ...c, quantity } : c);
+      const exists = prev.find(c => c.id === itemId && !c.selectedVariant);
+      if (quantity <= 0) {
+        return prev.filter(c => !(c.id === itemId && !c.selectedVariant));
+      }
+      if (!exists && itemObj) {
+        return [...prev, { ...itemObj, quantity }];
+      }
+      return prev.map(c => (c.id === itemId && !c.selectedVariant) ? { ...c, quantity } : c);
     })
   }
 
@@ -528,10 +598,10 @@ export default function OrderPage() {
 
   const categoryChips = useMemo(() => {
     const set = new Set()
-    ;(menuItems || []).forEach((item) => {
-      const cat = item.category || 'Others'
-      set.add(cat)
-    })
+      ; (menuItems || []).forEach((item) => {
+        const cat = item.category || 'Others'
+        set.add(cat)
+      })
     return Array.from(set)
   }, [menuItems])
 
@@ -571,9 +641,9 @@ export default function OrderPage() {
   // Show blocked screen if table is not available
   if (tableBlocked) {
     const statusMessages = {
-      occupied:    { label: 'Occupied',    message: 'This table is currently occupied. Please ask the staff for assistance.' },
-      reserved:    { label: 'Reserved',    message: 'This table is reserved. Please ask the staff for assistance.' },
-      cleaning:    { label: 'Cleaning',    message: 'This table is being cleaned. Please check back shortly.' },
+      occupied: { label: 'Occupied', message: 'This table is currently occupied. Please ask the staff for assistance.' },
+      reserved: { label: 'Reserved', message: 'This table is reserved. Please ask the staff for assistance.' },
+      cleaning: { label: 'Cleaning', message: 'This table is being cleaned. Please check back shortly.' },
       maintenance: { label: 'Maintenance', message: 'This table is temporarily unavailable. Please contact the staff.' },
     };
     const s = statusMessages[tableStatus] || { label: tableStatus, message: 'This table is not available right now. Please contact the staff.' };
@@ -621,11 +691,11 @@ export default function OrderPage() {
         </button>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <h1 style={{ 
-              margin: 0, 
-              fontSize: 20, 
-              fontWeight: 900, 
-              color: '#0f172a', 
+            <h1 style={{
+              margin: 0,
+              fontSize: 20,
+              fontWeight: 900,
+              color: '#0f172a',
               letterSpacing: '-0.03em',
               lineHeight: 1.2,
               overflow: 'hidden',
@@ -669,72 +739,72 @@ export default function OrderPage() {
           position: 'relative',
           animation: 'slideInDown 0.5s ease-out'
         }}>
-           <div style={{
-             background: 'var(--brand)15',
-             width: 42,
-             height: 42,
-             borderRadius: 12,
-             display: 'flex',
-             alignItems: 'center',
-             justifyContent: 'center',
-             flexShrink: 0
-           }}>
-             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-               <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
-               <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-             </svg>
-           </div>
-           
-           <div style={{ flex: 1, paddingRight: 24 }}>
-              <div style={{ 
-                fontSize: 12, 
-                fontWeight: 800, 
-                color: 'var(--brand)', 
-                marginBottom: 4, 
-                textTransform: 'uppercase', 
-                letterSpacing: '0.08em',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6
-              }}>
-                Store Notice
-                <span style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--brand)' }}></span>
-              </div>
-              <div style={{ 
-                fontSize: 15, 
-                color: '#475569', 
-                lineHeight: 1.5, 
-                fontWeight: 500,
-                letterSpacing: '-0.01em'
-              }}>
-                {restaurant.store_notice_msg}
-              </div>
-           </div>
+          <div style={{
+            background: 'var(--brand)15',
+            width: 42,
+            height: 42,
+            borderRadius: 12,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0
+          }}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+            </svg>
+          </div>
 
-           <button 
-             onClick={() => setDismissedNotice(true)}
-             style={{
-               position: 'absolute',
-               top: 12,
-               right: 12,
-               background: 'rgba(0,0,0,0.05)',
-               border: 'none',
-               width: 24,
-               height: 24,
-               borderRadius: 99,
-               display: 'flex',
-               alignItems: 'center',
-               justifyContent: 'center',
-               cursor: 'pointer',
-               color: 'var(--brand)',
-               fontSize: 12,
-               padding: 0,
-             }}
-             onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.1)'}
-             onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.05)'}
-           >
-             ✕
-           </button>
+          <div style={{ flex: 1, paddingRight: 24 }}>
+            <div style={{
+              fontSize: 12,
+              fontWeight: 800,
+              color: 'var(--brand)',
+              marginBottom: 4,
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6
+            }}>
+              Store Notice
+              <span style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--brand)' }}></span>
+            </div>
+            <div style={{
+              fontSize: 15,
+              color: '#475569',
+              lineHeight: 1.5,
+              fontWeight: 500,
+              letterSpacing: '-0.01em'
+            }}>
+              {restaurant.store_notice_msg}
+            </div>
+          </div>
+
+          <button
+            onClick={() => setDismissedNotice(true)}
+            style={{
+              position: 'absolute',
+              top: 12,
+              right: 12,
+              background: 'rgba(0,0,0,0.05)',
+              border: 'none',
+              width: 24,
+              height: 24,
+              borderRadius: 99,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              color: 'var(--brand)',
+              fontSize: 12,
+              padding: 0,
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.1)'}
+            onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.05)'}
+          >
+            ✕
+          </button>
         </div>
       )}
 
@@ -748,27 +818,27 @@ export default function OrderPage() {
       <div style={{ background: '#fff' }}>
         <div style={{ padding: '8px 16px 16px' }}>
           <div className="search-box premium-search">
-             <div className="search-icon-wrapper">
-               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                 <circle cx="11" cy="11" r="8"></circle>
-                 <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-               </svg>
-             </div>
-             <input
-               type="text"
-               placeholder="Search for dishes, cuisines..."
-               value={searchQuery}
-               onChange={(e) => setSearchQuery(e.target.value)}
-             />
-             {searchQuery && (
-               <button 
-                 onClick={() => setSearchQuery('')} 
-                 className="search-clear-btn"
-                 style={{ animation: 'popIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)' }}
-               >
-                 ✕
-               </button>
-             )}
+            <div className="search-icon-wrapper">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+            </div>
+            <input
+              type="text"
+              placeholder="Search for dishes, cuisines..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="search-clear-btn"
+                style={{ animation: 'popIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)' }}
+              >
+                ✕
+              </button>
+            )}
           </div>
         </div>
 
@@ -796,12 +866,12 @@ export default function OrderPage() {
             {showLeftArrow && (
               <button className="carousel-btn left" onClick={() => scrollCarousel('left')}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M15 18l-6-6 6-6"/>
+                  <path d="M15 18l-6-6 6-6" />
                 </svg>
               </button>
             )}
-            <div 
-              className="category-carousel" 
+            <div
+              className="category-carousel"
               ref={carouselRef}
               onScroll={checkScroll}
             >
@@ -826,7 +896,7 @@ export default function OrderPage() {
             {showRightArrow && (
               <button className="carousel-btn right" onClick={() => scrollCarousel('right')}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M9 18l6-6-6-6"/>
+                  <path d="M9 18l6-6-6-6" />
                 </svg>
               </button>
             )}
@@ -837,9 +907,9 @@ export default function OrderPage() {
       <div>
         {error && (
           <div style={{ padding: '1rem', color: '#dc2626', background: '#fee2e2', margin: '1rem', borderRadius: 8, textAlign: 'center' }}>
-            <p style={{fontWeight: 'bold', marginBottom: 4}}>Unable to load menu</p>
-            <p style={{fontSize: '0.9em', marginBottom: 12}}>{error}</p>
-            <button 
+            <p style={{ fontWeight: 'bold', marginBottom: 4 }}>Unable to load menu</p>
+            <p style={{ fontSize: '0.9em', marginBottom: 12 }}>{error}</p>
+            <button
               onClick={() => window.location.reload()}
               style={{ padding: '6px 16px', background: '#dc2626', color: 'white', border: 'none', borderRadius: 6, fontWeight: 600, cursor: 'pointer' }}
             >
@@ -908,7 +978,7 @@ export default function OrderPage() {
                   // For variants, we force "ADD" state (qty=0) but show badge
                   const passQty = item.has_variants ? 0 : totalQty
                   const badge = item.has_variants ? totalQty : 0
-                  
+
                   return (
                     <div style={{ minWidth: '240px', maxWidth: '240px' }}>
                       <MenuItemCard
@@ -935,19 +1005,19 @@ export default function OrderPage() {
           // OLD LAYOUT: Simple vertical list (when images disabled)
           Object.entries(groupedItems).map(([category, items]) => (
             <section key={category} style={{ background: 'transparent', marginBottom: 24, padding: '0 16px' }}>
-              <div style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                gap: 12, 
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
                 marginBottom: 16,
                 marginTop: 8
               }}>
                 <div style={{ width: 4, height: 24, background: brandColor, borderRadius: 4 }}></div>
-                <h3 style={{ 
-                  fontSize: 18, 
-                  fontWeight: 800, 
-                  margin: 0, 
-                  color: '#1e293b', 
+                <h3 style={{
+                  fontSize: 18,
+                  fontWeight: 800,
+                  margin: 0,
+                  color: '#1e293b',
                   letterSpacing: '-0.02em',
                   textTransform: 'capitalize'
                 }}>
@@ -958,13 +1028,13 @@ export default function OrderPage() {
                 {items.map((item) => {
                   const totalQty = getItemQuantity(item.id);
                   const isOutOfStock = item.status === 'out_of_stock' || item.available === false;
-                  
+
                   // Logic for manual list rendering (No-Image mode)
                   // If variant, show simple Add button that opens popup
                   const showStepper = !item.has_variants && totalQty > 0;
-                  
+
                   return (
-                    <div 
+                    <div
                       key={item.id}
                       onClick={() => handleAddItem(item)}
                       style={{
@@ -992,13 +1062,13 @@ export default function OrderPage() {
                     >
                       <div style={{ flex: 1 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-                          <span style={{ 
-                            flexShrink: 0, 
-                            display: 'flex', 
-                            padding: 2, 
-                            borderRadius: 4, 
-                            border: `0.5px solid ${item.veg ? '#16653433' : '#991b1b33'}`, 
-                            background: item.veg ? '#16a34a08' : '#dc262608' 
+                          <span style={{
+                            flexShrink: 0,
+                            display: 'flex',
+                            padding: 2,
+                            borderRadius: 4,
+                            border: `0.5px solid ${item.veg ? '#16653433' : '#991b1b33'}`,
+                            background: item.veg ? '#16a34a08' : '#dc262608'
                           }}>
                             {item.veg ? (
                               <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
@@ -1012,11 +1082,11 @@ export default function OrderPage() {
                               </svg>
                             )}
                           </span>
-                          <h4 style={{ 
-                            margin: 0, 
-                            fontSize: 16, 
-                            fontWeight: 700, 
-                            color: '#1e293b', 
+                          <h4 style={{
+                            margin: 0,
+                            fontSize: 16,
+                            fontWeight: 700,
+                            color: '#1e293b',
                             letterSpacing: '-0.02em',
                             lineHeight: 1.2
                           }}>
@@ -1025,9 +1095,9 @@ export default function OrderPage() {
                         </div>
 
                         {item.category && (
-                          <div style={{ 
-                            fontSize: 10, 
-                            color: '#64748b', 
+                          <div style={{
+                            fontSize: 10,
+                            color: '#64748b',
                             fontWeight: 700,
                             background: '#f1f5f9',
                             padding: '2px 8px',
@@ -1040,11 +1110,11 @@ export default function OrderPage() {
                           </div>
                         )}
 
-                        <div style={{ 
-                          fontSize: 18, 
-                          fontWeight: 800, 
-                          color: '#0f172a', 
-                          display: 'flex', 
+                        <div style={{
+                          fontSize: 18,
+                          fontWeight: 800,
+                          color: '#0f172a',
+                          display: 'flex',
                           alignItems: 'baseline',
                           gap: 2
                         }}>
@@ -1101,20 +1171,20 @@ export default function OrderPage() {
                           >
                             ADD
                             {item.has_variants && totalQty > 0 && (
-                                <span style={{
-                                  fontSize: 11, 
-                                  background: brandColor, 
-                                  color: 'white', 
-                                  width: 20, 
-                                  height: 20, 
-                                  display: 'flex', 
-                                  alignItems: 'center', 
-                                  justifyContent: 'center', 
-                                  borderRadius: '50%',
-                                  border: '2px solid #fff'
-                                }}>
-                                  {formatQtyP(totalQty, item.uom?.precision ?? 0)}
-                                </span>
+                              <span style={{
+                                fontSize: 11,
+                                background: brandColor,
+                                color: 'white',
+                                width: 20,
+                                height: 20,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                borderRadius: '50%',
+                                border: '2px solid #fff'
+                              }}>
+                                {formatQtyP(totalQty, item.uom?.precision ?? 0)}
+                              </span>
                             )}
                           </button>
                         ) : (
@@ -1158,11 +1228,11 @@ export default function OrderPage() {
                             >
                               −
                             </button>
-                            <span style={{ 
-                              fontSize: 15, 
-                              fontWeight: 800, 
-                              color: '#1e293b', 
-                              minWidth: 32, 
+                            <span style={{
+                              fontSize: 15,
+                              fontWeight: 800,
+                              color: '#1e293b',
+                              minWidth: 32,
                               textAlign: 'center',
                               fontVariantNumeric: 'tabular-nums'
                             }}>
@@ -1281,7 +1351,7 @@ export default function OrderPage() {
           onSelect={handleVariantAdd}
           onClose={() => setShowVariantSelector(false)}
           showImage={enableMenuImages}
-          gstEnabled={false} 
+          gstEnabled={false}
           pricesIncludeTax={true}
         />
       )}
@@ -1296,7 +1366,7 @@ export default function OrderPage() {
         />
       )}
 
-    <style jsx>{`
+      <style jsx>{`
       .cust-page { min-height: 100vh; background: #fdfdfd; font-family: 'Inter', system-ui, -apple-system, sans-serif; padding-bottom: 90px; }
       @media (min-width: 768px) { .cust-page { padding-bottom: 0; max-width: 800px; margin: 0 auto; background: #fff; box-shadow: 0 0 60px rgba(0,0,0,0.08); min-height: 100vh; position: relative; } }
       

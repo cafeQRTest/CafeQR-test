@@ -699,6 +699,9 @@ export default function SettingsPage() {
     round_off_mode: 'automatic',
     round_off_auto_factor: 1.0,
     round_off_manual_limit: 10.0,
+    delivery_enabled: false,
+    delivery_webpage_enabled: true,
+    delivery_app_enabled: false,
   });
 
   const [originalTables, setOriginalTables] = useState(0);
@@ -772,7 +775,7 @@ export default function SettingsPage() {
             qr_ordering_enabled: profile.qr_ordering_enabled !== false, // Default to true if not set
             features_inventory_enabled: !!profile.features_inventory_enabled,
             features_counter_send_to_kitchen_enabled: profile.features_counter_send_to_kitchen_enabled !== false,
-            featurescustomersenabled: !!profile.featurescustomersenabled, 
+            featurescustomersenabled: !!profile.featurescustomersenabled,
             featuresloyaltyenabled: !!profile.featuresloyaltyenabled,
             allow_multiple_customers_per_order: !!profile.allow_multiple_customers_per_order,
             swiggy_enabled: !!(profile.swiggy_api_key), zomato_enabled: !!(profile.zomato_api_key),
@@ -784,6 +787,9 @@ export default function SettingsPage() {
             round_off_mode: profile.round_off_mode || 'automatic',
             round_off_auto_factor: profile.round_off_auto_factor ?? 1.0,
             round_off_manual_limit: profile.round_off_manual_limit ?? 10.0,
+            delivery_enabled: !!profile.delivery_enabled,
+            delivery_webpage_enabled: profile.delivery_webpage_enabled !== false,
+            delivery_app_enabled: !!profile.delivery_app_enabled,
           }));
           setOriginalTables(profile.tables_count || 0);
           setIsFirstTime(false);
@@ -811,9 +817,11 @@ export default function SettingsPage() {
       if (!form.legal_name) throw new Error("Legal Name required");
       if (!form.fssai_license) throw new Error("FSSAI License Number is required");
 
-      // Validation for Location & Delivery Radius
-      if (!form.delivery_radius_km || Number(form.delivery_radius_km) <= 0) {
-        throw new Error("Delivery Radius must be greater than 0");
+      // Validation for Location & Delivery Radius (only when delivery is enabled)
+      if (form.delivery_enabled) {
+        if (!form.delivery_radius_km || Number(form.delivery_radius_km) <= 0) {
+          throw new Error("Delivery Radius must be greater than 0");
+        }
       }
       // Strict Types: Ensure coordinates are strictly treated as Numbers
       const finalLat = Number(form.owner_lat);
@@ -886,6 +894,9 @@ export default function SettingsPage() {
         round_off_mode: form.round_off_mode,
         round_off_auto_factor: Number(form.round_off_auto_factor),
         round_off_manual_limit: Number(form.round_off_manual_limit),
+        delivery_enabled: form.delivery_enabled,
+        delivery_webpage_enabled: form.delivery_webpage_enabled,
+        delivery_app_enabled: form.delivery_app_enabled,
       };
 
       const { error: upsertError } = await supabase.from('restaurant_profiles').upsert(payload, { onConflict: 'restaurant_id' });
@@ -1048,62 +1059,66 @@ export default function SettingsPage() {
                 </FormField>
               </SectionBody>
 
-              <SectionHeader>
-                <SectionIcon>📍</SectionIcon>
-                <div>
-                  <SectionTitle>Delivery Location</SectionTitle>
-                  <div style={{ fontSize: 13, color: 'gray', fontWeight: 400 }}>
-                    Used to show your restaurant to customers nearby
-                  </div>
-                </div>
-              </SectionHeader>
+              {form.delivery_enabled && (
+                <>
+                  <SectionHeader>
+                    <SectionIcon>📍</SectionIcon>
+                    <div>
+                      <SectionTitle>Delivery Location</SectionTitle>
+                      <div style={{ fontSize: 13, color: 'gray', fontWeight: 400 }}>
+                        Used to show your restaurant to customers nearby
+                      </div>
+                    </div>
+                  </SectionHeader>
 
-              <SectionBody>
-                <FormField>
-                  <Label>Delivery radius (km)</Label>
-                  <Input
-                    type="number"
-                    min="1"
-                    max="50"
-                    value={form.delivery_radius_km}
-                    onChange={onChange('delivery_radius_km')}
-                  />
-                  <HelperText>Customers will see you within this radius.</HelperText>
-                </FormField>
+                  <SectionBody>
+                    <FormField>
+                      <Label>Delivery radius (km)</Label>
+                      <Input
+                        type="number"
+                        min="1"
+                        max="50"
+                        value={form.delivery_radius_km}
+                        onChange={onChange('delivery_radius_km')}
+                      />
+                      <HelperText>Customers will see you within this radius.</HelperText>
+                    </FormField>
 
-                <FormField>
-                  <Label>Latitude</Label>
-                  <Input value={form.owner_lat} onChange={onChange('owner_lat')} placeholder="e.g. 12.9716" />
-                </FormField>
+                    <FormField>
+                      <Label>Latitude</Label>
+                      <Input value={form.owner_lat} onChange={onChange('owner_lat')} placeholder="e.g. 12.9716" />
+                    </FormField>
 
-                <FormField>
-                  <Label>Longitude</Label>
-                  <Input value={form.owner_lng} onChange={onChange('owner_lng')} placeholder="e.g. 77.5946" />
-                </FormField>
+                    <FormField>
+                      <Label>Longitude</Label>
+                      <Input value={form.owner_lng} onChange={onChange('owner_lng')} placeholder="e.g. 77.5946" />
+                    </FormField>
 
-                <FormField span={2}>
-                  <ActionButton
-                    type="button"
-                    primary
-                    onClick={() => {
-                      if (!navigator.geolocation) return alert('Geolocation not supported')
-                      navigator.geolocation.getCurrentPosition(
-                        (pos) => {
-                          setForm(f => ({
-                            ...f,
-                            owner_lat: Number(Number(pos.coords.latitude).toFixed(8)),
-                            owner_lng: Number(Number(pos.coords.longitude).toFixed(8))
-                          }))
-                        },
-                        (err) => alert(err.message),
-                        { enableHighAccuracy: true, timeout: 10000 }
-                      )
-                    }}
-                  >
-                    Use current location
-                  </ActionButton>
-                </FormField>
-              </SectionBody>
+                    <FormField span={2}>
+                      <ActionButton
+                        type="button"
+                        primary
+                        onClick={() => {
+                          if (!navigator.geolocation) return alert('Geolocation not supported')
+                          navigator.geolocation.getCurrentPosition(
+                            (pos) => {
+                              setForm(f => ({
+                                ...f,
+                                owner_lat: Number(Number(pos.coords.latitude).toFixed(8)),
+                                owner_lng: Number(Number(pos.coords.longitude).toFixed(8))
+                              }))
+                            },
+                            (err) => alert(err.message),
+                            { enableHighAccuracy: true, timeout: 10000 }
+                          )
+                        }}
+                      >
+                        Use current location
+                      </ActionButton>
+                    </FormField>
+                  </SectionBody>
+                </>
+              )}
 
 
             </SectionCard>
@@ -1408,13 +1423,13 @@ export default function SettingsPage() {
                   </div>
 
                   {form.featurescustomersenabled && (
-                    <div 
-                      style={{ 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        justifyContent: 'space-between', 
-                        padding: '14px 16px', 
-                        background: 'rgba(249, 115, 22, 0.05)', 
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '14px 16px',
+                        background: 'rgba(249, 115, 22, 0.05)',
                         border: '1px solid rgba(249, 115, 22, 0.1)',
                         borderRadius: 14,
                         marginLeft: 72 // Align with text
@@ -1457,6 +1472,78 @@ export default function SettingsPage() {
                     <FeatureDesc>Forward orders to kitchen</FeatureDesc>
                   </FeatureText>
                   <Switch checked={form.features_counter_send_to_kitchen_enabled} />
+                </FeatureCard>
+
+                {/* ONLINE DELIVERY */}
+                <FeatureCard
+                  checked={form.delivery_enabled}
+                  onClick={() => setForm(f => {
+                    const next = !f.delivery_enabled;
+                    return {
+                      ...f,
+                      delivery_enabled: next,
+                      // Auto-set sub-defaults when enabling
+                      ...(next ? { delivery_webpage_enabled: true, delivery_app_enabled: false } : {})
+                    };
+                  })}
+                  style={{ flexDirection: 'column', alignItems: 'stretch', gap: 16 }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: 0 }}>
+                      <FeatureIcon active={form.delivery_enabled}>🚚</FeatureIcon>
+                      <FeatureText>
+                        <FeatureTitle>Online Delivery</FeatureTitle>
+                        <FeatureDesc>Enable delivery ordering for your restaurant</FeatureDesc>
+                      </FeatureText>
+                    </div>
+                    <Switch checked={form.delivery_enabled} />
+                  </div>
+
+                  {form.delivery_enabled && (
+                    <>
+                      <div
+                        style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                          padding: '14px 16px',
+                          background: 'rgba(249, 115, 22, 0.05)',
+                          border: '1px solid rgba(249, 115, 22, 0.1)',
+                          borderRadius: 14,
+                          marginLeft: 72
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setForm(f => ({ ...f, delivery_webpage_enabled: !f.delivery_webpage_enabled }));
+                        }}
+                      >
+                        <FeatureText style={{ gap: 4 }}>
+                          <FeatureTitle style={{ fontSize: 14 }}>Delivery Webpage</FeatureTitle>
+                          <FeatureDesc style={{ fontSize: 12 }}>Accept orders from the delivery webpage link</FeatureDesc>
+                        </FeatureText>
+                        <Switch checked={form.delivery_webpage_enabled} style={{ transform: 'scale(0.85)', transformOrigin: 'right center' }} />
+                      </div>
+
+                      <div
+                        style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                          padding: '14px 16px',
+                          background: 'rgba(249, 115, 22, 0.05)',
+                          border: '1px solid rgba(249, 115, 22, 0.1)',
+                          borderRadius: 14,
+                          marginLeft: 72
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setForm(f => ({ ...f, delivery_app_enabled: !f.delivery_app_enabled }));
+                        }}
+                      >
+                        <FeatureText style={{ gap: 4 }}>
+                          <FeatureTitle style={{ fontSize: 14 }}>Availability on Delivery App</FeatureTitle>
+                          <FeatureDesc style={{ fontSize: 12 }}>Show your restaurant in the delivery app for customers</FeatureDesc>
+                        </FeatureText>
+                        <Switch checked={form.delivery_app_enabled} style={{ transform: 'scale(0.85)', transformOrigin: 'right center' }} />
+                      </div>
+                    </>
+                  )}
                 </FeatureCard>
 
               </SectionBody>

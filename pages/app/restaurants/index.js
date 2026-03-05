@@ -107,7 +107,8 @@ export default function RestaurantListing() {
                         brand_color,
                         latitude,
                         longitude,
-                        delivery_radius_km
+                        delivery_radius_km,
+                        delivery_app_enabled
                     )
                 `)
                 .order("name", { ascending: true });
@@ -135,6 +136,8 @@ export default function RestaurantListing() {
             const filteredList = allRestaurants.filter(r => {
                 const profile = r.restaurant_profiles;
                 if (!profile?.latitude || !profile?.longitude) return false;
+                // Only show restaurants that have enabled delivery app
+                if (!profile?.delivery_app_enabled) return false;
 
                 const restLat = parseFloat(profile.latitude);
                 const restLng = parseFloat(profile.longitude);
