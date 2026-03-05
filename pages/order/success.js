@@ -168,19 +168,18 @@ export default function OrderSuccess() {
     order?.subtotal_ex_tax != null && order?.total_tax != null
   ) ? (Number(order.subtotal_ex_tax) + Number(order.total_tax)) : null
 
-  // Build candidates and pick the smallest positive to avoid duplicates/double-add
-  const rawCandidates = order ? [
-    amountFromQuery,
-    amountFromSession,
-    order.total_inc_tax,
-    order.total_amount,
-    order.total,
-    derivedFromExAndTax
-  ] : [amountFromQuery, amountFromSession];
-  const candidates = rawCandidates
-    .map(n => (n == null ? null : Number(n)))
-    .filter(n => Number.isFinite(n) && n > 0)
-  const amount = candidates.length ? Math.min(...candidates) : 0
+  // Pick the best candidate based on reliability
+  const amount = (
+    amountFromQuery ??
+    amountFromSession ??
+    (order ? (
+      Number(order.total_amount) ||
+      Number(order.total_inc_tax) ||
+      derivedFromExAndTax ||
+      Number(order.total) ||
+      0
+    ) : 0)
+  );
 
   return (
     <div>
