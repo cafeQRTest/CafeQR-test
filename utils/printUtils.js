@@ -378,24 +378,14 @@ export function buildKotText(order, restaurantProfile) {
     // go back to normal flow
     lines.push(ALIGN_LEFT);
 
-
-
-
-    wrapText(address, W).forEach((l) =>
-      lines.push(withMargins(center(l, W), layout))
-    );
-    if (phone)
-      lines.push(withMargins(center(`Contact No.: ${phone}`, W), layout));
-
     lines.push(withMargins(dashes(), layout));
 
-    lines.push(withMargins(center("*** KITCHEN ORDER TICKET ***", W), layout));
+    lines.push(withMargins(center("*** KOT ***", W), layout));
     lines.push(withMargins(`${dateStr} ${timeStr}`, layout));
     lines.push(withMargins(`Order: #${orderId}`, layout));
     if (order?.bill_no) {
       lines.push(withMargins(`Bill No: ${order.bill_no}`, layout));
     }
-    if (tableLabel) lines.push(withMargins(`For: ${tableLabel}`, layout));
     const staffName = String(order?.taken_by_name || '').trim();
 
     if (staffName) {
@@ -428,6 +418,19 @@ export function buildKotText(order, restaurantProfile) {
 
     lines.push(withMargins(dashes(), layout));
 
+    if (tableLabel) {
+      lines.push(ALIGN_CENTER);
+      lines.push(
+        MODE_BOLD +
+        SIZE_2X +
+        tableLabel.toUpperCase() +
+        SIZE_1X +
+        MODE_NO_BOLD
+      );
+      lines.push(ALIGN_LEFT);
+      lines.push(withMargins(dashes(), layout));
+    }
+
     if (items.length) {
       lines.push(
         withMargins(
@@ -437,6 +440,7 @@ export function buildKotText(order, restaurantProfile) {
       );
       lines.push(withMargins(dashes(), layout));
 
+      lines.push(MODE_BOLD);
       items.forEach((it) => {
         let baseName = it.name || "Item";
         if (it.variant_name) {
@@ -464,6 +468,7 @@ export function buildKotText(order, restaurantProfile) {
           lines.push(withMargins(nameLines[i], layout));
         }
       });
+      lines.push(MODE_NO_BOLD);
     }
 
     if (removedItems.length) {
@@ -476,6 +481,7 @@ export function buildKotText(order, restaurantProfile) {
         )
       );
 
+      lines.push(MODE_BOLD);
       removedItems.forEach((ri) => {
         const displayName = ri.variant_name ? `${ri.name} (${ri.variant_name})` : ri.name;
         const nameLines = wrapText(displayName || "Item", nameW);
@@ -496,6 +502,7 @@ export function buildKotText(order, restaurantProfile) {
           lines.push(withMargins("  " + nameLines[i], layout));
         }
       });
+      lines.push(MODE_NO_BOLD);
     }
 
     lines.push(withMargins(dashes(), layout));
