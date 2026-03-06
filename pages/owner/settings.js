@@ -1738,7 +1738,7 @@ export default function SettingsPage() {
 
         </form>
 
-        <SectionCard>
+        <SectionCard style={{ position: 'relative', zIndex: 10 }}>
           <SectionHeader>
             <SectionIcon>📊</SectionIcon>
             <div>
