@@ -29,9 +29,9 @@ export default async function handler(req, res) {
         .select('id')
         .eq('owner_email', owner_email)
         .maybeSingle();
-      
+
       if (!emailError && byEmail) {
-         existingRestaurant = byEmail;
+        existingRestaurant = byEmail;
       }
     }
 
@@ -43,12 +43,26 @@ export default async function handler(req, res) {
     let restaurant = existingRestaurant;
 
     if (!restaurant) {
+      // Defensive: If this user is already staff on another restaurant, don't create a ghost restaurant
+      if (owner_email) {
+        const { data: staffRow } = await supabase
+          .from('restaurant_staff')
+          .select('restaurant_id')
+          .eq('staff_email', owner_email.toLowerCase())
+          .maybeSingle();
+
+        if (staffRow) {
+          // This user is staff — they don't need their own restaurant
+          return res.status(200).json({ message: 'Staff user, no restaurant needed' });
+        }
+      }
+
       const { data: created, error: createError } = await supabase
         .from('restaurants')
         .insert({
           id: restaurant_id,
-          name: 'New restaurant',                 // NEW: satisfy NOT NULL
-          owner_email: owner_email || null,       // optional
+          name: 'New restaurant',
+          owner_email: owner_email || null,
         })
         .select('id')
         .single();

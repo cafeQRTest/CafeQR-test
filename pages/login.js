@@ -27,10 +27,20 @@ export default function LoginPage() {
       if (error) throw error
 
       if (data?.user?.id) {
-        try {
-          await fetch('/api/subscription/start-trial', { method: 'POST', body: JSON.stringify({ restaurant_id: data.user.id }) });
-          await refresh();
-        } catch {}
+        // Check if this user is a staff member of an existing restaurant
+        const { data: staffRow } = await supabase
+          .from('restaurant_staff')
+          .select('restaurant_id')
+          .eq('staff_email', email.toLowerCase())
+          .maybeSingle()
+
+        if (!staffRow) {
+          // Only create restaurant/trial for non-staff (actual owners)
+          try {
+            await fetch('/api/subscription/start-trial', { method: 'POST', body: JSON.stringify({ restaurant_id: data.user.id }) });
+            await refresh();
+          } catch { }
+        }
       }
 
       router.push('/owner/counter')
@@ -45,19 +55,19 @@ export default function LoginPage() {
       <div className="mobile-card">
         {/* Header Graphic */}
         <div className="header-graphic">
-           <div className="circle-overlay" />
-           <div className="header-content">
-             <button className="back-btn" onClick={() => router.push('/')}>
-               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-             </button>
-             <h1>Welcome<br/>Back</h1>
-           </div>
+          <div className="circle-overlay" />
+          <div className="header-content">
+            <button className="back-btn" onClick={() => router.push('/')}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+            </button>
+            <h1>Welcome<br />Back</h1>
+          </div>
         </div>
 
         {/* Form Body */}
         <div className="form-body">
           <form onSubmit={handleLogin}>
-            
+
             {/* Email Field with Floating Label */}
             <div className="input-group">
               <input
@@ -86,13 +96,13 @@ export default function LoginPage() {
                 />
                 <label htmlFor="password">Password</label>
                 <button type="button" className="eye-btn" onClick={() => setShowPassword(!showPassword)}>
-                   {showPassword ? <FaEyeSlash /> : <FaEye />}
+                  {showPassword ? <FaEyeSlash /> : <FaEye />}
                 </button>
               </div>
             </div>
 
             <div className="forgot-row">
-               <Link href="/forgot-password">Forgot Password?</Link>
+              <Link href="/forgot-password">Forgot Password?</Link>
             </div>
 
             {message && <div className="alert">{message}</div>}
@@ -100,24 +110,24 @@ export default function LoginPage() {
             <button type="submit" disabled={loading} className="submit-btn">
               {loading ? 'WAIT...' : 'SIGN IN'}
             </button>
-            
+
             <div className="social-row">
-               <button type="button" className="social-btn" disabled>
-                 <span style={{ display: 'flex', flexShrink: 0 }}><FcGoogle size={24} /></span>
-                 <span>Sign in with Google</span>
-               </button>
-               <button type="button" className="social-btn" disabled>
-                 <span style={{ display: 'flex', flexShrink: 0 }}><FaFacebook size={24} color="#1877F2" /></span>
-                 <span>Sign in with Facebook</span>
-               </button>
-               <button type="button" className="social-btn full-width" disabled>
-                 <span style={{ display: 'flex', flexShrink: 0 }}><FaApple size={26} color="black" /></span>
-                 <span>Sign in with Apple</span>
-               </button>
+              <button type="button" className="social-btn" disabled>
+                <span style={{ display: 'flex', flexShrink: 0 }}><FcGoogle size={24} /></span>
+                <span>Sign in with Google</span>
+              </button>
+              <button type="button" className="social-btn" disabled>
+                <span style={{ display: 'flex', flexShrink: 0 }}><FaFacebook size={24} color="#1877F2" /></span>
+                <span>Sign in with Facebook</span>
+              </button>
+              <button type="button" className="social-btn full-width" disabled>
+                <span style={{ display: 'flex', flexShrink: 0 }}><FaApple size={26} color="black" /></span>
+                <span>Sign in with Apple</span>
+              </button>
             </div>
 
             <div className="signup-link">
-               <p>Don&apos;t have an account? <Link href="/signup">Sign Up</Link></p>
+              <p>Don&apos;t have an account? <Link href="/signup">Sign Up</Link></p>
             </div>
 
             <div className="copyright-footer">
