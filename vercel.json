@@ -3,6 +3,10 @@
     {
       "path": "/api/subscription/cron",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/reports/cron-monthly",
+      "schedule": "29 18 28-31 * *"
     }
   ]
 }

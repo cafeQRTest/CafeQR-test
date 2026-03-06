@@ -677,6 +677,53 @@ export default function SettingsPage() {
   const [success, setSuccess] = useState('');
   const [showToast, setShowToast] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+
+  const [reportMonth, setReportMonth] = useState('');
+  const [sendingReport, setSendingReport] = useState(false);
+
+  const monthOptions = React.useMemo(() => {
+    const opts = [];
+    const now = new Date();
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const label = d.toLocaleString('en-US', { month: 'short', year: 'numeric' });
+      opts.push({ value: val, label });
+    }
+    return opts;
+  }, []);
+
+  useEffect(() => {
+    if (!reportMonth && monthOptions.length > 0) {
+      setReportMonth(monthOptions[0].value);
+    }
+  }, [monthOptions, reportMonth]);
+
+  const handleSendReport = async () => {
+    const targetId = restaurant?.id || localRestaurantId;
+    if (!targetId || !reportMonth) return;
+    setSendingReport(true);
+    setShowToast(false);
+    setError('');
+    setSuccess('');
+    try {
+      const res = await fetch('/api/reports/send-reports/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ restaurant_id: targetId, month: reportMonth })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to send reports');
+      setSuccess(`Reports sent successfully to owner email!`);
+      setShowToast(true);
+    } catch (err) {
+      setError(err.message);
+      setShowToast(true);
+    } finally {
+      setSendingReport(false);
+    }
+  };
+
   const [form, setForm] = useState({
     legal_name: '', restaurant_name: '', phone: '', support_email: '',
     shipping_address_line1: '', shipping_address_line2: '', shipping_city: '', shipping_state: '', shipping_pincode: '',
@@ -1693,6 +1740,40 @@ export default function SettingsPage() {
 
         <SectionCard>
           <SectionHeader>
+            <SectionIcon>📊</SectionIcon>
+            <div>
+              <SectionTitle>Monthly Reports</SectionTitle>
+              <div style={{ fontSize: 13, color: 'gray', fontWeight: 400 }}>
+                Manually send monthly sales, expenses, and profit reports to your email.
+              </div>
+            </div>
+          </SectionHeader>
+          <SectionBody>
+            <FormField>
+              <Label>Select Month</Label>
+              <div style={{ display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={{ flex: '1 1 200px', maxWidth: '300px' }}>
+                  <NiceSelect
+                    options={monthOptions}
+                    value={reportMonth}
+                    onChange={setReportMonth}
+                  />
+                </div>
+                <ActionButton
+                  primary
+                  disabled={sendingReport || !reportMonth}
+                  onClick={handleSendReport}
+                  type="button"
+                >
+                  {sendingReport ? 'Sending...' : '📨 Send Reports'}
+                </ActionButton>
+              </div>
+            </FormField>
+          </SectionBody>
+        </SectionCard>
+
+        <SectionCard>
+          <SectionHeader>
             <SectionIcon>🖨️</SectionIcon>
             <div>
               <SectionTitle>Printers & Hardware</SectionTitle>
@@ -1772,6 +1853,34 @@ export default function SettingsPage() {
             fetchRestaurant();
           }}
         />
+      )}
+
+      {/* Global Toast for Feedback */}
+      {showToast && (error || success) && (
+        <Toast>
+          {error ? (
+            <div style={{ color: '#ef4444', fontSize: 24 }}>⚠️</div>
+          ) : (
+            <div style={{ color: '#22c55e', fontSize: 24 }}>✅</div>
+          )}
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', marginBottom: 2 }}>
+              {error ? 'Error' : 'Success'}
+            </div>
+            <div style={{ fontSize: 13, color: '#475569', lineHeight: 1.4 }}>
+              {error || success}
+            </div>
+          </div>
+          <button
+            onClick={() => setShowToast(false)}
+            style={{
+              background: 'none', border: 'none', padding: 4, cursor: 'pointer',
+              color: '#94a3b8', display: 'flex'
+            }}
+          >
+            ✕
+          </button>
+        </Toast>
       )}
     </>
   );
