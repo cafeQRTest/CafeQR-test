@@ -27,20 +27,15 @@ export default function LoginPage() {
       if (error) throw error
 
       if (data?.user?.id) {
-        // Check if this user is a staff member of an existing restaurant
-        const { data: staffRow } = await supabase
-          .from('restaurant_staff')
-          .select('restaurant_id')
-          .eq('staff_email', email.toLowerCase())
-          .maybeSingle()
-
-        if (!staffRow) {
-          // Only create restaurant/trial for non-staff (actual owners)
-          try {
-            await fetch('/api/subscription/start-trial', { method: 'POST', body: JSON.stringify({ restaurant_id: data.user.id }) });
-            await refresh();
-          } catch { }
-        }
+        // Pass email so server can check if user is staff (client can't due to RLS)
+        try {
+          await fetch('/api/subscription/start-trial', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ restaurant_id: data.user.id, owner_email: email.toLowerCase() }),
+          });
+          await refresh();
+        } catch { }
       }
 
       router.push('/owner/counter')

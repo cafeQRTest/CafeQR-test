@@ -64,8 +64,32 @@ export function RestaurantProvider({ children }) {
         const userEmail =
           session?.user?.email || session?.user?.user_metadata?.email || null;
 
-        // === 1) Owner pages with NO explicit rid: try OWNER restaurant first ===
+        // === 0) Check STAFF binding FIRST (highest priority for owner pages) ===
+        // This ensures staff users are always routed to their employer's restaurant,
+        // even if a ghost restaurant exists with their email as owner_email.
+        let staffBinding = null;
         if (router.pathname?.startsWith('/owner') && !ridFromUrlOrStorage && userEmail) {
+          const { data: staffRow, error: staffErr } = await supabase
+            .from('restaurant_staff')
+            .select('restaurant_id, role, staff_name')
+            .eq('staff_email', userEmail.toLowerCase())
+            .maybeSingle();
+          if (!staffErr && staffRow?.restaurant_id) {
+            staffBinding = staffRow;
+            const { data: rest, error: restErr } = await supabase
+              .from('restaurants')
+              .select('*')
+              .eq('id', staffRow.restaurant_id)
+              .maybeSingle();
+            if (restErr) throw restErr;
+            if (rest) {
+              found = { ...rest, _staffRole: staffRow.role, _staffName: staffRow.staff_name };
+            }
+          }
+        }
+
+        // === 1) Owner pages with NO explicit rid: try OWNER restaurant (only if not resolved as staff) ===
+        if (!found && router.pathname?.startsWith('/owner') && !ridFromUrlOrStorage && userEmail) {
           const { data, error } = await supabase
             .from('restaurants')
             .select('*')
@@ -86,10 +110,8 @@ export function RestaurantProvider({ children }) {
           found = data || null;
         }
 
-        // === 3) If STILL nothing, but user is logged in → treat them as STAFF ===
-        // This is the key part that lets pure staff accounts land on the correct restaurant.
-        let staffBinding = null;
-        if (!found && userEmail) {
+        // === 3) Fallback staff check for non-/owner pages ===
+        if (!found && !staffBinding && userEmail) {
           const { data: staffRow, error: staffErr } = await supabase
             .from('restaurant_staff')
             .select('restaurant_id, role, staff_name')
@@ -160,11 +182,11 @@ export function RestaurantProvider({ children }) {
         // === 5) Determine current user's role for THIS restaurant ===
         let role = 'guest'; // default when not logged in or no binding
         if (found?.id && userEmail) {
-          if (userEmail === found.owner_email) {
-            role = 'admin';
-          } else if (found._staffRole === 'manager' || found._staffRole === 'staff') {
-            // staff binding we already looked up in step 3
+          if (found._staffRole) {
+            // staff binding we already looked up in step 0 or 3
             role = found._staffRole;
+          } else if (userEmail === found.owner_email) {
+            role = 'admin';
           } else {
             // Fallback: if we got restaurant by rid, check if this user is staff on it
             try {
