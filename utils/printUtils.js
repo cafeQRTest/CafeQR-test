@@ -771,7 +771,7 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     lines.push(
       MODE_BOLD +
       (is80 ? SIZE_2X : SIZE_2X) +
-      withMargins(kvLine("TOTAL:", fmtRate(oGrandTotal), W), layout) +
+      withMargins(kvLineScaled("TOTAL:", fmtRate(oGrandTotal), W, 2), layout) +
       SIZE_1X +
       MODE_NO_BOLD
     );
@@ -780,12 +780,20 @@ export function buildReceiptText(order, bill, restaurantProfile) {
 
     // Helper text for customer clarity
     if (isInclusive && oTotalTax > 0) {
-      lines.push(withMargins(center("Prices are inclusive of GST", W), layout));
+      wrapText("Prices are inclusive of GST", W).forEach(l => {
+        lines.push(withMargins(center(l, W), layout));
+      });
     }
 
-    lines.push(withMargins(center("Please consume the food within 2 hours", W), layout));
-    lines.push(withMargins(center("** THANK YOU! VISIT AGAIN !! **", W), layout));
-    lines.push(withMargins(center("Powered by Cafe QR", W), layout));
+    wrapText("Please consume the food within 2 hours", W).forEach(l => {
+      lines.push(withMargins(center(l, W), layout));
+    });
+    wrapText("** THANK YOU! VISIT AGAIN !! **", W).forEach(l => {
+      lines.push(withMargins(center(l, W), layout));
+    });
+    wrapText("Powered by Cafe QR", W).forEach(l => {
+      lines.push(withMargins(center(l, W), layout));
+    });
     lines.push("");
 
     return escposPageSetup(layout) + buildLogoEscPos(restaurantProfile) + lines.join("\n");
