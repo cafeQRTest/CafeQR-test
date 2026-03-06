@@ -30,7 +30,7 @@ const SIZE_2H = GS + "!" + b(0x01); // 1x width, 2x height (your current â€œDHâ€
 
 
 export function toDisplayItems(order) {
-  
+
   // DB/API shape (HAS discount data)
   if (Array.isArray(order?.order_items) && order.order_items.length) {
     return order.order_items.map((oi) => {
@@ -64,20 +64,20 @@ export function toDisplayItems(order) {
     });
   }
 
-  
+
   // Counter/cart shape (simple, may not have discount) - FALLBACK ONLY
   if (Array.isArray(order?.items) && order.items.length) {
     return order.items.map((i) => {
       let discountAmount = Number(i.discount_amount || 0);
 
       if (!discountAmount && i.discount) {
-         const val = Number(i.discount.value || 0);
-         const base = Number(i.price || 0) * Number(i.quantity || 1);
-         if (i.discount.type === 'percent') {
-            discountAmount = base * (val / 100);
-         } else {
-            discountAmount = val;
-         }
+        const val = Number(i.discount.value || 0);
+        const base = Number(i.price || 0) * Number(i.quantity || 1);
+        if (i.discount.type === 'percent') {
+          discountAmount = base * (val / 100);
+        } else {
+          discountAmount = val;
+        }
       }
 
       return {
@@ -316,8 +316,8 @@ export function buildKotText(order, restaurantProfile) {
 
     const restaurantName = String(
       restaurantProfile?.restaurant_name ||
-        order?.restaurant_name ||
-        "RESTAURANT"
+      order?.restaurant_name ||
+      "RESTAURANT"
     ).toUpperCase();
 
     const addressParts = [
@@ -361,22 +361,22 @@ export function buildKotText(order, restaurantProfile) {
     // Use PRINTER ALIGNMENT (ALIGN_CENTER) for the double-width header
     // so it ignores column counting errors.
 
-// === RESTAURANT NAME (center + bold; 80mm = 2xW/2xH, 58mm = normal) ===
-const is80 = layout.paperMm >= 76;
+    // === RESTAURANT NAME (center + bold; 80mm = 2xW/2xH, 58mm = normal) ===
+    const is80 = layout.paperMm >= 76;
 
-lines.push(ALIGN_CENTER);
+    lines.push(ALIGN_CENTER);
 
-lines.push(
-  MODE_BOLD +
-    (is80 ? SIZE_2X : SIZE_1X) +
-    restaurantName +
-    SIZE_1X +
-    MODE_NO_BOLD
-);
+    lines.push(
+      MODE_BOLD +
+      (is80 ? SIZE_2X : SIZE_1X) +
+      restaurantName +
+      SIZE_1X +
+      MODE_NO_BOLD
+    );
 
 
-// go back to normal flow
-lines.push(ALIGN_LEFT);
+    // go back to normal flow
+    lines.push(ALIGN_LEFT);
 
 
 
@@ -386,26 +386,46 @@ lines.push(ALIGN_LEFT);
     );
     if (phone)
       lines.push(withMargins(center(`Contact No.: ${phone}`, W), layout));
-    
+
     lines.push(withMargins(dashes(), layout));
 
     lines.push(withMargins(center("*** KITCHEN ORDER TICKET ***", W), layout));
     lines.push(withMargins(`${dateStr} ${timeStr}`, layout));
     lines.push(withMargins(`Order: #${orderId}`, layout));
     if (order?.bill_no) {
-       lines.push(withMargins(`Bill No: ${order.bill_no}`, layout));
+      lines.push(withMargins(`Bill No: ${order.bill_no}`, layout));
     }
     if (tableLabel) lines.push(withMargins(`For: ${tableLabel}`, layout));
-const staffName = String(order?.taken_by_name || '').trim();
+    const staffName = String(order?.taken_by_name || '').trim();
 
-if (staffName) {
-  lines.push(withMargins(`Staff: ${staffName}`, layout));
-}
+    if (staffName) {
+      lines.push(withMargins(`Attended by: ${staffName}`, layout));
+    }
 
     if (order?.number_of_customers)
       lines.push(
         withMargins(`No. of Customers: ${order.number_of_customers}`, layout)
       );
+
+    const custName = String(order?.customer_name || "").trim();
+    const custPhone = String(order?.customer_phone || "").trim();
+    const inst = String(order?.special_instructions || order?.instructions || "").trim();
+    const hasDeliveryBlock = inst.includes("Delivery Details:");
+
+    if (!hasDeliveryBlock) {
+      if (custName) lines.push(withMargins(`Customer: ${custName}`, layout));
+      if (custPhone) lines.push(withMargins(`Phone: ${custPhone}`, layout));
+    }
+
+    if (inst) {
+      lines.push(withMargins(dashes(), layout));
+      inst.split('\n').map(s => s.trim()).filter(Boolean).forEach(line => {
+        wrapText(line, W).forEach(wl => {
+          lines.push(withMargins(wl, layout));
+        });
+      });
+    }
+
     lines.push(withMargins(dashes(), layout));
 
     if (items.length) {
@@ -431,8 +451,8 @@ if (staffName) {
         const p = Number.isInteger(it?.uom_precision)
           ? it.uom_precision
           : qtyNum % 1 === 0
-          ? 0
-          : 2;
+            ? 0
+            : 2;
 
         if (!nameLines.length) return;
 
@@ -463,8 +483,8 @@ if (staffName) {
         const p = Number.isInteger(ri?.uom_precision)
           ? ri.uom_precision
           : qtyNum % 1 === 0
-          ? 0
-          : 2;
+            ? 0
+            : 2;
 
         if (!nameLines.length) return;
 
@@ -529,8 +549,8 @@ export function buildReceiptText(order, bill, restaurantProfile) {
 
     const restaurantName = String(
       restaurantProfile?.restaurant_name ||
-        order?.restaurant_name ||
-        "RESTAURANT"
+      order?.restaurant_name ||
+      "RESTAURANT"
     ).toUpperCase();
 
     const addressParts = [
@@ -585,10 +605,10 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     lines.push(ALIGN_CENTER);
     lines.push(
       MODE_BOLD +
-        (is80 ? SIZE_2X : SIZE_1X) +
-        restaurantName +
-        SIZE_1X +
-        MODE_NO_BOLD
+      (is80 ? SIZE_2X : SIZE_1X) +
+      restaurantName +
+      SIZE_1X +
+      MODE_NO_BOLD
     );
     lines.push(ALIGN_LEFT);
 
@@ -612,6 +632,25 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     if (orderType) lines.push(withMargins(`Order Type: ${orderType}`, layout));
     if (order?.number_of_customers)
       lines.push(withMargins(`No. of Customers: ${order.number_of_customers}`, layout));
+
+    const custName = String(order?.customer_name || "").trim();
+    const custPhone = String(order?.customer_phone || "").trim();
+    const inst = String(order?.special_instructions || order?.instructions || "").trim();
+    const hasDeliveryBlock = inst.includes("Delivery Details:");
+
+    if (!hasDeliveryBlock) {
+      if (custName) lines.push(withMargins(`Customer: ${custName}`, layout));
+      if (custPhone) lines.push(withMargins(`Phone: ${custPhone}`, layout));
+    }
+
+    if (inst) {
+      lines.push(withMargins(dashes(), layout));
+      inst.split('\n').map(s => s.trim()).filter(Boolean).forEach(line => {
+        wrapText(line, W).forEach(wl => {
+          lines.push(withMargins(wl, layout));
+        });
+      });
+    }
 
     lines.push(withMargins(dashes(), layout));
 
@@ -655,10 +694,10 @@ export function buildReceiptText(order, bill, restaurantProfile) {
       // }
 
       const nameLines = wrapText(nameStr, name);
-      
+
       const qtyStr = Number.isInteger(qtyNum) ? qtyNum.toString() : qtyNum.toFixed(2);
       const rateStr = fmtRate(rateNum);
-      
+
       // Show original Gross total in the item column to keep summary math clear
       const printLineTotal = rateNum * qtyNum;
       const totalStr = printLineTotal.toFixed(2);
@@ -687,12 +726,12 @@ export function buildReceiptText(order, bill, restaurantProfile) {
 
     // ===== TOTALS (Restaurant-Standard Customer Bill Format) =====
     const isInclusive = order?.prices_include_tax === true;
-    
+
     // 1. Items Total (Sum of Rate * Qty)
     const itemsGrossTotal = items.reduce((s, it) => s + (Number(it.price || 0) * Number(it.quantity || 1)), 0);
     const label = isInclusiveMode ? "Items Total:" : "Gross Total:";
     lines.push(withMargins(kvLine(label, fmtRate(itemsGrossTotal), W), layout));
-    
+
     // 2. Total Discount (Unified Line + Bill reductions)
     // We sum Line Discounts + whole Bill Discount. 
     // it.discount_amount - it.order_discount_share = actual Line Discount.
@@ -731,22 +770,30 @@ export function buildReceiptText(order, bill, restaurantProfile) {
     // ===== GRAND TOTAL =====
     lines.push(
       MODE_BOLD +
-        (is80 ? SIZE_2X : SIZE_2H) +
-        withMargins(kvLine("TOTAL:", fmtRate(oGrandTotal), W), layout) +
-        SIZE_1X +
-        MODE_NO_BOLD
+      (is80 ? SIZE_2X : SIZE_2X) +
+      withMargins(kvLineScaled("TOTAL:", fmtRate(oGrandTotal), W, 2), layout) +
+      SIZE_1X +
+      MODE_NO_BOLD
     );
 
     lines.push(withMargins(dashes(), layout));
-    
+
     // Helper text for customer clarity
     if (isInclusive && oTotalTax > 0) {
-      lines.push(withMargins(center("Prices are inclusive of GST", W), layout));
+      wrapText("Prices are inclusive of GST", W).forEach(l => {
+        lines.push(withMargins(center(l, W), layout));
+      });
     }
-    
-    lines.push(withMargins(center("Please consume the food within 2 hours",W), layout));
-    lines.push(withMargins(center("** THANK YOU! VISIT AGAIN !! **", W), layout));
-    lines.push(withMargins(center("Powered by Cafe QR", W), layout));
+
+    wrapText("Please consume the food within 2 hours", W).forEach(l => {
+      lines.push(withMargins(center(l, W), layout));
+    });
+    wrapText("** THANK YOU! VISIT AGAIN !! **", W).forEach(l => {
+      lines.push(withMargins(center(l, W), layout));
+    });
+    wrapText("Powered by Cafe QR", W).forEach(l => {
+      lines.push(withMargins(center(l, W), layout));
+    });
     lines.push("");
 
     return escposPageSetup(layout) + buildLogoEscPos(restaurantProfile) + lines.join("\n");
