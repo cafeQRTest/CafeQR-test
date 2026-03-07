@@ -3,7 +3,7 @@
 import { useRouter } from "next/router";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { getSupabase } from "../../services/supabase";
+import { getCustomerSupabase } from "../../services/supabase";
 import { useCustomerAuth } from "../../context/CustomerAuthContext";
 
 
@@ -11,7 +11,7 @@ const cartKey = (restaurantId) => `cart_delivery_${restaurantId}`;
 
 export default function DeliveryPayment() {
   const router = useRouter();
-  const supabase = getSupabase();
+  const supabase = getCustomerSupabase();
   const { user } = useCustomerAuth();
   const { r: restaurantId } = router.query;
 

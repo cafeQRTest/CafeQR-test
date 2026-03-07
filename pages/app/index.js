@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import LandingPage from "../../components/LandingPage";
 
-import { getSupabase } from "../../services/supabase";
+import { getCustomerSupabase } from "../../services/supabase";
 
 export default function DeliveryAppHome() {
   return (

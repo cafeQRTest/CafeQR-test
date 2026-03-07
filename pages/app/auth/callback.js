@@ -1,7 +1,7 @@
 // pages/app/auth/callback.js
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
-import { getSupabase } from "../../../services/supabase";
+import { getCustomerSupabase } from "../../../services/supabase";
 import { motion, AnimatePresence } from "framer-motion";
 import { AlertCircle, Link as LinkIcon, RefreshCcw } from "lucide-react";
 
@@ -10,7 +10,7 @@ import { AlertCircle, Link as LinkIcon, RefreshCcw } from "lucide-react";
 const DELIVERY_REDIRECT = "/app/restaurants";
 
 export default function AuthCallback() {
-  const supabase = getSupabase();
+  const supabase = getCustomerSupabase();
   const router = useRouter();
   const [err, setErr] = useState("");
 

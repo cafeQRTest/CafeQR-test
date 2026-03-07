@@ -1,13 +1,11 @@
-import { useEffect, useState } from "react";
-import { useRouter } from "next/router";
-import { getSupabase } from "../../services/supabase";
+import { getCustomerSupabase } from "../../services/supabase";
 import { getOrCreateCustomer } from "../../lib/customer/getOrCreateCustomer";
 import { MapPin, Navigation, Loader2, ArrowRight, RefreshCw } from "lucide-react";
 import { Capacitor } from "@capacitor/core";
 import { Geolocation } from "@capacitor/geolocation";
 
 export default function AddressPage() {
-  const supabase = getSupabase();
+  const supabase = getCustomerSupabase();
   const router = useRouter();
 
   const [customer, setCustomer] = useState(null);

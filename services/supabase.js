@@ -63,4 +63,45 @@ export function getSupabase() {
   return supabaseInstance
 }
 
+let customerSupabaseInstance
+
+export function getCustomerSupabase() {
+  if (customerSupabaseInstance) return customerSupabaseInstance
+
+  if (Capacitor.isNativePlatform()) {
+    // Native: Use standard client with persistent Capacitor storage
+    customerSupabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        storage: CapacitorStorage,
+        storageKey: 'customer_auth_token',
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: true,
+        flowType: 'pkce',
+      },
+    })
+  } else {
+    // Web: Use SSR Browser Client (Cookies)
+    customerSupabaseInstance = createBrowserClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        storageKey: 'customer_auth_token',
+        flowType: 'pkce',
+        detectSessionInUrl: true,
+        persistSession: true,
+        autoRefreshToken: true,
+      },
+      cookieOptions: {
+        name: 'customer_auth_token',
+        maxAge: 60 * 60 * 24 * 30, // 30 Days
+        path: '/',
+        sameSite: 'lax',
+        secure: process.env.NODE_ENV === 'production',
+        httpOnly: false
+      }
+    })
+  }
+
+  return customerSupabaseInstance
+}
+
 export default getSupabase;

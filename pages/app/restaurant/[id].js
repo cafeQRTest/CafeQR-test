@@ -3,7 +3,7 @@
 import { useRouter } from "next/router";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { getSupabase } from "../../../services/supabase";
+import { getCustomerSupabase } from "../../../services/supabase";
 import { motion, AnimatePresence } from "framer-motion";
 
 
@@ -11,7 +11,7 @@ const cartKey = (restaurantId) => `cart_delivery_${restaurantId}`;
 
 export default function DeliveryRestaurantMenu() {
   const router = useRouter();
-  const supabase = getSupabase();
+  const supabase = getCustomerSupabase();
   const { id: restaurantId } = router.query;
 
   const [loading, setLoading] = useState(true);

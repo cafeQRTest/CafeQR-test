@@ -3,14 +3,14 @@
 import { useRouter } from "next/router";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { getSupabase } from "../../services/supabase";
+import { getCustomerSupabase } from "../../services/supabase";
 
 
 const cartKey = (restaurantId) => `cart_delivery_${restaurantId}`;
 
 export default function DeliveryCart() {
   const router = useRouter();
-  const supabase = getSupabase();
+  const supabase = getCustomerSupabase();
   const { r: restaurantId } = router.query;
 
   const [restaurant, setRestaurant] = useState(null);
