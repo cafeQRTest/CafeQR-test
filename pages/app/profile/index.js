@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
+import { ArrowLeft, User, Phone, Save, LogOut, MapPin, ChevronRight } from "lucide-react";
 import { getSupabase } from "../../../services/supabase";
-import Loading from "./loading";
 
 export default function ProfilePage() {
     const supabase = getSupabase();
@@ -28,26 +28,33 @@ export default function ProfilePage() {
         const init = async () => {
             setLoading(true);
 
-            const { data } = await supabase.auth.getUser();
-            const user = data?.user || null;
-            if (mounted) setSessionUser(user);
+            try {
+                // Use getSession() instead of getUser() — getUser() makes a network call
+                // that can hang on Android APK
+                const { data: sessionData } = await Promise.race([
+                    supabase.auth.getSession(),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 8000)),
+                ]);
+                const user = sessionData?.session?.user || null;
+                if (mounted) setSessionUser(user);
 
-            if (user) {
-                // Fetch profile from 'customers' table using user_id
-                const { data: profile, error } = await supabase
-                    .from('customers')
-                    .select('name, phone')
-                    .eq('user_id', user.id)
-                    .maybeSingle();
+                if (user) {
+                    const { data: profile } = await Promise.race([
+                        supabase
+                            .from('customers')
+                            .select('name, phone')
+                            .eq('user_id', user.id)
+                            .maybeSingle(),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 8000)),
+                    ]);
 
-                if (error) {
-                    console.error("Error fetching profile:", error);
+                    if (mounted && profile) {
+                        if (profile.name) setName(profile.name);
+                        if (profile.phone) setPhone(profile.phone.replace(/\D/g, '').slice(0, 10));
+                    }
                 }
-
-                if (mounted && profile) {
-                    if (profile.name) setName(profile.name);
-                    if (profile.phone) setPhone(profile.phone.replace(/\D/g, '').slice(0, 10));
-                }
+            } catch (e) {
+                console.warn("Profile init error:", e);
             }
 
             if (mounted) setLoading(false);
@@ -62,195 +69,365 @@ export default function ProfilePage() {
         setMsg("");
         setSaving(true);
 
-        // Get fresh session
-        const { data: { user } } = await supabase.auth.getUser();
+        try {
+            const { data: sessionData } = await supabase.auth.getSession();
+            const user = sessionData?.session?.user;
 
-        if (!user) {
-            setMsg("Please log in to save.");
-            setSaving(false);
-            setTimeout(() => setMsg(""), 1500);
-            return;
-        }
+            if (!user) {
+                setMsg("Please log in to save.");
+                setSaving(false);
+                setTimeout(() => setMsg(""), 1500);
+                return;
+            }
 
-        const nextName = name.trim();
-        const nextPhone = phone.trim();
+            const nextName = name.trim();
+            const nextPhone = phone.trim();
 
-        // Use 'customers' table, matching on user_id
-        const { data: existing } = await supabase
-            .from('customers')
-            .select('id')
-            .eq('user_id', user.id)
-            .maybeSingle();
-
-        let error;
-
-        if (existing) {
-            // Update
-            const { error: updateErr } = await supabase
+            const { data: existing } = await supabase
                 .from('customers')
-                .update({ name: nextName, phone: nextPhone })
-                .eq('id', existing.id);
-            error = updateErr;
-        } else {
-            // Insert
-            const { error: insertErr } = await supabase
-                .from('customers')
-                .insert({
-                    user_id: user.id,
-                    name: nextName,
-                    phone: nextPhone,
-                    email: user.email // optional but good practice
-                });
-            error = insertErr;
-        }
+                .select('id')
+                .eq('user_id', user.id)
+                .maybeSingle();
 
-        if (error) {
-            console.error("Supabase Error Details:", error);
+            let error;
+
+            if (existing) {
+                const { error: updateErr } = await supabase
+                    .from('customers')
+                    .update({ name: nextName, phone: nextPhone })
+                    .eq('id', existing.id);
+                error = updateErr;
+            } else {
+                const { error: insertErr } = await supabase
+                    .from('customers')
+                    .insert({
+                        user_id: user.id,
+                        name: nextName,
+                        phone: nextPhone,
+                        email: user.email
+                    });
+                error = insertErr;
+            }
+
+            if (error) {
+                console.error("Supabase Error:", error);
+                setMsg("Error saving.");
+            } else {
+                setMsg("Saved!");
+            }
+        } catch (e) {
+            console.warn("Save error:", e);
             setMsg("Error saving.");
-        } else {
-            setMsg("Saved.");
         }
 
         setSaving(false);
-        setTimeout(() => setMsg(""), 1500);
+        setTimeout(() => setMsg(""), 2000);
     };
 
     const logout = async () => {
         await supabase.auth.signOut().catch(() => { });
-        window.location.href = "/app";
+        window.location.href = "/app/auth";
     };
 
-    if (loading) return <Loading />;
+    if (loading) {
+        return (
+            <div className="dp-page">
+                <style>{CSS_TEXT}</style>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+                    <div className="dp-spinner" />
+                </div>
+            </div>
+        );
+    }
 
     return (
-        <div style={{ minHeight: "100vh", background: "#f8f9fa", paddingBottom: 84 }}>
-            <header style={{ background: "#fff", borderBottom: "1px solid #e5e7eb", padding: 16 }}>
-                <div style={{ fontSize: 18, fontWeight: 900, color: "#111827" }}>Profile</div>
-                <div style={{ marginTop: 6, color: "#6b7280", fontSize: 13 }}>
-                    Manage your delivery details and addresses
-                </div>
+        <div className="dp-page">
+            <style>{CSS_TEXT}</style>
+
+            {/* Header */}
+            <header className="dp-header">
+                <button className="dp-back-btn" onClick={() => router.push("/app/restaurants")}>
+                    <ArrowLeft size={20} />
+                </button>
+                <h1>Profile</h1>
+                <div style={{ width: 36 }} />
             </header>
 
-            <div style={{ padding: 16, display: "grid", gap: 12 }}>
-                {!sessionUser ? (
-                    <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: 14 }}>
-                        <div style={{ fontWeight: 900, marginBottom: 8 }}>Login</div>
-                        <div style={{ color: "#6b7280", fontSize: 13, marginBottom: 12 }}>
-                            Login to keep your profile synced across devices.
-                        </div>
-                        <Link
-                            href="/app/auth"
-                            style={{
-                                display: "inline-block",
-                                background: "#f59e0b",
-                                color: "#fff",
-                                textDecoration: "none",
-                                padding: "12px 14px",
-                                borderRadius: 12,
-                                fontWeight: 900,
-                            }}
-                        >
-                            Login / OTP
-                        </Link>
+            <div className="dp-content">
+                {/* Avatar */}
+                <div className="dp-avatar-section">
+                    <div className="dp-avatar-circle">
+                        <User size={36} color="#f97316" />
                     </div>
-                ) : null}
+                    <p className="dp-avatar-email">
+                        {sessionUser?.email || "Not logged in"}
+                    </p>
+                </div>
 
-                <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 14, padding: 14 }}>
-                    <div style={{ fontWeight: 900, marginBottom: 10 }}>Customer details</div>
+                {/* Form */}
+                <div className="dp-card">
+                    <h2 className="dp-card-title">Customer Details</h2>
 
-                    <label style={{ fontSize: 12, color: "#6b7280" }}>Name <span style={{ color: "red" }}>*</span></label>
-                    <input
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        placeholder="Your name"
-                        style={{
-                            width: "100%",
-                            padding: 12,
-                            borderRadius: 12,
-                            border: !isNameValid && name.length > 0 ? "1px solid red" : "1px solid #e5e7eb",
-                            marginTop: 6,
-                            outline: "none",
-                        }}
-                    />
+                    <div className="dp-field">
+                        <label className="dp-label">
+                            <User size={14} />
+                            Name <span className="dp-required">*</span>
+                        </label>
+                        <input
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            placeholder="Your name"
+                            className="dp-input"
+                        />
+                    </div>
 
-                    <div style={{ height: 10 }} />
+                    <div className="dp-field">
+                        <label className="dp-label">
+                            <Phone size={14} />
+                            Phone <span className="dp-required">*</span>
+                            {phone.length > 0 && !isPhoneValid && (
+                                <span className="dp-error-hint">Enter valid 10-digit number</span>
+                            )}
+                        </label>
+                        <input
+                            value={phone}
+                            onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                            placeholder="10-digit mobile number"
+                            type="tel"
+                            inputMode="numeric"
+                            className="dp-input"
+                        />
+                    </div>
 
-                    <label style={{ fontSize: 12, color: "#6b7280" }}>
-                        Phone <span style={{ color: "red" }}>*</span>
-                        {phone.length > 0 && !isPhoneValid && (
-                            <span style={{ color: "red", marginLeft: 8 }}>Enter valid phone number</span>
-                        )}
-                    </label>
-                    <input
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                        placeholder="10-digit mobile number"
-                        style={{
-                            width: "100%",
-                            padding: 12,
-                            borderRadius: 12,
-                            border: !isPhoneValid && phone.length > 0 ? "1px solid red" : "1px solid #e5e7eb",
-                            marginTop: 6,
-                            outline: "none",
-                        }}
-                    />
-
-                    <div style={{ display: "flex", gap: 10, marginTop: 12, alignItems: "center" }}>
+                    <div className="dp-save-row">
                         <button
                             onClick={save}
                             disabled={saving || !isFormValid}
-                            style={{
-                                background: (saving || !isFormValid) ? "#cbd5e1" : "#f59e0b",
-                                border: "none",
-                                color: "#fff",
-                                borderRadius: 12,
-                                padding: "12px 14px",
-                                fontWeight: 900,
-                                cursor: (saving || !isFormValid) ? "not-allowed" : "pointer",
-                                opacity: isFormValid ? 1 : 0.5,
-                            }}
+                            className="dp-save-btn"
                         >
+                            <Save size={16} />
                             {saving ? "Saving..." : "Save"}
                         </button>
-                        {msg ? <div style={{ color: "#6b7280", fontSize: 13 }}>{msg}</div> : null}
+                        {msg && <span className="dp-msg">{msg}</span>}
                     </div>
                 </div>
 
-                <Link
-                    href="/app/address"
-                    style={{
-                        background: "#fff",
-                        border: "1px solid #e5e7eb",
-                        borderRadius: 14,
-                        padding: 14,
-                        textDecoration: "none",
-                        color: "#111827",
-                        fontWeight: 900,
-                    }}
-                >
-                    Manage addresses →
+                {/* Addresses link */}
+                <Link href="/app/address" className="dp-link-card">
+                    <div className="dp-link-left">
+                        <MapPin size={18} color="#f97316" />
+                        <span>Manage Addresses</span>
+                    </div>
+                    <ChevronRight size={18} color="#9ca3af" />
                 </Link>
 
-                {sessionUser ? (
-                    <button
-                        onClick={logout}
-                        style={{
-                            background: "#fff",
-                            border: "1px solid #ef4444",
-                            color: "#ef4444",
-                            borderRadius: 14,
-                            padding: 14,
-                            fontWeight: 900,
-                            cursor: "pointer",
-                        }}
-                    >
-                        Logout
+                {/* Logout */}
+                {sessionUser && (
+                    <button onClick={logout} className="dp-logout-btn">
+                        <LogOut size={16} />
+                        Sign Out
                     </button>
-                ) : null}
+                )}
             </div>
         </div>
     );
 }
 
+const CSS_TEXT = `
+    .dp-page {
+        min-height: 100vh;
+        min-height: 100dvh;
+        background: #f5f5f5;
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        -webkit-font-smoothing: antialiased;
+    }
+    .dp-spinner {
+        width: 32px; height: 32px;
+        border: 3px solid #f3e8d8;
+        border-top: 3px solid #f97316;
+        border-radius: 50%;
+        animation: dp-spin 0.7s linear infinite;
+    }
+    @keyframes dp-spin { to { transform: rotate(360deg); } }
 
+    .dp-header {
+        background: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 16px;
+        border-bottom: 1px solid #e5e7eb;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }
+    .dp-header h1 {
+        font-size: 17px;
+        font-weight: 800;
+        color: #111827;
+        margin: 0;
+    }
+    .dp-back-btn {
+        width: 36px; height: 36px;
+        display: flex; align-items: center; justify-content: center;
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        color: #374151;
+        border-radius: 10px;
+    }
+    .dp-back-btn:active { background: #f3f4f6; }
 
+    .dp-content {
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 20px 16px 40px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    .dp-avatar-section {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 24px 0 8px;
+    }
+    .dp-avatar-circle {
+        width: 80px; height: 80px;
+        border-radius: 50%;
+        background: #fff7ed;
+        border: 3px solid #fed7aa;
+        display: flex; align-items: center; justify-content: center;
+        margin-bottom: 12px;
+    }
+    .dp-avatar-email {
+        font-size: 13px;
+        color: #6b7280;
+        margin: 0;
+        font-weight: 500;
+    }
+
+    .dp-card {
+        background: #fff;
+        border-radius: 20px;
+        padding: 20px;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+        border: 1px solid rgba(0,0,0,0.04);
+    }
+    .dp-card-title {
+        font-size: 16px;
+        font-weight: 800;
+        color: #1f2937;
+        margin: 0 0 16px;
+    }
+
+    .dp-field {
+        margin-bottom: 14px;
+    }
+    .dp-label {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #6b7280;
+        margin-bottom: 6px;
+    }
+    .dp-required { color: #ef4444; }
+    .dp-error-hint {
+        color: #ef4444;
+        margin-left: 8px;
+        font-size: 11px;
+    }
+    .dp-input {
+        width: 100%;
+        padding: 12px 14px;
+        border-radius: 14px;
+        border: 2px solid #e5e7eb;
+        font-size: 15px;
+        font-weight: 500;
+        color: #1f2937;
+        outline: none;
+        transition: all 0.2s;
+        background: #fafafa;
+        box-sizing: border-box;
+    }
+    .dp-input:focus {
+        border-color: #f97316;
+        box-shadow: 0 0 0 4px rgba(249,115,22,0.08);
+        background: #fff;
+    }
+
+    .dp-save-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-top: 4px;
+    }
+    .dp-save-btn {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: #f97316;
+        color: #fff;
+        border: none;
+        border-radius: 14px;
+        padding: 12px 24px;
+        font-weight: 700;
+        font-size: 14px;
+        cursor: pointer;
+        box-shadow: 0 4px 14px rgba(249,115,22,0.3);
+        transition: all 0.2s;
+    }
+    .dp-save-btn:hover { background: #ea580c; }
+    .dp-save-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+    .dp-msg {
+        font-size: 13px;
+        color: #059669;
+        font-weight: 600;
+    }
+
+    .dp-link-card {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: #fff;
+        border-radius: 16px;
+        padding: 16px 18px;
+        text-decoration: none;
+        color: #1f2937;
+        font-weight: 700;
+        font-size: 15px;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+        border: 1px solid rgba(0,0,0,0.04);
+        transition: all 0.2s;
+    }
+    .dp-link-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+    .dp-link-left {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .dp-logout-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        width: 100%;
+        background: #fff;
+        border: 2px solid #fecaca;
+        color: #ef4444;
+        font-weight: 700;
+        font-size: 14px;
+        padding: 14px;
+        border-radius: 16px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .dp-logout-btn:hover { background: #fef2f2; }
+`;
