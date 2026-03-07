@@ -26,6 +26,7 @@ import { FaUserFriends, FaExchangeAlt, FaSearch, FaEdit, FaTrash, FaInfoCircle, 
 import Button from '../../components/ui/Button'
 import NiceSelect from '../../components/NiceSelect'
 import { Fragment } from 'react'
+import { useRestaurantProfileConfig } from '../../hooks/useCreateOrderData'
 
 export default function OwnerCustomersPage() {
   const BRAND = {
@@ -64,6 +65,9 @@ export default function OwnerCustomersPage() {
   // Loyalty Programs
   const [loyaltyPrograms, setLoyaltyPrograms] = useState([]);
   const [duplicateWarning, setDuplicateWarning] = useState(null); // { message, onConfirm }
+
+  const { data: profileConfig } = useRestaurantProfileConfig(restaurantId);
+  const allowMultipleCustomers = profileConfig?.allow_multiple_customers_per_order === true;
 
   useEffect(() => {
     if(!restaurantId) return;
@@ -317,17 +321,33 @@ export default function OwnerCustomersPage() {
 
   const exportToCSV = () => {
     if (!rows.length) return;
+    
+    // Base headers
     const headers = ['Name', 'Phone', 'Visits', 'Total Orders', 'Total Spent', 'Last Visited'];
+    
+    // Add Age if config is on
+    if (allowMultipleCustomers) {
+      headers.push('Age');
+    }
+
     const csvRows = [
       headers.join(','),
-      ...rows.map(r => [
-        `"${r.name}"`,
-        `"${r.phone || 'No Phone'}"`,
-        r.visit_count,
-        r.order_count,
-        r.total_spent.toFixed(2),
-        r.last_order_at ? new Date(r.last_order_at).toLocaleDateString() : ''
-      ].join(','))
+      ...rows.map(r => {
+        const rowData = [
+          `"${r.name}"`,
+          `"${r.phone || 'No Phone'}"`,
+          r.visit_count,
+          r.order_count,
+          r.total_spent.toFixed(2),
+          r.last_order_at ? new Date(r.last_order_at).toLocaleDateString() : ''
+        ];
+        
+        if (allowMultipleCustomers) {
+          rowData.push(`"${r.age || ''}"`);
+        }
+        
+        return rowData.join(',');
+      })
     ];
     
     const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
@@ -986,6 +1006,12 @@ export default function OwnerCustomersPage() {
                       {fmt.format(Number(c.total_spent || 0))}
                     </div>
                   </div>
+                  {allowMultipleCustomers && (
+                    <div className="cc-metric">
+                      <div className="l">Age</div>
+                      <div className="v">{c.age || '-'}</div>
+                    </div>
+                  )}
                 </div>
 
                 {expandedKey === c.key && (
@@ -1036,6 +1062,7 @@ export default function OwnerCustomersPage() {
                   <th>Contact</th>
                   <th className="cr-center">Visits</th>
                   <th className="cr-center">Orders</th>
+                  {allowMultipleCustomers && <th className="cr-center">Age</th>}
                   <th className="cr-right">Total Spent</th>
                   <th>Last Order</th>
                   <th style={{ textAlign: 'center', width: '160px' }}>Actions</th>
@@ -1068,6 +1095,7 @@ export default function OwnerCustomersPage() {
                       <td style={{ color: c.phone ? 'inherit' : '#94a3b8' }}>{c.displayPhone}</td>
                       <td className="cr-center">{Number(c.visit_count || 0)}</td>
                       <td className="cr-center">{Number(c.order_count || 0)}</td>
+                      {allowMultipleCustomers && <td className="cr-center">{c.age || '-'}</td>}
                       <td className="cr-right" style={{ fontWeight: 800, color: BRAND.orange }}>
                         {fmt.format(Number(c.total_spent || 0))}
                       </td>
@@ -1089,7 +1117,7 @@ export default function OwnerCustomersPage() {
 
                     {expandedKey === c.key && (
                       <tr>
-                        <td colSpan={9} style={{ background: '#fff', padding: '12px 24px' }}>
+                        <td colSpan={allowMultipleCustomers ? 10 : 9} style={{ background: '#fff', padding: '12px 24px' }}>
                            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
                               <div style={{ padding: '12px 16px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                  <span style={{ fontWeight: 800, fontSize: 13, color: '#475569' }}>Order History</span>
