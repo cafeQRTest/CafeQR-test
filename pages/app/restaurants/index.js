@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { Search, User, ShoppingBag, MapPin, Navigation, RefreshCw, AlertTriangle, Clock, Star, ChevronDown, LogOut } from "lucide-react";
-import { getSupabase } from "../../../services/supabase";
+import { getCustomerSupabase } from "../../../services/supabase";
 import { Capacitor } from "@capacitor/core";
 import { Geolocation } from "@capacitor/geolocation";
 
@@ -38,7 +38,7 @@ const GPS_SUCCESS = "success";
 const GPS_ERROR = "error";
 
 export default function RestaurantListing() {
-    const supabase = getSupabase();
+    const supabase = getCustomerSupabase();
     const router = useRouter();
 
     // Auth

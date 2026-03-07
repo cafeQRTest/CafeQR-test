@@ -1,11 +1,11 @@
 // context/CustomerAuthContext.js
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { getSupabase } from "../services/supabase";
+import { getCustomerSupabase } from "../services/supabase";
 
 const CustomerAuthContext = createContext(null);
 
 export function CustomerAuthProvider({ children }) {
-  const supabase = getSupabase();
+  const supabase = getCustomerSupabase();
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
 

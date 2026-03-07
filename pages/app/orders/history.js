@@ -3,7 +3,7 @@
 import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
 import { ArrowLeft, Clock, ShoppingBag, ArrowRight as ArrowIcon, CheckCircle2, XCircle, Package, RefreshCw } from "lucide-react";
-import { getSupabase } from "../../../services/supabase";
+import { getCustomerSupabase } from "../../../services/supabase";
 
 const cartKey = (restaurantId) => `cart_delivery_${restaurantId}`;
 
@@ -16,7 +16,7 @@ const STOCK_IMAGES = [
 
 export default function OrderHistory() {
   const router = useRouter();
-  const supabase = getSupabase();
+  const supabase = getCustomerSupabase();
 
   const [orders, setOrders] = useState([]);
   const [restaurants, setRestaurants] = useState({});

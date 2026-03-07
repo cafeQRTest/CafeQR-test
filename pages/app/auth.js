@@ -3,7 +3,7 @@ export const runtime = "experimental-edge";
 
 import { useRouter } from "next/router";
 import { useState, useEffect } from "react";
-import { getSupabase } from "../../services/supabase";
+import { getCustomerSupabase } from "../../services/supabase";
 import { ArrowLeft } from "lucide-react";
 
 const DELIVERY_REDIRECT = "/app/restaurants";
@@ -24,7 +24,7 @@ export default function CustomerAuthPage() {
 
   useEffect(() => {
     let cancelled = false;
-    const supabase = getSupabase();
+    const supabase = getCustomerSupabase();
 
     (async () => {
       const { data } = await supabase.auth.getSession();
@@ -39,7 +39,7 @@ export default function CustomerAuthPage() {
     e.preventDefault();
     setErr("");
 
-    const supabase = getSupabase();
+    const supabase = getCustomerSupabase();
 
     // 1. Immediate UI Feedback: Move to OTP input screen instantly
     setOtpSent(true);
@@ -73,7 +73,7 @@ export default function CustomerAuthPage() {
     setErr("");
     setLoading(true);
 
-    const supabase = getSupabase(); // localized usage
+    const supabase = getCustomerSupabase(); // localized usage
 
     const { error } = await supabase.auth.verifyOtp({
       email,

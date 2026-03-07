@@ -4,10 +4,10 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { ArrowLeft, User, Phone, Save, LogOut, MapPin, ChevronRight } from "lucide-react";
-import { getSupabase } from "../../../services/supabase";
+import { getCustomerSupabase } from "../../../services/supabase";
 
 export default function ProfilePage() {
-    const supabase = getSupabase();
+    const supabase = getCustomerSupabase();
     const router = useRouter();
 
     const [loading, setLoading] = useState(true);
