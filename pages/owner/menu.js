@@ -1,4 +1,4 @@
-﻿//pages/owner/menu
+//pages/owner/menu
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useRequireAuth } from "../../lib/useRequireAuth";
@@ -756,8 +756,8 @@ useEffect(() => {
         {/* Right Content Area */}
         <MenuContentArea>
           <ToolBar>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center', width: '100%' }}>
-          <div className="search-row search-bar-premium" style={{ flex: 1 }}>
+        <div className="toolbar-top-row">
+          <div className="search-row search-bar-premium search-full-mobile">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="search-icon-svg">
               <circle cx="11" cy="11" r="8" />
               <path d="M21 21L16.65 16.65" />
@@ -780,7 +780,7 @@ useEffect(() => {
             )}
           </div>
           
-          <div className="filter-chips" style={{ marginBottom: 0 }}>
+          <div className="filter-chips" style={{ marginBottom: 0, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button 
               className={`filter-chip ${filterVeg ? 'filter-chip-veg-active' : ''}`}
               onClick={() => setFilterVeg(!filterVeg)}
@@ -1678,6 +1678,45 @@ useEffect(() => {
           box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
           transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
           width: 100%;
+        }
+
+        .toolbar-top-row {
+          display: flex;
+          gap: 12px;
+          align-items: center;
+          width: 100%;
+          flex-wrap: wrap;
+        }
+
+        .search-full-mobile {
+          flex: 1 1 auto;
+          min-width: 200px;
+        }
+
+        @media (max-width: 768px) {
+          .toolbar-top-row {
+            flex-direction: column;
+            align-items: flex-start;
+          }
+          .search-full-mobile {
+            width: 100%;
+            min-width: 100%;
+            max-width: 100%;
+            flex: 0 0 100%;
+            box-sizing: border-box;
+          }
+          .filter-chips {
+            flex-wrap: nowrap;
+            overflow-x: auto;
+            width: 100%;
+            padding-bottom: 4px;
+            /* hide scrollbar */
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+          }
+          .filter-chips::-webkit-scrollbar {
+            display: none;
+          }
         }
 
         .search-row.search-bar-premium:focus-within {
