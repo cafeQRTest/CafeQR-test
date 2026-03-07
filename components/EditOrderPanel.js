@@ -108,17 +108,14 @@ export default function EditOrderPanel({ order, onClose, onSave, tablesCount = 0
     
     // Parse location
     let tableNum = null;
-    let orderType = 'dine-in';
+    let orderType = order.order_type;
     
     if (selectedLocation === 'takeaway' || selectedLocation === 'parcel') {
        tableNum = null;
-       orderType = 'takeaway';
     } else if (selectedLocation === 'delivery') {
        tableNum = null;
-       orderType = 'delivery';
     } else if (selectedLocation && selectedLocation.startsWith('table:')) {
        tableNum = selectedLocation.split(':')[1];
-       orderType = 'dine-in';
     }
 
     setSaving(true);
