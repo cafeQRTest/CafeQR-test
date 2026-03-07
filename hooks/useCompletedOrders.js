@@ -36,7 +36,8 @@ async function fetchCompletedOrders(restaurantId) {
       order_items (
         *,
         menu_items (name)
-      )
+      ),
+      order_customers (customer_id, is_primary)
     `)
     .eq('restaurant_id', restaurantId)
     .eq('status', 'completed')
@@ -49,7 +50,34 @@ async function fetchCompletedOrders(restaurantId) {
     throw error;
   }
 
-  return data || [];
+  let orders = data || [];
+
+  // Batch-enrich orders missing customer_name from order_customers junction
+  const needsEnrich = orders.filter(o => !o.customer_name && o.order_customers?.length > 0);
+  if (needsEnrich.length > 0) {
+    const allLinks = needsEnrich.flatMap(o => o.order_customers);
+    const uniqueCustIds = [...new Set(allLinks.map(l => l.customer_id).filter(Boolean))];
+    if (uniqueCustIds.length > 0) {
+      const { data: rcRows } = await supabase
+        .from('restaurant_customers')
+        .select('customer_id, name')
+        .eq('restaurant_id', restaurantId)
+        .in('customer_id', uniqueCustIds);
+      const rcMap = new Map((rcRows || []).map(r => [r.customer_id, r.name]));
+
+      orders = orders.map(o => {
+        if (o.customer_name || !o.order_customers?.length) return o;
+        const names = o.order_customers
+          .sort((a, b) => (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0))
+          .map(l => rcMap.get(l.customer_id))
+          .filter(Boolean);
+        return names.length > 0 ? { ...o, _customer_names: names } : o;
+      });
+    }
+  }
+
+  return orders;
+
 }
 
 export function useCompletedOrders(restaurantId) {

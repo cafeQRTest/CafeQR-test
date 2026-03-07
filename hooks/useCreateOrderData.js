@@ -53,7 +53,7 @@ async function fetchRestaurantProfile(restaurantId) {
   if (!restaurantId) return null;
   const { data, error } = await supabase
     .from('restaurant_profiles')
-    .select('round_off_enabled, round_off_mode, round_off_auto_factor, round_off_manual_limit')
+    .select('round_off_enabled, round_off_mode, round_off_auto_factor, round_off_manual_limit, allow_multiple_customers_per_order')
     .eq('restaurant_id', restaurantId)
     .maybeSingle();
 
@@ -65,7 +65,8 @@ async function fetchRestaurantProfile(restaurantId) {
       round_off_mode: data.round_off_mode || 'automatic',
       round_off_auto_factor: Number(data.round_off_auto_factor || 1),
       round_off_manual_value: 0,
-      round_off_manual_limit: Number(data.round_off_manual_limit || 10)
+      round_off_manual_limit: Number(data.round_off_manual_limit || 10),
+      allow_multiple_customers_per_order: !!data.allow_multiple_customers_per_order
     };
   }
   return null;
@@ -101,8 +102,8 @@ export function useRestaurantProfileConfig(restaurantId) {
     queryKey: orderKeys.profile(restaurantId),
     queryFn: () => fetchRestaurantProfile(restaurantId),
     enabled: !!restaurantId,
-    staleTime: 60 * 60 * 1000, 
+    staleTime: 5 * 60 * 1000, 
     gcTime: 24 * 60 * 60 * 1000,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
   });
 }

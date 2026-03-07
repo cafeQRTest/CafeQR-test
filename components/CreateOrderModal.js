@@ -1773,12 +1773,17 @@ export default function CreateOrderModal({
       // Invalidate main customer list too as they are related
       queryClient.invalidateQueries(orderKeys.customers(restaurantId));
 
-      setSelectedCreditCustomerId(data.id);
+      if (allowMultipleCustomers) {
+          setSelectedCustomers(prev => [...prev, { id: data.id, name: data.name, phone: data.phone, loyalty_points: 0 }]);
+          setCustomerName('');
+          setCustomerPhone('');
+      } else {
+          setSelectedCreditCustomerId(data.id);
+          setCustomerName(data.name);
+          setCustomerPhone(data.phone);
+      }
       setCreditCustomerBalance(0);
       setShowNewCreditCustomerModal(false);
-      setCustomerName(data.name);
-      setCustomerPhone(data.phone);
-      setCreditError('');
       setCreditError('');
       const confirmColor = orderMode === 'settle' ? '#16a34a' : '#f97316';
       showAlert(`Customer "${data.name}" created successfully`, 'Success', { confirmColor });
@@ -1853,9 +1858,15 @@ export default function CreateOrderModal({
         });
         
         // Select
-        setSelectedCustomerId(data.customer_id);
-        setCustomerName(data.name);
-        setCustomerPhone(data.phone || '');
+        if (allowMultipleCustomers) {
+            setSelectedCustomers(prev => [...prev, { id: data.customer_id, name: data.name, phone: data.phone || '', loyalty_points: 0 }]);
+            setCustomerName('');
+            setCustomerPhone('');
+        } else {
+            setSelectedCustomerId(data.customer_id);
+            setCustomerName(data.name);
+            setCustomerPhone(data.phone || '');
+        }
         setShowNewCustomerModal(false);
         const confirmColor = orderMode === 'settle' ? '#16a34a' : '#f97316';
         showAlert(`Customer "${data.name}" created`, 'Success', { confirmColor });
@@ -2366,20 +2377,7 @@ export default function CreateOrderModal({
           
           {/* Customer Details in Header */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, maxWidth: 540, position: 'relative' }}>
-            {(allowMultipleCustomers && selectedCustomers.length > 0) ? (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {selectedCustomers.map(sc => (
-                      <div key={sc.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', background: 'rgba(255,255,255,0.2)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}>
-                          <span style={{ fontSize: 13, fontWeight: 800 }}>{sc.name}</span>
-                          <button onClick={() => setSelectedCustomers(prev => prev.filter(c => c.id !== sc.id))} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: 14 }}>×</button>
-                      </div>
-                  ))}
-                  <button 
-                  onClick={() => setSelectedCustomers([])}
-                  style={{ background: 'rgba(239, 68, 68, 0.2)', border: '1px solid rgba(239, 68, 68, 0.4)', borderRadius: 12, padding: '4px 8px', color: '#fca5a5', fontWeight: 800, cursor: 'pointer', fontSize: 11 }}
-                  >Clear All</button>
-              </div>
-            ) : selectedCustomerObj ? (
+            {(!allowMultipleCustomers && selectedCustomerObj) ? (
               /* Detailed Selected Customer Card */
               <SlideInContainer style={{ 
                 padding: '10px 18px', 
@@ -2539,9 +2537,23 @@ export default function CreateOrderModal({
                   +
                 </button>
               </div>
-            ) : ( (!allowMultipleCustomers || selectedCustomers.length === 0) &&
+            ) : ( 
               /* Normal Customer Search */
-              <div style={{ flex: 1, position: 'relative' }}>
+              <div style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {(allowMultipleCustomers && selectedCustomers.length > 0) && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {selectedCustomers.map(sc => (
+                          <div key={sc.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', background: 'rgba(255,255,255,0.2)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}>
+                              <span style={{ fontSize: 13, fontWeight: 800 }}>{sc.name}</span>
+                              <button onClick={() => setSelectedCustomers(prev => prev.filter(c => c.id !== sc.id))} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', fontSize: 14 }}>×</button>
+                          </div>
+                      ))}
+                      <button 
+                      onClick={() => setSelectedCustomers([])}
+                      style={{ background: 'rgba(239, 68, 68, 0.2)', border: '1px solid rgba(239, 68, 68, 0.4)', borderRadius: 12, padding: '4px 8px', color: '#fca5a5', fontWeight: 800, cursor: 'pointer', fontSize: 11 }}
+                      >Clear All</button>
+                  </div>
+                )}
                 <div style={{ position: 'relative', width: '100%' }}>
                   <span style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', opacity: 0.6, fontSize: 18 }}>👤</span>
                   <input 
@@ -2560,7 +2572,7 @@ export default function CreateOrderModal({
                     }}
                     style={{ 
                       width: '100%', 
-                      padding: '12px 45px 12px 48px', 
+                      padding: '12px 76px 12px 48px', 
                       borderRadius: 16, 
                       border: '1.5px solid rgba(255,255,255,0.25)', 
                       background: 'rgba(255,255,255,0.15)',
@@ -2583,7 +2595,7 @@ export default function CreateOrderModal({
                       }}
                       style={{
                         position: 'absolute',
-                        right: 12,
+                        right: 44,
                         top: '50%',
                         transform: 'translateY(-50%)',
                         background: 'rgba(255,255,255,0.2)',
@@ -2602,6 +2614,31 @@ export default function CreateOrderModal({
                       ×
                     </button>
                   )}
+                  {/* Add New Customer Button */}
+                  <button
+                    onClick={() => setShowNewCustomerModal(true)}
+                    style={{
+                      position: 'absolute',
+                      right: 8,
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      width: 28,
+                      height: 28,
+                      borderRadius: 8,
+                      border: 'none',
+                      background: orderMode === 'settle' ? '#16a34a' : '#f97316',
+                      color: 'white',
+                      fontSize: 18,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      boxShadow: '0 2px 5px rgba(0,0,0,0.1)'
+                    }}
+                    title="Create New Customer"
+                  >
+                    +
+                  </button>
                 </div>
 
                 {showNameSuggestions && filteredSuggestions.length > 0 && (
@@ -2664,32 +2701,6 @@ export default function CreateOrderModal({
                     ))}
                   </div>
                 )}
-                {/* Add New Customer Button */}
-                <button
-                  onClick={() => setShowNewCustomerModal(true)}
-                  style={{
-                    position: 'absolute',
-                    right: 8,
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    width: 28,
-                    height: 28,
-                    borderRadius: 8,
-                    border: 'none',
-                    background: orderMode === 'settle' ? '#16a34a' : '#f97316',
-                    color: 'white',
-                    fontSize: 18,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: 'pointer',
-                    boxShadow: '0 2px 5px rgba(0,0,0,0.1)'
-                  }}
-                  title="Create New Customer"
-                >
-                  +
-                </button>
-
                 <style jsx>{`
                   .customer-search-input::placeholder { color: rgba(255,255,255,0.7); }
                   .customer-search-input:focus { 

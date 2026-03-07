@@ -2377,11 +2377,24 @@ const OrderHistoryView = ({ onBack, orders, onPrint, onCancel, loading, onOrderC
                 {
                   header: 'Customer',
                   accessor: 'customer_name',
-                  cell: (order) => (
-                    <span style={{ fontWeight: 600, color: '#334155', fontSize: '13px' }}>
-                      {order.customer_name || ''}
-                    </span>
-                  )
+                  cell: (order) => {
+                    if (order.customer_name) {
+                      return <span style={{ fontWeight: 600, color: '#334155', fontSize: '13px' }}>{order.customer_name}</span>;
+                    }
+                    if (order._customer_names?.length > 0) {
+                      return (
+                        <span style={{ color: '#334155' }}>
+                          {order._customer_names.map((n, i) => (
+                            <span key={i}>
+                              {i > 0 && <span style={{ color: '#94a3b8', margin: '0 2px' }}>,</span>}
+                              <span style={{ background: '#f1f5f9', borderRadius: 4, padding: '1px 5px', fontSize: '11px', fontWeight: 600 }}>{n}</span>
+                            </span>
+                          ))}
+                        </span>
+                      );
+                    }
+                    return <span style={{ fontWeight: 600, color: '#334155', fontSize: '13px' }}></span>;
+                  }
                 },
                 {
                   header: 'Type / Table',
@@ -2849,17 +2862,72 @@ export default function TableManagement() {
     // Find the invoice from the order's invoices relation
     const inv = order.invoices?.[0] || order.invoices || null;
     if (!inv) { alert('No invoice found for this order'); return; }
-    setHistoryInvoice(inv);
+    
+    // Copy the invoice and attach order-level customer data to it
+    const invoiceToView = { ...inv };
+    invoiceToView.order_id = order.id;
+    invoiceToView.customer_name = order.customer_name;
+    invoiceToView.customer_phone = order.customer_phone;
+    invoiceToView.customers = [];
+
+    setHistoryInvoice(Math.random()); // temp state to trigger loading UI if needed
     setHistoryInvoiceLoading(true);
     setHistoryInvoiceItems([]);
+
     try {
-      const { data, error } = await supabase
+      // 1. Fetch order items
+      const { data: items, error: itemsErr } = await supabase
         .from('order_items')
         .select('*, menu_items(name)')
         .eq('order_id', order.id);
-      if (!error) setHistoryInvoiceItems(data || []);
-    } catch (_) { }
-    finally { setHistoryInvoiceLoading(false); }
+      if (!itemsErr) setHistoryInvoiceItems(items || []);
+
+      // 2. Resolve customers
+      let enrichedCustomers = null;
+      if (order.customer_name || order.customer_phone) {
+        enrichedCustomers = [{ name: order.customer_name, phone: order.customer_phone, is_primary: true }];
+      } else if (order.customer_id) {
+        const { data: rc } = await supabase
+          .from('restaurant_customers')
+          .select('name, phone')
+          .eq('customer_id', order.customer_id)
+          .eq('restaurant_id', restaurant.id)
+          .maybeSingle();
+        if (rc) enrichedCustomers = [{ name: rc.name, phone: rc.phone, is_primary: true }];
+      }
+
+      if (!enrichedCustomers) {
+        const { data: links } = await supabase
+          .from('order_customers')
+          .select('customer_id, is_primary')
+          .eq('order_id', order.id);
+
+        if (links && links.length > 0) {
+          const ids = links.map(l => l.customer_id).filter(Boolean);
+          const { data: rcRows } = await supabase
+            .from('restaurant_customers')
+            .select('customer_id, name, phone')
+            .eq('restaurant_id', restaurant.id)
+            .in('customer_id', ids);
+            
+          const rcMap = new Map((rcRows || []).map(r => [r.customer_id, r]));
+          const mapped = links.map(l => {
+            const rc = rcMap.get(l.customer_id);
+            return { name: rc?.name || null, phone: rc?.phone || null, is_primary: l.is_primary };
+          }).filter(c => c.name || c.phone);
+          if (mapped.length > 0) enrichedCustomers = mapped;
+        }
+      }
+      
+      if (enrichedCustomers) invoiceToView.customers = enrichedCustomers;
+      setHistoryInvoice(invoiceToView);
+
+    } catch (err) { 
+      console.error(err);
+      setHistoryInvoice(null);
+    } finally { 
+      setHistoryInvoiceLoading(false); 
+    }
   };
 
   // Silent helper: finish a credit order directly without any popup or alert
@@ -5221,41 +5289,39 @@ export default function TableManagement() {
                   padding: '12px', background: '#f8fafc', borderRadius: 12, border: '1px solid #f1f5f9',
                   marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 12
                 }}>
-                  {(historyInvoice.customer_name || historyInvoice.customer_phone) ? (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                      {historyInvoice.customer_name && (
+                       {(historyInvoice.customer_name || historyInvoice.customers?.length > 0) ? (
+                    historyInvoice.customers?.length > 0 ? (
+                      historyInvoice.customers.map((c, idx) => (
+                        <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, borderBottom: idx < historyInvoice.customers.length - 1 ? '1px solid #f1f5f9' : 'none', paddingBottom: idx < historyInvoice.customers.length - 1 ? 8 : 0 }}>
+                          <div>
+                            <div style={{ fontSize: 8, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>
+                              {c.is_primary ? 'Primary Customer' : `Customer ${idx + 1}`}
+                            </div>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{c.name || 'Guest'}</div>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 8, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>Contact</div>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{c.phone || '-'}</div>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                         <div>
                           <div style={{ fontSize: 8, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>Customer</div>
                           <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{historyInvoice.customer_name}</div>
                         </div>
-                      )}
-                      {historyInvoice.customer_phone && (
-                        <div>
-                          <div style={{ fontSize: 8, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>Contact</div>
-                          <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{historyInvoice.customer_phone}</div>
-                        </div>
-                      )}
-                    </div>
-                  ) : historyInvoice.order_customers && historyInvoice.order_customers.length > 0 ? (
-                    historyInvoice.order_customers.map((c, idx) => {
-                      const cust = c.restaurant_customer;
-                      return (
-                        <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, borderBottom: idx < historyInvoice.order_customers.length - 1 ? '1px solid #f1f5f9' : 'none', paddingBottom: idx < historyInvoice.order_customers.length - 1 ? 8 : 0 }}>
-                          <div>
-                            <div style={{ fontSize: 8, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>
-                              {c.is_primary ? 'Primary Customer' : 'Customer'}
-                            </div>
-                            <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{cust?.name || 'Guest'}</div>
-                          </div>
+                        {historyInvoice.customer_phone && (
                           <div>
                             <div style={{ fontSize: 8, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>Contact</div>
-                            <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{cust?.phone || '-'}</div>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{historyInvoice.customer_phone}</div>
                           </div>
-                        </div>
-                      );
-                    })
+                        )}
+                      </div>
+                    )
                   ) : null}
                 </div>
+
               )}
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
