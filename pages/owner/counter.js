@@ -775,6 +775,7 @@ const SectionLabel = ({ children }) => (
 
 
 import { useSubscription } from '../../context/SubscriptionContext';
+import { useUpdateTableStatus } from '../../hooks/useTables';
 
 // ... (keep surrounding code) ...
 
@@ -787,6 +788,7 @@ export default function CounterSale() {
   const { restaurant, loading: loadingRestaurant, staffName } = useRestaurant();
   const { subscription, loading: subLoading } = useSubscription();
   const router = useRouter();
+  const updateStatusMutation = useUpdateTableStatus();
 
   // Subscription check
   useEffect(() => {
@@ -2008,6 +2010,18 @@ const res = await fetch('/api/orders/create', {
       })
     );
 
+    // Update Table Status if Dine-in
+    if (order_type === 'dine-in' && table_number) {
+       const rec = tableRecords.find(t => String(t.identifier) === String(table_number));
+       if (rec?.id) {
+         updateStatusMutation.mutate({
+           tableId: rec.id,
+           restaurantId: restaurantId,
+           status: 'available' // settled orders reset table to available or billed depending on flow, but since they are paid, 'available' is most appropriate for a quick counter settlement.
+         });
+       }
+    }
+
 
     setCart([]); 
     setCustomerName(''); 
@@ -2173,6 +2187,18 @@ const orderForPrint = {
       })
     );
     */
+
+    // Update Table Status if Dine-in
+    if (order_type === 'dine-in' && table_number) {
+       const rec = tableRecords.find(t => String(t.identifier) === String(table_number));
+       if (rec?.id) {
+         updateStatusMutation.mutate({
+           tableId: rec.id,
+           restaurantId: restaurantId,
+           status: 'occupied'
+         });
+       }
+    }
 
     setCart([]); setCustomerName(''); setCustomerPhone(''); setCustomerAge(''); setNumberOfCustomers(''); setPaymentMethod('cash');
     setOrderSelect(''); setIsCreditSale(false); setSelectedCreditCustomerId(''); setCreditCustomerBalance(0);
