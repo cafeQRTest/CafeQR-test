@@ -168,18 +168,20 @@ export class OrderService {
       if (itemsErr) throw itemsErr;
 
       // 3.5 Update Order Customers Junction
+      // Only wipe + re-insert if customer_ids were explicitly provided.
+      // When called from complete.js (payment settlement), customer_ids is []
+      // and we must NOT delete the existing junction rows.
       if (Array.isArray(customer_ids) && customer_ids.length > 0) {
-         // Wipe existing junction rows for this order
-         await supabase.from('order_customers').delete().eq('order_id', finalOrderId);
-         
-         const ocToInsert = customer_ids.map((cid, idx) => ({
-             order_id: finalOrderId,
-             customer_id: cid,
-             is_primary: idx === 0 // First customer in array is primary
-         }));
-         const { error: ocErr } = await supabase.from('order_customers').insert(ocToInsert);
-         if (ocErr) throw ocErr;
+        await supabase.from('order_customers').delete().eq('order_id', finalOrderId);
+        const ocToInsert = customer_ids.map((cid, idx) => ({
+            order_id: finalOrderId,
+            customer_id: cid,
+            is_primary: idx === 0
+        }));
+        const { error: ocErr } = await supabase.from('order_customers').insert(ocToInsert);
+        if (ocErr) throw ocErr;
       }
+      // If customer_ids is empty, existing order_customers rows are preserved as-is.
 
       // 4. Upsert Invoice
       // Fetch or generate invoice number/bill number

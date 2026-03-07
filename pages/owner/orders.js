@@ -846,7 +846,7 @@ function TableEditDialog({ order, onSave, onClose, tables = [], tablesCount = 0 
 async function fetchFullOrder(supabase, orderId) {
   const { data, error } = await supabase
     .from('orders')
-    .select('*, order_items(*, menu_items(name, uom:unit_of_measures(precision))), order_customers(*, restaurant_customer(name, phone))')
+    .select('*, order_items(*, menu_items(name, uom:unit_of_measures(precision))), order_customers(*, restaurant_customer(name, phone, age, customer_no))')
     .eq('id', orderId)
     .single();
 
@@ -855,8 +855,10 @@ async function fetchFullOrder(supabase, orderId) {
     if (data.order_customers && data.order_customers.length > 0) {
       data.customers = data.order_customers.map(link => ({
         id: link.customer_id,
-        name: link.restaurant_customer?.name,
-        phone: link.restaurant_customer?.phone,
+        name: link.restaurant_customer?.name || (link.is_primary ? data.customer_name : null) || null,
+        phone: link.restaurant_customer?.phone || (link.is_primary ? data.customer_phone : null) || null,
+        age: link.restaurant_customer?.age || null,
+        customer_no: link.restaurant_customer?.customer_no || null,
         is_primary: link.is_primary
       }));
     } else if (data.customer_name || data.customer_phone) {
@@ -1482,7 +1484,7 @@ export default function OrdersPage() {
     if (!supabase || !restaurantId) return [];
     let q = supabase
       .from('orders')
-      .select('*, order_items(*, menu_items(name, uom:unit_of_measures(precision))), order_customers(*, restaurant_customer(name, phone))')
+      .select('*, order_items(*, menu_items(name, uom:unit_of_measures(precision))), order_customers(customer_id, is_primary)')
       .eq('restaurant_id', restaurantId)
       .eq('status', status);
 
@@ -1492,13 +1494,73 @@ export default function OrdersPage() {
         .order('updated_at', { ascending: false })
         .range(0, to);
       if (error) throw error;
+      if (data) await enrichOrdersWithCustomers(supabase, restaurantId, data);
       return data;
     }
 
     const { data, error } = await q.order('updated_at', { ascending: true });
     if (error) throw error;
+    if (data) await enrichOrdersWithCustomers(supabase, restaurantId, data);
     return data;
   }
+
+  // Batch-enriches orders with customer info.
+  // Priority: order.customer_name (direct) → order_customers → restaurant_customers (batch lookup)
+  async function enrichOrdersWithCustomers(supabase, restaurantId, orders) {
+    if (!orders || orders.length === 0) return;
+
+    // Collect all unique customer_ids that need lookup (from order_customers junction)
+    const needsLookup = new Set();
+    orders.forEach(order => {
+      if (!order.customer_name && !order.customer_phone) {
+        (order.order_customers || []).forEach(link => {
+          if (link.customer_id) needsLookup.add(link.customer_id);
+        });
+        // Also try order.customer_id directly if no junction rows
+        if ((order.order_customers || []).length === 0 && order.customer_id) {
+          needsLookup.add(order.customer_id);
+        }
+      }
+    });
+
+    // Batch fetch all needed customer records in one query
+    let rcMap = new Map();
+    if (needsLookup.size > 0) {
+      const { data: rcRows } = await supabase
+        .from('restaurant_customers')
+        .select('customer_id, name, phone, age, customer_no')
+        .eq('restaurant_id', restaurantId)
+        .in('customer_id', [...needsLookup]);
+      (rcRows || []).forEach(r => rcMap.set(r.customer_id, r));
+    }
+
+    orders.forEach(order => {
+      if (order.customer_name || order.customer_phone) {
+        // Has direct name — build customers array from it
+        order.customers = [{ name: order.customer_name, phone: order.customer_phone, is_primary: true }];
+      } else if (order.order_customers && order.order_customers.length > 0) {
+        // Build from junction + batch lookup
+        order.customers = order.order_customers.map(link => {
+          const rc = rcMap.get(link.customer_id);
+          return {
+            id: link.customer_id,
+            name: rc?.name || null,
+            phone: rc?.phone || null,
+            age: rc?.age || null,
+            customer_no: rc?.customer_no || null,
+            is_primary: link.is_primary
+          };
+        });
+      } else if (order.customer_id) {
+        // No junction rows but has a direct customer_id
+        const rc = rcMap.get(order.customer_id);
+        if (rc?.name || rc?.phone) {
+          order.customers = [{ id: order.customer_id, name: rc.name, phone: rc.phone, age: rc.age, customer_no: rc.customer_no, is_primary: true }];
+        }
+      }
+    });
+  }
+
 
   // ✅ Only ONE loadOrders, independent of completedPage
   const loadOrders = useCallback(
@@ -1607,15 +1669,32 @@ export default function OrdersPage() {
         { event: '*', schema: 'public', table: 'orders', filter: `restaurant_id=eq.${restaurantId}` },
         (payload) => {
           const payloadOrder = payload.new;
-          if (!payloadOrder) return;
           // Fetch full order with items and precision to ensure UI is correct
           supabase
             .from('orders')
-            .select('*, order_items(*, menu_items(name, uom:unit_of_measures(precision)))')
+            .select('*, order_items(*, menu_items(name, uom:unit_of_measures(precision))), order_customers(*, restaurant_customer(name, phone, age, customer_no))')
             .eq('id', payloadOrder.id)
             .single()
             .then(({ data: fullOrder }) => {
               if (!fullOrder) return;
+              
+              if (fullOrder.order_customers && fullOrder.order_customers.length > 0) {
+                fullOrder.customers = fullOrder.order_customers.map(link => ({
+                  id: link.customer_id,
+                  name: link.restaurant_customer?.name || (link.is_primary ? fullOrder.customer_name : null) || null,
+                  phone: link.restaurant_customer?.phone || (link.is_primary ? fullOrder.customer_phone : null) || null,
+                  age: link.restaurant_customer?.age || null,
+                  customer_no: link.restaurant_customer?.customer_no || null,
+                  is_primary: link.is_primary
+                }));
+              } else if (fullOrder.customer_name || fullOrder.customer_phone) {
+                fullOrder.customers = [{
+                  name: fullOrder.customer_name,
+                  phone: fullOrder.customer_phone,
+                  is_primary: true
+                }];
+              }
+
               // Update order in kanban/mobile list
               setOrdersByStatus((prev) => {
                 const updated = { ...prev };
@@ -1650,7 +1729,7 @@ export default function OrdersPage() {
             // Catch-up for pending delivery orders
             const { data: pa } = await supabase
               .from('orders')
-              .select('*, order_items(*, menu_items(name, uom:unit_of_measures(precision)))')
+              .select('*, order_items(*, menu_items(name, uom:unit_of_measures(precision))), order_customers(*, restaurant_customer(name, phone, age, customer_no))')
               .eq('restaurant_id', restaurantId)
               .eq('status', 'pending_acceptance')
               .gte('updated_at', cutoff)
@@ -1658,11 +1737,56 @@ export default function OrdersPage() {
             // Catch-up for new regular orders
             const { data } = await supabase
               .from('orders')
-              .select('*, order_items(*, menu_items(name, uom:unit_of_measures(precision)))')
+              .select('*, order_items(*, menu_items(name, uom:unit_of_measures(precision))), order_customers(*, restaurant_customer(name, phone, age, customer_no))')
               .eq('restaurant_id', restaurantId)
               .eq('status', 'new')
               .gte('updated_at', cutoff)
               .order('updated_at', { ascending: true });
+              
+            // Map customers for pa    
+            if (pa) {
+              pa.forEach(order => {
+                if (order.order_customers && order.order_customers.length > 0) {
+                  order.customers = order.order_customers.map(link => ({
+                    id: link.customer_id,
+                    name: link.restaurant_customer?.name || (link.is_primary ? order.customer_name : null) || null,
+                    phone: link.restaurant_customer?.phone || (link.is_primary ? order.customer_phone : null) || null,
+                    age: link.restaurant_customer?.age || null,
+                    customer_no: link.restaurant_customer?.customer_no || null,
+                    is_primary: link.is_primary
+                  }));
+                } else if (order.customer_name || order.customer_phone) {
+                  order.customers = [{
+                    name: order.customer_name,
+                    phone: order.customer_phone,
+                    is_primary: true
+                  }];
+                }
+              });
+            }
+
+            // Map customers for data
+            if (data) {
+              data.forEach(order => {
+                if (order.order_customers && order.order_customers.length > 0) {
+                  order.customers = order.order_customers.map(link => ({
+                    id: link.customer_id,
+                    name: link.restaurant_customer?.name || (link.is_primary ? order.customer_name : null) || null,
+                    phone: link.restaurant_customer?.phone || (link.is_primary ? order.customer_phone : null) || null,
+                    age: link.restaurant_customer?.age || null,
+                    customer_no: link.restaurant_customer?.customer_no || null,
+                    is_primary: link.is_primary
+                  }));
+                } else if (order.customer_name || order.customer_phone) {
+                  order.customers = [{
+                    name: order.customer_name,
+                    phone: order.customer_phone,
+                    is_primary: true
+                  }];
+                }
+              });
+            }
+
             setOrdersByStatus((prev) => ({
               ...prev,
               pending_acceptance: pa
@@ -2104,7 +2228,39 @@ export default function OrdersPage() {
               onChangeStatus={updateStatus}
               onComplete={finalize}
               generatingInvoice={generatingInvoice}
-              onShowItems={(o) => setItemsModalOrder(o)}
+              onShowItems={async (o) => {
+                const hasName = o.customer_name || o.customer_phone ||
+                  (o.customers && o.customers.some(c => c.name || c.phone));
+                if (hasName) { setItemsModalOrder(o); return; }
+
+                if (o.status === 'completed' && supabase && restaurantId) {
+                  // Try primary customer_id first
+                  if (o.customer_id) {
+                    const { data: rc } = await supabase
+                      .from('restaurant_customers')
+                      .select('name, phone, customer_no, age')
+                      .eq('customer_id', o.customer_id)
+                      .eq('restaurant_id', restaurantId)
+                      .maybeSingle();
+                    if (rc?.name || rc?.phone) {
+                      setItemsModalOrder({ ...o, customers: [{ name: rc.name, phone: rc.phone, customer_no: rc.customer_no, age: rc.age, is_primary: true }] });
+                      return;
+                    }
+                  }
+                  // Try order_customers junction (handles allow_multiple_customers case)
+                  if (o.order_customers?.length > 0) {
+                    const enriched = await Promise.all(o.order_customers.map(async (link) => {
+                      const { data: r } = await supabase.from('restaurant_customers').select('name, phone, customer_no, age').eq('customer_id', link.customer_id).eq('restaurant_id', restaurantId).maybeSingle();
+                      return { name: r?.name || null, phone: r?.phone || null, customer_no: r?.customer_no || null, age: r?.age || null, is_primary: link.is_primary };
+                    }));
+                    if (enriched.some(c => c.name || c.phone)) {
+                      setItemsModalOrder({ ...o, customers: enriched });
+                      return;
+                    }
+                  }
+                }
+                setItemsModalOrder(o);
+              }}
               onPrintKot={(orderObj) => {
                 window.dispatchEvent(
                   new CustomEvent('auto-print-order', {
@@ -2310,7 +2466,45 @@ export default function OrdersPage() {
                       }}
                       onEditPax={(order) => setPaxEditOrder(order)}
                       onEditTable={(order) => setTableEditOrder(order)}
-                      onShowItems={(o) => setItemsModalOrder(o)}
+                      onShowItems={async (o) => {
+                        // If order already has customer info, show immediately
+                        const hasName = o.customer_name || o.customer_phone ||
+                          (o.customers && o.customers.some(c => c.name || c.phone));
+                        if (hasName) { setItemsModalOrder(o); return; }
+
+                        if (o.status === 'completed' && supabase && restaurantId) {
+                          // Try primary customer_id first
+                          if (o.customer_id) {
+                            const { data: rc } = await supabase
+                              .from('restaurant_customers')
+                              .select('name, phone, customer_no, age')
+                              .eq('customer_id', o.customer_id)
+                              .eq('restaurant_id', restaurantId)
+                              .maybeSingle();
+                            if (rc?.name || rc?.phone) {
+                              setItemsModalOrder({ ...o, customers: [{ name: rc.name, phone: rc.phone, customer_no: rc.customer_no, age: rc.age, is_primary: true }] });
+                              return;
+                            }
+                          }
+                          // Try order_customers junction (handles allow_multiple_customers case where customer_id is null)
+                          if (o.order_customers?.length > 0) {
+                            const enriched = await Promise.all(o.order_customers.map(async (link) => {
+                              const { data: r } = await supabase
+                                .from('restaurant_customers')
+                                .select('name, phone, customer_no, age')
+                                .eq('customer_id', link.customer_id)
+                                .eq('restaurant_id', restaurantId)
+                                .maybeSingle();
+                              return { name: r?.name || null, phone: r?.phone || null, customer_no: r?.customer_no || null, age: r?.age || null, is_primary: link.is_primary };
+                            }));
+                            if (enriched.some(c => c.name || c.phone)) {
+                              setItemsModalOrder({ ...o, customers: enriched });
+                              return;
+                            }
+                          }
+                        }
+                        setItemsModalOrder(o);
+                      }}
                     />
                   ))
                 )}

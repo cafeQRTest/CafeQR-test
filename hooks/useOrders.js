@@ -16,7 +16,8 @@ async function fetchOrders(restaurantId, type) {
       order_items!inner(
         *,
         menu_items(name)
-      )
+      ),
+      order_customers(*, restaurant_customer(name, phone, age, customer_no))
     `)
     .eq('restaurant_id', restaurantId)
     .neq('status', 'completed')
@@ -30,6 +31,28 @@ async function fetchOrders(restaurantId, type) {
   const { data, error } = await query.order('created_at', { ascending: false });
 
   if (error) throw error;
+  
+  if (data) {
+    data.forEach(order => {
+      if (order.customer_name || order.customer_phone) {
+        order.customers = [{
+          name: order.customer_name,
+          phone: order.customer_phone,
+          is_primary: true
+        }];
+      } else if (order.order_customers && order.order_customers.length > 0) {
+        order.customers = order.order_customers.map(link => ({
+          id: link.customer_id,
+          name: link.restaurant_customer?.name || null,
+          phone: link.restaurant_customer?.phone || null,
+          age: link.restaurant_customer?.age || null,
+          customer_no: link.restaurant_customer?.customer_no || null,
+          is_primary: link.is_primary
+        }));
+      }
+    });
+  }
+  
   return data || [];
 }
 

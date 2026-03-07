@@ -242,7 +242,9 @@ export default function SalesPage() {
           created_at,
           updated_at,
           status,
+          customer_id,
           customer_name,
+          customer_phone,
           items,
           order_items (
             item_name,
@@ -259,11 +261,8 @@ export default function SalesPage() {
           round_off_amount,
           prices_include_tax,
           order_customers (
-            is_primary,
-            restaurant_customer (
-              name,
-              phone
-            )
+            customer_id,
+            is_primary
           ),
           invoices (
             invoice_no,
@@ -739,7 +738,37 @@ export default function SalesPage() {
                       accessor: 'id',
                       cell: (r) => (
                         <span
-                          onClick={() => setItemsModalOrder(r)}
+                          onClick={async () => {
+                            // If already has customer info, show immediately
+                            const hasName = r.customer_name || r.customer_phone ||
+                              (r.customers && r.customers.some(c => c.name || c.phone));
+                            if (hasName) { setItemsModalOrder(r); return; }
+
+                            // Enrich from restaurant_customers via order_customers junction
+                            if (supabase && restaurantId) {
+                              if (r.customer_id) {
+                                const { data: rc } = await supabase
+                                  .from('restaurant_customers')
+                                  .select('name, phone, customer_no, age')
+                                  .eq('customer_id', r.customer_id)
+                                  .eq('restaurant_id', restaurantId)
+                                  .maybeSingle();
+                                if (rc?.name || rc?.phone) {
+                                  setItemsModalOrder({ ...r, customers: [{ name: rc.name, phone: rc.phone, customer_no: rc.customer_no, is_primary: true }] });
+                                  return;
+                                }
+                              }
+                              // Try order_customers links
+                              if (r.order_customers?.length > 0) {
+                                const enriched = await Promise.all(r.order_customers.map(async (link) => {
+                                  const { data: rc } = await supabase.from('restaurant_customers').select('name, phone, customer_no').eq('customer_id', link.customer_id).eq('restaurant_id', restaurantId).maybeSingle();
+                                  return { name: rc?.name || null, phone: rc?.phone || null, customer_no: rc?.customer_no || null, is_primary: link.is_primary };
+                                }));
+                                if (enriched.some(c => c.name || c.phone)) { setItemsModalOrder({ ...r, customers: enriched }); return; }
+                              }
+                            }
+                            setItemsModalOrder(r);
+                          }}
                           style={{ color: '#334155', cursor: 'pointer', fontWeight: 700 }}
                         >
                           #{r.id.slice(0, 8)}
@@ -801,10 +830,13 @@ export default function SalesPage() {
                       header: 'Customer',
                       accessor: 'customer_name',
                       cell: (r) => {
+                        if (r.customer_name) {
+                          return r.customer_name;
+                        }
                         if (r.order_customers && r.order_customers.length > 0) {
                           return r.order_customers.map(c => c.restaurant_customer?.name).filter(Boolean).join(', ')
                         }
-                        return r.customer_name || ''
+                        return ''
                       }
                     }
                   ]}
@@ -1004,6 +1036,63 @@ export default function SalesPage() {
                 </div>
               </div>
             </div>
+
+            {/* Customer Details */}
+            {((itemsModalOrder.customer_name || itemsModalOrder.customer_phone) || (itemsModalOrder.customers?.length > 0) || (itemsModalOrder.order_customers?.length > 0)) && (
+              <div style={{
+                padding: '12px', background: '#f8fafc', borderRadius: 12, border: '1px solid #f1f5f9',
+                marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 12
+              }}>
+                {(itemsModalOrder.customer_name || itemsModalOrder.customer_phone) ? (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    {itemsModalOrder.customer_name && (
+                      <div>
+                        <div style={{ fontSize: 8, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>Customer</div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{itemsModalOrder.customer_name}</div>
+                      </div>
+                    )}
+                    {itemsModalOrder.customer_phone && (
+                      <div>
+                        <div style={{ fontSize: 8, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>Contact</div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{itemsModalOrder.customer_phone}</div>
+                      </div>
+                    )}
+                  </div>
+                ) : itemsModalOrder.customers?.length > 0 ? (
+                  itemsModalOrder.customers.map((cust, idx) => (
+                    <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, borderBottom: idx < itemsModalOrder.customers.length - 1 ? '1px solid #f1f5f9' : 'none', paddingBottom: idx < itemsModalOrder.customers.length - 1 ? 8 : 0 }}>
+                      <div>
+                        <div style={{ fontSize: 8, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>
+                          {cust.is_primary ? 'Primary Customer' : 'Customer'}
+                        </div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{cust.name || 'Guest'}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 8, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>Contact</div>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{cust.phone || '-'}</div>
+                      </div>
+                    </div>
+                  ))
+                ) : itemsModalOrder.order_customers?.length > 0 ? (
+                  // Fallback: render raw order_customers if no enrichment happened
+                  itemsModalOrder.order_customers.map((c, idx) => {
+                    const cust = c.restaurant_customer;
+                    return (
+                      <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, borderBottom: idx < itemsModalOrder.order_customers.length - 1 ? '1px solid #f1f5f9' : 'none', paddingBottom: idx < itemsModalOrder.order_customers.length - 1 ? 8 : 0 }}>
+                        <div>
+                          <div style={{ fontSize: 8, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>{c.is_primary ? 'Primary Customer' : 'Customer'}</div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{cust?.name || 'Guest'}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 8, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>Contact</div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{cust?.phone || '-'}</div>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : null}
+              </div>
+            )}
 
             {/* Items Header */}
             <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', paddingBottom: 8, borderBottom: '1px solid #e2e8f0', marginBottom: 12 }}>

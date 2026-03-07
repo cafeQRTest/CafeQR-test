@@ -44,6 +44,28 @@ export default function OrderCard({ order, statusColor, onChangeStatus, onComple
         </Chip>
       </div>
 
+      {/* Customer Info Section */}
+      {order.customers && order.customers.length > 0 ? (
+        <div style={{ fontSize: 13, color: '#475569', marginTop: -4, paddingBottom: 8, borderBottom: '1px solid #f1f5f9' }}>
+          {order.customers.map((c, idx) => (
+            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontWeight: 600, color: '#1e293b' }}>{c.name || 'Guest'}</span>
+              {c.phone && <span>· {c.phone}</span>}
+              {order.customers.length > 1 && c.is_primary && (
+                <span style={{ fontSize: 10, background: '#e2e8f0', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>PRIMARY</span>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : (order.customer_name || order.customer_phone) && (
+        <div style={{ fontSize: 13, color: '#475569', marginTop: -4, paddingBottom: 8, borderBottom: '1px solid #f1f5f9' }}>
+           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontWeight: 600, color: '#1e293b' }}>{order.customer_name || 'Guest'}</span>
+              {order.customer_phone && <span>· {order.customer_phone}</span>}
+           </div>
+        </div>
+      )}
+
       <div style={{ fontSize: 14, color: '#374151' }}>
         {items.slice(0, 3).map((it, i) => (
           <div key={i}>

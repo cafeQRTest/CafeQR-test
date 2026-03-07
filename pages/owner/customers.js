@@ -172,26 +172,62 @@ export default function OwnerCustomersPage() {
         .in('payment_status', ['paid', 'completed'])
         .or('is_credit.eq.false,is_credit.is.null');
       
-      // Match orders by customer_id only (strict matching)
-      // Don't use phone number matching as it can link orders from different customers
+      // Match orders by customer_id OR via order_customers junction table
+      let directOrders = [];
+      let junctionOrders = [];
+
       if (cId) {
-         query = query.eq('customer_id', cId);
+        // 1. Direct customer_id match
+        const { data: d1 } = await supabase
+          .from('orders')
+          .select('id, created_at, date_ordered, total_amount, total_inc_tax, status, payment_method, is_credit, payment_status')
+          .eq('restaurant_id', restaurantId)
+          .eq('customer_id', cId)
+          .eq('status', 'completed')
+          .in('payment_status', ['paid', 'completed'])
+          .or('is_credit.eq.false,is_credit.is.null')
+          .order('created_at', { ascending: false });
+        directOrders = d1 || [];
+
+        // 2. Junction table match (when allow_multiple_customers=true, customer_id on order is null)
+        const { data: ocLinks } = await supabase
+          .from('order_customers')
+          .select('order_id')
+          .eq('customer_id', cId);
+        
+        const junctionOrderIds = (ocLinks || []).map(l => l.order_id).filter(Boolean);
+        
+        if (junctionOrderIds.length > 0) {
+          const directIds = new Set(directOrders.map(o => o.id));
+          const onlyInJunction = junctionOrderIds.filter(id => !directIds.has(id));
+          
+          if (onlyInJunction.length > 0) {
+            const { data: d2 } = await supabase
+              .from('orders')
+              .select('id, created_at, date_ordered, total_amount, total_inc_tax, status, payment_method, is_credit, payment_status')
+              .eq('restaurant_id', restaurantId)
+              .in('id', onlyInJunction)
+              .eq('status', 'completed')
+              .in('payment_status', ['paid', 'completed'])
+              .or('is_credit.eq.false,is_credit.is.null');
+            junctionOrders = d2 || [];
+          }
+        }
       } else {
-         // If no customer_id, we can't reliably fetch orders
-         setCustomerOrders(prev => ({ ...prev, [key]: [] }));
-         return;
+        setCustomerOrders(prev => ({ ...prev, [key]: [] }));
+        return;
       }
 
-     const { data: orders, error } = await query.order('created_at', { ascending: false });
-     if (error) throw error;
+      // Merge and sort by created_at descending
+      const allOrders = [...directOrders, ...junctionOrders]
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-     if (!orders || orders.length === 0) {
+     // 2. Fetch Loyalty Transactions for these orders
+     if (allOrders.length === 0) {
         setCustomerOrders(prev => ({ ...prev, [key]: [] }));
         return;
      }
-
-     // 2. Fetch Loyalty Transactions for these orders
-     const orderIds = orders.map(o => o.id);
+     const orderIds = allOrders.map(o => o.id);
      console.log('[loadHistory] Fetching loyalty for orders:', orderIds);
      
      const { data: loyaltyTx, error: lErr } = await supabase
@@ -206,7 +242,7 @@ export default function OwnerCustomersPage() {
      }
 
      // 3. Merge Loyalty Data into Orders
-     const ordersWithLoyalty = orders.map(o => {
+     const ordersWithLoyalty = allOrders.map(o => {
          // Find transactions for this order
          const txs = (loyaltyTx || []).filter(t => t.order_id === o.id);
          
@@ -231,8 +267,17 @@ export default function OwnerCustomersPage() {
 
          console.log(`[loadHistory] Order ${o.id.substring(0, 8)} loyalty summary: earned=${earned}, used=${used}, amountUsed=${amountUsed}`);
 
+         // For junction-linked orders (multi-customer), split the total evenly
+         // junctionOrderIds contains IDs of orders found via order_customers
+         const isJunctionOrder = junctionOrders.some(j => j.id === o.id);
+         const orderCustomerCount = isJunctionOrder && o.number_of_customers > 1
+           ? o.number_of_customers
+           : 1;
+         const splitAmount = Number(o.total_amount || o.total_inc_tax || 0) / orderCustomerCount;
+
          return {
              ...o,
+             display_amount: splitAmount, // amount attributable to this customer
              loyalty_points_earned: earned,
              loyalty_points_used: used,
              loyalty_amount_used: amountUsed

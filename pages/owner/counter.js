@@ -886,6 +886,7 @@ const getDraftOrQtyNumber = (cartId, fallbackQty, precision = 2) => {
 
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [customerAge, setCustomerAge] = useState(''); // NEW Age field
   const [selectedCustomerId, setSelectedCustomerId] = useState(null);
   const [selectedCustomerNo, setSelectedCustomerNo] = useState(null);
   const [allowMultipleCustomers, setAllowMultipleCustomers] = useState(false);
@@ -1360,7 +1361,7 @@ await loadAllCustomers();
     const q3 = (selectedCustomerNo || '').trim().toLowerCase();
     
     // Clear if all empty
-    if (!q1 && !q2 && !q3) {
+    if (!q1 && !q2 && !q3 && !customerAge) {
       setFilteredSuggestions([]);
       setShowNameSuggestions(false);
       return;
@@ -1371,16 +1372,20 @@ await loadAllCustomers();
       const cName = (c.name || '').toLowerCase();
       const cPhone = String(c.phone || '');
       const cNo = (c.customer_no || '').toLowerCase();
+      const cAge = String(c.age || ''); // Optional age match
       
       const matchName = q1 ? cName.includes(q1) : true;
       const matchPhone = q2 ? cPhone.includes(q2) : true;
       const matchNo = q3 ? cNo.includes(q3) : true;
       
+      // If user typed age, we might filter on it, or ignore for now to keep it broad
+      // It's safer to just match name/phone/no and just pass age along
+      
       return matchName && matchPhone && matchNo;
     });
 
     setFilteredSuggestions(matches.slice(0, 10));
-  }, [customerName, customerPhone, selectedCustomerNo, allCustomers]);
+  }, [customerName, customerPhone, selectedCustomerNo, customerAge, allCustomers]);
 
   // Fetch upsells on cart change
   useEffect(() => {
@@ -1878,7 +1883,9 @@ async function doCreateAndFinalizeOrder(finalPaymentMethod, mixedDetails, finali
     const finalCustId = isMultiple ? selectedCustomers[0].id : selectedCustomerId;
     const finalCustName = isMultiple ? selectedCustomers[0].name : (customerName.trim() || null);
     const finalCustPhone = isMultiple ? selectedCustomers[0].phone : (customerPhone.trim() || null);
-    const finalCustIdsArray = isMultiple ? selectedCustomers.map(c => c.id) : (selectedCustomerId ? [selectedCustomerId] : []);
+    const finalCustIdsArray = isMultiple ? selectedCustomers.map(c => ({
+       id: c.id, name: c.name, phone: c.phone, customer_no: c.customer_no, age: c.age, isNew: c.isNew
+    })) : (selectedCustomerId ? [selectedCustomerId] : []);
 
     const orderData = {
       restaurant_id: restaurantId,
@@ -2005,6 +2012,7 @@ const res = await fetch('/api/orders/create', {
     setCart([]); 
     setCustomerName(''); 
     setCustomerPhone(''); 
+    setCustomerAge('');
     setSelectedCustomerId(null);
     setSelectedCustomers([]);
     setSelectedCustomerNo(null);
@@ -2085,7 +2093,9 @@ async function getBearerTokenOrThrow() {
     const finalCustId = isMultiple ? selectedCustomers[0].id : selectedCustomerId;
     const finalCustName = isMultiple ? selectedCustomers[0].name : (customerName.trim() || null);
     const finalCustPhone = isMultiple ? selectedCustomers[0].phone : (customerPhone.trim() || null);
-    const finalCustIdsArray = isMultiple ? selectedCustomers.map(c => c.id) : (selectedCustomerId ? [selectedCustomerId] : []);
+    const finalCustIdsArray = isMultiple ? selectedCustomers.map(c => ({
+       id: c.id, name: c.name, phone: c.phone, customer_no: c.customer_no, age: c.age, isNew: c.isNew
+    })) : (selectedCustomerId ? [selectedCustomerId] : []);
 
     const orderData = {
       restaurant_id: restaurantId,
@@ -2164,7 +2174,7 @@ const orderForPrint = {
     );
     */
 
-    setCart([]); setCustomerName(''); setCustomerPhone(''); setNumberOfCustomers(''); setPaymentMethod('cash');
+    setCart([]); setCustomerName(''); setCustomerPhone(''); setCustomerAge(''); setNumberOfCustomers(''); setPaymentMethod('cash');
     setOrderSelect(''); setIsCreditSale(false); setSelectedCreditCustomerId(''); setCreditCustomerBalance(0);
     setSelectedCustomerId(null); setSelectedCustomers([]); setSelectedCustomerNo(null);
     setDiscount({ type: 'amount', value: 0 }); // Reset discount
@@ -2849,23 +2859,7 @@ function requireTakenByName() {
                         )}
                       </div>
                       
-                      {allowMultipleCustomers && selectedCustomers.length > 0 && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-                          {selectedCustomers.map(sc => (
-                            <div key={sc.id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: THEME.soft, border: `1px solid ${THEME.main}40`, padding: '4px 10px', borderRadius: 16 }}>
-                               <span style={{ fontSize: 13, fontWeight: 600, color: THEME.main }}>{sc.name} {sc.customer_no ? `#${sc.customer_no}` : ''}</span>
-                               <button 
-                                 type="button"
-                                 onClick={(e) => {
-                                   e.stopPropagation();
-                                   setSelectedCustomers(selectedCustomers.filter(x => x.id !== sc.id));
-                                 }}
-                                 style={{ background: 'transparent', border: 'none', color: THEME.main, cursor: 'pointer', padding: 2, display: 'flex', alignItems: 'center' }}
-                               >✕</button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+
 
                       <input 
                         type="text" placeholder="Search name..." 
@@ -2916,37 +2910,39 @@ function requireTakenByName() {
                     </div>
 
                     {/* Customer No */}
-                    <div style={{ flex: 1 }}>
-                      <SectionLabel>Cust #</SectionLabel>
-                      <input 
-                        type="text"
-                        placeholder="ID"
-                        value={selectedCustomerNo || ''}
-                        readOnly={!allowMultipleCustomers && !!selectedCustomerId}
-                        onChange={(e) => {
-                          const val = e.target.value.toUpperCase();
-                          setSelectedCustomerNo(val);
-                          setShowNameSuggestions(true);
-                          if (!allowMultipleCustomers && selectedCustomerId) {
-                            setSelectedCustomerId(null);
-                            setCustomerName('');
-                            setCustomerPhone('');
-                          }
-                        }}
-                        onFocus={() => setShowNameSuggestions(true)}
-                        onBlur={() => setTimeout(() => setShowNameSuggestions(false), 200)}
-                        style={{
-                          width: '100%', padding: '12px 16px', 
-                          background: (!allowMultipleCustomers && selectedCustomerId) ? (orderMode === 'kitchen' ? '#fff7ed' : '#f0fdf4') : '#ffffff', 
-                          border: (!allowMultipleCustomers && selectedCustomerId) 
-                            ? (orderMode === 'kitchen' ? '1.5px solid #fdba74' : '1.5px solid #4ade80') 
-                            : '1.5px solid #e2e8f0',
-                          borderRadius: '12px', fontSize: '14px', fontWeight: 700, outline: 'none',
-                          color: (!allowMultipleCustomers && selectedCustomerId) ? (orderMode === 'kitchen' ? '#9a3412' : '#166534') : '#1e293b',
-                          cursor: (!allowMultipleCustomers && selectedCustomerId) ? 'not-allowed' : 'text'
-                        }}
-                      />
-                    </div>
+                    {!allowMultipleCustomers && (
+                      <div style={{ flex: 1 }}>
+                        <SectionLabel>Cust #</SectionLabel>
+                        <input 
+                          type="text"
+                          placeholder="ID"
+                          value={selectedCustomerNo || ''}
+                          readOnly={!allowMultipleCustomers && !!selectedCustomerId}
+                          onChange={(e) => {
+                            const val = e.target.value.toUpperCase();
+                            setSelectedCustomerNo(val);
+                            setShowNameSuggestions(true);
+                            if (!allowMultipleCustomers && selectedCustomerId) {
+                              setSelectedCustomerId(null);
+                              setCustomerName('');
+                              setCustomerPhone('');
+                            }
+                          }}
+                          onFocus={() => setShowNameSuggestions(true)}
+                          onBlur={() => setTimeout(() => setShowNameSuggestions(false), 200)}
+                          style={{
+                            width: '100%', padding: '12px 16px', 
+                            background: (!allowMultipleCustomers && selectedCustomerId) ? (orderMode === 'kitchen' ? '#fff7ed' : '#f0fdf4') : '#ffffff', 
+                            border: (!allowMultipleCustomers && selectedCustomerId) 
+                              ? (orderMode === 'kitchen' ? '1.5px solid #fdba74' : '1.5px solid #4ade80') 
+                              : '1.5px solid #e2e8f0',
+                            borderRadius: '12px', fontSize: '14px', fontWeight: 700, outline: 'none',
+                            color: (!allowMultipleCustomers && selectedCustomerId) ? (orderMode === 'kitchen' ? '#9a3412' : '#166534') : '#1e293b',
+                            cursor: (!allowMultipleCustomers && selectedCustomerId) ? 'not-allowed' : 'text'
+                          }}
+                        />
+                      </div>
+                    )}
 
                     <div style={{ flex: 1 }}>
                       <SectionLabel>Phone</SectionLabel>
@@ -2975,7 +2971,105 @@ function requireTakenByName() {
                         }} 
                       />
                     </div>
+
+                    {allowMultipleCustomers && (
+                      <div style={{ flex: 0.5 }}>
+                        <SectionLabel>Age</SectionLabel>
+                        <input 
+                          type="number" placeholder="Age" 
+                          value={customerAge} 
+                          onChange={(e) => {
+                            setCustomerAge(e.target.value);
+                            setShowNameSuggestions(true);
+                          }} 
+                          onFocus={() => setShowNameSuggestions(true)}
+                          onBlur={() => setTimeout(() => setShowNameSuggestions(false), 200)}
+                          style={{ 
+                            width: '100%', padding: '12px', borderRadius: '12px', outline: 'none', fontSize: '14px',
+                            background: '#ffffff', 
+                            border: '1.5px solid #e2e8f0'
+                          }} 
+                        />
+                      </div>
+                    )}
                   </div>
+
+                  {/* Add Customer Button for New Customers in Multiple Mode */}
+                  {allowMultipleCustomers && (customerName.trim() || customerPhone.trim() || selectedCustomerNo || customerAge.trim()) && (
+                    <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: 16 }}>
+                      <button
+                        onClick={() => {
+                          const newCust = {
+                            id: `new_${Date.now()}`,
+                            isNew: true, // Marker for API to create this customer
+                            name: customerName.trim() || 'Guest',
+                            phone: customerPhone.trim(),
+                            customer_no: selectedCustomerNo || '',
+                            age: customerAge.trim()
+                          };
+                          // Avoid duplicates by simple exact match (ignoring ID)
+                          const duplicate = selectedCustomers.some(c => 
+                             c.name === newCust.name && c.phone === newCust.phone && c.customer_no === newCust.customer_no
+                          );
+                          if (!duplicate) {
+                            setSelectedCustomers([...selectedCustomers, newCust]);
+                          }
+                          setCustomerName('');
+                          setCustomerPhone('');
+                          setCustomerAge('');
+                          setSelectedCustomerNo(null);
+                          setShowNameSuggestions(false);
+                        }}
+                        style={{
+                          background: THEME.soft, color: THEME.main, border: `1.5px solid ${THEME.main}`, padding: '6px 14px', borderRadius: '20px', 
+                          fontSize: '12px', fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '6px'
+                        }}
+                        onMouseEnter={(e) => {
+                           e.currentTarget.style.background = THEME.main;
+                           e.currentTarget.style.color = '#fff';
+                        }}
+                        onMouseLeave={(e) => {
+                           e.currentTarget.style.background = THEME.soft;
+                           e.currentTarget.style.color = THEME.main;
+                        }}
+                      >
+                        + Add New Customer
+                      </button>
+                    </div>
+                  )}
+
+                  {allowMultipleCustomers && selectedCustomers.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
+                      <SectionLabel style={{ color: THEME.main, marginBottom: 0 }}>Selected Customers</SectionLabel>
+                      {selectedCustomers.map((sc, idx) => (
+                        <div key={sc.id} style={{ display: 'flex', gap: 12, alignItems: 'flex-end', background: THEME.soft, padding: '12px', borderRadius: '12px', border: `1px solid ${THEME.main}30` }}>
+                          <div style={{ flex: 1.5 }}>
+                            <SectionLabel style={{ fontSize: '11px' }}>Name</SectionLabel>
+                            <input type="text" value={sc.name} readOnly style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f8fafc', fontSize: '13px', color: '#475569', outline: 'none' }} />
+                          </div>
+
+                          <div style={{ flex: 1 }}>
+                            <SectionLabel style={{ fontSize: '11px' }}>Phone</SectionLabel>
+                            <input type="tel" value={sc.phone || ''} readOnly style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f8fafc', fontSize: '13px', color: '#475569', outline: 'none' }} />
+                          </div>
+                          <div style={{ flex: 0.5 }}>
+                            <SectionLabel style={{ fontSize: '11px' }}>Age</SectionLabel>
+                            <input type="number" value={sc.age || ''} readOnly style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f8fafc', fontSize: '13px', color: '#475569', outline: 'none' }} />
+                          </div>
+                          <button 
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedCustomers(selectedCustomers.filter(x => x.id !== sc.id));
+                            }}
+                            style={{ background: '#fee2e2', color: '#b91c1c', border: 'none', padding: '10px', borderRadius: '8px', cursor: 'pointer', fontWeight: 800, height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                          >✕</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+
 
                   {/* Delivery Address Selection (Only if Delivery is selected) */}
                   {orderSelect === 'delivery' && (
@@ -3052,15 +3146,18 @@ function requireTakenByName() {
                                      id: c.customer_id || c.id,
                                      name: c.name || '',
                                      phone: c.phone || '',
-                                     customer_no: c.customer_no || ''
+                                     customer_no: c.customer_no || '',
+                                     age: c.age || ''
                                   }]);
                                }
                                setCustomerName('');
                                setCustomerPhone('');
+                               setCustomerAge('');
                                setSelectedCustomerNo(null);
                              } else {
                                setCustomerName(c.name || '');
                                setCustomerPhone(c.phone || '');
+                               setCustomerAge(c.age || '');
                                setSelectedCustomerId(c.customer_id || c.id || null);
                                setSelectedCustomerNo(c.customer_no || null);
                              }

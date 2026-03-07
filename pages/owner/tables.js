@@ -1,4 +1,4 @@
-﻿// pages/owner/table-management.js - Premium Table Management Screen
+// pages/owner/table-management.js - Premium Table Management Screen
 // Comprehensive table management with grid/list views, real-time status, sections, and advanced features
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
@@ -2819,23 +2819,25 @@ export default function TableManagement() {
   async function fetchFullOrder(orderId) {
     const { data, error } = await supabase
       .from('orders')
-      .select('*, order_items(*, menu_items(name, uom:unit_of_measures(precision))), order_customers(*, restaurant_customer(name, phone))')
+      .select('*, order_items(*, menu_items(name, uom:unit_of_measures(precision))), order_customers(*, restaurant_customer(name, phone, age, customer_no))')
       .eq('id', orderId)
       .single();
     if (!error && data) {
-      if (data.order_customers && data.order_customers.length > 0) {
-        data.customers = data.order_customers.map(link => ({
-          id: link.customer_id,
-          name: link.restaurant_customer?.name,
-          phone: link.restaurant_customer?.phone,
-          is_primary: link.is_primary
-        }));
-      } else if (data.customer_name || data.customer_phone) {
+      if (data.customer_name || data.customer_phone) {
         data.customers = [{
           name: data.customer_name,
           phone: data.customer_phone,
           is_primary: true
         }];
+      } else if (data.order_customers && data.order_customers.length > 0) {
+        data.customers = data.order_customers.map(link => ({
+          id: link.customer_id,
+          name: link.restaurant_customer?.name || null,
+          phone: link.restaurant_customer?.phone || null,
+          age: link.restaurant_customer?.age || null,
+          customer_no: link.restaurant_customer?.customer_no || null,
+          is_primary: link.is_primary
+        }));
       }
       return data;
     }
@@ -5214,13 +5216,49 @@ export default function TableManagement() {
             {/* Body */}
             <div style={{ overflowY: 'auto', flex: 1, padding: '20px 24px' }}>
               {/* Meta grid */}
+              {((historyInvoice.customer_name || historyInvoice.customer_phone) || (historyInvoice.order_customers && historyInvoice.order_customers.length > 0)) && (
+                <div style={{
+                  padding: '12px', background: '#f8fafc', borderRadius: 12, border: '1px solid #f1f5f9',
+                  marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 12
+                }}>
+                  {(historyInvoice.customer_name || historyInvoice.customer_phone) ? (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                      {historyInvoice.customer_name && (
+                        <div>
+                          <div style={{ fontSize: 8, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>Customer</div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{historyInvoice.customer_name}</div>
+                        </div>
+                      )}
+                      {historyInvoice.customer_phone && (
+                        <div>
+                          <div style={{ fontSize: 8, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>Contact</div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{historyInvoice.customer_phone}</div>
+                        </div>
+                      )}
+                    </div>
+                  ) : historyInvoice.order_customers && historyInvoice.order_customers.length > 0 ? (
+                    historyInvoice.order_customers.map((c, idx) => {
+                      const cust = c.restaurant_customer;
+                      return (
+                        <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, borderBottom: idx < historyInvoice.order_customers.length - 1 ? '1px solid #f1f5f9' : 'none', paddingBottom: idx < historyInvoice.order_customers.length - 1 ? 8 : 0 }}>
+                          <div>
+                            <div style={{ fontSize: 8, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>
+                              {c.is_primary ? 'Primary Customer' : 'Customer'}
+                            </div>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{cust?.name || 'Guest'}</div>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 8, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>Contact</div>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{cust?.phone || '-'}</div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : null}
+                </div>
+              )}
+
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
-                {historyInvoice.customer_name && (
-                  <div style={{ background: '#f8fafc', borderRadius: 10, padding: '10px 14px' }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>Customer</div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>{historyInvoice.customer_name}</div>
-                  </div>
-                )}
                 <div style={{ background: '#f8fafc', borderRadius: 10, padding: '10px 14px' }}>
                   <div style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>Date</div>
                   <div style={{ fontSize: 12, fontWeight: 600, color: '#334155' }}>

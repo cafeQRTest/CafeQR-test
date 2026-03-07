@@ -197,6 +197,43 @@ export default function BillingPage() {
       } // 'all' shows everything kept by the base filter (paid + credit + void)
 
 
+      // Batch-enrich invoices missing customer_name from order_customers junction
+      const needsEnrich = list.filter(inv => !inv.customer_name && inv.order_id);
+      if (needsEnrich.length > 0) {
+        const orderIds = needsEnrich.map(inv => inv.order_id);
+        // Fetch all junction links for these orders at once
+        const { data: links } = await supabase
+          .from('order_customers')
+          .select('order_id, customer_id, is_primary')
+          .in('order_id', orderIds);
+
+        if (links && links.length > 0) {
+          const uniqueCustIds = [...new Set(links.map(l => l.customer_id).filter(Boolean))];
+          const { data: rcRows } = await supabase
+            .from('restaurant_customers')
+            .select('customer_id, name')
+            .eq('restaurant_id', restaurant.id)
+            .in('customer_id', uniqueCustIds);
+          const rcMap = new Map((rcRows || []).map(r => [r.customer_id, r.name]));
+
+          // Group links by order_id
+          const linksByOrder = {};
+          links.forEach(l => {
+            if (!linksByOrder[l.order_id]) linksByOrder[l.order_id] = [];
+            linksByOrder[l.order_id].push(l);
+          });
+
+          list = list.map(inv => {
+            if (inv.customer_name || !linksByOrder[inv.order_id]) return inv;
+            const names = linksByOrder[inv.order_id]
+              .sort((a, b) => (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0))
+              .map(l => rcMap.get(l.customer_id))
+              .filter(Boolean);
+            return names.length > 0 ? { ...inv, _customer_names: names } : inv;
+          });
+        }
+      }
+
       setInvoices(list);
 
       // Compute statistics from the visible list
@@ -371,15 +408,74 @@ export default function BillingPage() {
     setDetailsLoading(true);
     setInvoiceItems([]);
     try {
-      const { data, error } = await supabase
+      // 1. Fetch order items
+      const { data: items, error: itemsErr } = await supabase
         .from('order_items')
         .select('*, menu_items(name)')
         .eq('order_id', invoice.order_id);
+      if (itemsErr) throw itemsErr;
+      setInvoiceItems(items || []);
 
-      if (error) throw error;
-      setInvoiceItems(data || []);
+      // 2. Fetch customer info for this order
+      // Priority: order.customer_id → restaurant_customers
+      //           else → order_customers junction → restaurant_customers (batch)
+      if (invoice.order_id && restaurant?.id) {
+        // Already has customer_name on invoice — no need to fetch
+        if (!invoice.customer_name) {
+          const { data: order } = await supabase
+            .from('orders')
+            .select('customer_id, customer_name, customer_phone')
+            .eq('id', invoice.order_id)
+            .maybeSingle();
+
+          let enrichedCustomers = null;
+
+          if (order?.customer_name || order?.customer_phone) {
+            // Direct name on order
+            enrichedCustomers = [{ name: order.customer_name, phone: order.customer_phone, is_primary: true }];
+          } else if (order?.customer_id) {
+            // Look up by customer_id
+            const { data: rc } = await supabase
+              .from('restaurant_customers')
+              .select('name, phone, customer_no')
+              .eq('customer_id', order.customer_id)
+              .eq('restaurant_id', restaurant.id)
+              .maybeSingle();
+            if (rc?.name || rc?.phone) {
+              enrichedCustomers = [{ name: rc.name, phone: rc.phone, customer_no: rc.customer_no, is_primary: true }];
+            }
+          }
+
+          if (!enrichedCustomers) {
+            // Fall back to order_customers junction
+            const { data: links } = await supabase
+              .from('order_customers')
+              .select('customer_id, is_primary')
+              .eq('order_id', invoice.order_id);
+
+            if (links && links.length > 0) {
+              const ids = links.map(l => l.customer_id).filter(Boolean);
+              const { data: rcRows } = await supabase
+                .from('restaurant_customers')
+                .select('customer_id, name, phone, customer_no')
+                .eq('restaurant_id', restaurant.id)
+                .in('customer_id', ids);
+              const rcMap = new Map((rcRows || []).map(r => [r.customer_id, r]));
+              const mapped = links.map(l => {
+                const rc = rcMap.get(l.customer_id);
+                return { name: rc?.name || null, phone: rc?.phone || null, customer_no: rc?.customer_no || null, is_primary: l.is_primary };
+              }).filter(c => c.name || c.phone);
+              if (mapped.length > 0) enrichedCustomers = mapped;
+            }
+          }
+
+          if (enrichedCustomers) {
+            setSelectedInvoice(prev => prev ? { ...prev, customers: enrichedCustomers } : prev);
+          }
+        }
+      }
     } catch (err) {
-      console.error('Failed to fetch invoice items:', err);
+      console.error('Failed to fetch invoice details:', err);
     } finally {
       setDetailsLoading(false);
     }
@@ -556,7 +652,22 @@ export default function BillingPage() {
                       }),
                   },
 
-                  { header: 'Customer', accessor: 'customer_name', cell: (r) => r.customer_name || '' },
+                  { header: 'Customer', accessor: 'customer_name', cell: (r) => {
+                    if (r.customer_name) return r.customer_name;
+                    if (r._customer_names?.length > 0) {
+                      return (
+                        <span style={{ color: '#334155' }}>
+                          {r._customer_names.map((n, i) => (
+                            <span key={i}>
+                              {i > 0 && <span style={{ color: '#94a3b8', margin: '0 2px' }}>,</span>}
+                              <span style={{ background: '#f1f5f9', borderRadius: 4, padding: '1px 5px', fontSize: 12, fontWeight: 600 }}>{n}</span>
+                            </span>
+                          ))}
+                        </span>
+                      );
+                    }
+                    return '';
+                  }},
                   { header: 'Taxable', accessor: 'taxable_amount', cell: (r) => formatMoney(r.taxable_amount) },
                   { header: 'Tax', accessor: 'total_tax', cell: (r) => <span style={{ color: '#dc2626', fontWeight: 600 }}>{formatMoney(r.total_tax)}</span> },
                   { header: 'Total', accessor: 'total_inc_tax', cell: (r) => <span style={{ fontWeight: 800, color: '#0f172a' }}>{formatMoney(getInvoiceTotal(r))}</span> },
@@ -626,11 +737,21 @@ export default function BillingPage() {
 
                 <div className="modal-body">
                   <div className="details-grid">
-                    {selectedInvoice.customer_name && (
-                      <div className="detail-item">
-                        <div className="d-label"><FaUser /> Customer</div>
-                        <div className="d-value">{selectedInvoice.customer_name}</div>
-                      </div>
+                    {/* Customer section: show if invoice has direct name, or enriched customers array */}
+                    {(selectedInvoice.customer_name || selectedInvoice.customers?.length > 0) && (
+                      selectedInvoice.customers?.length > 0 ? (
+                        selectedInvoice.customers.map((c, idx) => (
+                          <div key={idx} className="detail-item">
+                            <div className="d-label"><FaUser /> {c.is_primary ? 'Customer' : `Customer ${idx + 1}`}</div>
+                            <div className="d-value">{c.name}{c.phone ? <span style={{ fontWeight: 400, color: '#64748b', fontSize: 12, marginLeft: 8 }}>{c.phone}</span> : null}</div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="detail-item">
+                          <div className="d-label"><FaUser /> Customer</div>
+                          <div className="d-value">{selectedInvoice.customer_name}</div>
+                        </div>
+                      )
                     )}
                     <div className="detail-item">
                       <div className="d-label"><FaCalendarDay /> Date</div>

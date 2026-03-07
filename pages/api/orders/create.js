@@ -4,6 +4,7 @@ import { InvoiceService } from '../../../services/invoiceService';
 import { OrderService } from '../../../services/orderService';
 import { ensureCustomer } from '../../../lib/customer/ensureCustomer';
 import { sendNewOrderPush } from '../../../services/push/newOrderNotifier';
+import { randomUUID } from 'crypto';
 
 export default async function handler(req, res) {
   console.log('[/api/orders/create] handler called, method =', req.method);
@@ -62,33 +63,115 @@ export default async function handler(req, res) {
 
     // --- Customer Resolution Logic ---
     let finalCustomerId = customer_id || null;
+    
+    // Sanitize any temporary frontend IDs
+    if (finalCustomerId && String(finalCustomerId).startsWith('new_')) {
+      finalCustomerId = null;
+    }
 
     // If no ID provided but we have a phone or name, try to find/create
-    if (!finalCustomerId && (customer_phone || customer_name || credit_customer_id)) {
+    // Skip this if the client is using the modern multiple customers payload, to avoid creating the same customer twice
+    const hasMultipleCustomersPayload = Array.isArray(customer_ids) && customer_ids.length > 0;
+    
+    if (!finalCustomerId && (customer_phone || customer_name || credit_customer_id) && !hasMultipleCustomersPayload) {
       try {
-        // If credit customer ID is explicit, prefer that as the customer link
         if (is_credit && credit_customer_id) {
-          // Usually credit_customer_id maps to 'restaurant_customers.id' or 'customers.id'
-          // We'll trust the frontend passed a valid UUID.
-          // But if specific logic is needed, we can check it. 
-          // Often credit_customer_id IS the customer_id.
-          // If they are distinct concepts in your DB, handle accordingly.
-          // Assuming here we want to link the order to that customer.
           finalCustomerId = credit_customer_id;
         } else {
           finalCustomerId = await ensureCustomer(supabase, {
             restaurant_id,
             phone: customer_phone,
             name: customer_name,
-            // email, address if available in body
           });
         }
       } catch (custErr) {
         console.error('[CreateOrder] Failed to ensure customer:', custErr);
-        // Don't swallow for now, let's see why it failed. 
-        // Optional: throw custErr; 
-        // For production, swallowing is safer for Order Completion, but for debugging we need this log.
       }
+    }
+
+    // --- Multiple Customers Resolution Logic ---
+    let finalCustomerIds = [];
+    if (Array.isArray(customer_ids) && customer_ids.length > 0) {
+      for (const reqCust of customer_ids) {
+        if (typeof reqCust === 'string') {
+          // Backward compatibility: array of strings
+          if (!reqCust.startsWith('new_')) {
+            finalCustomerIds.push(reqCust);
+          }
+        } else if (typeof reqCust === 'object' && reqCust !== null) {
+          if (reqCust.isNew) {
+            try {
+              // Generate or use customer_no
+              const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+              let temp_no = '';
+              for (let i = 0; i < 8; i++) temp_no += chars.charAt(Math.floor(Math.random() * chars.length));
+              
+              const newId = randomUUID();
+
+              const baseCustomer = {
+                restaurant_id,
+                customer_id: newId,
+                customer_no: reqCust.customer_no || temp_no,
+                name: reqCust.name || 'Guest',
+                phone: reqCust.phone || null,
+                total_spent: 0,
+                visit_count: 0,
+                is_active: true,
+                last_order_at: new Date().toISOString()
+              };
+
+              let insertedCustId = null;
+
+              // If age is provided, try inserting with age first
+              if (reqCust.age) {
+                const { data, error } = await supabase
+                  .from('restaurant_customers')
+                  .insert([{ ...baseCustomer, age: reqCust.age }])
+                  .select('customer_id')
+                  .maybeSingle();
+
+                if (error) {
+                   console.log('[CreateOrder] Failed to insert with age column (might not exist). Retrying without age...', error.message);
+                   // Fallback: without age
+                   const fb = await supabase.from('restaurant_customers').insert([baseCustomer]).select('customer_id').maybeSingle();
+                   if (!fb.error && fb.data) insertedCustId = fb.data.customer_id;
+                } else if (data) {
+                   insertedCustId = data.customer_id;
+                }
+              } else {
+                // No age provided, just insert
+                const { data, error } = await supabase.from('restaurant_customers').insert([baseCustomer]).select('customer_id').maybeSingle();
+                if (!error && data) insertedCustId = data.customer_id;
+              }
+
+              if (insertedCustId) {
+                finalCustomerIds.push(insertedCustId);
+              }
+            } catch(e) {
+               console.error('[CreateOrder] Error creating multiple customer:', e);
+            }
+          } else {
+            if (reqCust.id && !String(reqCust.id).startsWith('new_')) {
+              finalCustomerIds.push(reqCust.id);
+              // Optimistically update last_order_at
+              await supabase.from('restaurant_customers')
+                .update({ last_order_at: new Date().toISOString() })
+                .eq('customer_id', reqCust.id)
+                .eq('restaurant_id', restaurant_id);
+            }
+          }
+        }
+      }
+    }
+
+    // Ensure we have a primary customer ID if it was omitted but list is present
+    if (!finalCustomerId && finalCustomerIds.length > 0) {
+      finalCustomerId = finalCustomerIds[0];
+    }
+    
+    // Ensure single customer resolved from phone/name is also present in order_customers junction
+    if (finalCustomerId && !finalCustomerIds.includes(finalCustomerId)) {
+      finalCustomerIds.unshift(finalCustomerId);
     }
     // ---------------------------------
 
@@ -231,7 +314,7 @@ export default async function handler(req, res) {
     const { data: profile, error: profileErr } = await supabase
       .from('restaurant_profiles')
       .select(
-        'gst_enabled, default_tax_rate, prices_include_tax, features_inventory_enabled, round_off_enabled, round_off_mode, round_off_auto_factor, round_off_manual_limit'
+        'gst_enabled, default_tax_rate, prices_include_tax, features_inventory_enabled, round_off_enabled, round_off_mode, round_off_auto_factor, round_off_manual_limit, allow_multiple_customers_per_order'
       )
       .eq('restaurant_id', restaurant_id)
       .maybeSingle();
@@ -421,10 +504,13 @@ export default async function handler(req, res) {
         taken_by_email: serverTakenByEmail,
         taken_by_role: serverTakenByRole,
 
-        customer_id: finalCustomerId,
-        customer_ids,
-        customer_name,
-        customer_phone,
+        // ✅ Store based on the toggle configuration:
+        // Config ON -> Save to junction `order_customers`, nullify orders fields.
+        // Config OFF -> Save to `orders`, skip junction.
+        customer_id: profile?.allow_multiple_customers_per_order ? null : finalCustomerId,
+        customer_ids: profile?.allow_multiple_customers_per_order ? finalCustomerIds : [],
+        customer_name: profile?.allow_multiple_customers_per_order ? null : customer_name,
+        customer_phone: profile?.allow_multiple_customers_per_order ? null : customer_phone,
         number_of_customers,
         order_type,
         table_number,
