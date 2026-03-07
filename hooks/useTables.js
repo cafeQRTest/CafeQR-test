@@ -73,6 +73,7 @@ export function useTables(restaurantId) {
     queryKey: tableKeys.list(restaurantId),
     queryFn: () => fetchTables(restaurantId),
     enabled: !!restaurantId,
+    staleTime: 0, // Ensure fresh data on every mount
     refetchInterval: 10000, // Safety net: refetch every 10s if real-time fails
   });
 }

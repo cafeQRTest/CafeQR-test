@@ -61,6 +61,7 @@ export function useOrders(restaurantId, type) {
     queryKey: orderKeys.list(restaurantId, type),
     queryFn: () => fetchOrders(restaurantId, type),
     enabled: !!restaurantId,
+    staleTime: 0,
     refetchInterval: 10000, // Poll every 10 seconds for real-time feel
   });
 }

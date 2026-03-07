@@ -1697,6 +1697,7 @@ useEffect(() => {
           .toolbar-top-row {
             flex-direction: column;
             align-items: flex-start;
+            gap: 12px;
           }
           .search-full-mobile {
             width: 100%;
@@ -1706,16 +1707,10 @@ useEffect(() => {
             box-sizing: border-box;
           }
           .filter-chips {
-            flex-wrap: nowrap;
-            overflow-x: auto;
+            flex-wrap: wrap;
+            gap: 8px;
             width: 100%;
             padding-bottom: 4px;
-            /* hide scrollbar */
-            -ms-overflow-style: none;
-            scrollbar-width: none;
-          }
-          .filter-chips::-webkit-scrollbar {
-            display: none;
           }
         }
 

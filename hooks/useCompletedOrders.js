@@ -85,6 +85,7 @@ export function useCompletedOrders(restaurantId) {
     queryKey: orderHistoryKeys.today(restaurantId),
     queryFn: () => fetchCompletedOrders(restaurantId),
     enabled: !!restaurantId,
+    staleTime: 0,
     refetchInterval: 60000, // Refresh every minute
   });
 }
