@@ -1,7 +1,7 @@
 // services/founder-auth.js
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 // Comma-separated founder emails in env, e.g. "you@domain.com,cofounder@domain.com"
@@ -11,7 +11,7 @@ const founderEmails = (process.env.FOUNDER_EMAILS || '')
   .filter(Boolean);
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Founder auth: missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY');
+  throw new Error('Founder auth: missing SUPABASE_URL/NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY');
 }
 
 // Server-side auth client using anon key, no persistence
