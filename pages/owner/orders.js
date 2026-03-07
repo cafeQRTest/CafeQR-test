@@ -2662,6 +2662,7 @@ function getOrderTypeLabel(order) {
     return `Table ${order.table_number}`;
   }
   if (order.order_type === 'parcel' || order.order_type === 'takeaway') return 'Takeaway';
+  if (order.order_type === 'delivery') return 'Home Delivery';
   return '';
 }
 
