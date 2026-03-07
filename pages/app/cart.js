@@ -23,13 +23,22 @@ export default function DeliveryCart() {
     const load = async () => {
       setLoading(true);
 
-      const { data: rest } = await supabase
-        .from("restaurants")
-        .select("id, name, restaurant_profiles(brand_color, gst_enabled, default_tax_rate, prices_include_tax)")
-        .eq("id", restaurantId)
-        .single();
+      try {
+        const fetchWithTimeout = Promise.race([
+          supabase
+            .from("restaurants")
+            .select("id, name, restaurant_profiles(brand_color, gst_enabled, default_tax_rate, prices_include_tax)")
+            .eq("id", restaurantId)
+            .single(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 10000)),
+        ]);
 
-      setRestaurant(rest || null);
+        const { data: rest } = await fetchWithTimeout;
+        setRestaurant(rest || null);
+      } catch (e) {
+        console.warn("Cart: restaurant fetch error:", e);
+        setRestaurant(null);
+      }
 
       if (typeof window !== "undefined") {
         const stored = localStorage.getItem(cartKey(restaurantId));

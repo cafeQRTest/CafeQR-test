@@ -43,6 +43,16 @@ export default function DeliveryPayment() {
   const isAddrValid = custHouseNo.trim().length > 0;
   const isFormValid = isNameValid && isPhoneValid && isAddrValid;
 
+  // Helper: race a promise against a timeout (for Android APK where network may hang)
+  const withTimeout = (promise, ms, label = "Operation") => {
+    return Promise.race([
+      promise,
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error(`${label} timed out after ${ms / 1000}s`)), ms)
+      ),
+    ]);
+  };
+
   useEffect(() => {
     if (!restaurantId) return;
 
@@ -52,31 +62,36 @@ export default function DeliveryPayment() {
 
       let rest = null;
       try {
-        const { data: restData, error: restErr } = await supabase
-          .from("restaurants")
-          .select(
+        // 1. Fetch restaurant (with 10s timeout)
+        const { data: restData, error: restErr } = await withTimeout(
+          supabase
+            .from("restaurants")
+            .select(
+              `
+              id,
+              name,
+              delivery_paused,
+              restaurant_profiles(
+                brand_color,
+                online_payment_enabled,
+                use_own_gateway,
+                gst_enabled,
+                default_tax_rate,
+                prices_include_tax
+              )
             `
-            id,
-            name,
-            delivery_paused,
-            restaurant_profiles(
-              brand_color,
-              online_payment_enabled,
-              use_own_gateway,
-              gst_enabled,
-              default_tax_rate,
-              prices_include_tax
             )
-          `
-          )
-          .eq("id", restaurantId)
-          .single();
+            .eq("id", restaurantId)
+            .single(),
+          10000, "Restaurant fetch"
+        );
 
         if (restErr) console.warn("Restaurant fetch error:", restErr.message);
         rest = restData || null;
         setRestaurant(rest);
 
         if (typeof window !== "undefined") {
+          // 2. Load cart from localStorage (sync, always works)
           const stored = localStorage.getItem(cartKey(restaurantId));
           if (stored) {
             try {
@@ -93,47 +108,61 @@ export default function DeliveryPayment() {
           const detected = localStorage.getItem("detected_delivery_address");
           if (detected) setCustAddress(detected);
 
-          // Fetch Profile Data (SSOT)
+          // 3. Get session (with 8s timeout — uses Capacitor Preferences on Android)
           try {
-            const { data: { session } } = await supabase.auth.getSession();
+            const { data: { session } } = await withTimeout(
+              supabase.auth.getSession(),
+              8000, "Session fetch"
+            );
             if (session) {
               setSessionToken(session.access_token);
+              // Use session.user instead of getUser() to avoid an extra network call
+              // getUser() makes a direct HTTP request to Supabase that can hang on Android
+              const sessionUser = session.user;
+              if (sessionUser) {
+                setCurrentUser(sessionUser);
+                // 4. Fetch customer profile (with 8s timeout)
+                try {
+                  const { data: profile } = await withTimeout(
+                    supabase
+                      .from('customers')
+                      .select('name, phone')
+                      .eq('user_id', sessionUser.id)
+                      .maybeSingle(),
+                    8000, "Profile fetch"
+                  );
+                  if (profile) {
+                    if (profile.name) setCustName(profile.name);
+                    if (profile.phone) setCustPhone(profile.phone.replace(/\D/g, '').slice(0, 10));
+                  }
+                } catch (profileErr) {
+                  console.warn("Profile fetch error:", profileErr);
+                }
+              }
             }
           } catch (sessionErr) {
             console.warn("Session fetch error:", sessionErr);
-          }
-
-          try {
-            const { data: { user: dbUser } } = await supabase.auth.getUser();
-            if (dbUser) {
-              setCurrentUser(dbUser);
-              const { data: profile } = await supabase
-                .from('customers')
-                .select('name, phone')
-                .eq('user_id', dbUser.id)
-                .maybeSingle();
-
-              if (profile) {
-                if (profile.name) setCustName(profile.name);
-                if (profile.phone) setCustPhone(profile.phone.replace(/\D/g, '').slice(0, 10));
-              }
+            // Fallback: try to use user from CustomerAuthContext
+            if (user) {
+              setCurrentUser(user);
             }
-          } catch (userErr) {
-            console.warn("User/profile fetch error:", userErr);
           }
         }
 
-        // Check delivery availability (defense-in-depth)
+        // 5. Check delivery availability (with 8s timeout)
         if (rest) {
           if (rest.delivery_paused) {
             setIsDeliveryClosed(true);
             setDeliveryClosedMessage("Delivery is currently paused");
           } else {
             try {
-              const { data: dHours } = await supabase
-                .from("delivery_hours")
-                .select("dow, open_time, close_time, enabled")
-                .eq("restaurant_id", restaurantId);
+              const { data: dHours } = await withTimeout(
+                supabase
+                  .from("delivery_hours")
+                  .select("dow, open_time, close_time, enabled")
+                  .eq("restaurant_id", restaurantId),
+                8000, "Delivery hours"
+              );
 
               if (dHours && dHours.length > 0) {
                 const now = new Date();
@@ -166,7 +195,20 @@ export default function DeliveryPayment() {
       }
     };
 
-    load();
+    // Global safety net: if load() itself hangs for >20s, force-complete
+    let loadDone = false;
+    const safetyTimer = setTimeout(() => {
+      if (!loadDone) {
+        console.warn("Payment load safety timeout reached (20s)");
+        setLoading(false);
+        setLoadError("Loading took too long. Please check your connection and try again.");
+      }
+    }, 20000);
+
+    load().finally(() => {
+      loadDone = true;
+      clearTimeout(safetyTimer);
+    });
 
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session) {
@@ -178,16 +220,18 @@ export default function DeliveryPayment() {
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
         if (session?.user) {
           setCurrentUser(session.user);
-          const { data: profile } = await supabase
-            .from('customers')
-            .select('name, phone')
-            .eq('user_id', session.user.id)
-            .maybeSingle();
+          try {
+            const { data: profile } = await supabase
+              .from('customers')
+              .select('name, phone')
+              .eq('user_id', session.user.id)
+              .maybeSingle();
 
-          if (profile) {
-            if (profile.name) setCustName(profile.name);
-            if (profile.phone) setCustPhone(profile.phone.replace(/\D/g, '').slice(0, 10));
-          }
+            if (profile) {
+              if (profile.name) setCustName(profile.name);
+              if (profile.phone) setCustPhone(profile.phone.replace(/\D/g, '').slice(0, 10));
+            }
+          } catch { /* best effort */ }
         } else {
           setCurrentUser(null);
         }
