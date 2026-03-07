@@ -2130,10 +2130,6 @@ export default function OrdersPage() {
         </div>
       </header>
 
-      <div style={{ padding: '0 12px 10px', display: 'flex', justifyContent: 'flex-start' }}>
-        <EnableAlertsButton restaurantId={restaurantId} />
-      </div>
-
       <ControlsBar>
         <SearchWrapper>
           <svg className="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -2630,13 +2626,13 @@ export default function OrdersPage() {
 .header-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
 .muted { color:#6b7280; font-size:14px; }
 .mobile-list { display:none; }
-.kanban { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; padding:12px 16px; }
+.kanban { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; padding:12px 16px; }
 .kanban-col-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
 .pill { background:#f3f4f6; padding:4px 10px; border-radius:9999px; font-size:12px; }
 .kanban-col-body { display:flex; flex-direction:column; gap:10px; max-height:70vh; overflow-y:auto; }
 .empty-col { text-align:center; color:#9ca3af; padding:20px; border:1px dashed #e5e7eb; border-radius:8px; }
 @media (max-width:1280px) {
-  .kanban { grid-template-columns:repeat(4,minmax(220px,1fr)); overflow-x:auto; }
+  .kanban { grid-template-columns:repeat(3,minmax(220px,1fr)); overflow-x:auto; }
 }
 @media (max-width:1023px) {
   .orders-wrap { padding:8px 0 24px; }

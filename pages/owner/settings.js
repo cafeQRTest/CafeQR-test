@@ -10,6 +10,7 @@ import UomManager from "../../components/UomManager";
 import PrinterSetupCard from '../../components/PrinterSetupCard';
 import NiceSelect from '../../components/NiceSelect';
 import { fileToBitmapGrid } from '../../utils/logoBitmap';
+import EnableAlertsButton from '../../components/EnableAlertsButton';
 
 // --- Animations ---
 
@@ -1714,6 +1715,20 @@ export default function SettingsPage() {
                   </CopyBtn>
                 </UrlRow>
 
+              </div>
+            </SectionCard>
+
+            {/* NOTIFICATIONS SETTINGS CARD */}
+            <SectionCard>
+              <SectionHeader>
+                <SectionIcon>🔔</SectionIcon>
+                <div>
+                  <SectionTitle>Push Notifications</SectionTitle>
+                  <div style={{ fontSize: 13, color: 'gray', fontWeight: 400 }}>Manage alerts for new orders on this device</div>
+                </div>
+              </SectionHeader>
+              <div style={{ padding: 36 }}>
+                <EnableAlertsButton restaurantId={restaurant?.id || localRestaurantId} />
               </div>
             </SectionCard>
 
