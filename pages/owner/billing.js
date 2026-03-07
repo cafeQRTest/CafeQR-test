@@ -5,6 +5,7 @@ import { getSupabase } from '../../services/supabase';
 import { useRequireAuth } from '../../lib/useRequireAuth';
 import { useRestaurant } from '../../context/RestaurantContext';
 import Button from '../../components/ui/Button';
+import { useRestaurantProfileConfig } from '../../hooks/useCreateOrderData';
 import Card from '../../components/ui/Card';
 import Table from '../../components/ui/Table';
 import NiceSelect from '../../components/NiceSelect';
@@ -279,61 +280,102 @@ export default function BillingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [restaurant?.id, range, reportType, supabase, restLoading, checking]);
 
-  const exportCSV = async (type) => {
+  const { data: profileConfig } = useRestaurantProfileConfig(restaurant?.id);
+  const allowMultipleCustomers = profileConfig?.allow_multiple_customers_per_order === true;
+  const exportBillingCSV = async (type) => {
     if (!restaurant?.id) return;
-    const { startUtc, endUtc } = istSpanFromDateTimesUtcISO(
-      range.start,
-      range.startTime || '00:00',
-      range.end,
-      range.endTime || '23:59'
-    );
 
-    const qs = new URLSearchParams({
-      from: startUtc,
-      to: endUtc,
-      restaurant_id: restaurant.id,
-      report_type: type,
-    }).toString();
-    const relUrl = `/api/reports/sales?${qs}`;
+    // Filter by type if specifically requested (sales or credit)
+    let exportData = invoices;
+    if (type === 'sales') {
+      exportData = invoices.filter(inv => {
+        const s = String(inv.status || '').toLowerCase();
+        const pm = getPayMethod(inv);
+        return s === 'paid' && pm !== 'credit';
+      });
+    } else if (type === 'credit') {
+      exportData = invoices.filter(inv => {
+        const s = String(inv.status || '').toLowerCase();
+        const pm = getPayMethod(inv);
+        return (pm === 'credit' || s === 'unpaid') && s !== 'void';
+      });
+    }
 
-    const dateTag = `${range.start.toISOString().slice(0, 10)}_to_${range.end.toISOString().slice(0, 10)}`;
-
-    // Web: existing download behavior
-    if (!Capacitor.isNativePlatform()) {
-      window.location.href = relUrl;
+    if (exportData.length === 0) {
+      alert(`No ${type} records found in the current view to export.`);
       return;
     }
 
+    const headers = [
+      'Invoice No',
+      'Date',
+      'Order ID',
+      'Customer',
+      'Status',
+      'Payment Method',
+      'Taxable Amount',
+      'Total Tax',
+      'Grand Total'
+    ];
+    if (allowMultipleCustomers) headers.push('All Customers');
+
+    const rows = exportData.map(inv => {
+      const date = inv.date_ordered ? new Date(inv.date_ordered).toLocaleDateString('en-IN') : '';
+      const total = getInvoiceTotal(inv);
+      const statusLabel = getStatusLabel(inv.status);
+      const methodLabel = prettyMethod(getPayMethod(inv));
+      
+      const primaryCustomer = inv.customer_name || '';
+      const allCustomers = allowMultipleCustomers && Array.isArray(inv._customer_names) && inv._customer_names.length > 0
+        ? inv._customer_names.join(', ')
+        : primaryCustomer;
+
+      const row = [
+        inv.invoice_no || '',
+        date,
+        inv.order_id || '',
+        primaryCustomer,
+        statusLabel,
+        methodLabel,
+        inv.taxable_amount || '0',
+        inv.total_tax || '0',
+        total
+      ];
+      if (allowMultipleCustomers) row.push(allCustomers);
+      return row.map(v => `"${v}"`).join(',');
+    });
+
+    const csvContent = [headers.map(h => `"${h}"`).join(','), ...rows].join('\n');
+    const dateTag = `${range.start.toISOString().slice(0, 10)}_to_${range.end.toISOString().slice(0, 10)}`;
+    const fileName = `Invoices_${type}_${dateTag}.csv`;
+    // Use Capacitor share similar to other exports
+    if (!Capacitor.isNativePlatform()) {
+      const blob = new Blob([csvContent], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      link.click();
+      URL.revokeObjectURL(url);
+      return;
+    }
     try {
-      const res = await fetch(relUrl);
-      if (!res.ok) throw new Error('Failed to generate CSV');
-      const csv = await res.text();
-
-      const fileName = `Invoices_${type}_${dateTag}.csv`;
-
       await Filesystem.writeFile({
         directory: Directory.Cache,
         path: fileName,
-        data: csv,
+        data: csvContent,
         encoding: 'utf8',
       });
-
-      const { uri } = await Filesystem.getUri({
-        directory: Directory.Cache,
-        path: fileName,
-      });
-
-      await Share.share({
-        title: fileName,
-        text: 'Cafe QR billing CSV export',
-        url: uri,               // share the CSV file
-        dialogTitle: 'Share billing CSV',
-      });
+      const { uri } = await Filesystem.getUri({ directory: Directory.Cache, path: fileName });
+      await Share.share({ title: fileName, text: 'Cafe QR billing CSV export', url: uri, dialogTitle: 'Share billing CSV' });
     } catch (e) {
       console.error('Billing CSV export failed', e);
       alert(e.message || 'Failed to export CSV');
     }
   };
+
+  // Keep original exportCSV for backward compatibility (optional) but replace calls
+  const exportCSV = exportBillingCSV;
 
   const exportHsnSummary = async () => {
     if (!restaurant?.id) return;
@@ -893,6 +935,9 @@ export default function BillingPage() {
 
                 <div className="modal-footer">
                   <Button variant="outline" onClick={() => setSelectedInvoice(null)}>Close</Button>
+                  <Button variant="outline" onClick={() => exportBillingCSV('sales')} title="Export to CSV">
+                    <FaFileDownload /> Export
+                  </Button>
                   <Button onClick={() => handleViewInvoice(selectedInvoice)}>Download PDF</Button>
                 </div>
               </div>

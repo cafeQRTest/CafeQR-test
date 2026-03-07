@@ -271,7 +271,10 @@ export const exportSalesReportToCSV = ({
       const grandTotal = fmtMoney(grandTotalNum);
       const totalTax   = fmtMoney(totalTaxNum);
 
-      const customer = pick(o || {}, ['customer_name', 'customername'], '');
+      // Prefer multiple customer names if available (from _customer_names array), otherwise fallback to single name
+      const customer = Array.isArray(o._customer_names) && o._customer_names.length > 0
+        ? o._customer_names.join(', ')
+        : pick(o || {}, ['customer_name', 'customername'], '');
 
 
       const invoiceNo =
@@ -411,10 +414,14 @@ export const exportSalesReportToExcel = ({
               const mixed = pick(inv || o, ['mixed_payment_details', 'mixedpaymentdetails'], null);
               return `
                 <tr>
-                  <td>#${o.id.slice(0, 8)}</td>
+                  <td>${o.id.slice(0, 8)}</td>
                   <td>${inv?.invoice_no || ''}</td>
                   <td>${new Date(o.date_ordered || o.created_at).toLocaleDateString('en-IN')}</td>
-                  <td>${o.customer_name || 'Walk-in'}</td>
+                  <td>${
+                    Array.isArray(o._customer_names) && o._customer_names.length > 0
+                      ? o._customer_names.join(', ')
+                      : (o.customer_name || 'Walk-in')
+                  }</td>
                   <td>${prettyMixed(method, mixed)}</td>
                   <td class="currency">₹${fmtMoney(o.total_amount || o.total_inc_tax)}</td>
                 </tr>
@@ -424,6 +431,7 @@ export const exportSalesReportToExcel = ({
         </table>
 
         <div style="margin-top: 30px; font-size: 11px; color: #94a3b8;">
+
           Cafe QR • Generated Report
         </div>
       </body>

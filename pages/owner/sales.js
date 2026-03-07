@@ -9,6 +9,7 @@ import Table from '../../components/ui/Table'
 import DateTimeRangePicker from '../../components/ui/DateTimeRangePicker'
 import Button from '../../components/ui/Button'
 import NiceSelect from '../../components/NiceSelect'
+import { useRestaurantProfileConfig } from '../../hooks/useCreateOrderData'
 import { getSupabase } from '../../services/supabase'
 import { FaCalendarAlt, FaReceipt, FaMoneyBillWave, FaPercentage, FaShoppingBag } from 'react-icons/fa'
 import { printSalesReport } from '../../utils/printSalesReport'
@@ -164,6 +165,10 @@ export default function SalesPage() {
   const itemsPerPage = 15
 
   const reports = ['Summary', 'Orders', 'Item-wise', 'Payment Methods', 'Order Types', 'Tax Report', 'Hourly Sales', 'Categories']
+  
+  const { data: profileConfig } = useRestaurantProfileConfig(restaurantId)
+  const allowMultipleCustomers = profileConfig?.allow_multiple_customers_per_order === true
+
 
   useEffect(() => {
     if (!restaurantId || !supabase) return
@@ -262,7 +267,11 @@ export default function SalesPage() {
           prices_include_tax,
           order_customers (
             customer_id,
-            is_primary
+            is_primary,
+            restaurant_customer (
+              name,
+              phone
+            )
           ),
           invoices (
             invoice_no,
@@ -280,6 +289,22 @@ export default function SalesPage() {
       const orderData = Array.isArray(orders) ? orders : []
       // Sort orders by date_ordered desc initially if not already
       orderData.sort((a, b) => new Date(b.date_ordered || b.created_at) - new Date(a.date_ordered || a.created_at))
+      
+      // Process multiple customers if enabled
+      orderData.forEach(o => {
+        if (allowMultipleCustomers && o.order_customers?.length > 0) {
+          const enrichedCusts = o.order_customers
+            .sort((a, b) => (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0))
+            .map(oc => ({
+              name: oc.restaurant_customer?.name || 'Guest',
+              phone: oc.restaurant_customer?.phone || '',
+              is_primary: oc.is_primary
+            }));
+          o.customers = enrichedCusts;
+          o._customer_names = enrichedCusts.map(c => c.name).filter(Boolean);
+        }
+      });
+
       setOrdersList(orderData)
       setCurrentPage(1) // Reset to page 1 on new data
 
@@ -738,37 +763,7 @@ export default function SalesPage() {
                       accessor: 'id',
                       cell: (r) => (
                         <span
-                          onClick={async () => {
-                            // If already has customer info, show immediately
-                            const hasName = r.customer_name || r.customer_phone ||
-                              (r.customers && r.customers.some(c => c.name || c.phone));
-                            if (hasName) { setItemsModalOrder(r); return; }
-
-                            // Enrich from restaurant_customers via order_customers junction
-                            if (supabase && restaurantId) {
-                              if (r.customer_id) {
-                                const { data: rc } = await supabase
-                                  .from('restaurant_customers')
-                                  .select('name, phone, customer_no, age')
-                                  .eq('customer_id', r.customer_id)
-                                  .eq('restaurant_id', restaurantId)
-                                  .maybeSingle();
-                                if (rc?.name || rc?.phone) {
-                                  setItemsModalOrder({ ...r, customers: [{ name: rc.name, phone: rc.phone, customer_no: rc.customer_no, is_primary: true }] });
-                                  return;
-                                }
-                              }
-                              // Try order_customers links
-                              if (r.order_customers?.length > 0) {
-                                const enriched = await Promise.all(r.order_customers.map(async (link) => {
-                                  const { data: rc } = await supabase.from('restaurant_customers').select('name, phone, customer_no').eq('customer_id', link.customer_id).eq('restaurant_id', restaurantId).maybeSingle();
-                                  return { name: rc?.name || null, phone: rc?.phone || null, customer_no: rc?.customer_no || null, is_primary: link.is_primary };
-                                }));
-                                if (enriched.some(c => c.name || c.phone)) { setItemsModalOrder({ ...r, customers: enriched }); return; }
-                              }
-                            }
-                            setItemsModalOrder(r);
-                          }}
+                          onClick={() => setItemsModalOrder(r)}
                           style={{ color: '#334155', cursor: 'pointer', fontWeight: 700 }}
                         >
                           #{r.id.slice(0, 8)}
@@ -830,13 +825,10 @@ export default function SalesPage() {
                       header: 'Customer',
                       accessor: 'customer_name',
                       cell: (r) => {
-                        if (r.customer_name) {
-                          return r.customer_name;
+                        if (allowMultipleCustomers && r._customer_names?.length > 0) {
+                          return r._customer_names.join(', ');
                         }
-                        if (r.order_customers && r.order_customers.length > 0) {
-                          return r.order_customers.map(c => c.restaurant_customer?.name).filter(Boolean).join(', ')
-                        }
-                        return ''
+                        return r.customer_name || '';
                       }
                     }
                   ]}
