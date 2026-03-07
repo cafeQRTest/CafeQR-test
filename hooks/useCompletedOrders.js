@@ -12,32 +12,17 @@ export const orderHistoryKeys = {
 async function fetchCompletedOrders(restaurantId) {
   if (!restaurantId) return [];
 
-  // Get boundaries for today in Asia/Kolkata (IST) mathematically
-  // to prevent iPhone/Safari "Invalid Date" errors
-  const todayIST = istYmdFromDate(new Date());
-  let startUtc;
-  try {
-     const [y, m, d] = todayIST.split('-').map(Number);
-     const istOffsetMs = (5 * 60 + 30) * 60 * 1000;
-     const midnightUtcTimestamp = Date.UTC(y, m - 1, d, 0, 0, 0);
-     startUtc = new Date(midnightUtcTimestamp - istOffsetMs).toISOString();
-  } catch (e) {
-     // Fallback to old behavior just in case
-     startUtc = istDayRangeUtcISO(todayIST).startUtc;
-  }
+  const todayIst = istYmdFromDate(new Date());
+  const { startUtc } = istDayRangeUtcISO(todayIst);
 
   // Fetch completed orders for today IST
   const { data, error } = await supabase
     .from('orders')
     .select(`
       *,
-      tables:table_id (identifier),
-      invoices (invoice_no, bill_no, paid_amount, status),
-      order_items (
-        *,
-        menu_items (name)
-      ),
-      order_customers (customer_id, is_primary)
+      invoices(*),
+      order_items(*, menu_items(name, uom:unit_of_measures(precision))),
+      order_customers(*, restaurant_customer(name, phone, age, customer_no))
     `)
     .eq('restaurant_id', restaurantId)
     .eq('status', 'completed')

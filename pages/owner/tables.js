@@ -2264,7 +2264,7 @@ const OrderHistoryView = ({ onBack, orders, onPrint, onCancel, loading, onOrderC
           </button>
           <TitleBlock>
             <Title>Order <span>History</span></Title>
-            <Subtitle>Secure historical ledger of all completed transactions</Subtitle>
+            <Subtitle>Today&apos;s Orders (IST) • Secure historical ledger of all completed transactions</Subtitle>
           </TitleBlock>
         </div>
 
@@ -2860,8 +2860,13 @@ export default function TableManagement() {
   // Open invoice detail popup (billing-style) from order history
   const handleHistoryViewDetails = async (order) => {
     // Find the invoice from the order's invoices relation
-    const inv = order.invoices?.[0] || order.invoices || null;
-    if (!inv) { alert('No invoice found for this order'); return; }
+    const invArray = Array.isArray(order.invoices) ? order.invoices : (order.invoices ? [order.invoices] : []);
+    const inv = invArray[0] || null;
+    
+    if (!inv) { 
+      showAlert('This order does not have an associated invoice yet.'); 
+      return; 
+    }
     
     // Copy the invoice and attach order-level customer data to it
     const invoiceToView = { ...inv };
