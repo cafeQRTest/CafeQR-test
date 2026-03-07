@@ -6,7 +6,7 @@ import { useState, useEffect } from "react";
 import { getSupabase } from "../../services/supabase";
 import { ArrowLeft } from "lucide-react";
 
-const DELIVERY_NEXT_KEY = "delivery.next_after_magiclink";
+const DELIVERY_REDIRECT = "/app/restaurants";
 
 function getBaseUrl() {
   if (typeof window !== 'undefined') return window.location.origin;
@@ -16,9 +16,6 @@ function getBaseUrl() {
 export default function CustomerAuthPage() {
   const router = useRouter();
 
-  const next =
-    typeof router.query.next === "string" ? router.query.next : "/app/restaurants";
-
   const [email, setEmail] = useState("");
   const [otpSent, setOtpSent] = useState(false);
   const [otpToken, setOtpToken] = useState("");
@@ -27,16 +24,12 @@ export default function CustomerAuthPage() {
 
   useEffect(() => {
     let cancelled = false;
-    const supabase = getSupabase(); // Initialize safely once inside the effect
+    const supabase = getSupabase();
 
     (async () => {
       const { data } = await supabase.auth.getSession();
       if (!cancelled && data?.session) {
-        const nextUrl = localStorage.getItem(DELIVERY_NEXT_KEY);
-        if (nextUrl) {
-          localStorage.removeItem(DELIVERY_NEXT_KEY);
-          router.replace(nextUrl);
-        }
+        router.replace(DELIVERY_REDIRECT);
       }
     })();
     return () => { cancelled = true; };
@@ -46,17 +39,13 @@ export default function CustomerAuthPage() {
     e.preventDefault();
     setErr("");
 
-    const supabase = getSupabase(); // Use localized singleton call
+    const supabase = getSupabase();
 
-    // 1. Immediate UI Feedback: Move to next screen instantly
+    // 1. Immediate UI Feedback: Move to OTP input screen instantly
     setOtpSent(true);
 
-    try {
-      localStorage.setItem(DELIVERY_NEXT_KEY, next);
-    } catch { }
-
     const baseUrl = getBaseUrl();
-    const redirectTo = `${baseUrl}/app/auth/callback?next=${encodeURIComponent(next)}`;
+    const redirectTo = `${baseUrl}/app/auth/callback`;
 
     // 2. Fire and Forget the Async call
     supabase.auth.signInWithOtp({
@@ -97,11 +86,7 @@ export default function CustomerAuthPage() {
       return setErr(error.message);
     }
 
-    try {
-      localStorage.removeItem(DELIVERY_NEXT_KEY);
-    } catch { }
-
-    router.replace(next);
+    router.replace(DELIVERY_REDIRECT);
   };
 
   return (
