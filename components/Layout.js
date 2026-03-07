@@ -23,6 +23,7 @@ import {
   FaFileAlt,
   FaBookOpen,
   FaTruck,
+  FaDesktop,
 } from 'react-icons/fa';
 import { signOutAndRedirect } from '../lib/authActions';
 import { getSupabase } from '../services/supabase';
@@ -594,6 +595,11 @@ function Sidebar({ collapsed, onSignOut, isSigningOut }) {
     { href: '/owner/menu', label: 'Menu', icon: <FaBookOpen /> },
     { href: '/owner/orders', label: 'Orders', icon: <FaUtensils /> },
     { href: '/owner/counter', label: 'Counter Sale', icon: <FaCashRegister /> },
+    ...(feature.table_ordering_enabled
+      ? [
+        { href: '/owner/tables', label: 'POS', icon: <FaDesktop /> },
+      ]
+      : []),
   ];
 
 
@@ -601,10 +607,9 @@ function Sidebar({ collapsed, onSignOut, isSigningOut }) {
     ...(feature.inventory_enabled
       ? [{ href: '/owner/inventory', label: 'Inventory', icon: <FaBoxes /> }]
       : []),
-    ...(feature.table_ordering_enabled
+    ...(feature.table_ordering_enabled && feature.qr_ordering_enabled !== false
       ? [
-        { href: '/owner/tables', label: 'Tables', icon: <FaUtensils /> },
-        ...(feature.qr_ordering_enabled !== false ? [{ href: '/owner/availability', label: 'QR Availability', icon: <FaClock /> }] : [])
+        { href: '/owner/availability', label: 'QR Availability', icon: <FaClock /> }
       ]
       : []),
     ...(feature.delivery_enabled
@@ -724,7 +729,7 @@ function Sidebar({ collapsed, onSignOut, isSigningOut }) {
           feature.table_ordering_enabled ||
           feature.production_enabled ||
           feature.credit_enabled) &&
-          !collapsed && <div style={sectionStyle}>Add-ons</div>}
+          !collapsed && <div style={sectionStyle}>Add On</div>}
         {addons.map(renderItem)}
         {credit.map(renderItem)}
 
@@ -933,6 +938,9 @@ function MobileSidebar({ onNavigate, onSignOut, isSigningOut }) {
     { href: '/owner/menu', label: 'Menu', icon: <FaBars /> },
     { href: '/owner/orders', label: 'Orders', icon: <FaUtensils /> },
     { href: '/owner/counter', label: 'Counter Sale', icon: <FaCashRegister /> },
+    ...(feature.table_ordering_enabled
+      ? [{ href: '/owner/tables', label: 'POS', icon: <FaDesktop /> }]
+      : []),
   ].filter((it) => canAccess(it.href, role));
 
   const addons = [
@@ -941,7 +949,7 @@ function MobileSidebar({ onNavigate, onSignOut, isSigningOut }) {
       : []),
     ...(feature.table_ordering_enabled
       ? [
-        { href: '/owner/tables', label: 'Tables', icon: <FaUtensils /> },
+        { href: '/owner/tables', label: 'POS', icon: <FaDesktop /> },
         ...(feature.qr_ordering_enabled !== false ? [{ href: '/owner/availability', label: 'QR Availability', icon: <FaClock /> }] : [])
       ]
       : []),
