@@ -92,9 +92,9 @@ export default function OrderItemsModal({ order, onClose, modalLoyalty }) {
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                           <span style={{fontWeight:700, textTransform: 'uppercase', letterSpacing: '0.04em', fontSize: 7.5, color: '#cbd5e1'}}>Placed</span>
                           <span style={{fontWeight:600, color: '#475569'}}>
-                            {new Date(order.date_ordered || order.created_at).toLocaleString('en-IN', {
-                              month:'short', day:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit', hour12: true
-                            })}
+                           {new Date(order.date_ordered || order.created_at).toLocaleString('en-IN', {
+                             timeZone: 'Asia/Kolkata', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit', hour12: true
+                           })}
                           </span>
                       </div>
 
@@ -104,9 +104,9 @@ export default function OrderItemsModal({ order, onClose, modalLoyalty }) {
                           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                               <span style={{fontWeight:700, textTransform: 'uppercase', letterSpacing: '0.04em', fontSize: 7.5, color: '#cbd5e1'}}>Edited</span>
                               <span style={{fontWeight:600, color: '#475569'}}>
-                                {new Date(order.updated_at).toLocaleString('en-IN', {
-                                  hour:'2-digit', minute:'2-digit', second:'2-digit', hour12: true
-                                })}
+                               {new Date(order.updated_at).toLocaleString('en-IN', {
+                                 timeZone: 'Asia/Kolkata', hour:'2-digit', minute:'2-digit', second:'2-digit', hour12: true
+                               })}
                               </span>
                           </div>
                         </>

@@ -25,7 +25,7 @@ export default function OrderDetailsModal({ order, onClose, onStatusChange }) {
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 24 }}>
             <div>
               <div className="muted">Time</div>
-              <div>{new Date(order.date_ordered || order.created_at).toLocaleString()}</div>
+              <div>{new Date(order.date_ordered || order.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</div>
             </div>
             {order.table_number && (
               <div>

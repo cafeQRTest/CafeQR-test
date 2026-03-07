@@ -198,8 +198,8 @@ export default function BillingPage() {
       } // 'all' shows everything kept by the base filter (paid + credit + void)
 
 
-      // Batch-enrich invoices missing customer_name from order_customers junction
-      const needsEnrich = list.filter(inv => !inv.customer_name && inv.order_id);
+      // Batch-enrich invoices from order_customers junction
+      const needsEnrich = list.filter(inv => inv.order_id);
       if (needsEnrich.length > 0) {
         const orderIds = needsEnrich.map(inv => inv.order_id);
         // Fetch all junction links for these orders at once
@@ -225,7 +225,7 @@ export default function BillingPage() {
           });
 
           list = list.map(inv => {
-            if (inv.customer_name || !linksByOrder[inv.order_id]) return inv;
+            if (!linksByOrder[inv.order_id]) return inv;
             const names = linksByOrder[inv.order_id]
               .sort((a, b) => (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0))
               .map(l => rcMap.get(l.customer_id))
@@ -273,15 +273,15 @@ export default function BillingPage() {
     }
   };
 
+  const { data: profileConfig } = useRestaurantProfileConfig(restaurant?.id);
+  const allowMultipleCustomers = profileConfig?.allow_multiple_customers_per_order === true;
+
   useEffect(() => {
     if (supabase && restaurant?.id && !restLoading && !checking) {
       loadInvoices();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [restaurant?.id, range, reportType, supabase, restLoading, checking]);
-
-  const { data: profileConfig } = useRestaurantProfileConfig(restaurant?.id);
-  const allowMultipleCustomers = profileConfig?.allow_multiple_customers_per_order === true;
+  }, [restaurant?.id, range, reportType, supabase, restLoading, checking, allowMultipleCustomers]);
   const exportBillingCSV = async (type) => {
     if (!restaurant?.id) return;
 

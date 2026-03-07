@@ -12,7 +12,7 @@ export default function RecentOrders({ orders, loading }) {
           {orders.map((o) => (
             <li key={o.id}>
               <span>#{o.id.slice(0,8)}</span>
-              <span>{new Date(o.created_at).toLocaleString()}</span>
+              <span>{new Date(o.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</span>
               <span>{o.status}</span>
               <span>₹{o.total_amount.toFixed(2)}</span>
             </li>

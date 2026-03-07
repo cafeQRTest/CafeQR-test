@@ -206,7 +206,7 @@ export default function SalesPage() {
   useEffect(() => {
     if (checking || restLoading || !restaurantId || !supabase) return
     loadAllReportsData()
-  }, [checking, restLoading, restaurantId, range, supabase])
+  }, [checking, restLoading, restaurantId, range, supabase, allowMultipleCustomers])
 
   useEffect(() => {
     if (!selectedCategory) {
