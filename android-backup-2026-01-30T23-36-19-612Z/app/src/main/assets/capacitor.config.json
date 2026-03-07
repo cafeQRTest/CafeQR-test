@@ -1,0 +1,21 @@
+{
+	"appId": "com.cafeqr.test",
+	"appName": "Cafe QR Test (POS)",
+	"webDir": "out",
+	"plugins": {
+		"PushNotifications": {
+			"presentationOptions": [
+				"badge",
+				"sound",
+				"alert"
+			]
+		}
+	},
+	"server": {
+		"url": "https://test-cafeqr.vercel.app",
+		"androidScheme": "https",
+		"allowNavigation": [
+			"test-cafeqr.vercel.app"
+		]
+	}
+}

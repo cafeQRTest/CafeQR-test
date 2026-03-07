@@ -402,6 +402,8 @@ function GlobalOwnerAlertsBridge() {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'orders', filter: `restaurant_id=eq.${restaurantId}` },
         (payload) => {
+          if (arePushAlertsDisabled()) return;
+
           const detail = buildOwnerAlertPayload(payload?.new, restaurantId);
           if (!detail) return;
 

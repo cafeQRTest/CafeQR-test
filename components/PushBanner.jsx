@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
 import { ShoppingBag, X } from 'lucide-react';
+import { arePushAlertsDisabled } from '../lib/push/tokenStore';
 
 const AUDIO_SOURCES = [
     '/beep.mp3?v=20260305-2',
@@ -183,6 +184,7 @@ export default function PushBanner() {
         }
 
         const handlePush = (e) => {
+            if (arePushAlertsDisabled()) return;
             const payload = e?.detail ?? e;
             if (!payload) return;
 
