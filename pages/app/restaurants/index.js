@@ -1,9 +1,9 @@
 // pages/app/restaurants/index.js
 // GPS is fetched LIVE on every mount. No caching. Auth-guarded.
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { Search, ArrowRight, User, ShoppingBag, MapPin, Navigation, RefreshCw, Loader2, AlertTriangle } from "lucide-react";
+import { Search, ArrowRight, User, ShoppingBag, MapPin, Navigation, RefreshCw, Loader2, AlertTriangle, Clock, Star, ChevronDown, LogOut } from "lucide-react";
 import { getSupabase } from "../../../services/supabase";
 import { Capacitor } from "@capacitor/core";
 import { Geolocation } from "@capacitor/geolocation";
@@ -15,6 +15,8 @@ const STOCK_IMAGES = [
     "https://images.unsplash.com/photo-1559339352-11d035aa65de?auto=format&fit=crop&w=800&q=80",
     "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80",
     "https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?auto=format&fit=crop&w=800&q=80",
+    "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=800&q=80",
+    "https://images.unsplash.com/photo-1476224203421-9ac39bcb3327?auto=format&fit=crop&w=800&q=80",
 ];
 
 // haversine distance in km
@@ -46,12 +48,14 @@ export default function RestaurantListing() {
     const [gpsState, setGpsState] = useState(GPS_IDLE);
     const [gpsError, setGpsError] = useState("");
     const [userCoords, setUserCoords] = useState(null);
+    const [addressText, setAddressText] = useState("");
 
     // Restaurants
     const [allRestaurants, setAllRestaurants] = useState([]);
     const [loading, setLoading] = useState(false);
     const [q, setQ] = useState("");
     const [showMenu, setShowMenu] = useState(false);
+    const searchRef = useRef(null);
 
     // ── 1. AUTH GUARD ────────────────────────────────────────────────────────
     useEffect(() => {
@@ -71,6 +75,7 @@ export default function RestaurantListing() {
         setGpsState(GPS_LOADING);
         setGpsError("");
         setUserCoords(null);
+        setAddressText("");
 
         try {
             let lat, lng;
@@ -102,6 +107,27 @@ export default function RestaurantListing() {
 
             setUserCoords({ lat, lng });
             setGpsState(GPS_SUCCESS);
+
+            // Reverse geocode (best-effort, non-blocking)
+            try {
+                const res = await fetch(
+                    `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&zoom=16&addressdetails=1`,
+                    { headers: { "Accept-Language": "en" } }
+                );
+                const geo = await res.json();
+                const addr = geo?.address;
+                if (addr) {
+                    const parts = [
+                        addr.suburb || addr.neighbourhood || addr.hamlet || addr.village || "",
+                        addr.city || addr.town || addr.county || "",
+                        addr.state || "",
+                    ].filter(Boolean);
+                    setAddressText(parts.slice(0, 2).join(", ") || geo.display_name?.split(",").slice(0, 2).join(",") || "");
+                }
+            } catch {
+                // Fallback to coordinates
+                setAddressText(`${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+            }
         } catch (e) {
             console.error("GPS error:", e);
             setGpsError("Location permission denied or GPS is off. Please enable GPS and try again.");
@@ -155,6 +181,15 @@ export default function RestaurantListing() {
                 parseFloat(p.latitude), parseFloat(p.longitude)
             );
             return dist <= radius;
+        }).map(r => {
+            const p = r.restaurant_profiles;
+            return {
+                ...r,
+                distance: haversineKm(
+                    userCoords.lat, userCoords.lng,
+                    parseFloat(p.latitude), parseFloat(p.longitude)
+                ),
+            };
         });
     }, [allRestaurants, userCoords]);
 
@@ -176,247 +211,290 @@ export default function RestaurantListing() {
     // Full-screen GPS overlay — shown while locating or on error
     if (!authReady || gpsState === GPS_IDLE || gpsState === GPS_LOADING) {
         return (
-            <div className="gps-overlay">
-                <div className="gps-card">
-                    <div className={`gps-icon-ring ${gpsState === GPS_LOADING ? "pulsing" : ""}`}>
-                        <Navigation className="gps-icon" />
+            <>
+                <div className="dr-gps-overlay">
+                    <div className="dr-gps-card">
+                        <div className="dr-gps-icon-ring pulsing">
+                            <Navigation size={32} color="#f97316" />
+                        </div>
+                        <h2 className="dr-gps-title">Locating you…</h2>
+                        <p className="dr-gps-subtitle">Finding restaurants near your current location</p>
+                        <div className="dr-gps-spinner" />
                     </div>
-                    <h2 className="gps-title">Locating you…</h2>
-                    <p className="gps-subtitle">Finding restaurants near your current location</p>
-                    <Loader2 className="gps-spinner" />
                 </div>
                 {renderStyles()}
-            </div>
+            </>
         );
     }
 
     if (gpsState === GPS_ERROR) {
         return (
-            <div className="gps-overlay">
-                <div className="gps-card">
-                    <div className="gps-icon-ring error">
-                        <AlertTriangle className="gps-icon error-icon" />
+            <>
+                <div className="dr-gps-overlay">
+                    <div className="dr-gps-card">
+                        <div className="dr-gps-icon-ring error">
+                            <AlertTriangle size={32} color="#ef4444" />
+                        </div>
+                        <h2 className="dr-gps-title">Location Required</h2>
+                        <p className="dr-gps-subtitle">{gpsError}</p>
+                        <button className="dr-gps-retry-btn" onClick={fetchGps}>
+                            <RefreshCw size={18} />
+                            <span>Try Again</span>
+                        </button>
                     </div>
-                    <h2 className="gps-title">Location Required</h2>
-                    <p className="gps-subtitle">{gpsError}</p>
-                    <button className="gps-retry-btn" onClick={fetchGps}>
-                        <RefreshCw className="w-5 h-5" />
-                        <span>Try Again</span>
-                    </button>
                 </div>
                 {renderStyles()}
-            </div>
+            </>
         );
     }
 
     // ── Main restaurant listing ──────────────────────────────────────────────
     return (
-        <div className="delivery-restaurants-page">
-            <header className="delivery-restaurants-header">
-                <div className="header-inner">
-                    <div className="header-top">
-                        <div className="header-address">
-                            <p className="address-label">YOUR LOCATION</p>
-                            <div className="address-link">
-                                <MapPin className="w-3 h-3 text-orange-500 flex-shrink-0" />
-                                <span className="address-text">
-                                    {userCoords
-                                        ? `${userCoords.lat.toFixed(4)}, ${userCoords.lng.toFixed(4)}`
-                                        : "Locating..."}
-                                </span>
+        <>
+            <div className="dr-page">
+                {/* ─── Sticky Header ─── */}
+                <header className="dr-header">
+                    <div className="dr-header-inner">
+                        <div className="dr-header-top">
+                            <div className="dr-header-loc" onClick={fetchGps}>
+                                <div className="dr-loc-icon-wrap">
+                                    <MapPin size={18} color="#f97316" fill="rgba(249,115,22,0.15)" />
+                                </div>
+                                <div className="dr-loc-text">
+                                    <span className="dr-loc-label">DELIVER TO</span>
+                                    <div className="dr-loc-address">
+                                        <span>{addressText || "Detecting location…"}</span>
+                                        <ChevronDown size={14} color="#9ca3af" />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div style={{ position: 'relative' }}>
                                 <button
-                                    onClick={fetchGps}
-                                    className="refresh-loc-btn"
-                                    title="Refresh location"
+                                    onClick={() => setShowMenu(!showMenu)}
+                                    className="dr-avatar-btn"
                                 >
-                                    <RefreshCw className="w-3 h-3" />
+                                    <User size={20} color="#f97316" />
                                 </button>
+
+                                {showMenu && (
+                                    <>
+                                        <div
+                                            style={{ position: 'fixed', inset: 0, zIndex: 40 }}
+                                            onClick={() => setShowMenu(false)}
+                                        />
+                                        <div className="dr-profile-menu">
+                                            <button
+                                                onClick={() => { setShowMenu(false); router.push('/app/orders/history'); }}
+                                                className="dr-menu-item"
+                                            >
+                                                <ShoppingBag size={16} />
+                                                My Orders
+                                            </button>
+                                            <button
+                                                onClick={() => { setShowMenu(false); router.push('/app/profile'); }}
+                                                className="dr-menu-item"
+                                            >
+                                                <User size={16} />
+                                                Profile
+                                            </button>
+                                            <div className="dr-menu-divider" />
+                                            <button
+                                                onClick={() => { setShowMenu(false); handleSignOut(); }}
+                                                className="dr-menu-item dr-menu-signout"
+                                            >
+                                                <LogOut size={16} />
+                                                Sign Out
+                                            </button>
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         </div>
 
-                        <div style={{ position: 'relative' }}>
-                            <button
-                                onClick={() => setShowMenu(!showMenu)}
-                                className="header-avatar"
-                            >
-                                <span>👤</span>
-                            </button>
-
-                            {showMenu && (
-                                <>
-                                    <div
-                                        style={{ position: 'fixed', inset: 0, zIndex: 40 }}
-                                        onClick={() => setShowMenu(false)}
-                                    />
-                                    <div className="profile-menu">
-                                        <button
-                                            onClick={() => { setShowMenu(false); router.push('/app/orders/history'); }}
-                                            className="profile-menu-item"
-                                        >
-                                            <ShoppingBag size={16} />
-                                            My Orders
-                                        </button>
-                                        <button
-                                            onClick={() => { setShowMenu(false); router.push('/app/profile'); }}
-                                            className="profile-menu-item"
-                                        >
-                                            <User size={16} />
-                                            Profile
-                                        </button>
-                                        <div className="profile-menu-divider" />
-                                        <button
-                                            onClick={() => { setShowMenu(false); handleSignOut(); }}
-                                            className="profile-menu-item sign-out"
-                                        >
-                                            Sign Out
-                                        </button>
-                                    </div>
-                                </>
-                            )}
+                        {/* Search bar */}
+                        <div className="dr-search-wrap" onClick={() => searchRef.current?.focus()}>
+                            <Search size={18} color="#9ca3af" />
+                            <input
+                                ref={searchRef}
+                                value={q}
+                                onChange={(e) => setQ(e.target.value)}
+                                placeholder="Search for restaurants..."
+                                className="dr-search-input"
+                            />
                         </div>
                     </div>
+                </header>
 
-                    <div className="header-search">
-                        <Search className="search-icon" />
-                        <input
-                            value={q}
-                            onChange={(e) => setQ(e.target.value)}
-                            placeholder="Search restaurants, cuisines..."
-                            className="search-input"
-                        />
+                {/* ─── Promo Banner ─── */}
+                <div className="dr-promo-banner">
+                    <div className="dr-promo-inner">
+                        <div className="dr-promo-text">
+                            <span className="dr-promo-tag">NEW</span>
+                            <h3>Free delivery on first order!</h3>
+                            <p>Use code <strong>WELCOME</strong> at checkout</p>
+                        </div>
+                        <div className="dr-promo-emoji">🎉</div>
                     </div>
                 </div>
-            </header>
 
-            <div className="delivery-restaurants-content">
-                {loading ? (
-                    <div className="p-12 text-center text-gray-500 font-medium">Finding nearby restaurants...</div>
-                ) : filtered.length === 0 ? (
-                    <div className="empty-state">
-                        <ShoppingBag className="empty-icon" />
-                        <p>No restaurants found near you.</p>
-                        <p style={{ fontSize: 13, marginTop: 6 }}>Try refreshing your location.</p>
+                {/* ─── Restaurant list ─── */}
+                <div className="dr-content">
+                    <div className="dr-section-header">
+                        <h2>{filtered.length} restaurant{filtered.length !== 1 ? "s" : ""} near you</h2>
                     </div>
-                ) : (
-                    <div className="restaurants-grid">
-                        {filtered.map((r, i) => {
-                            const brand = r?.restaurant_profiles?.brand_color || "#f97316";
-                            const imgUrl = STOCK_IMAGES[i % STOCK_IMAGES.length];
-                            return (
-                                <Link key={r.id} href={`/app/restaurant/${r.id}`} className="restaurant-card">
-                                    <div className="card-inner">
-                                        <div className="card-image">
+
+                    {loading ? (
+                        <div className="dr-loading-state">
+                            <div className="dr-gps-spinner" />
+                            <p>Finding nearby restaurants…</p>
+                        </div>
+                    ) : filtered.length === 0 ? (
+                        <div className="dr-empty-state">
+                            <div className="dr-empty-icon-wrap">
+                                <MapPin size={40} color="#d1d5db" />
+                            </div>
+                            <h3>No restaurants found nearby</h3>
+                            <p>Try refreshing your location or expanding your search area.</p>
+                            <button className="dr-gps-retry-btn" onClick={fetchGps} style={{ marginTop: 16 }}>
+                                <RefreshCw size={16} />
+                                <span>Refresh Location</span>
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="dr-grid">
+                            {filtered.map((r, i) => {
+                                const brand = r?.restaurant_profiles?.brand_color || "#f97316";
+                                const imgUrl = STOCK_IMAGES[i % STOCK_IMAGES.length];
+                                const distKm = r.distance;
+                                const deliveryMins = Math.round(10 + distKm * 5);
+                                return (
+                                    <Link key={r.id} href={`/app/restaurant/${r.id}`} className="dr-card">
+                                        {/* Hero Image */}
+                                        <div className="dr-card-img-wrap">
                                             <img src={imgUrl} alt={r.name} loading="lazy" />
-                                        </div>
-                                        <div className="card-content">
-                                            <div className="card-info">
-                                                <h3>{r.name}</h3>
-                                                <p>Coffee • Snacks • Beverages</p>
-                                            </div>
-                                            <div className="card-footer">
-                                                <div className="card-rating">
-                                                    <span>4.5 ★</span>
-                                                    <span>20-30 mins</span>
-                                                </div>
-                                                <span className="card-order-btn" style={{ backgroundColor: brand }}>
-                                                    Order <ArrowRight className="w-3 h-3" />
-                                                </span>
+                                            <div className="dr-card-img-overlay" />
+                                            <div className="dr-card-delivery-badge">
+                                                <Clock size={12} />
+                                                <span>{deliveryMins}-{deliveryMins + 10} min</span>
                                             </div>
                                         </div>
-                                    </div>
-                                </Link>
-                            );
-                        })}
-                    </div>
-                )}
-            </div>
 
+                                        {/* Card Body */}
+                                        <div className="dr-card-body">
+                                            <div className="dr-card-row">
+                                                <h3 className="dr-card-name">{r.name}</h3>
+                                                <div className="dr-card-rating" style={{ backgroundColor: brand }}>
+                                                    <Star size={10} fill="#fff" color="#fff" />
+                                                    <span>4.5</span>
+                                                </div>
+                                            </div>
+                                            <p className="dr-card-cuisine">Coffee • Snacks • Beverages</p>
+                                            <div className="dr-card-meta">
+                                                <span className="dr-card-distance">
+                                                    <MapPin size={11} />
+                                                    {distKm < 1 ? `${Math.round(distKm * 1000)}m` : `${distKm.toFixed(1)} km`}
+                                                </span>
+                                                <span className="dr-card-dot">•</span>
+                                                <span className="dr-card-fee">Free delivery</span>
+                                            </div>
+                                        </div>
+                                    </Link>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+            </div>
             {renderStyles()}
-        </div>
+        </>
     );
 }
 
 function renderStyles() {
     return (
         <style jsx>{`
-            /* ── GPS Overlay ─────────────────────────────────────────── */
-            .gps-overlay {
+            /* ─── Reset & Base ────────────────────────────────────── */
+            .dr-page {
                 min-height: 100vh;
-                background: #f9fafb;
+                width: 100%;
+                background: #f5f5f5;
+                font-family: 'Inter', system-ui, -apple-system, sans-serif;
+                padding-bottom: 40px;
+            }
+
+            /* ─── GPS Overlay ─────────────────────────────────────── */
+            .dr-gps-overlay {
+                min-height: 100vh;
+                background: linear-gradient(135deg, #fff7ed 0%, #f5f5f5 100%);
                 display: flex;
                 align-items: center;
                 justify-content: center;
                 padding: 24px;
-                font-family: system-ui, -apple-system, sans-serif;
+                font-family: 'Inter', system-ui, -apple-system, sans-serif;
             }
-            .gps-card {
+            .dr-gps-card {
                 background: #fff;
-                border-radius: 24px;
-                padding: 40px 28px;
+                border-radius: 28px;
+                padding: 48px 32px;
                 max-width: 360px;
                 width: 100%;
                 text-align: center;
-                box-shadow: 0 4px 24px rgba(0,0,0,0.08);
-                border: 1px solid rgba(0,0,0,0.04);
+                box-shadow: 0 8px 40px rgba(0,0,0,0.06);
+                border: 1px solid rgba(0,0,0,0.03);
                 display: flex;
                 flex-direction: column;
                 align-items: center;
-                gap: 12px;
+                gap: 14px;
             }
-            .gps-icon-ring {
-                width: 80px;
-                height: 80px;
+            .dr-gps-icon-ring {
+                width: 88px;
+                height: 88px;
                 background: #fff7ed;
                 border-radius: 50%;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                border: 2px solid #fed7aa;
+                border: 3px solid #fed7aa;
                 margin-bottom: 8px;
             }
-            .gps-icon-ring.pulsing {
-                animation: gps-pulse 1.5s infinite ease-in-out;
+            .dr-gps-icon-ring.pulsing {
+                animation: dr-pulse 1.6s infinite ease-in-out;
             }
-            .gps-icon-ring.error {
+            .dr-gps-icon-ring.error {
                 background: #fef2f2;
                 border-color: #fecaca;
             }
-            @keyframes gps-pulse {
-                0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(249,115,22,0.3); }
-                50% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(249,115,22,0); }
+            @keyframes dr-pulse {
+                0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(249,115,22,0.25); }
+                50% { transform: scale(1.06); box-shadow: 0 0 0 14px rgba(249,115,22,0); }
             }
-            .gps-icon {
-                width: 36px;
-                height: 36px;
-                color: #f97316;
-                fill: rgba(249,115,22,0.15);
-            }
-            .error-icon {
-                color: #ef4444;
-                fill: rgba(239,68,68,0.1);
-            }
-            .gps-title {
-                font-size: 20px;
+            .dr-gps-title {
+                font-size: 22px;
                 font-weight: 800;
                 color: #111827;
                 margin: 0;
+                letter-spacing: -0.3px;
             }
-            .gps-subtitle {
+            .dr-gps-subtitle {
                 font-size: 14px;
                 color: #6b7280;
                 margin: 0;
-                line-height: 1.5;
+                line-height: 1.6;
+                max-width: 260px;
             }
-            .gps-spinner {
-                width: 28px;
-                height: 28px;
-                color: #f97316;
-                animation: spin 1s linear infinite;
+            .dr-gps-spinner {
+                width: 32px;
+                height: 32px;
+                border: 3px solid #f3e8d8;
+                border-top: 3px solid #f97316;
+                border-radius: 50%;
+                animation: dr-spin 0.7s linear infinite;
                 margin-top: 8px;
             }
-            @keyframes spin { to { transform: rotate(360deg); } }
-            .gps-retry-btn {
-                display: flex;
+            @keyframes dr-spin { to { transform: rotate(360deg); } }
+            .dr-gps-retry-btn {
+                display: inline-flex;
                 align-items: center;
                 gap: 8px;
                 background: #f97316;
@@ -429,90 +507,116 @@ function renderStyles() {
                 cursor: pointer;
                 margin-top: 8px;
                 box-shadow: 0 4px 14px rgba(249,115,22,0.3);
-                transition: background 0.2s;
+                transition: all 0.2s;
             }
-            .gps-retry-btn:hover { background: #ea580c; }
+            .dr-gps-retry-btn:hover { background: #ea580c; transform: translateY(-1px); }
+            .dr-gps-retry-btn:active { transform: scale(0.98); }
 
-            /* ── Main Page ───────────────────────────────────────────── */
-            .delivery-restaurants-page {
-                min-height: 100vh;
-                width: 100%;
-                background: #f8fafc;
-                padding-bottom: 120px;
-                font-family: system-ui, -apple-system, sans-serif;
-            }
-            .delivery-restaurants-header {
+            /* ─── Header ──────────────────────────────────────────── */
+            .dr-header {
                 background: #fff;
-                border-bottom: 1px solid #e5e7eb;
                 position: sticky;
                 top: 0;
-                z-index: 20;
-                padding: 12px 16px;
+                z-index: 30;
+                box-shadow: 0 1px 8px rgba(0,0,0,0.04);
             }
-            .header-inner { max-width: 1280px; margin: 0 auto; }
-            .header-top {
+            .dr-header-inner {
+                max-width: 600px;
+                margin: 0 auto;
+                padding: 12px 16px 14px;
+            }
+            .dr-header-top {
                 display: flex;
                 align-items: center;
+                justify-content: space-between;
                 gap: 12px;
-                margin-bottom: 12px;
+                margin-bottom: 14px;
             }
-            .header-address { flex: 1; overflow: hidden; }
-            .address-label {
-                font-size: 10px;
-                font-weight: 700;
-                color: #9ca3af;
-                text-transform: uppercase;
-                margin: 0 0 2px;
-            }
-            .address-link {
-                display: inline-flex;
-                align-items: center;
-                gap: 4px;
-                color: #111827;
-            }
-            .address-text {
-                font-weight: 700;
-                font-size: 13px;
-                max-width: 200px;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
-            }
-            .refresh-loc-btn {
-                background: transparent;
-                border: none;
-                color: #9ca3af;
-                cursor: pointer;
-                padding: 2px;
+            .dr-header-loc {
                 display: flex;
                 align-items: center;
+                gap: 10px;
+                cursor: pointer;
+                flex: 1;
+                min-width: 0;
             }
-            .refresh-loc-btn:hover { color: #f97316; }
-            .header-avatar {
+            .dr-loc-icon-wrap {
                 width: 40px;
                 height: 40px;
-                border-radius: 50%;
                 background: #fff7ed;
-                border: 1px solid #f97316;
+                border-radius: 12px;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                font-size: 20px;
-                cursor: pointer;
+                flex-shrink: 0;
             }
-            .profile-menu {
+            .dr-loc-text {
+                min-width: 0;
+                flex: 1;
+            }
+            .dr-loc-label {
+                display: block;
+                font-size: 10px;
+                font-weight: 700;
+                color: #f97316;
+                text-transform: uppercase;
+                letter-spacing: 0.8px;
+                margin-bottom: 2px;
+            }
+            .dr-loc-address {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                font-size: 14px;
+                font-weight: 700;
+                color: #1f2937;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            .dr-loc-address span {
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            /* Avatar */
+            .dr-avatar-btn {
+                width: 42px;
+                height: 42px;
+                border-radius: 50%;
+                background: #fff7ed;
+                border: 2px solid #fed7aa;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                transition: all 0.2s;
+                flex-shrink: 0;
+            }
+            .dr-avatar-btn:hover {
+                border-color: #f97316;
+                box-shadow: 0 2px 12px rgba(249,115,22,0.2);
+            }
+
+            /* Profile menu */
+            .dr-profile-menu {
                 position: absolute;
-                top: 120%;
+                top: calc(100% + 8px);
                 right: 0;
                 background: white;
                 border-radius: 16px;
-                box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+                box-shadow: 0 8px 30px rgba(0,0,0,0.12);
                 padding: 8px;
-                min-width: 180px;
+                min-width: 200px;
                 z-index: 50;
                 border: 1px solid #f3f4f6;
+                animation: dr-menu-in 0.15s ease-out;
             }
-            .profile-menu-item {
+            @keyframes dr-menu-in {
+                from { opacity: 0; transform: translateY(-4px) scale(0.97); }
+                to { opacity: 1; transform: translateY(0) scale(1); }
+            }
+            .dr-menu-item {
                 display: flex;
                 align-items: center;
                 gap: 12px;
@@ -525,102 +629,293 @@ function renderStyles() {
                 text-align: left;
                 color: #374151;
                 font-size: 14px;
-                font-weight: 500;
+                font-weight: 600;
+                transition: background 0.15s;
             }
-            .profile-menu-item:hover { background: #f9fafb; }
-            .profile-menu-item.sign-out { color: #ef4444; }
-            .profile-menu-divider {
+            .dr-menu-item:hover { background: #f9fafb; }
+            .dr-menu-signout { color: #ef4444; }
+            .dr-menu-divider {
                 height: 1px;
                 background: #f3f4f6;
                 margin: 4px 8px;
             }
-            .header-search { position: relative; }
-            .search-icon {
-                position: absolute;
-                left: 12px;
-                top: 50%;
-                transform: translateY(-50%);
-                width: 20px;
-                height: 20px;
-                color: #9ca3af;
-            }
-            .search-input {
-                width: 100%;
-                padding: 10px 12px 10px 40px;
-                border-radius: 12px;
+
+            /* Search */
+            .dr-search-wrap {
+                display: flex;
+                align-items: center;
+                gap: 10px;
                 background: #f3f4f6;
-                border: 1px solid transparent;
+                border-radius: 14px;
+                padding: 0 14px;
+                border: 2px solid transparent;
+                transition: all 0.2s;
+                cursor: text;
+            }
+            .dr-search-wrap:focus-within {
+                background: #fff;
+                border-color: #f97316;
+                box-shadow: 0 0 0 4px rgba(249,115,22,0.08);
+            }
+            .dr-search-input {
+                flex: 1;
+                padding: 12px 0;
+                border: none;
+                background: transparent;
                 font-size: 14px;
+                font-weight: 500;
+                color: #1f2937;
                 outline: none;
             }
-            .delivery-restaurants-content {
-                max-width: 1280px;
-                margin: 0 auto;
-                padding: 24px;
+            .dr-search-input::placeholder { color: #9ca3af; font-weight: 400; }
+
+            /* ─── Promo Banner ────────────────────────────────────── */
+            .dr-promo-banner {
+                max-width: 600px;
+                margin: 16px auto 0;
+                padding: 0 16px;
             }
-            .empty-state {
-                text-align: center;
-                padding: 80px 0;
-                color: #6b7280;
-            }
-            .empty-icon {
-                width: 48px;
-                height: 48px;
-                margin: 0 auto 12px;
-                color: #d1d5db;
-            }
-            .restaurants-grid { display: grid; gap: 16px; }
-            .restaurant-card {
-                display: block;
-                background: #fff;
-                border-radius: 16px;
-                padding: 12px;
-                border: 1px solid #e5e7eb;
-                text-decoration: none;
-                color: inherit;
-                transition: box-shadow 0.2s;
-            }
-            .restaurant-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.08); }
-            .card-inner { display: flex; gap: 16px; }
-            .card-image {
-                width: 80px;
-                height: 80px;
-                flex-shrink: 0;
-                border-radius: 12px;
+            .dr-promo-inner {
+                background: linear-gradient(135deg, #f97316 0%, #ea580c 50%, #dc2626 100%);
+                border-radius: 20px;
+                padding: 20px 22px;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 16px;
                 overflow: hidden;
+                position: relative;
             }
-            .card-image img { width: 100%; height: 100%; object-fit: cover; }
-            .card-content {
+            .dr-promo-inner::before {
+                content: '';
+                position: absolute;
+                top: -40px;
+                right: -20px;
+                width: 120px;
+                height: 120px;
+                background: rgba(255,255,255,0.08);
+                border-radius: 50%;
+            }
+            .dr-promo-text {
                 flex: 1;
+                color: #fff;
+            }
+            .dr-promo-tag {
+                display: inline-block;
+                background: rgba(255,255,255,0.2);
+                backdrop-filter: blur(4px);
+                color: #fff;
+                font-size: 10px;
+                font-weight: 800;
+                letter-spacing: 1px;
+                padding: 3px 10px;
+                border-radius: 6px;
+                margin-bottom: 8px;
+            }
+            .dr-promo-text h3 {
+                margin: 0 0 4px;
+                font-size: 17px;
+                font-weight: 800;
+                letter-spacing: -0.3px;
+            }
+            .dr-promo-text p {
+                margin: 0;
+                font-size: 12px;
+                opacity: 0.9;
+                font-weight: 500;
+            }
+            .dr-promo-emoji {
+                font-size: 40px;
+                flex-shrink: 0;
+                position: relative;
+                z-index: 1;
+            }
+
+            /* ─── Content ─────────────────────────────────────────── */
+            .dr-content {
+                max-width: 600px;
+                margin: 0 auto;
+                padding: 20px 16px;
+            }
+            .dr-section-header {
+                margin-bottom: 16px;
+            }
+            .dr-section-header h2 {
+                font-size: 18px;
+                font-weight: 800;
+                color: #1f2937;
+                margin: 0;
+                letter-spacing: -0.3px;
+            }
+
+            /* Loading */
+            .dr-loading-state {
                 display: flex;
                 flex-direction: column;
-                justify-content: space-between;
+                align-items: center;
+                padding: 60px 0;
+                color: #6b7280;
+                font-weight: 600;
+                font-size: 14px;
             }
-            .card-info h3 { font-size: 16px; font-weight: 700; margin: 0 0 4px; }
-            .card-info p { font-size: 12px; color: #6b7280; margin: 0; }
-            .card-footer {
+            .dr-loading-state p { margin-top: 16px; }
+
+            /* Empty */
+            .dr-empty-state {
+                text-align: center;
+                padding: 60px 20px;
+            }
+            .dr-empty-icon-wrap {
+                width: 80px;
+                height: 80px;
+                background: #f3f4f6;
+                border-radius: 50%;
                 display: flex;
                 align-items: center;
-                justify-content: space-between;
-                margin-top: 8px;
+                justify-content: center;
+                margin: 0 auto 20px;
             }
-            .card-rating {
-                display: flex;
-                align-items: center;
-                gap: 4px;
-                font-size: 10px;
-                font-weight: 700;
-                color: #15803d;
+            .dr-empty-state h3 {
+                font-size: 18px;
+                font-weight: 800;
+                color: #374151;
+                margin: 0 0 8px;
             }
-            .card-order-btn {
+            .dr-empty-state p {
+                font-size: 14px;
+                color: #6b7280;
+                margin: 0;
+                line-height: 1.5;
+            }
+
+            /* ─── Restaurant Cards ────────────────────────────────── */
+            .dr-grid {
+                display: grid;
+                gap: 16px;
+            }
+            .dr-card {
+                display: block;
+                background: #fff;
+                border-radius: 20px;
+                overflow: hidden;
+                text-decoration: none;
+                color: inherit;
+                box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+                border: 1px solid rgba(0,0,0,0.04);
+                transition: all 0.25s ease;
+            }
+            .dr-card:hover {
+                box-shadow: 0 8px 30px rgba(0,0,0,0.08);
+                transform: translateY(-2px);
+            }
+            .dr-card:active {
+                transform: scale(0.985);
+            }
+
+            /* Card image */
+            .dr-card-img-wrap {
+                position: relative;
+                width: 100%;
+                height: 180px;
+                overflow: hidden;
+            }
+            .dr-card-img-wrap img {
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+                transition: transform 0.4s ease;
+            }
+            .dr-card:hover .dr-card-img-wrap img {
+                transform: scale(1.04);
+            }
+            .dr-card-img-overlay {
+                position: absolute;
+                inset: 0;
+                background: linear-gradient(
+                    180deg,
+                    transparent 40%,
+                    rgba(0,0,0,0.05) 70%,
+                    rgba(0,0,0,0.15) 100%
+                );
+                pointer-events: none;
+            }
+            .dr-card-delivery-badge {
+                position: absolute;
+                bottom: 10px;
+                left: 10px;
+                background: rgba(0,0,0,0.7);
+                backdrop-filter: blur(6px);
                 color: #fff;
                 font-size: 11px;
                 font-weight: 700;
-                padding: 6px 12px;
-                border-radius: 999px;
+                padding: 5px 10px;
+                border-radius: 8px;
                 display: flex;
                 align-items: center;
-                gap: 4px;
+                gap: 5px;
+            }
+
+            /* Card body */
+            .dr-card-body {
+                padding: 14px 16px 16px;
+            }
+            .dr-card-row {
+                display: flex;
+                align-items: flex-start;
+                justify-content: space-between;
+                gap: 10px;
+            }
+            .dr-card-name {
+                font-size: 17px;
+                font-weight: 800;
+                color: #1f2937;
+                margin: 0;
+                letter-spacing: -0.3px;
+                line-height: 1.3;
+            }
+            .dr-card-rating {
+                display: flex;
+                align-items: center;
+                gap: 3px;
+                color: #fff;
+                font-size: 12px;
+                font-weight: 800;
+                padding: 3px 8px;
+                border-radius: 8px;
+                flex-shrink: 0;
+                margin-top: 2px;
+            }
+            .dr-card-cuisine {
+                font-size: 13px;
+                color: #6b7280;
+                margin: 4px 0 0;
+                font-weight: 500;
+            }
+            .dr-card-meta {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                margin-top: 10px;
+                font-size: 12px;
+                color: #9ca3af;
+                font-weight: 600;
+            }
+            .dr-card-distance {
+                display: flex;
+                align-items: center;
+                gap: 3px;
+            }
+            .dr-card-dot {
+                color: #d1d5db;
+            }
+            .dr-card-fee {
+                color: #059669;
+                font-weight: 700;
+            }
+
+            /* ─── Responsive ──────────────────────────────────────── */
+            @media (min-width: 480px) {
+                .dr-card-img-wrap { height: 200px; }
             }
         `}</style>
     );

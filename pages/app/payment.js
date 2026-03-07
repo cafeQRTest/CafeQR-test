@@ -18,6 +18,7 @@ export default function DeliveryPayment() {
   const [restaurant, setRestaurant] = useState(null);
   const [cart, setCart] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
 
   const [payMode, setPayMode] = useState("cod"); // "cod" | "online"
   const [placing, setPlacing] = useState(false);
@@ -47,100 +48,121 @@ export default function DeliveryPayment() {
 
     const load = async () => {
       setLoading(true);
+      setLoadError("");
 
-      const { data: rest } = await supabase
-        .from("restaurants")
-        .select(
+      let rest = null;
+      try {
+        const { data: restData, error: restErr } = await supabase
+          .from("restaurants")
+          .select(
+            `
+            id,
+            name,
+            delivery_paused,
+            restaurant_profiles(
+              brand_color,
+              online_payment_enabled,
+              use_own_gateway,
+              gst_enabled,
+              default_tax_rate,
+              prices_include_tax
+            )
           `
-          id,
-          name,
-          delivery_paused,
-          restaurant_profiles(
-            brand_color,
-            online_payment_enabled,
-            use_own_gateway,
-            gst_enabled,
-            default_tax_rate,
-            prices_include_tax
           )
-        `
-        )
-        .eq("id", restaurantId)
-        .single();
+          .eq("id", restaurantId)
+          .single();
 
-      setRestaurant(rest || null);
+        if (restErr) console.warn("Restaurant fetch error:", restErr.message);
+        rest = restData || null;
+        setRestaurant(rest);
 
-      if (typeof window !== "undefined") {
-        const stored = localStorage.getItem(cartKey(restaurantId));
-        if (stored) {
-          try {
-            const parsed = JSON.parse(stored);
-            setCart(Array.isArray(parsed) ? parsed : []);
-          } catch {
+        if (typeof window !== "undefined") {
+          const stored = localStorage.getItem(cartKey(restaurantId));
+          if (stored) {
+            try {
+              const parsed = JSON.parse(stored);
+              setCart(Array.isArray(parsed) ? parsed : []);
+            } catch {
+              setCart([]);
+            }
+          } else {
             setCart([]);
           }
-        } else {
-          setCart([]);
-        }
 
-        // Prefill detected address
-        const detected = localStorage.getItem("detected_delivery_address");
-        if (detected) setCustAddress(detected);
+          // Prefill detected address
+          const detected = localStorage.getItem("detected_delivery_address");
+          if (detected) setCustAddress(detected);
 
-        // Fetch Profile Data (SSOT)
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-          setSessionToken(session.access_token);
-        }
+          // Fetch Profile Data (SSOT)
+          try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+              setSessionToken(session.access_token);
+            }
+          } catch (sessionErr) {
+            console.warn("Session fetch error:", sessionErr);
+          }
 
-        const { data: { user: dbUser } } = await supabase.auth.getUser();
-        if (dbUser) {
-          setCurrentUser(dbUser);
-          const { data: profile } = await supabase
-            .from('customers')
-            .select('name, phone')
-            .eq('user_id', dbUser.id)
-            .maybeSingle();
+          try {
+            const { data: { user: dbUser } } = await supabase.auth.getUser();
+            if (dbUser) {
+              setCurrentUser(dbUser);
+              const { data: profile } = await supabase
+                .from('customers')
+                .select('name, phone')
+                .eq('user_id', dbUser.id)
+                .maybeSingle();
 
-          if (profile) {
-            if (profile.name) setCustName(profile.name);
-            if (profile.phone) setCustPhone(profile.phone.replace(/\D/g, '').slice(0, 10));
+              if (profile) {
+                if (profile.name) setCustName(profile.name);
+                if (profile.phone) setCustPhone(profile.phone.replace(/\D/g, '').slice(0, 10));
+              }
+            }
+          } catch (userErr) {
+            console.warn("User/profile fetch error:", userErr);
           }
         }
-      }
 
-      setLoading(false);
+        // Check delivery availability (defense-in-depth)
+        if (rest) {
+          if (rest.delivery_paused) {
+            setIsDeliveryClosed(true);
+            setDeliveryClosedMessage("Delivery is currently paused");
+          } else {
+            try {
+              const { data: dHours } = await supabase
+                .from("delivery_hours")
+                .select("dow, open_time, close_time, enabled")
+                .eq("restaurant_id", restaurantId);
 
-      // Check delivery availability (defense-in-depth)
-      if (rest) {
-        if (rest.delivery_paused) {
-          setIsDeliveryClosed(true);
-          setDeliveryClosedMessage("Delivery is currently paused");
-        } else {
-          const { data: dHours } = await supabase
-            .from("delivery_hours")
-            .select("dow, open_time, close_time, enabled")
-            .eq("restaurant_id", restaurantId);
+              if (dHours && dHours.length > 0) {
+                const now = new Date();
+                const currentDOW = now.getDay() === 0 ? 7 : now.getDay();
+                const currentTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+                const todayHours = dHours.find((h) => h.dow === currentDOW);
 
-          if (dHours && dHours.length > 0) {
-            const now = new Date();
-            const currentDOW = now.getDay() === 0 ? 7 : now.getDay();
-            const currentTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-            const todayHours = dHours.find((h) => h.dow === currentDOW);
-
-            if (!todayHours || !todayHours.enabled) {
-              setIsDeliveryClosed(true);
-              setDeliveryClosedMessage("Delivery is not available today");
-            } else if (todayHours.open_time && todayHours.close_time) {
-              const openTime = todayHours.open_time.substring(0, 5);
-              const closeTime = todayHours.close_time.substring(0, 5);
-              if (currentTime < openTime || currentTime > closeTime) {
-                setIsDeliveryClosed(true);
-                setDeliveryClosedMessage(`Delivery is closed. Opens at ${openTime}, closes at ${closeTime}`);
+                if (!todayHours || !todayHours.enabled) {
+                  setIsDeliveryClosed(true);
+                  setDeliveryClosedMessage("Delivery is not available today");
+                } else if (todayHours.open_time && todayHours.close_time) {
+                  const openTime = todayHours.open_time.substring(0, 5);
+                  const closeTime = todayHours.close_time.substring(0, 5);
+                  if (currentTime < openTime || currentTime > closeTime) {
+                    setIsDeliveryClosed(true);
+                    setDeliveryClosedMessage(`Delivery is closed. Opens at ${openTime}, closes at ${closeTime}`);
+                  }
+                }
               }
+            } catch (hoursErr) {
+              console.warn("Delivery hours check error:", hoursErr);
             }
           }
         }
+      } catch (e) {
+        console.error("Payment page load error:", e);
+        setLoadError(e?.message || "Failed to load payment details. Please try again.");
+      } finally {
+        setLoading(false);
       }
     };
 
@@ -555,7 +577,31 @@ export default function DeliveryPayment() {
     }
   };
 
-  if (loading) return <div className="p-4 text-center text-gray-500">Loading...</div>;
+  if (loading) return (
+    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#f8f9fa" }}>
+      <div style={{ width: 48, height: 48, border: "4px solid #e5e7eb", borderTop: "4px solid #f97316", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+      <p style={{ marginTop: 16, color: "#6b7280", fontWeight: 600, fontSize: 15 }}>Loading payment details…</p>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+
+  if (loadError) return (
+    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#f8f9fa", padding: 24 }}>
+      <div style={{ width: 64, height: 64, borderRadius: "50%", background: "#fef2f2", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16, border: "2px solid #fecaca" }}>
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
+      </div>
+      <h2 style={{ margin: 0, color: "#111827", fontSize: 20, fontWeight: 800 }}>Something went wrong</h2>
+      <p style={{ color: "#6b7280", marginTop: 8, textAlign: "center", fontSize: 14, lineHeight: 1.5 }}>{loadError}</p>
+      <button
+        onClick={() => window.location.reload()}
+        style={{ marginTop: 20, background: "#f97316", color: "#fff", border: "none", borderRadius: 14, padding: "14px 28px", fontWeight: 700, fontSize: 15, cursor: "pointer", boxShadow: "0 4px 14px rgba(249,115,22,0.3)" }}
+      >Retry</button>
+      <button
+        onClick={() => router.back()}
+        style={{ marginTop: 10, background: "transparent", color: "#6b7280", border: "none", padding: "10px 20px", fontWeight: 600, fontSize: 14, cursor: "pointer" }}
+      >Go Back</button>
+    </div>
+  );
 
   if (successStep) {
     return (
