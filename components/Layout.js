@@ -947,10 +947,9 @@ function MobileSidebar({ onNavigate, onSignOut, isSigningOut }) {
     ...(feature.inventory_enabled
       ? [{ href: '/owner/inventory', label: 'Inventory', icon: <FaBoxes /> }]
       : []),
-    ...(feature.table_ordering_enabled
+    ...(feature.table_ordering_enabled && feature.qr_ordering_enabled !== false
       ? [
-        { href: '/owner/tables', label: 'POS', icon: <FaDesktop /> },
-        ...(feature.qr_ordering_enabled !== false ? [{ href: '/owner/availability', label: 'QR Availability', icon: <FaClock /> }] : [])
+        { href: '/owner/availability', label: 'QR Availability', icon: <FaClock /> }
       ]
       : []),
     { href: '/owner/delivery-availability', label: 'Delivery Hours', icon: <FaTruck /> },
@@ -1033,7 +1032,7 @@ function MobileSidebar({ onNavigate, onSignOut, isSigningOut }) {
   const groups = [
     { title: 'Operations', items: ops },
     {
-      title: addons.length || credit.length ? 'Add-ons' : null,
+      title: addons.length || credit.length ? 'Add On' : null,
       items: [...addons, ...credit],
     },
     {

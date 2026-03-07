@@ -130,7 +130,7 @@ export default function BillingPage() {
     if (m === 'cash') return 'Cash';
     if (m === 'credit') return 'Credit';
     if (m === 'mixed') return 'Mixed';
-    if (m === 'unknown') return 'Unknown';
+    if (m === 'unknown') return 'None';
     return m;
   };
 

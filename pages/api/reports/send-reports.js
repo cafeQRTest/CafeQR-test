@@ -129,7 +129,7 @@ function prettyCsvMethod(m) {
     if (m === 'online') return 'Online';
     if (m === 'cash') return 'Cash';
     if (m === 'credit') return 'Credit';
-    if (m === 'unknown') return 'Unknown';
+    if (m === 'unknown') return 'None';
     return m || 'Other';
 }
 
