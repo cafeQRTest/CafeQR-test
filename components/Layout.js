@@ -655,6 +655,7 @@ function Sidebar({ collapsed, onSignOut, isSigningOut }) {
       label: 'Expenses & P&L',
       icon: <FaFileAlt />,
     },
+    { href: '/owner/billing', label: 'Billing', icon: <FaFileInvoice /> },
   ];
 
   const account = [
@@ -674,7 +675,6 @@ function Sidebar({ collapsed, onSignOut, isSigningOut }) {
       icon: <FaCrown />,
     },
     { href: '/owner/settings', label: 'Settings', icon: <FaCog /> },
-    { href: '/owner/billing', label: 'Billing', icon: <FaFileInvoice /> },
   ];
 
   const integrations = hasAggregatorIntegration

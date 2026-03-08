@@ -135,13 +135,13 @@ export default function Shell({ children, showSidebar = false }) {
                     <FaCreditCard className="nav-icon" />
                     <span className="nav-text">Sales</span>
                   </Link>
-                  <Link href="/settings" className="nav-item">
-                    <FaCog className="nav-icon" />
-                    <span className="nav-text">Settings</span>
-                  </Link>
                   <Link href="/billing" className="nav-item">
                     <FaFileInvoice className="nav-icon" />
                     <span className="nav-text">Billing</span>
+                  </Link>
+                  <Link href="/settings" className="nav-item">
+                    <FaCog className="nav-icon" />
+                    <span className="nav-text">Settings</span>
                   </Link>
 
                   <div className="nav-divider" />
