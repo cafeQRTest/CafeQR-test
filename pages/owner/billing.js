@@ -286,91 +286,193 @@ export default function BillingPage() {
     if (!restaurant?.id) return;
 
     // Filter by type if specifically requested (sales or credit)
-    let exportData = invoices;
+    let exportInvoices = invoices;
     if (type === 'sales') {
-      exportData = invoices.filter(inv => {
+      exportInvoices = invoices.filter(inv => {
         const s = String(inv.status || '').toLowerCase();
         const pm = getPayMethod(inv);
         return s === 'paid' && pm !== 'credit';
       });
     } else if (type === 'credit') {
-      exportData = invoices.filter(inv => {
+      exportInvoices = invoices.filter(inv => {
         const s = String(inv.status || '').toLowerCase();
         const pm = getPayMethod(inv);
         return (pm === 'credit' || s === 'unpaid') && s !== 'void';
       });
     }
 
-    if (exportData.length === 0) {
+    if (exportInvoices.length === 0) {
       alert(`No ${type} records found in the current view to export.`);
       return;
     }
 
-    const headers = [
-      'Invoice No',
-      'Date',
-      'Order ID',
-      'Customer',
-      'Status',
-      'Payment Method',
-      'Taxable Amount',
-      'Total Tax',
-      'Grand Total'
-    ];
-    if (allowMultipleCustomers) headers.push('All Customers');
-
-    const rows = exportData.map(inv => {
-      const date = inv.date_ordered ? new Date(inv.date_ordered).toLocaleDateString('en-IN') : '';
-      const total = getInvoiceTotal(inv);
-      const statusLabel = getStatusLabel(inv.status);
-      const methodLabel = prettyMethod(getPayMethod(inv));
-      
-      const primaryCustomer = inv.customer_name || '';
-      const allCustomers = allowMultipleCustomers && Array.isArray(inv._customer_names) && inv._customer_names.length > 0
-        ? inv._customer_names.join(', ')
-        : primaryCustomer;
-
-      const row = [
-        inv.invoice_no || '',
-        date,
-        inv.order_id || '',
-        primaryCustomer,
-        statusLabel,
-        methodLabel,
-        inv.taxable_amount || '0',
-        inv.total_tax || '0',
-        total
-      ];
-      if (allowMultipleCustomers) row.push(allCustomers);
-      return row.map(v => `"${v}"`).join(',');
-    });
-
-    const csvContent = [headers.map(h => `"${h}"`).join(','), ...rows].join('\n');
-    const dateTag = `${range.start.toISOString().slice(0, 10)}_to_${range.end.toISOString().slice(0, 10)}`;
-    const fileName = `Invoices_${type}_${dateTag}.csv`;
-    // Use Capacitor share similar to other exports
-    if (!Capacitor.isNativePlatform()) {
-      const blob = new Blob([csvContent], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = fileName;
-      link.click();
-      URL.revokeObjectURL(url);
-      return;
-    }
     try {
-      await Filesystem.writeFile({
-        directory: Directory.Cache,
-        path: fileName,
-        data: csvContent,
-        encoding: 'utf8',
+      setLoading(true);
+      const invoiceIds = exportInvoices.map(inv => inv.id);
+      const orderIds = exportInvoices.map(inv => inv.order_id).filter(Boolean);
+
+      // 1. Fetch all items for these invoices
+      const { data: allItems, error: itemsErr } = await supabase
+        .from('invoice_items')
+        .select('*')
+        .in('invoice_id', invoiceIds)
+        .order('line_no', { ascending: true });
+
+      if (itemsErr) throw itemsErr;
+
+      // 2. Fetch order-level customer data for priority resolution
+      const { data: dbOrders, error: ordersErr } = await supabase
+        .from('orders')
+        .select('id, customer_name, customer_id')
+        .in('id', orderIds);
+
+      if (ordersErr) throw ordersErr;
+
+      const orderMap = new Map((dbOrders || []).map(o => [o.id, o]));
+
+      // 3. Resolve customer names for orders missing direct names (but having IDs)
+      const needsCustNames = (dbOrders || []).filter(o => !o.customer_name && o.customer_id);
+      let rcNamesMap = new Map();
+      if (needsCustNames.length > 0) {
+        const rcIds = [...new Set(needsCustNames.map(o => o.customer_id))];
+        const { data: rcRows } = await supabase
+          .from('restaurant_customers')
+          .select('customer_id, name')
+          .eq('restaurant_id', restaurant.id)
+          .in('customer_id', rcIds);
+        rcNamesMap = new Map((rcRows || []).map(r => [r.customer_id, r.name]));
+      }
+
+      // Group items by invoice_id for faster lookup
+      const itemsByInvoice = {};
+      (allItems || []).forEach(item => {
+        if (!itemsByInvoice[item.invoice_id]) itemsByInvoice[item.invoice_id] = [];
+        itemsByInvoice[item.invoice_id].push(item);
       });
-      const { uri } = await Filesystem.getUri({ directory: Directory.Cache, path: fileName });
-      await Share.share({ title: fileName, text: 'Cafe QR billing CSV export', url: uri, dialogTitle: 'Share billing CSV' });
+
+      const headers = [
+        'Invoice No',
+        'Date & Time',
+        'Customer',
+        'Place of Supply',
+        'Line No',
+        'Item Name',
+        'HSN',
+        'Tax Rate %',
+        'Qty',
+        'Unit Rate',
+        'Line Taxable',
+        'CGST Amt',
+        'SGST Amt',
+        'IGST Amt',
+        'Cess %',
+        'Cess Amt',
+        'Line Total',
+        'Payment Method',
+        'Status'
+      ];
+
+      const csvRows = [];
+      for (const inv of exportInvoices) {
+        const invItems = itemsByInvoice[inv.id] || [];
+        if (invItems.length === 0) continue;
+
+        const dateStr = inv.date_ordered 
+          ? new Date(inv.date_ordered).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) 
+          : '';
+        const statusLabel = getStatusLabel(inv.status);
+        const methodLabel = prettyMethod(getPayMethod(inv));
+        const pos = inv.place_of_supply || 'intra_state';
+
+        // Customer Logic Priority:
+        // 1. Direct name on Invoice
+        // 2. Name on Order table
+        // 3. Name from restaurant_customers via order.customer_id
+        // 4. Joined names from junction (pre-fetched in loadInvoices as _customer_names)
+        let resolvedCustomer = inv.customer_name || '';
+        if (!resolvedCustomer && inv.order_id) {
+          const order = orderMap.get(inv.order_id);
+          if (order) {
+            resolvedCustomer = order.customer_name || rcNamesMap.get(order.customer_id) || '';
+          }
+        }
+        if (!resolvedCustomer && inv._customer_names?.length > 0) {
+          resolvedCustomer = inv._customer_names.join(', ');
+        }
+
+        for (const item of invItems) {
+          const rate = Number(item.tax_rate || 0);
+          const taxable = Number(item.line_total_ex_tax || 0);
+          const lineTax = Number(item.tax_amount || 0);
+          const total = Number(item.line_total_inc_tax || 0);
+          const cessAmt = Number(item.cess_amount || 0);
+          const cessPct = Number(item.cess_rate || 0);
+
+          const isInterState = String(pos).toLowerCase() === 'inter_state' || Number(inv.igst || 0) > 0;
+          let cgst = 0, sgst = 0, igst = 0;
+
+          if (isInterState) {
+            igst = lineTax;
+          } else {
+            cgst = Math.round((lineTax / 2) * 100) / 100;
+            sgst = Math.round((lineTax / 2) * 100) / 100;
+          }
+
+          csvRows.push([
+            inv.invoice_no || '',
+            dateStr,
+            resolvedCustomer,
+            pos,
+            item.line_no || '',
+            item.variant_name ? `${item.item_name} (${item.variant_name})` : item.item_name,
+            item.hsn || '',
+            rate,
+            item.qty || 0,
+            item.unit_rate_ex_tax || 0,
+            taxable,
+            cgst,
+            sgst,
+            igst,
+            cessPct,
+            cessAmt,
+            total,
+            methodLabel,
+            statusLabel
+          ]);
+        }
+      }
+
+      const csvContent = [
+        headers.map(h => `"${h}"`).join(','),
+        ...csvRows.map(row => row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
+      ].join('\n');
+
+      const dateTag = `${range.start.toISOString().slice(0, 10)}_to_${range.end.toISOString().slice(0, 10)}`;
+      const fileName = `Billing_Details_${type}_${dateTag}.csv`;
+
+      if (!Capacitor.isNativePlatform()) {
+        const blob = new Blob([csvContent], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        link.click();
+        URL.revokeObjectURL(url);
+      } else {
+        await Filesystem.writeFile({
+          directory: Directory.Cache,
+          path: fileName,
+          data: csvContent,
+          encoding: 'utf8',
+        });
+        const { uri } = await Filesystem.getUri({ directory: Directory.Cache, path: fileName });
+        await Share.share({ title: fileName, text: 'Cafe QR billing line-item export', url: uri, dialogTitle: 'Share billing CSV' });
+      }
     } catch (e) {
       console.error('Billing CSV export failed', e);
       alert(e.message || 'Failed to export CSV');
+    } finally {
+      setLoading(false);
     }
   };
 
