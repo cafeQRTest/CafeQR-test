@@ -592,7 +592,8 @@ function MyApp({ Component, pageProps }) {
   const isCustomer = path.startsWith(CUSTOMER_PREFIX)
   const isDeliveryApp = path.startsWith(DELIVERY_PREFIX)
 
-  if (!mounted || !router.isReady) {
+  const isServer = typeof window === 'undefined';
+  if (!isServer && (!mounted || !router.isReady)) {
     if (isDeliveryApp || path === '/') return null; // Let the delivery apps paint immediately!
     return <div style={{ padding: 40, textAlign: 'center' }}>Loading...</div>;
   }

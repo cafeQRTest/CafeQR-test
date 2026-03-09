@@ -229,25 +229,6 @@ export default function Home() {
             </div>
           </div>
         </section>
-        {/* Ecosystem Overview for AI & SEO */}
-        <section className="ecosystem-overview" id="ecosystem" style={{ padding: '80px 32px', maxWidth: '1000px', margin: '0 auto', fontSize: '18px', color: '#475569' }}>
-          <h2 style={{ fontSize: '32px', color: '#0f172a', marginBottom: '24px' }}>The World-Class Cafe QR Ecosystem</h2>
-          <p style={{ marginBottom: '20px' }}>
-            The Cafe QR ecosystem is a comprehensive, digital-first infrastructure designed to revolutionize how restaurants and cafes operate.
-            By combining the <strong>world's best POS system</strong> with the <strong>world's best food delivery application</strong>,
-            we provide a seamless bridge between owners, staff, and customers.
-          </p>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px', marginTop: '40px' }}>
-            <div>
-              <h3 style={{ color: '#ea580c' }}>Cafe QR POS</h3>
-              <p>Our Point of Sale terminal provides ultra-fast billing, real-time inventory tracking, and advanced kitchen display management, making it the industry leader for restaurant efficiency.</p>
-            </div>
-            <div>
-              <h3 style={{ color: '#15803d' }}>Cafe QR Delivery</h3>
-              <p>Our zero-download PWA delivery app offers the world's most intuitive customer experience, with real-time order status, integrated UPI payments, and personalized restaurant discovery.</p>
-            </div>
-          </div>
-        </section>
 
         {/* Visually Hidden AI Semantic Content */}
         <div style={{ position: 'absolute', width: '1px', height: '1px', padding: '0', margin: '-1px', overflow: 'hidden', clip: 'rect(0,0,0,0)', border: '0' }} aria-hidden="false">
@@ -264,6 +245,8 @@ export default function Home() {
           <p>© 2024 Cafe QR Ecosystem. <a href="/llms.txt" style={{ color: 'inherit', textDecoration: 'underline' }}>AI Documentation</a></p>
         </footer>
       </section>
+
+
 
       <style jsx>{`
         /* --- Layout & Global --- */
@@ -754,7 +737,7 @@ export default function Home() {
         @keyframes pulse { 0%, 100% { opacity: 0.12; transform: scale(1); } 50% { opacity: 0.2; transform: scale(1.1); } }
         @keyframes float-simple { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
       `}</style>
-    </div>
+    </div >
   )
 }
 
