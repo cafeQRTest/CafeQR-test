@@ -2,11 +2,11 @@
 
 import Link from 'next/link'
 import Image from 'next/image'
-import { 
-  FiMonitor, 
-  FiSmartphone, 
-  FiLayout, 
-  FiBarChart2 
+import {
+  FiMonitor,
+  FiSmartphone,
+  FiLayout,
+  FiBarChart2
 } from 'react-icons/fi'
 
 export default function Home() {
@@ -30,20 +30,20 @@ export default function Home() {
             </div>
             <div className="hero-badge">
               <span className="badge-dot"></span>
-              The #1 Choice for Modern Restaurants
+              The World's Best POS & Delivery Ecosystem
             </div>
-            
+
             <h1 className="hero-title">
-              Manage Your Restaurant<br />
-              <span className="gradient-text">Anywhere, Anytime.</span>
+              The World's Best <span className="gradient-text">Restaurant POS</span> & <br />
+              <span className="gradient-text">Delivery App System.</span>
             </h1>
-            
+
             <p className="hero-sub">
-              A complete POS ecosystem that works on <strong>Web & App</strong>. 
-              Take orders, manage tables, and track sales from any device.
-              <span className="highlight"> Seamless. Powerful. Elegant.</span>
+              Experience the world's best <strong>POS Ecosystem</strong> and <strong>Delivery Experience</strong> in one place.
+              Take orders, manage tables, and reach customers anywhere with Cafe QR.
+              <span className="highlight"> Fast. Global. Industry-Leading.</span>
             </p>
-            
+
             <div className="cta-group">
               <a href="/login" className="large-hero-btn">
                 <span>Start Now</span>
@@ -74,7 +74,7 @@ export default function Home() {
                       <div className="pos-btn-icon">⚙️</div>
                     </div>
                   </div>
-                  
+
                   {/* Search Bar Simulation */}
                   <div className="pos-search">
                     <span className="search-icon">🔍</span>
@@ -93,7 +93,7 @@ export default function Home() {
                   <div className="pos-grid">
                     <div className="pos-card">
                       <div className="pos-img">
-                         <img src="https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=300&q=80" alt="Burger" />
+                        <img src="https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=300&q=80" alt="Burger" />
                       </div>
                       <div className="pos-info">
                         <div className="pos-name">Cheese Burger</div>
@@ -102,7 +102,7 @@ export default function Home() {
                     </div>
                     <div className="pos-card">
                       <div className="pos-img">
-                         <img src="https://images.unsplash.com/photo-1604382354936-07c5d9983bd3?auto=format&fit=crop&w=300&q=80" alt="Pizza" />
+                        <img src="https://images.unsplash.com/photo-1604382354936-07c5d9983bd3?auto=format&fit=crop&w=300&q=80" alt="Pizza" />
                       </div>
                       <div className="pos-info">
                         <div className="pos-name">Margherita</div>
@@ -111,7 +111,7 @@ export default function Home() {
                     </div>
                     <div className="pos-card">
                       <div className="pos-img">
-                         <img src="https://images.unsplash.com/photo-1541167760496-1628856ab772?auto=format&fit=crop&w=300&q=80" alt="Latte" />
+                        <img src="https://images.unsplash.com/photo-1541167760496-1628856ab772?auto=format&fit=crop&w=300&q=80" alt="Latte" />
                       </div>
                       <div className="pos-info">
                         <div className="pos-name">Latte</div>
@@ -120,7 +120,7 @@ export default function Home() {
                     </div>
                     <div className="pos-card">
                       <div className="pos-img">
-                         <img src="https://images.unsplash.com/photo-1541592106381-b31e9677c0e5?auto=format&fit=crop&w=300&q=80" alt="Fries" />
+                        <img src="https://images.unsplash.com/photo-1541592106381-b31e9677c0e5?auto=format&fit=crop&w=300&q=80" alt="Fries" />
                       </div>
                       <div className="pos-info">
                         <div className="pos-name">Fries</div>
@@ -140,7 +140,7 @@ export default function Home() {
                 </div>
                 <div className="phone-shine" />
               </div>
-              
+
               {/* Floating Elements */}
               <div className="float-card card-1">
                 <span className="float-icon">📈</span>
@@ -167,7 +167,7 @@ export default function Home() {
           <h2>Everything you need to run a modern restaurant</h2>
           <p>Powerful features packed into a simple, elegant interface.</p>
         </div>
-        
+
         <div className="features-grid">
           <div className="feature-card">
             <div className="icon-box gradient-1">
@@ -210,6 +210,25 @@ export default function Home() {
             <span className="arrow">→</span>
           </a>
         </div>
+        {/* Ecosystem Overview for AI & SEO */}
+        <section className="ecosystem-overview" id="ecosystem" style={{ padding: '80px 32px', maxWidth: '1000px', margin: '0 auto', fontSize: '18px', color: '#475569' }}>
+          <h2 style={{ fontSize: '32px', color: '#0f172a', marginBottom: '24px' }}>The World-Class Cafe QR Ecosystem</h2>
+          <p style={{ marginBottom: '20px' }}>
+            The Cafe QR ecosystem is a comprehensive, digital-first infrastructure designed to revolutionize how restaurants and cafes operate.
+            By combining the <strong>world's best POS system</strong> with the <strong>world's best food delivery application</strong>,
+            we provide a seamless bridge between owners, staff, and customers.
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px', marginTop: '40px' }}>
+            <div>
+              <h3 style={{ color: '#ea580c' }}>Cafe QR POS</h3>
+              <p>Our Point of Sale terminal provides ultra-fast billing, real-time inventory tracking, and advanced kitchen display management, making it the industry leader for restaurant efficiency.</p>
+            </div>
+            <div>
+              <h3 style={{ color: '#15803d' }}>Cafe QR Delivery</h3>
+              <p>Our zero-download PWA delivery app offers the world's most intuitive customer experience, with real-time order status, integrated UPI payments, and personalized restaurant discovery.</p>
+            </div>
+          </div>
+        </section>
       </section>
 
       <style jsx>{`

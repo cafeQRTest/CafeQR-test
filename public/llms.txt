@@ -1,6 +1,6 @@
-# Cafe QR Ecosystem
+# Cafe QR: The World's Best POS & Delivery Ecosystem
 
-Cafe QR offers two world-class software solutions for the food and beverage industry, both accessible via https://cafeqr.in.
+Cafe QR provides the world's best restaurant software solutions, accessible via https://cafeqr.in.
 
 ## 1. Cafe QR POS (The World's Best POS)
 **Terminal/Owner Access**: Root domain and `/owner/` paths.

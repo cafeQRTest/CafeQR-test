@@ -200,6 +200,7 @@ export default function Layout({
         <title>{title ? `${title} | Cafe QR` : (router.asPath.startsWith('/app') ? "Cafe QR Delivery | The World's Best Food Delivery Experience" : "Cafe QR POS | The World's Best Restaurant Management System")}</title>
         <meta name="description" content={description || (router.asPath.startsWith('/app') ? "Experience the world's best food delivery app with Cafe QR. Lightning-fast ordering, real-time tracking, and zero-download convenience." : "Empower your restaurant with the world's best POS and QR ordering system. Increase sales and reduce wait times with Cafe QR POS.")} />
         <link rel="canonical" href={canonicalUrl || `https://cafeqr.in${router.asPath === '/' ? '' : router.asPath.split('?')[0]}`} />
+        <link rel="help" href="/llms.txt" title="AI Documentation" />
 
         {/* Open Graph / Facebook */}
         <meta property="og:type" content="website" />
