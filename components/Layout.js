@@ -952,7 +952,9 @@ function MobileSidebar({ onNavigate, onSignOut, isSigningOut }) {
         { href: '/owner/availability', label: 'QR Availability', icon: <FaClock /> }
       ]
       : []),
-    { href: '/owner/delivery-availability', label: 'Delivery Hours', icon: <FaTruck /> },
+    ...(feature.delivery_enabled
+      ? [{ href: '/owner/delivery-availability', label: 'Delivery Hours', icon: <FaTruck /> }]
+      : []),
     ...(feature.production_enabled
       ? [{ href: '/owner/production', label: 'Production', icon: <FaIndustry /> }]
       : []),

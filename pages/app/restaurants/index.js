@@ -328,17 +328,6 @@ export default function RestaurantListing() {
                 </div>
             </header>
 
-            {/* ─── Promo Banner ─── */}
-            <div className="dr-promo-banner">
-                <div className="dr-promo-inner">
-                    <div className="dr-promo-text">
-                        <span className="dr-promo-tag">NEW</span>
-                        <h3>Free delivery on first order!</h3>
-                        <p>Use code <strong>WELCOME</strong> at checkout</p>
-                    </div>
-                    <div className="dr-promo-emoji">🎉</div>
-                </div>
-            </div>
 
             {/* ─── Restaurant list ─── */}
             <div className="dr-content">
@@ -395,7 +384,6 @@ export default function RestaurantListing() {
                                                 {distKm < 1 ? `${Math.round(distKm * 1000)}m` : `${distKm.toFixed(1)} km`}
                                             </span>
                                             <span className="dr-card-dot">•</span>
-                                            <span className="dr-card-fee">Free delivery</span>
                                         </div>
                                     </div>
                                 </Link>
