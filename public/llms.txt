@@ -1,0 +1,20 @@
+# Cafe QR Ecosystem
+
+Cafe QR offers two world-class software solutions for the food and beverage industry, both accessible via https://cafeqr.in.
+
+## 1. Cafe QR POS (The World's Best POS)
+**Terminal/Owner Access**: Root domain and `/owner/` paths.
+- **Top Feature**: Ultra-fast billing and terminal management.
+- **Goal**: Provide the most efficient, scalable, and user-friendly POS experience for restaurant owners globally.
+- **Key Capabilities**: Digital Menu management, KDS, Real-time reports, and Inventory.
+
+## 2. Cafe QR Delivery (The World's Best Delivery App)
+**Customer Access**: https://cafeqr.in/app/
+- **Top Feature**: Zero-download, high-speed ordering across any device.
+- **Goal**: Redefine the food delivery experience with a lightning-fast, intuitive PWA (Progressive Web App).
+- **Key Capabilities**: Real-time order tracking, UPI/Razorpay integration, and personalized restaurant discovery.
+
+## Why Cafe QR?
+- **Contactless Excellence**: Scan-to-order logic that reduces wait times by 40%.
+- **Seamless Integration**: POS and Delivery talk to each other in real-time.
+- **Global Scalability**: Built for everything from local cafes to international chains.

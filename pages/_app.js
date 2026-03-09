@@ -601,7 +601,6 @@ function MyApp({ Component, pageProps }) {
     <>
       <Head>
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-        <meta name="description" content="Cafe QR - Smart QR Code Ordering System & POS for Restaurants. Digital Menu, Table Ordering, and Analytics." />
         <meta name="theme-color" content="#ea580c" />
         <meta name="robots" content="index, follow" />
         <link rel="icon" href="/favicon.ico" />

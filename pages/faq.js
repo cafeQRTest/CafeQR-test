@@ -1,6 +1,7 @@
 // pages/faq.js
 import Image from 'next/image'
 import Link from 'next/link'
+import Head from 'next/head'
 
 export default function FAQPage() {
   const faqs = [
@@ -23,6 +24,27 @@ export default function FAQPage() {
       fontFamily: '"Inter", "Segoe UI", Tahoma, Geneva, Verdana, sans-serif',
       padding: '40px 20px'
     }}>
+      <Head>
+        <title>FAQ | Cafe QR - Frequently Asked Questions</title>
+        <meta name="description" content="Find answers to common questions about Cafe QR's digital menu, POS system, and setup process." />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "FAQPage",
+              "mainEntity": faqs.map(faq => ({
+                "@type": "Question",
+                "name": faq.question,
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": faq.answer
+                }
+              }))
+            })
+          }}
+        />
+      </Head>
       {/* Header */}
       <div style={{ textAlign: 'center', marginBottom: 50 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>

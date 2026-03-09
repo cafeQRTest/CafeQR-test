@@ -197,20 +197,20 @@ export default function Layout({
       onTouchEnd={handleTouchEnd}
     >
       <Head>
-        <title>{title ? `${title} | Cafe QR` : 'Cafe QR - Smart Restaurant POS & QR Ordering'}</title>
-        <meta name="description" content={description} />
+        <title>{title ? `${title} | Cafe QR` : (router.asPath.startsWith('/app') ? "Cafe QR Delivery | The World's Best Food Delivery Experience" : "Cafe QR POS | The World's Best Restaurant Management System")}</title>
+        <meta name="description" content={description || (router.asPath.startsWith('/app') ? "Experience the world's best food delivery app with Cafe QR. Lightning-fast ordering, real-time tracking, and zero-download convenience." : "Empower your restaurant with the world's best POS and QR ordering system. Increase sales and reduce wait times with Cafe QR POS.")} />
         <link rel="canonical" href={canonicalUrl || `https://cafeqr.in${router.asPath === '/' ? '' : router.asPath.split('?')[0]}`} />
 
         {/* Open Graph / Facebook */}
         <meta property="og:type" content="website" />
-        <meta property="og:title" content={title || "Cafe QR - Smart Restaurant POS & QR Ordering"} />
-        <meta property="og:description" content={description} />
+        <meta property="og:title" content={title || (router.asPath.startsWith('/app') ? "Cafe QR Delivery | The World's Best Food Delivery Experience" : "Cafe QR POS | The World's Best Restaurant Management System")} />
+        <meta property="og:description" content={description || (router.asPath.startsWith('/app') ? "Experience the world's best food delivery app with Cafe QR. Lightning-fast ordering, real-time tracking, and zero-download convenience." : "Empower your restaurant with the world's best POS and QR ordering system. Increase sales and reduce wait times with Cafe QR POS.")} />
         <meta property="og:site_name" content="Cafe QR" />
 
         {/* Twitter */}
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content={title || "Cafe QR - Smart Restaurant POS & QR Ordering"} />
-        <meta name="twitter:description" content={description} />
+        <meta name="twitter:title" content={title || (router.asPath.startsWith('/app') ? "Cafe QR Delivery | The World's Best Food Delivery Experience" : "Cafe QR POS | The World's Best Restaurant Management System")} />
+        <meta name="twitter:description" content={description || (router.asPath.startsWith('/app') ? "Experience the world's best food delivery app with Cafe QR. Lightning-fast ordering, real-time tracking, and zero-download convenience." : "Empower your restaurant with the world's best POS and QR ordering system. Increase sales and reduce wait times with Cafe QR POS.")} />
 
         <script
           type="application/ld+json"
@@ -218,10 +218,24 @@ export default function Layout({
             __html: JSON.stringify({
               "@context": "https://schema.org",
               "@type": "SoftwareApplication",
-              "name": "Cafe QR",
+              "name": router.asPath.startsWith('/app') ? "Cafe QR Delivery" : "Cafe QR POS",
               "operatingSystem": "Web, Android, iOS",
-              "applicationCategory": "BusinessApplication",
-              "description": "Smart QR Code Ordering System & POS for Restaurants",
+              "applicationCategory": router.asPath.startsWith('/app') ? "FoodServiceApplication" : "BusinessApplication",
+              "description": router.asPath.startsWith('/app') ? "World's Best Food Delivery Application" : "World's Best Restaurant POS & QR Ordering System",
+              "softwareVersion": "2.0",
+              "featureList": router.asPath.startsWith('/app') ? [
+                "Fast Browser-based Ordering",
+                "Real-time Order Tracking",
+                "Secure UPI Payments",
+                "Nearby Restaurant Discovery",
+                "Zero Download Required"
+              ] : [
+                "Digital QR Menu",
+                "POS Billing System",
+                "Kitchen Display System",
+                "Real-time Analytics",
+                "Inventory Management"
+              ],
               "offers": {
                 "@type": "Offer",
                 "price": "0",
