@@ -199,7 +199,7 @@ export default function Layout({
       <Head>
         <title>{title ? `${title} | Cafe QR` : 'Cafe QR - Smart Restaurant POS & QR Ordering'}</title>
         <meta name="description" content={description} />
-        {canonicalUrl && <link rel="canonical" href={canonicalUrl} />}
+        <link rel="canonical" href={canonicalUrl || `https://cafeqr.in${router.asPath === '/' ? '' : router.asPath.split('?')[0]}`} />
 
         {/* Open Graph / Facebook */}
         <meta property="og:type" content="website" />

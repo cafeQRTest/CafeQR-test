@@ -1,5 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://cafe-qr-app.vercel.app/sitemap.xml
 Sitemap: https://cafeqr.in/sitemap.xml
