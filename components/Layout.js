@@ -88,6 +88,7 @@ export default function Layout({
   // If landing/login/signup page or delivery app routes, render raw children (allows full screen control)
   const fullScreenRoutes = ['/', '/login', '/signup', '/forgot-password'];
   const isDeliveryApp = router.pathname.startsWith('/app');
+  const isDeliveryPath = router.asPath.startsWith('/app');
   const isRawLayout = fullScreenRoutes.includes(router.pathname) || isDeliveryApp;
 
   const [collapsed, setCollapsed] = useState(false);
@@ -197,22 +198,22 @@ export default function Layout({
       onTouchEnd={handleTouchEnd}
     >
       <Head>
-        <title>{title ? `${title} | Cafe QR` : (router.asPath.startsWith('/app') ? "Cafe QR Delivery | The World's Best Food Delivery Experience" : "Cafe QR POS | The World's Best Restaurant Management System")}</title>
-        <meta name="description" content={description || (router.asPath.startsWith('/app') ? "Experience the world's best food delivery app with Cafe QR. Lightning-fast ordering, real-time tracking, and zero-download convenience." : "Empower your restaurant with the world's best POS and QR ordering system. Increase sales and reduce wait times with Cafe QR POS.")} />
+        <title>{title ? `${title} | Cafe QR` : (isDeliveryPath ? "Cafe QR Delivery | The World's Best Food Delivery Experience" : "Cafe QR POS | The World's Best Restaurant Management System")}</title>
+        <meta name="description" content={description || (isDeliveryPath ? "Experience the world's best food delivery app with Cafe QR. Lightning-fast ordering, real-time tracking, and zero-download convenience." : "Empower your restaurant with the world's best POS and QR ordering system. Increase sales and reduce wait times with Cafe QR POS.")} />
         <meta name="keywords" content={isDeliveryPath ? "world's best delivery app, food delivery, lightning fast ordering, zero download food app" : "world's best restaurant pos, qr code ordering, digital menu, restaurant management system"} />
         <link rel="canonical" href={canonicalUrl || `https://cafeqr.in${router.asPath === '/' ? '' : router.asPath.split('?')[0]}`} />
         <link rel="help" href="/llms.txt" title="AI Documentation" />
 
         {/* Open Graph / Facebook */}
         <meta property="og:type" content="website" />
-        <meta property="og:title" content={title || (router.asPath.startsWith('/app') ? "Cafe QR Delivery | The World's Best Food Delivery Experience" : "Cafe QR POS | The World's Best Restaurant Management System")} />
-        <meta property="og:description" content={description || (router.asPath.startsWith('/app') ? "Experience the world's best food delivery app with Cafe QR. Lightning-fast ordering, real-time tracking, and zero-download convenience." : "Empower your restaurant with the world's best POS and QR ordering system. Increase sales and reduce wait times with Cafe QR POS.")} />
+        <meta property="og:title" content={title || (isDeliveryPath ? "Cafe QR Delivery | The World's Best Food Delivery Experience" : "Cafe QR POS | The World's Best Restaurant Management System")} />
+        <meta property="og:description" content={description || (isDeliveryPath ? "Experience the world's best food delivery app with Cafe QR. Lightning-fast ordering, real-time tracking, and zero-download convenience." : "Empower your restaurant with the world's best POS and QR ordering system. Increase sales and reduce wait times with Cafe QR POS.")} />
         <meta property="og:site_name" content="Cafe QR" />
 
         {/* Twitter */}
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content={title || (router.asPath.startsWith('/app') ? "Cafe QR Delivery | The World's Best Food Delivery Experience" : "Cafe QR POS | The World's Best Restaurant Management System")} />
-        <meta name="twitter:description" content={description || (router.asPath.startsWith('/app') ? "Experience the world's best food delivery app with Cafe QR. Lightning-fast ordering, real-time tracking, and zero-download convenience." : "Empower your restaurant with the world's best POS and QR ordering system. Increase sales and reduce wait times with Cafe QR POS.")} />
+        <meta name="twitter:title" content={title || (isDeliveryPath ? "Cafe QR Delivery | The World's Best Food Delivery Experience" : "Cafe QR POS | The World's Best Restaurant Management System")} />
+        <meta name="twitter:description" content={description || (isDeliveryPath ? "Experience the world's best food delivery app with Cafe QR. Lightning-fast ordering, real-time tracking, and zero-download convenience." : "Empower your restaurant with the world's best POS and QR ordering system. Increase sales and reduce wait times with Cafe QR POS.")} />
 
         <script
           type="application/ld+json"
@@ -220,12 +221,12 @@ export default function Layout({
             __html: JSON.stringify({
               "@context": "https://schema.org",
               "@type": "SoftwareApplication",
-              "name": router.asPath.startsWith('/app') ? "Cafe QR Delivery" : "Cafe QR POS",
+              "name": isDeliveryPath ? "Cafe QR Delivery" : "Cafe QR POS",
               "operatingSystem": "Web, Android, iOS",
-              "applicationCategory": router.asPath.startsWith('/app') ? "FoodServiceApplication" : "BusinessApplication",
-              "description": router.asPath.startsWith('/app') ? "World's Best Food Delivery Application" : "World's Best Restaurant POS & QR Ordering System",
+              "applicationCategory": isDeliveryPath ? "FoodServiceApplication" : "BusinessApplication",
+              "description": isDeliveryPath ? "World's Best Food Delivery Application" : "World's Best Restaurant POS & QR Ordering System",
               "softwareVersion": "2.0",
-              "featureList": router.asPath.startsWith('/app') ? [
+              "featureList": isDeliveryPath ? [
                 "Fast Browser-based Ordering",
                 "Real-time Order Tracking",
                 "Secure UPI Payments",
