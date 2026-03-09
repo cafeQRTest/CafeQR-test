@@ -1,5 +1,6 @@
 // components/layout.js
 import React, { useEffect, useState } from 'react';
+import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useRestaurant } from '../context/RestaurantContext';
@@ -75,9 +76,11 @@ function canAccess(href, role) {
 export default function Layout({
   children,
   title,
+  description = "Smart QR Code Ordering System & POS for Restaurants. Digital Menu, Table Ordering, and Analytics.",
   showSidebar = false,
   hideChrome = false,
   showCustomerHeader = false,
+  canonicalUrl,
 }) {
   const router = useRouter();
   const { restaurant } = useRestaurant();
@@ -193,6 +196,47 @@ export default function Layout({
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
+      <Head>
+        <title>{title ? `${title} | Cafe QR` : 'Cafe QR - Smart Restaurant POS & QR Ordering'}</title>
+        <meta name="description" content={description} />
+        {canonicalUrl && <link rel="canonical" href={canonicalUrl} />}
+
+        {/* Open Graph / Facebook */}
+        <meta property="og:type" content="website" />
+        <meta property="og:title" content={title || "Cafe QR - Smart Restaurant POS & QR Ordering"} />
+        <meta property="og:description" content={description} />
+        <meta property="og:site_name" content="Cafe QR" />
+
+        {/* Twitter */}
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={title || "Cafe QR - Smart Restaurant POS & QR Ordering"} />
+        <meta name="twitter:description" content={description} />
+
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "SoftwareApplication",
+              "name": "Cafe QR",
+              "operatingSystem": "Web, Android, iOS",
+              "applicationCategory": "BusinessApplication",
+              "description": "Smart QR Code Ordering System & POS for Restaurants",
+              "offers": {
+                "@type": "Offer",
+                "price": "0",
+                "priceCurrency": "INR"
+              },
+              "aggregateRating": {
+                "@type": "AggregateRating",
+                "ratingValue": "4.9",
+                "ratingCount": "120"
+              }
+            })
+          }}
+        />
+      </Head>
+
       <Header
         showSidebar={showSidebar}
         onHamburger={handleHamburger}
