@@ -8,7 +8,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).send({ error: 'Method not allowed' });
 
   try {
-    const { restaurantId, orderId, tableNumber, orderType, totalAmount } = req.body || {};
+    const { restaurantId, orderId, tableNumber, orderType, totalAmount, orderItems } = req.body || {};
     if (!restaurantId || !orderId) {
       return res.status(400).send({ error: 'Missing restaurantId or orderId' });
     }
@@ -20,6 +20,7 @@ export default async function handler(req, res) {
       tableNumber,
       orderType,
       totalAmount,
+      orderItems,
     });
 
     if (!result.ok) {

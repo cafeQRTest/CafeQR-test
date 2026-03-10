@@ -49,6 +49,7 @@ function normalizePushPayload(raw) {
   const body = String(data.body || notification.body || 'You have a new order.');
   const orderId = String(data.orderId || data.order_id || '');
   const restaurantId = String(data.restaurantId || data.restaurant_id || data.rid || '');
+  const itemsSummary = String(data.itemsSummary || payload.itemsSummary || '').trim();
   const typeFromStatus =
     String(data.status || '').toLowerCase() === 'pending_acceptance'
       ? 'delivery_pending'
@@ -62,6 +63,7 @@ function normalizePushPayload(raw) {
     url,
     orderId,
     restaurantId,
+    itemsSummary,
     type,
     data: {
       ...data,
@@ -70,6 +72,7 @@ function normalizePushPayload(raw) {
       url,
       orderId,
       restaurantId,
+      itemsSummary,
       type,
     },
   };
@@ -78,8 +81,9 @@ function normalizePushPayload(raw) {
 function buildNotificationOptions(detail) {
   const isDeliveryPending = detail.type === 'delivery_pending';
   const tag = detail.orderId ? `new-order-${detail.orderId}` : 'new-order';
+  const body = detail.itemsSummary ? `${detail.body}\n${detail.itemsSummary}` : detail.body;
   const options = {
-    body: detail.body,
+    body,
     icon: DEFAULT_ICON,
     badge: DEFAULT_BADGE,
     tag,
@@ -94,6 +98,7 @@ function buildNotificationOptions(detail) {
       url: detail.url,
       orderId: detail.orderId,
       restaurantId: detail.restaurantId,
+      itemsSummary: detail.itemsSummary,
       type: detail.type,
     },
   };

@@ -101,7 +101,9 @@ public class MyForegroundService extends Service {
     private Notification buildNotification(Intent intent) {
         String title = intent.getStringExtra("title");
         String body = intent.getStringExtra("body");
+        String itemsSummary = intent.getStringExtra("itemsSummary");
         String orderId = intent.getStringExtra("orderId");
+        String displayBody = (itemsSummary != null && !itemsSummary.isEmpty()) ? body + "\n" + itemsSummary : body;
 
         Intent notificationIntent = new Intent(this, MainActivity.class);
         notificationIntent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
@@ -112,7 +114,8 @@ public class MyForegroundService extends Service {
         NotificationCompat.Builder notificationBuilder = new NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(title)
-            .setContentText(body)
+            .setContentText(displayBody)
+            .setStyle(new NotificationCompat.BigTextStyle().bigText(displayBody))
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(pendingIntent)
@@ -129,8 +132,10 @@ public class MyForegroundService extends Service {
     private Notification buildDeliveryNotification(Intent intent) {
         String title = intent.getStringExtra("title");
         String body = intent.getStringExtra("body");
+        String itemsSummary = intent.getStringExtra("itemsSummary");
         String orderId = intent.getStringExtra("orderId");
         String restaurantId = intent.getStringExtra("restaurantId");
+        String displayBody = (itemsSummary != null && !itemsSummary.isEmpty()) ? body + "\n" + itemsSummary : body;
 
         // Tap body → open orders page
         Intent notificationIntent = new Intent(this, MainActivity.class);
@@ -164,8 +169,8 @@ public class MyForegroundService extends Service {
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, DELIVERY_CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(title)
-            .setContentText(body)
-            .setStyle(new NotificationCompat.BigTextStyle().bigText(body))
+            .setContentText(displayBody)
+            .setStyle(new NotificationCompat.BigTextStyle().bigText(displayBody))
             .setAutoCancel(false)        // Don't dismiss on tap
             .setOngoing(true)             // Can't swipe away
             .setPriority(NotificationCompat.PRIORITY_MAX)

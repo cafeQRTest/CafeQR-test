@@ -259,6 +259,7 @@ export default async function handler(req, res) {
       orderType: 'delivery',
       tableNumber: 'DELIVERY',
       totalAmount: total_inc_tax,
+      orderItems: preparedOrderItems,
     });
   } catch (e) {
     console.error('Push notification failed:', e);

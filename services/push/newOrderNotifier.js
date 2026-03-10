@@ -1,4 +1,5 @@
 import { admin, ensureFirebaseAdminInitialized } from './firebaseAdmin';
+import { buildOrderItemsSummary } from '../../lib/orders/orderItemsSummary';
 
 const isDev = process.env.NODE_ENV !== 'production';
 
@@ -51,6 +52,26 @@ async function fetchRestaurantTokens(supabase, restaurantId) {
   return { rows, error };
 }
 
+async function fetchOrderItemsPreview(supabase, orderId) {
+  if (!supabase || !orderId) return [];
+  try {
+    const { data, error } = await supabase
+      .from('order_items')
+      .select('name, quantity, variant_name')
+      .eq('order_id', orderId);
+
+    if (error) {
+      console.warn('[push:new_order] order item preview fetch failed:', error?.message || error);
+      return [];
+    }
+
+    return Array.isArray(data) ? data : [];
+  } catch (e) {
+    console.warn('[push:new_order] order item preview fetch exception:', e?.message || e);
+    return [];
+  }
+}
+
 async function markLogRow(supabase, id, patch) {
   if (!id) return;
   try {
@@ -71,6 +92,7 @@ export async function sendNewOrderPush({
   tableNumber = null,
   totalAmount = null,
   status = null, // 'new' | 'pending_acceptance'
+  orderItems = null,
 }) {
   if (!supabase) return { ok: false, reason: 'no_supabase' };
   if (!restaurantId || !orderId) return { ok: false, reason: 'missing_ids' };
@@ -128,6 +150,16 @@ export async function sendNewOrderPush({
   const resolvedTable = orderRow?.table_number ?? tableNumber;
   const resolvedOrderType = orderRow?.order_type ?? orderType;
   const resolvedAmount = orderRow?.total_amount ?? orderRow?.total_inc_tax ?? orderRow?.total ?? totalAmount;
+  const isDeliveryOrder =
+    isPendingDelivery ||
+    String(resolvedOrderType || '').toLowerCase() === 'delivery' ||
+    String(resolvedTable || '').trim().toUpperCase() === 'DELIVERY';
+
+  let resolvedOrderItems = Array.isArray(orderItems) ? orderItems : [];
+  if (!resolvedOrderItems.length) {
+    resolvedOrderItems = await fetchOrderItemsPreview(supabase, orderId);
+  }
+  const itemsSummary = isDeliveryOrder ? buildOrderItemsSummary(resolvedOrderItems) : '';
 
   const { rows, error: tokenFetchErr } = await fetchRestaurantTokens(supabase, restaurantId);
   if (tokenFetchErr) {
@@ -186,6 +218,7 @@ export async function sendNewOrderPush({
         url,
         title: notifTitle,
         body: notifBody,
+        itemsSummary,
       },
       webpush: {
         headers: { Urgency: 'high' },
@@ -215,7 +248,7 @@ export async function sendNewOrderPush({
           aps: {
             'content-available': 1,
             sound: 'beep.wav',
-            alert: { title: notifTitle, body: notifBody },
+            alert: { title: notifTitle, body: itemsSummary ? `${notifBody}\n${itemsSummary}` : notifBody },
           },
         },
       },
@@ -235,6 +268,7 @@ export async function sendNewOrderPush({
         url,
         title: notifTitle,
         body: notifBody,
+        itemsSummary,
       },
       webpush: {
         headers: { Urgency: 'high' },
@@ -294,6 +328,7 @@ export async function sendNewOrderPush({
       payload: {
         title: notifTitle,
         body: notifBody,
+        itemsSummary,
         type: notifType,
         orderId,
         restaurantId,

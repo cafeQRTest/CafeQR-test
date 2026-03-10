@@ -20,6 +20,7 @@ import PaymentConfirmDialog from '../../components/PaymentConfirmDialog';
 import OrderItemsModal from '../../components/OrderItemsModal';
 import { useQueryClient } from '@tanstack/react-query';
 import { tableKeys } from '../../hooks/useTables';
+import { buildOrderItemsSummary } from '../../lib/orders/orderItemsSummary';
 
 const BRAND = {
   orange: '#f97316',
@@ -1131,6 +1132,7 @@ export default function OrdersPage() {
     const total = computeOrderTotalDisplay(order);
     const title = '🔔 New Delivery Order — Action Required';
     const body = `Tap to Accept or Decline • #${orderId.slice(0, 8).toUpperCase()}${Number.isFinite(total) ? ` • ${money(total)}` : ''}`;
+    const itemsSummary = buildOrderItemsSummary(order?.items || order?.order_items || []);
     const url = `/owner/orders?highlight=${encodeURIComponent(orderId)}`;
 
     window.dispatchEvent(
@@ -1138,6 +1140,7 @@ export default function OrdersPage() {
         detail: {
           title,
           body,
+          itemsSummary,
           url,
           orderId,
           restaurantId: String(restaurantId || ''),
@@ -1145,6 +1148,7 @@ export default function OrdersPage() {
           data: {
             title,
             body,
+            itemsSummary,
             url,
             orderId,
             restaurantId: String(restaurantId || ''),

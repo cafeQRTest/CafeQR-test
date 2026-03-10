@@ -24,6 +24,7 @@ function normalizePushPayload(payload) {
         : '/owner/orders';
     const url = source.url || data.url || fallbackUrl;
     const pushRestaurantId = data.restaurantId || source.restaurantId || '';
+    const itemsSummary = String(data.itemsSummary || source.itemsSummary || '').trim();
 
     return {
         title,
@@ -32,6 +33,7 @@ function normalizePushPayload(payload) {
         orderId,
         type,
         pushRestaurantId,
+        itemsSummary,
         isDeliveryPending: type === 'delivery_pending' && Boolean(orderId),
     };
 }
@@ -197,6 +199,7 @@ export default function PushBanner() {
                 body,
                 url,
                 pushRestaurantId,
+                itemsSummary,
             } = normalized;
 
             const dedupeBase = orderId || `${title}|${body}|${url}`;
@@ -234,6 +237,7 @@ export default function PushBanner() {
                 body,
                 url,
                 orderId,
+                itemsSummary,
                 isDeliveryPending,
                 id: Date.now()
             });
@@ -343,6 +347,11 @@ export default function PushBanner() {
                 <p style={{ margin: 0, fontSize: 14, color: '#475569', lineHeight: 1.4 }}>
                     {notification.body}
                 </p>
+                {notification.itemsSummary && (
+                    <p style={{ margin: '8px 0 0', fontSize: 13, color: '#1e293b', lineHeight: 1.5, fontWeight: 600 }}>
+                        {notification.itemsSummary}
+                    </p>
+                )}
                 {notification?.isDeliveryPending && (
                     <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
                         <button

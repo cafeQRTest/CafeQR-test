@@ -588,7 +588,8 @@ export default async function handler(req, res) {
           orderType: order_type,
           tableNumber: table_number,
           totalAmount: finalGrandTotal,
-          status: statusForPush // Pass status to differentiate the push message
+          status: statusForPush, // Pass status to differentiate the push message
+          orderItems: mergedItems,
         });
       } catch (e) {
         console.warn('Notification dispatch failed (non-blocking):', e?.message || e);

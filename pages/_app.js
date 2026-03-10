@@ -25,6 +25,7 @@ import {
 } from '../services/supabase'
 import { ensureSessionValid } from '../lib/authActions'
 import { usePrintService } from '../lib/usePrintService'
+import { buildOrderItemsSummary } from '../lib/orders/orderItemsSummary';
 
 import ReactQueryProvider from '../lib/react-query-provider';
 import PushBanner from '../components/PushBanner';
@@ -289,7 +290,7 @@ function formatPushAmount(amount) {
   return ` • ₹${n.toFixed(2)}`;
 }
 
-function buildOwnerAlertPayload(orderRow, restaurantId) {
+function buildOwnerAlertPayload(orderRow, restaurantId, itemsSummary = '') {
   if (!orderRow?.id) return null;
   const status = String(orderRow.status || '').toLowerCase();
   if (status !== 'new' && status !== 'pending_acceptance') return null;
@@ -328,6 +329,7 @@ function buildOwnerAlertPayload(orderRow, restaurantId) {
     orderId,
     restaurantId: rid,
     type,
+    itemsSummary,
     data: {
       title,
       body,
@@ -335,6 +337,7 @@ function buildOwnerAlertPayload(orderRow, restaurantId) {
       orderId,
       restaurantId: rid,
       type,
+      itemsSummary,
     },
   };
 }
@@ -401,10 +404,21 @@ function GlobalOwnerAlertsBridge() {
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'orders', filter: `restaurant_id=eq.${restaurantId}` },
-        (payload) => {
+        async (payload) => {
           if (arePushAlertsDisabled()) return;
 
-          const detail = buildOwnerAlertPayload(payload?.new, restaurantId);
+          let itemsSummary = '';
+          try {
+            const { data: orderItems } = await supabase
+              .from('order_items')
+              .select('name, quantity, variant_name')
+              .eq('order_id', String(payload?.new?.id || ''));
+            itemsSummary = buildOrderItemsSummary(orderItems);
+          } catch (err) {
+            console.warn('[push] owner alert item preview failed:', err?.message || err);
+          }
+
+          const detail = buildOwnerAlertPayload(payload?.new, restaurantId, itemsSummary);
           if (!detail) return;
 
           const now = Date.now();
