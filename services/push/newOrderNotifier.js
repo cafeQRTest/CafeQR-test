@@ -208,6 +208,7 @@ export async function sendNewOrderPush({
     // DATA-ONLY message for delivery orders.
     // This ensures onMessageReceived ALWAYS fires (even when app is killed),
     // so our custom ForegroundService with FLAG_INSISTENT (looping sound) runs.
+    const fullBody = itemsSummary ? `${notifBody}\n${itemsSummary}` : notifBody;
     message = {
       tokens: uniqueTokens,
       // NO top-level "notification" key — critical for background delivery
@@ -217,7 +218,7 @@ export async function sendNewOrderPush({
         restaurantId: String(restaurantId),
         url,
         title: notifTitle,
-        body: notifBody,
+        body: fullBody,
         itemsSummary,
       },
       webpush: {
@@ -225,7 +226,7 @@ export async function sendNewOrderPush({
         fcmOptions: { link: url },
         notification: {
           title: notifTitle,
-          body: notifBody,
+          body: fullBody,
           icon: '/icons/icon-192.png',
           badge: '/icons/icon-192.png',
           tag: `new-order-${orderId}`,
@@ -248,7 +249,7 @@ export async function sendNewOrderPush({
           aps: {
             'content-available': 1,
             sound: 'beep.wav',
-            alert: { title: notifTitle, body: itemsSummary ? `${notifBody}\n${itemsSummary}` : notifBody },
+            alert: { title: notifTitle, body: fullBody },
           },
         },
       },

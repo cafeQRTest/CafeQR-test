@@ -315,9 +315,10 @@ function buildOwnerAlertPayload(orderRow, restaurantId, itemsSummary = '') {
   const title = isPendingDelivery
     ? '🔔 New Delivery Order — Action Required'
     : 'New Order';
-  const body = isPendingDelivery
+  const baseBody = isPendingDelivery
     ? `Tap to Accept or Decline • #${shortOrderId}${amountText}`
     : `${locationLabel} • #${shortOrderId}${amountText}`;
+  const body = (isPendingDelivery && itemsSummary) ? `${baseBody}\n${itemsSummary}` : baseBody;
   const url = `/owner/orders?highlight=${encodeURIComponent(orderId)}`;
   const type = isPendingDelivery ? 'delivery_pending' : 'new_order';
   const rid = String(restaurantId || '');

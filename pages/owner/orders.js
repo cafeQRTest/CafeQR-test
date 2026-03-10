@@ -1131,8 +1131,9 @@ export default function OrdersPage() {
 
     const total = computeOrderTotalDisplay(order);
     const title = '🔔 New Delivery Order — Action Required';
-    const body = `Tap to Accept or Decline • #${orderId.slice(0, 8).toUpperCase()}${Number.isFinite(total) ? ` • ${money(total)}` : ''}`;
+    const baseBody = `Tap to Accept or Decline • #${orderId.slice(0, 8).toUpperCase()}${Number.isFinite(total) ? ` • ${money(total)}` : ''}`;
     const itemsSummary = buildOrderItemsSummary(order?.items || order?.order_items || []);
+    const body = itemsSummary ? `${baseBody}\n${itemsSummary}` : baseBody;
     const url = `/owner/orders?highlight=${encodeURIComponent(orderId)}`;
 
     window.dispatchEvent(
@@ -1681,7 +1682,7 @@ export default function OrdersPage() {
             .single()
             .then(({ data: fullOrder }) => {
               if (!fullOrder) return;
-              
+
               if (fullOrder.order_customers && fullOrder.order_customers.length > 0) {
                 fullOrder.customers = fullOrder.order_customers.map(link => ({
                   id: link.customer_id,
@@ -1746,7 +1747,7 @@ export default function OrdersPage() {
               .eq('status', 'new')
               .gte('updated_at', cutoff)
               .order('updated_at', { ascending: true });
-              
+
             // Map customers for pa    
             if (pa) {
               pa.forEach(order => {
