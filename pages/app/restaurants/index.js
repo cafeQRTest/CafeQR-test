@@ -37,6 +37,19 @@ const GPS_LOADING = "loading";
 const GPS_SUCCESS = "success";
 const GPS_ERROR = "error";
 
+function persistDeliveryLocation(lat, lng, address = "") {
+    if (typeof window === "undefined") return;
+    try {
+        localStorage.setItem("delivery_user_location", JSON.stringify({ lat, lng }));
+        if (address) {
+            localStorage.setItem("detected_delivery_address", address);
+            localStorage.setItem("cafeqr_address", address);
+        }
+    } catch {
+        // best effort
+    }
+}
+
 export default function RestaurantListing() {
     const supabase = getCustomerSupabase();
     const router = useRouter();
@@ -116,6 +129,7 @@ export default function RestaurantListing() {
 
             setUserCoords({ lat, lng });
             setGpsState(GPS_SUCCESS);
+            persistDeliveryLocation(lat, lng, `${lat.toFixed(6)}, ${lng.toFixed(6)}`);
 
             // Reverse geocode (best-effort, non-blocking)
             try {
@@ -134,10 +148,17 @@ export default function RestaurantListing() {
                         addr.city || addr.town || addr.county || "",
                         addr.state || "",
                     ].filter(Boolean);
-                    setAddressText(parts.slice(0, 2).join(", ") || geo.display_name?.split(",").slice(0, 2).join(",") || "");
+                    const resolvedAddress =
+                        parts.slice(0, 2).join(", ") ||
+                        geo.display_name?.split(",").slice(0, 2).join(",") ||
+                        `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+                    setAddressText(resolvedAddress);
+                    persistDeliveryLocation(lat, lng, resolvedAddress);
                 }
             } catch {
-                setAddressText(`${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+                const fallbackAddress = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+                setAddressText(fallbackAddress);
+                persistDeliveryLocation(lat, lng, fallbackAddress);
             }
         } catch (e) {
             console.error("GPS error:", e);
@@ -243,7 +264,7 @@ export default function RestaurantListing() {
                     <p className="dr-gps-subtitle">Finding restaurants near your current location</p>
                     <div className="dr-spinner" />
                 </div>
-                <style>{CSS_TEXT}</style>
+                <RestaurantListingStyles />
             </div>
         );
     }
@@ -262,7 +283,7 @@ export default function RestaurantListing() {
                         <span>Try Again</span>
                     </button>
                 </div>
-                <style>{CSS_TEXT}</style>
+                <RestaurantListingStyles />
             </div>
         );
     }
@@ -270,7 +291,7 @@ export default function RestaurantListing() {
     // ── Main listing ─────────────────────────────────────────────────────────
     return (
         <div className="dr-page">
-            <style>{CSS_TEXT}</style>
+            <RestaurantListingStyles />
 
             {/* ─── Sticky Header ─── */}
             <header className="dr-header">
@@ -394,6 +415,10 @@ export default function RestaurantListing() {
             </div>
         </div>
     );
+}
+
+function RestaurantListingStyles() {
+    return <style jsx global>{CSS_TEXT}</style>;
 }
 
 // ── CSS (non-scoped, all class names use unique dr- prefix) ──────────────────

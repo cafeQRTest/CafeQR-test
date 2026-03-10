@@ -11,6 +11,15 @@ import VariantEditModal from "../../../components/VariantEditModal";
 
 
 const cartKey = (restaurantId) => `cart_delivery_${restaurantId}`;
+const restaurantCacheKey = (restaurantId) => `delivery_restaurant_${restaurantId}`;
+
+const withTimeout = (promise, ms, label = "Operation") =>
+  Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timed out after ${ms / 1000}s`)), ms)
+    ),
+  ]);
 
 export default function DeliveryRestaurantMenu() {
   const router = useRouter();
@@ -59,32 +68,90 @@ export default function DeliveryRestaurantMenu() {
   useEffect(() => {
     if (!restaurantId) return;
 
+    let ignore = false;
+
     const loadRestaurant = async () => {
-      setLoading(true);
-      const { data } = await supabase
-        .from("restaurants")
-        .select("id, name, delivery_paused, restaurant_profiles(brand_color, gst_enabled, default_tax_rate, prices_include_tax, features_menu_images_enabled)")
-        .eq("id", restaurantId)
-        .single();
+      let cachedRestaurant = null;
+      setIsDeliveryClosed(false);
+      setDeliveryClosedMessage("");
 
-      setRestaurant(data || null);
-      setEnableMenuImages(!!data?.restaurant_profiles?.features_menu_images_enabled);
+      if (typeof window !== "undefined") {
+        const cachedRestaurantRaw = localStorage.getItem(restaurantCacheKey(restaurantId));
+        if (cachedRestaurantRaw) {
+          try {
+            const parsedRestaurant = JSON.parse(cachedRestaurantRaw);
+            if (parsedRestaurant?.id === restaurantId) {
+              cachedRestaurant = parsedRestaurant;
+              setRestaurant(parsedRestaurant);
+              setEnableMenuImages(!!parsedRestaurant?.restaurant_profiles?.features_menu_images_enabled);
+              setLoading(false);
+            }
+          } catch {
+            // best effort
+          }
+        }
+      }
 
-      // Check delivery availability
-      if (data) {
-        if (data.delivery_paused) {
+      if (!cachedRestaurant) {
+        setLoading(true);
+      }
+
+      try {
+        const { data, error } = await withTimeout(
+          supabase
+            .from("restaurants")
+            .select("id, name, delivery_paused, restaurant_profiles(brand_color, gst_enabled, default_tax_rate, prices_include_tax, features_menu_images_enabled)")
+            .eq("id", restaurantId)
+            .single(),
+          6000,
+          "Restaurant fetch"
+        );
+
+        if (ignore) return;
+        if (error) throw error;
+
+        if (data) {
+          cachedRestaurant = data;
+          setRestaurant(data);
+          setEnableMenuImages(!!data?.restaurant_profiles?.features_menu_images_enabled);
+
+          if (typeof window !== "undefined") {
+            localStorage.setItem(restaurantCacheKey(restaurantId), JSON.stringify(data));
+          }
+        }
+      } catch (error) {
+        console.warn("Restaurant fetch error:", error);
+        if (!cachedRestaurant) {
+          setRestaurant(null);
+        }
+      }
+
+      const resolvedRestaurant = cachedRestaurant;
+      if (!resolvedRestaurant) {
+        if (!ignore) setLoading(false);
+        return;
+      }
+
+      if (resolvedRestaurant.delivery_paused) {
+        if (!ignore) {
           setIsDeliveryClosed(true);
           setDeliveryClosedMessage("Delivery is currently paused");
           setLoading(false);
-          return;
         }
+        return;
+      }
 
-        const { data: dHours } = await supabase
-          .from("delivery_hours")
-          .select("dow, open_time, close_time, enabled")
-          .eq("restaurant_id", restaurantId);
+      try {
+        const { data: dHours } = await withTimeout(
+          supabase
+            .from("delivery_hours")
+            .select("dow, open_time, close_time, enabled")
+            .eq("restaurant_id", restaurantId),
+          5000,
+          "Delivery hours"
+        );
 
-        if (dHours && dHours.length > 0) {
+        if (!ignore && dHours && dHours.length > 0) {
           const now = new Date();
           const currentDOW = now.getDay() === 0 ? 7 : now.getDay();
           const currentTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
@@ -93,29 +160,26 @@ export default function DeliveryRestaurantMenu() {
           if (!todayHours || !todayHours.enabled) {
             setIsDeliveryClosed(true);
             setDeliveryClosedMessage("Delivery is not available today");
-            setLoading(false);
-            return;
-          }
-
-          if (todayHours.open_time && todayHours.close_time) {
+          } else if (todayHours.open_time && todayHours.close_time) {
             const openTime = todayHours.open_time.substring(0, 5);
             const closeTime = todayHours.close_time.substring(0, 5);
             if (currentTime < openTime || currentTime > closeTime) {
               setIsDeliveryClosed(true);
               setDeliveryClosedMessage(`Delivery is closed. Opens at ${openTime}, closes at ${closeTime}`);
-              setLoading(false);
-              return;
             }
           }
         }
-        // No delivery_hours rows → default to always open
-        setIsDeliveryClosed(false);
+      } catch (error) {
+        console.warn("Delivery hours check error:", error);
+      } finally {
+        if (!ignore) setLoading(false);
       }
-
-      setLoading(false);
     };
 
     loadRestaurant();
+    return () => {
+      ignore = true;
+    };
   }, [restaurantId, supabase]);
 
   useEffect(() => {
@@ -334,6 +398,20 @@ export default function DeliveryRestaurantMenu() {
     const nextQty = Number(qty) || 0;
     commitCart((prev) => {
       if (nextQty <= 0) return prev.filter((cartItem) => !cartItemsMatch(cartItem, target));
+      const existingIdx = prev.findIndex((cartItem) => cartItemsMatch(cartItem, target));
+      if (existingIdx === -1) {
+        return [
+          ...prev,
+          {
+            ...target,
+            displayName: target.displayName || target.name,
+            price: Number(target.price) || 0,
+            quantity: nextQty,
+            selectedVariant: target.selectedVariant ?? null,
+          },
+        ];
+      }
+
       return prev.map((cartItem) =>
         cartItemsMatch(cartItem, target) ? { ...cartItem, quantity: nextQty } : cartItem
       );
@@ -529,7 +607,6 @@ export default function DeliveryRestaurantMenu() {
                     onEdit={it.has_variants ? () => setEditingVariantItem(it) : undefined}
                     showImage={enableMenuImages}
                     highlightColor={brandColor}
-                    onItemClick={() => handleAddItem(it)}
                     decimalPlaces={it.uom_precision ?? 0}
                     quantityStep={it.uom_precision > 0 ? 1 / Math.pow(10, it.uom_precision) : 1}
                   />
@@ -864,12 +941,6 @@ export default function DeliveryRestaurantMenu() {
               {/* Footer */}
               <div style={{ padding: "32px", borderTop: "1px solid #e5e7eb", background: "#fff", flexShrink: 0 }}>
 
-                {/* Extras: ReadOnly Discount */}
-                <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
-                  <span style={{ color: brandColor, fontWeight: 700, fontSize: 14, cursor: "default", opacity: 0.8 }}>
-                    + Add Discount
-                  </span>
-                </div>
 
                 {/* Total */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>

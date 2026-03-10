@@ -508,6 +508,8 @@ function MyApp({ Component, pageProps }) {
         } catch { }
         const supabase = getSupabase()
         const onForeground = async () => {
+          const path = router.pathname || ''
+          if (path.startsWith(DELIVERY_PREFIX)) return
           // Native persistence is handled by adapter. Just ensure valid session.
           await supabase.auth.startAutoRefresh()
           await ensureSessionValid()

@@ -8,11 +8,12 @@ import { useCustomerAuth } from "../../context/CustomerAuthContext";
 
 
 const cartKey = (restaurantId) => `cart_delivery_${restaurantId}`;
+const restaurantCacheKey = (restaurantId) => `delivery_restaurant_${restaurantId}`;
 
 export default function DeliveryPayment() {
   const router = useRouter();
   const supabase = getCustomerSupabase();
-  const { user } = useCustomerAuth();
+  const { user, session } = useCustomerAuth();
   const { r: restaurantId } = router.query;
 
   const [restaurant, setRestaurant] = useState(null);
@@ -30,6 +31,7 @@ export default function DeliveryPayment() {
   const [custName, setCustName] = useState("");
   const [custPhone, setCustPhone] = useState("");
   const [custAddress, setCustAddress] = useState("");
+  const [custCoords, setCustCoords] = useState(null);
   const [custHouseNo, setCustHouseNo] = useState("");
   const [custStreet, setCustStreet] = useState("");
   const [note, setNote] = useState("");
@@ -42,6 +44,10 @@ export default function DeliveryPayment() {
   const isPhoneValid = custPhone.length >= 10;
   const isAddrValid = custHouseNo.trim().length > 0;
   const isFormValid = isNameValid && isPhoneValid && isAddrValid;
+  const formattedCustCoords =
+    Number.isFinite(Number(custCoords?.lat)) && Number.isFinite(Number(custCoords?.lng))
+      ? `${Number(custCoords.lat).toFixed(6)}, ${Number(custCoords.lng).toFixed(6)}`
+      : "";
 
   // Helper: race a promise against a timeout (for Android APK where network may hang)
   const withTimeout = (promise, ms, label = "Operation") => {
@@ -54,15 +60,107 @@ export default function DeliveryPayment() {
   };
 
   useEffect(() => {
+    setSessionToken(session?.access_token || null);
+    setCurrentUser(session?.user || user || null);
+  }, [session, user]);
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    let ignore = false;
+
+    const loadProfile = async () => {
+      try {
+        const { data: profile } = await withTimeout(
+          supabase
+            .from("customers")
+            .select("name, phone")
+            .eq("user_id", currentUser.id)
+            .maybeSingle(),
+          5000,
+          "Profile fetch"
+        );
+
+        if (ignore || !profile) return;
+        if (profile.name) setCustName(profile.name);
+        if (profile.phone) setCustPhone(profile.phone.replace(/\D/g, "").slice(0, 10));
+      } catch (profileErr) {
+        console.warn("Profile fetch error:", profileErr);
+      }
+    };
+
+    loadProfile();
+    return () => {
+      ignore = true;
+    };
+  }, [currentUser?.id, supabase]);
+
+  useEffect(() => {
     if (!restaurantId) return;
 
-    const load = async () => {
-      setLoading(true);
-      setLoadError("");
+    let ignore = false;
 
-      let rest = null;
+    const load = async () => {
+      setLoadError("");
+      setIsDeliveryClosed(false);
+      setDeliveryClosedMessage("");
+
+      let cachedRestaurant = null;
+
+      if (typeof window !== "undefined") {
+        const storedCart = localStorage.getItem(cartKey(restaurantId));
+        if (storedCart) {
+          try {
+            const parsedCart = JSON.parse(storedCart);
+            setCart(Array.isArray(parsedCart) ? parsedCart : []);
+          } catch {
+            setCart([]);
+          }
+        } else {
+          setCart([]);
+        }
+
+        const detected =
+          localStorage.getItem("detected_delivery_address") ||
+          localStorage.getItem("cafeqr_address");
+        if (detected) setCustAddress(detected);
+
+        const storedLocation = localStorage.getItem("delivery_user_location");
+        if (storedLocation) {
+          try {
+            const parsedLocation = JSON.parse(storedLocation);
+            const lat = Number(parsedLocation?.lat);
+            const lng = Number(parsedLocation?.lng);
+            if (Number.isFinite(lat) && Number.isFinite(lng)) {
+              setCustCoords({ lat, lng });
+            }
+          } catch {
+            // best effort
+          }
+        }
+
+        const cachedRestaurantRaw = localStorage.getItem(restaurantCacheKey(restaurantId));
+        if (cachedRestaurantRaw) {
+          try {
+            const parsedRestaurant = JSON.parse(cachedRestaurantRaw);
+            if (parsedRestaurant?.id === restaurantId) {
+              cachedRestaurant = parsedRestaurant;
+              setRestaurant(parsedRestaurant);
+            }
+          } catch {
+            // best effort
+          }
+        }
+      }
+
+      if (!cachedRestaurant) {
+        setRestaurant(null);
+        setLoading(true);
+      } else {
+        setLoading(false);
+      }
+
       try {
-        // 1. Fetch restaurant (with 10s timeout)
         const { data: restData, error: restErr } = await withTimeout(
           supabase
             .from("restaurants")
@@ -83,170 +181,109 @@ export default function DeliveryPayment() {
             )
             .eq("id", restaurantId)
             .single(),
-          10000, "Restaurant fetch"
+          6000,
+          "Restaurant fetch"
         );
 
-        if (restErr) console.warn("Restaurant fetch error:", restErr.message);
-        rest = restData || null;
-        setRestaurant(rest);
+        if (ignore) return;
+        if (restErr) throw restErr;
 
-        if (typeof window !== "undefined") {
-          // 2. Load cart from localStorage (sync, always works)
-          const stored = localStorage.getItem(cartKey(restaurantId));
-          if (stored) {
-            try {
-              const parsed = JSON.parse(stored);
-              setCart(Array.isArray(parsed) ? parsed : []);
-            } catch {
-              setCart([]);
-            }
-          } else {
-            setCart([]);
-          }
+        if (restData) {
+          cachedRestaurant = restData;
+          setRestaurant(restData);
 
-          // Prefill detected address
-          const detected = localStorage.getItem("detected_delivery_address");
-          if (detected) setCustAddress(detected);
-
-          // 3. Get session (with 8s timeout — uses Capacitor Preferences on Android)
-          try {
-            const { data: { session } } = await withTimeout(
-              supabase.auth.getSession(),
-              8000, "Session fetch"
-            );
-            if (session) {
-              setSessionToken(session.access_token);
-              // Use session.user instead of getUser() to avoid an extra network call
-              // getUser() makes a direct HTTP request to Supabase that can hang on Android
-              const sessionUser = session.user;
-              if (sessionUser) {
-                setCurrentUser(sessionUser);
-                // 4. Fetch customer profile (with 8s timeout)
-                try {
-                  const { data: profile } = await withTimeout(
-                    supabase
-                      .from('customers')
-                      .select('name, phone')
-                      .eq('user_id', sessionUser.id)
-                      .maybeSingle(),
-                    8000, "Profile fetch"
-                  );
-                  if (profile) {
-                    if (profile.name) setCustName(profile.name);
-                    if (profile.phone) setCustPhone(profile.phone.replace(/\D/g, '').slice(0, 10));
-                  }
-                } catch (profileErr) {
-                  console.warn("Profile fetch error:", profileErr);
-                }
-              }
-            }
-          } catch (sessionErr) {
-            console.warn("Session fetch error:", sessionErr);
-            // Fallback: try to use user from CustomerAuthContext
-            if (user) {
-              setCurrentUser(user);
-            }
+          if (typeof window !== "undefined") {
+            localStorage.setItem(restaurantCacheKey(restaurantId), JSON.stringify(restData));
           }
         }
-
-        // 5. Check delivery availability (with 8s timeout)
-        if (rest) {
-          if (rest.delivery_paused) {
-            setIsDeliveryClosed(true);
-            setDeliveryClosedMessage("Delivery is currently paused");
-          } else {
-            try {
-              const { data: dHours } = await withTimeout(
-                supabase
-                  .from("delivery_hours")
-                  .select("dow, open_time, close_time, enabled")
-                  .eq("restaurant_id", restaurantId),
-                8000, "Delivery hours"
-              );
-
-              if (dHours && dHours.length > 0) {
-                const now = new Date();
-                const currentDOW = now.getDay() === 0 ? 7 : now.getDay();
-                const currentTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-                const todayHours = dHours.find((h) => h.dow === currentDOW);
-
-                if (!todayHours || !todayHours.enabled) {
-                  setIsDeliveryClosed(true);
-                  setDeliveryClosedMessage("Delivery is not available today");
-                } else if (todayHours.open_time && todayHours.close_time) {
-                  const openTime = todayHours.open_time.substring(0, 5);
-                  const closeTime = todayHours.close_time.substring(0, 5);
-                  if (currentTime < openTime || currentTime > closeTime) {
-                    setIsDeliveryClosed(true);
-                    setDeliveryClosedMessage(`Delivery is closed. Opens at ${openTime}, closes at ${closeTime}`);
-                  }
-                }
-              }
-            } catch (hoursErr) {
-              console.warn("Delivery hours check error:", hoursErr);
-            }
-          }
+      } catch (restErr) {
+        console.warn("Restaurant fetch error:", restErr);
+        if (!cachedRestaurant) {
+          setLoadError(restErr?.message || "Failed to load payment details. Please try again.");
         }
-      } catch (e) {
-        console.error("Payment page load error:", e);
-        setLoadError(e?.message || "Failed to load payment details. Please try again.");
       } finally {
-        setLoading(false);
+        if (!ignore) {
+          setLoading(false);
+        }
       }
     };
 
-    // Global safety net: if load() itself hangs for >20s, force-complete
-    let loadDone = false;
-    const safetyTimer = setTimeout(() => {
-      if (!loadDone) {
-        console.warn("Payment load safety timeout reached (20s)");
-        setLoading(false);
-        setLoadError("Loading took too long. Please check your connection and try again.");
-      }
-    }, 20000);
-
-    load().finally(() => {
-      loadDone = true;
-      clearTimeout(safetyTimer);
-    });
-
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session) {
-        setSessionToken(session.access_token);
-      } else {
-        setSessionToken(null);
-      }
-
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-        if (session?.user) {
-          setCurrentUser(session.user);
-          try {
-            const { data: profile } = await supabase
-              .from('customers')
-              .select('name, phone')
-              .eq('user_id', session.user.id)
-              .maybeSingle();
-
-            if (profile) {
-              if (profile.name) setCustName(profile.name);
-              if (profile.phone) setCustPhone(profile.phone.replace(/\D/g, '').slice(0, 10));
-            }
-          } catch { /* best effort */ }
-        } else {
-          setCurrentUser(null);
-        }
-      } else if (event === 'SIGNED_OUT') {
-        setCurrentUser(null);
-      }
-    });
+    load();
 
     return () => {
-      authListener.subscription.unsubscribe();
+      ignore = true;
     };
   }, [restaurantId, supabase]);
 
+  useEffect(() => {
+    if (!restaurantId || !restaurant) return;
+
+    let ignore = false;
+
+    const checkDeliveryAvailability = async () => {
+      if (restaurant.delivery_paused) {
+        if (!ignore) {
+          setIsDeliveryClosed(true);
+          setDeliveryClosedMessage("Delivery is currently paused");
+        }
+        return;
+      }
+
+      try {
+        const { data: dHours } = await withTimeout(
+          supabase
+            .from("delivery_hours")
+            .select("dow, open_time, close_time, enabled")
+            .eq("restaurant_id", restaurantId),
+          5000,
+          "Delivery hours"
+        );
+
+        if (ignore || !dHours || dHours.length === 0) return;
+
+        const now = new Date();
+        const currentDOW = now.getDay() === 0 ? 7 : now.getDay();
+        const currentTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+        const todayHours = dHours.find((h) => h.dow === currentDOW);
+
+        if (!todayHours || !todayHours.enabled) {
+          setIsDeliveryClosed(true);
+          setDeliveryClosedMessage("Delivery is not available today");
+          return;
+        }
+
+        if (todayHours.open_time && todayHours.close_time) {
+          const openTime = todayHours.open_time.substring(0, 5);
+          const closeTime = todayHours.close_time.substring(0, 5);
+          if (currentTime < openTime || currentTime > closeTime) {
+            setIsDeliveryClosed(true);
+            setDeliveryClosedMessage(`Delivery is closed. Opens at ${openTime}, closes at ${closeTime}`);
+            return;
+          }
+        }
+
+        setIsDeliveryClosed(false);
+        setDeliveryClosedMessage("");
+      } catch (hoursErr) {
+        console.warn("Delivery hours check error:", hoursErr);
+      }
+    };
+
+    checkDeliveryAvailability();
+    return () => {
+      ignore = true;
+    };
+  }, [restaurantId, restaurant, supabase]);
+
   const brandColor = restaurant?.restaurant_profiles?.brand_color || "#f59e0b";
   const onlineEnabled = !!restaurant?.restaurant_profiles?.online_payment_enabled;
+  const goBackToRestaurant = () => {
+    if (restaurantId) {
+      router.replace(`/app/restaurant/${restaurantId}`);
+      return;
+    }
+    router.replace("/app/restaurants");
+  };
 
   const totals = useMemo(() => {
     const profile = restaurant?.restaurant_profiles;
@@ -361,14 +398,15 @@ export default function DeliveryPayment() {
   };
 
   const buildDeliveryBlock = () => {
-    return [
-      "Delivery Details:",
-      `Name: ${custName.trim()}`,
-      `Phone: ${custPhone.trim()}`,
-      `Address: ${custHouseNo.trim()}, ${custStreet.trim()}`,
-      `Map Location: ${custAddress.trim()}`,
-      note.trim() ? `Note: ${note.trim()}` : "",
-    ]
+      return [
+        "Delivery Details:",
+        `Name: ${custName.trim()}`,
+        `Phone: ${custPhone.trim()}`,
+        `Address: ${custHouseNo.trim()}, ${custStreet.trim()}`,
+        custAddress.trim() ? `Detected Area: ${custAddress.trim()}` : "",
+        formattedCustCoords ? `GPS Coordinates: ${formattedCustCoords}` : "",
+        note.trim() ? `Note: ${note.trim()}` : "",
+      ]
       .filter(Boolean)
       .join("\n");
   };
@@ -641,7 +679,7 @@ export default function DeliveryPayment() {
         style={{ marginTop: 20, background: "#f97316", color: "#fff", border: "none", borderRadius: 14, padding: "14px 28px", fontWeight: 700, fontSize: 15, cursor: "pointer", boxShadow: "0 4px 14px rgba(249,115,22,0.3)" }}
       >Retry</button>
       <button
-        onClick={() => router.back()}
+        onClick={goBackToRestaurant}
         style={{ marginTop: 10, background: "transparent", color: "#6b7280", border: "none", padding: "10px 20px", fontWeight: 600, fontSize: 14, cursor: "pointer" }}
       >Go Back</button>
     </div>
@@ -695,7 +733,7 @@ export default function DeliveryPayment() {
         }}
       >
         <button
-          onClick={() => router.back()}
+          onClick={goBackToRestaurant}
           style={{
             border: "1px solid #e5e7eb",
             background: "#fff",
@@ -780,8 +818,24 @@ export default function DeliveryPayment() {
             }}
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-orange-500"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
-            <div style={{ flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {custAddress || "Location not detected"}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {formattedCustCoords || custAddress || "Location not detected"}
+              </div>
+              {formattedCustCoords && custAddress && (
+                <div
+                  style={{
+                    marginTop: 2,
+                    color: "#6b7280",
+                    fontSize: 12,
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
+                >
+                  {custAddress}
+                </div>
+              )}
             </div>
           </div>
 
