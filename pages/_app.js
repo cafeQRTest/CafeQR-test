@@ -593,8 +593,9 @@ function MyApp({ Component, pageProps }) {
   const isDeliveryApp = path.startsWith(DELIVERY_PREFIX)
 
   const isServer = typeof window === 'undefined';
-  if (!isServer && (!mounted || !router.isReady)) {
-    if (isDeliveryApp || path === '/') return null; // Let the delivery apps paint immediately!
+  // Avoid hydration mismatch on delivery routes: SSR already rendered content,
+  // so client should not return null on the first paint.
+  if (!isServer && (!mounted || !router.isReady) && !isDeliveryApp && path !== '/') {
     return <div style={{ padding: 40, textAlign: 'center' }}>Loading...</div>;
   }
 
