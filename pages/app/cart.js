@@ -241,6 +241,11 @@ export default function DeliveryCart() {
                 {item.displayName || item.name}{" "}
                 <span style={{ fontSize: 12 }}>{item.veg ? "🟢" : "🔺"}</span>
               </div>
+              {item.selectedVariant?.variant_name && (
+                <div style={{ marginTop: 6, color: "#6b7280", fontSize: 13, fontWeight: 700 }}>
+                  {item.selectedVariant.variant_name}
+                </div>
+              )}
               <div style={{ marginTop: 6, color: "#6b7280", fontSize: 13 }}>
                 ₹{Number(item.price).toFixed(2)} each
               </div>

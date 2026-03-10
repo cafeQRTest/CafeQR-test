@@ -5,6 +5,9 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { getCustomerSupabase } from "../../../services/supabase";
 import { motion, AnimatePresence } from "framer-motion";
+import MenuItemCard from "../../../components/MenuItemCard";
+import VariantSelector from "../../../components/VariantSelector";
+import VariantEditModal from "../../../components/VariantEditModal";
 
 
 const cartKey = (restaurantId) => `cart_delivery_${restaurantId}`;
@@ -27,6 +30,10 @@ export default function DeliveryRestaurantMenu() {
   const [cartOpen, setCartOpen] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
   const [showToast, setShowToast] = useState(false);
+  const [enableMenuImages, setEnableMenuImages] = useState(false);
+  const [showVariantSelector, setShowVariantSelector] = useState(false);
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [editingVariantItem, setEditingVariantItem] = useState(null);
 
   // Delivery availability state
   const [isDeliveryClosed, setIsDeliveryClosed] = useState(false);
@@ -47,7 +54,7 @@ export default function DeliveryRestaurantMenu() {
       router.replace(`/app/restaurant/${restaurantId}`, undefined, { shallow: true });
       return () => clearTimeout(t);
     }
-  }, [router.query.toast, restaurantId]);
+  }, [router, router.query.toast, restaurantId]);
 
   useEffect(() => {
     if (!restaurantId) return;
@@ -56,11 +63,12 @@ export default function DeliveryRestaurantMenu() {
       setLoading(true);
       const { data } = await supabase
         .from("restaurants")
-        .select("id, name, delivery_paused, restaurant_profiles(brand_color, gst_enabled, default_tax_rate, prices_include_tax)")
+        .select("id, name, delivery_paused, restaurant_profiles(brand_color, gst_enabled, default_tax_rate, prices_include_tax, features_menu_images_enabled)")
         .eq("id", restaurantId)
         .single();
 
       setRestaurant(data || null);
+      setEnableMenuImages(!!data?.restaurant_profiles?.features_menu_images_enabled);
 
       // Check delivery availability
       if (data) {
@@ -115,17 +123,127 @@ export default function DeliveryRestaurantMenu() {
 
     const loadItems = async () => {
       setItemsLoading(true);
+      try {
+        const { data: rawItems, error: menuErr } = await supabase
+          .from("menu_items")
+          .select(`
+            id, name, price, description, category, veg, status, is_packaged_good, ispopular, image_url, has_variants, tax_rate, uom_id,
+            uom:unit_of_measures(short_code, precision),
+            menu_item_variants(
+              variant_templates(id, name)
+            )
+          `)
+          .eq("restaurant_id", restaurantId)
+          .order("category", { ascending: true })
+          .order("name", { ascending: true });
 
-      // Assumptions (adjust columns if your schema differs):
-      // menu_items: id, restaurant_id, name, price, veg, image_url, category, is_active, is_packaged_good, tax_rate
-      const { data } = await supabase
-        .from("menu_items")
-        .select("id, name, price, veg, image_url, category, is_packaged_good, tax_rate")
-        .eq("restaurant_id", restaurantId)
-        .order("name", { ascending: true });
+        if (menuErr) throw menuErr;
 
-      setItems(data || []);
-      setItemsLoading(false);
+        const finalItems = (rawItems || []).map((item) => {
+          const uomObj = Array.isArray(item.uom) ? item.uom[0] : item.uom;
+          return {
+            ...item,
+            uom: uomObj,
+            uom_precision: uomObj?.precision ?? 0,
+          };
+        });
+
+        const variantItemIds = finalItems
+          .filter((item) => item?.has_variants && item?.id)
+          .map((item) => item.id);
+        const variantMap = new Map();
+
+        if (variantItemIds.length > 0) {
+          const { data: variantPricing, error: variantErr } = await supabase
+            .from("variant_pricing")
+            .select(`
+              menu_item_id, price, is_available,
+              variant_options(id, name, display_order, template_id)
+            `)
+            .in("menu_item_id", variantItemIds);
+
+          if (variantErr) {
+            console.error("Variant pricing load error:", variantErr);
+          } else {
+            (variantPricing || []).forEach((row) => {
+              if (!row.menu_item_id || !row.variant_options) return;
+              if (!variantMap.has(row.menu_item_id)) variantMap.set(row.menu_item_id, []);
+              variantMap.get(row.menu_item_id).push({
+                variant_id: row.variant_options.id,
+                variant_name: row.variant_options.name,
+                price: row.price,
+                is_available: row.is_available,
+                display_order: row.variant_options.display_order,
+              });
+            });
+          }
+        }
+
+        let upsellsData = [];
+        if (finalItems.length > 0) {
+          const { data, error: upsellsErr } = await supabase
+            .from("menu_items_with_upsells")
+            .select("menu_item_id, upsells")
+            .in("menu_item_id", finalItems.map((item) => item.id));
+
+          if (upsellsErr) {
+            console.error("Upsell load error:", upsellsErr);
+          } else {
+            upsellsData = data || [];
+          }
+        }
+
+        const upsellMap = new Map();
+        (upsellsData || []).forEach((row) => {
+          upsellMap.set(row.menu_item_id, row.upsells);
+        });
+
+        finalItems.forEach((item) => {
+          item.variants = (variantMap.get(item.id) || []).sort(
+            (a, b) => (a.display_order || 0) - (b.display_order || 0)
+          );
+
+          const rawUpsells = upsellMap.get(item.id) || [];
+          if (rawUpsells.length > 0) {
+            item.addon_groups = [
+              {
+                id: "upsells-group",
+                name: "Suggested Extras",
+                min_selections: 0,
+                max_selections: null,
+                options: rawUpsells.map((upsell) => ({
+                  id: upsell.id,
+                  name: upsell.name,
+                  price: upsell.price,
+                  is_active: upsell.status === "available",
+                  veg: upsell.veg,
+                  image_url: upsell.image_url,
+                })),
+              },
+            ];
+            item.has_addons = true;
+          } else {
+            item.addon_groups = [];
+            item.has_addons = false;
+          }
+        });
+
+        const transformed = finalItems.map((item) => {
+          const templateName = item.menu_item_variants?.[0]?.variant_templates?.name || "Options";
+          return {
+            ...item,
+            variant_template_name: item.has_variants ? templateName : null,
+            popular: !!item.ispopular,
+          };
+        });
+
+        setItems(transformed);
+      } catch (error) {
+        console.warn("Menu load error:", error);
+        setItems([]);
+      } finally {
+        setItemsLoading(false);
+      }
     };
 
     loadItems();
@@ -145,49 +263,85 @@ export default function DeliveryRestaurantMenu() {
 
   const brandColor = restaurant?.restaurant_profiles?.brand_color || "#f59e0b";
 
-  const persist = (next) => {
-    setCart(next);
-    if (typeof window !== "undefined" && restaurantId) {
-      localStorage.setItem(cartKey(restaurantId), JSON.stringify(next));
-    }
+  const commitCart = (nextOrUpdater) => {
+    setCart((prev) => {
+      const next = typeof nextOrUpdater === "function" ? nextOrUpdater(prev) : nextOrUpdater;
+      if (typeof window !== "undefined" && restaurantId) {
+        localStorage.setItem(cartKey(restaurantId), JSON.stringify(next));
+      }
+      return next;
+    });
   };
 
-  const addItem = (it) => {
-    const match = (c) => c.id === it.id && !c.selectedVariant;
+  const cartItemsMatch = (cartItem, targetItem) => {
+    if (cartItem.id !== targetItem.id) return false;
+    if (targetItem.selectedVariant) {
+      return String(cartItem.selectedVariant?.variant_id || "") === String(targetItem.selectedVariant?.variant_id || "");
+    }
+    return !cartItem.selectedVariant;
+  };
 
-    const found = cart.find(match);
-    if (found) {
-      persist(cart.map((c) => (match(c) ? { ...c, quantity: (c.quantity || 1) + 1 } : c)));
+  const addBaseItem = (item) => {
+    commitCart((prev) => {
+      const existing = prev.find((cartItem) => cartItem.id === item.id && !cartItem.selectedVariant);
+      if (existing) {
+        return prev.map((cartItem) =>
+          cartItem.id === item.id && !cartItem.selectedVariant
+            ? { ...cartItem, quantity: Number(cartItem.quantity || 0) + 1 }
+            : cartItem
+        );
+      }
+
+      return [
+        ...prev,
+        {
+          ...item,
+          displayName: item.name,
+          price: Number(item.price) || 0,
+          quantity: 1,
+          selectedVariant: null,
+        },
+      ];
+    });
+  };
+
+  const handleVariantAdd = (variantItem) => {
+    commitCart((prev) => {
+      const existingIdx = prev.findIndex((cartItem) => cartItemsMatch(cartItem, variantItem));
+      if (existingIdx >= 0) {
+        const next = [...prev];
+        next[existingIdx] = {
+          ...next[existingIdx],
+          quantity: Number(next[existingIdx].quantity || 0) + Number(variantItem.quantity || 0),
+        };
+        return next;
+      }
+      return [...prev, variantItem];
+    });
+  };
+
+  const handleAddItem = (item) => {
+    if ((item.has_variants && item.variants?.length > 0) || item.has_addons) {
+      setSelectedItem(item);
+      setShowVariantSelector(true);
       return;
     }
 
-    persist([
-      ...cart,
-      {
-        id: it.id,
-        name: it.name,
-        displayName: it.name,
-        price: Number(it.price) || 0,
-        quantity: 1,
-        veg: !!it.veg,
-        image_url: it.image_url || null,
-        is_packaged_good: !!it.is_packaged_good,
-        tax_rate: it.tax_rate ?? null,
-        selectedVariant: null,
-      },
-    ]);
-    // Do NOT auto-open cart: setCartOpen(true);
+    addBaseItem(item);
   };
 
   const updateQty = (target, qty) => {
-    const match = (c) =>
-      c.id === target.id &&
-      (target.selectedVariant
-        ? c.selectedVariant?.variant_id === target.selectedVariant?.variant_id
-        : !c.selectedVariant);
+    const nextQty = Number(qty) || 0;
+    commitCart((prev) => {
+      if (nextQty <= 0) return prev.filter((cartItem) => !cartItemsMatch(cartItem, target));
+      return prev.map((cartItem) =>
+        cartItemsMatch(cartItem, target) ? { ...cartItem, quantity: nextQty } : cartItem
+      );
+    });
+  };
 
-    if (qty <= 0) persist(cart.filter((c) => !match(c)));
-    else persist(cart.map((c) => (match(c) ? { ...c, quantity: qty } : c)));
+  const handleVariantEditUpdate = (targetItem, quantity) => {
+    updateQty(targetItem, quantity);
   };
 
   const categories = useMemo(() => {
@@ -203,8 +357,18 @@ export default function DeliveryRestaurantMenu() {
     const term = q.trim().toLowerCase();
     return (items || [])
       .filter((it) => (cat === "All" ? true : String(it.category || "") === cat))
-      .filter((it) => (it.name || "").toLowerCase().includes(term));
+      .filter((it) =>
+        !term ||
+        (it.name || "").toLowerCase().includes(term) ||
+        (it.description || "").toLowerCase().includes(term)
+      );
   }, [items, cat, q]);
+
+  const getItemQuantity = (itemId) => {
+    return cart
+      .filter((cartItem) => cartItem.id === itemId)
+      .reduce((sum, cartItem) => sum + Number(cartItem.quantity || 0), 0);
+  };
 
   const totals = useMemo(() => {
     const profile = restaurant?.restaurant_profiles;
@@ -282,7 +446,7 @@ export default function DeliveryRestaurantMenu() {
   }
 
   return (
-    <div className="delivery-menu-page">
+    <div className="delivery-menu-page" style={{ "--brand": brandColor }}>
       <header className="delivery-menu-header">
         <div className="header-content">
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -349,113 +513,26 @@ export default function DeliveryRestaurantMenu() {
         ) : (
           <div className="menu-grid">
             {filteredItems.map((it) => {
-              const inCart = cart.find(
-                (c) => c.id === it.id && !c.selectedVariant
-              );
-              const quantity = inCart?.quantity || 0;
+              const totalQty = getItemQuantity(it.id);
+              const passQty = it.has_variants ? 0 : totalQty;
+              const badge = it.has_variants ? totalQty : 0;
 
               return (
-                <div key={it.id} className="menu-item">
-                  {it.image_url ? (
-                    <img
-                      src={it.image_url}
-                      alt={it.name}
-                      style={{
-                        width: 56,
-                        height: 56,
-                        borderRadius: 12,
-                        objectFit: "cover",
-                      }}
-                    />
-                  ) : (
-                    <div
-                      style={{
-                        width: 56,
-                        height: 56,
-                        borderRadius: 12,
-                        background: "#f3f4f6",
-                      }}
-                    />
-                  )}
-
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 900, color: "#111827" }}>
-                      {it.name}{" "}
-                      <span style={{ fontSize: 12 }}>{it.veg ? "🟢" : "🔺"}</span>
-                    </div>
-                    <div style={{ marginTop: 6, color: "#6b7280", fontSize: 13 }}>
-                      ₹{Number(it.price || 0).toFixed(2)}
-                    </div>
-                  </div>
-
-                  {quantity > 0 ? (
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        border: `1px solid ${brandColor}`,
-                        borderRadius: 12,
-                        overflow: "hidden",
-                        background: "#fff",
-                      }}
-                    >
-                      <button
-                        onClick={() => updateQty(inCart, quantity - 1)}
-                        style={{
-                          padding: "8px 12px",
-                          border: "none",
-                          background: "#fff",
-                          color: brandColor,
-                          fontWeight: 900,
-                          fontSize: 16,
-                          cursor: "pointer",
-                        }}
-                      >
-                        -
-                      </button>
-                      <span
-                        style={{
-                          fontSize: 14,
-                          fontWeight: 700,
-                          minWidth: 24,
-                          textAlign: "center",
-                          color: "#111827",
-                        }}
-                      >
-                        {quantity}
-                      </span>
-                      <button
-                        onClick={() => updateQty(inCart, quantity + 1)}
-                        style={{
-                          padding: "8px 12px",
-                          border: "none",
-                          background: "#fff",
-                          color: brandColor,
-                          fontWeight: 900,
-                          fontSize: 16,
-                          cursor: "pointer",
-                        }}
-                      >
-                        +
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => addItem(it)}
-                      style={{
-                        background: "#fff",
-                        border: `2px solid ${brandColor}`,
-                        color: brandColor,
-                        borderRadius: 12,
-                        padding: "10px 12px",
-                        fontWeight: 900,
-                        cursor: "pointer",
-                        minWidth: 76,
-                      }}
-                    >
-                      Add
-                    </button>
-                  )}
+                <div key={it.id} className="menu-card-wrap">
+                  <MenuItemCard
+                    item={it}
+                    quantity={passQty}
+                    badge={badge}
+                    onAdd={() => handleAddItem(it)}
+                    onRemove={() => updateQty(it, passQty - 1)}
+                    onQuantityChange={(_, qty) => updateQty(it, qty)}
+                    onEdit={it.has_variants ? () => setEditingVariantItem(it) : undefined}
+                    showImage={enableMenuImages}
+                    highlightColor={brandColor}
+                    onItemClick={() => handleAddItem(it)}
+                    decimalPlaces={it.uom_precision ?? 0}
+                    quantityStep={it.uom_precision > 0 ? 1 / Math.pow(10, it.uom_precision) : 1}
+                  />
                 </div>
               );
             })}
@@ -503,21 +580,12 @@ export default function DeliveryRestaurantMenu() {
         }
         .menu-grid {
           display: grid;
-          gap: 12px;
+          gap: 16px;
+          grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+          align-items: start;
         }
-        .menu-item {
-          background: #fff;
-          border: 1px solid #e5e7eb;
-          border-radius: 14px;
-          padding: 14px;
-          display: flex;
-          gap: 12px;
-          align-items: center;
-          transition: all 0.2s;
-        }
-        .menu-item:hover {
-          box-shadow: 0 4px 12px rgba(0,0,0,0.06);
-          transform: translateY(-2px);
+        .menu-card-wrap {
+          min-width: 0;
         }
         @keyframes slideUp {
           from { transform: translateY(100%); opacity: 0; }
@@ -687,7 +755,7 @@ export default function DeliveryRestaurantMenu() {
                 <div style={{ fontSize: 24, fontWeight: 900, color: "#111827" }}>Your Order</div>
                 <motion.button
                   whileTap={{ scale: 0.9 }}
-                  onClick={() => persist([])}
+                  onClick={() => commitCart([])}
                   style={{
                     background: "#fee2e2",
                     color: "#ef4444",
@@ -743,6 +811,11 @@ export default function DeliveryRestaurantMenu() {
                         <div style={{ fontWeight: 700, fontSize: 16, color: "#111827" }}>
                           {it.displayName || it.name}
                         </div>
+                        {it.selectedVariant?.variant_name && (
+                          <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>
+                            {it.selectedVariant.variant_name}
+                          </div>
+                        )}
                         <div style={{ fontSize: 14, color: "#9ca3af", marginTop: 4 }}>
                           ₹{Number(it.price).toFixed(2)} x {it.quantity}
                         </div>
@@ -841,6 +914,39 @@ export default function DeliveryRestaurantMenu() {
           </>
         )}
       </AnimatePresence>
+
+      {showVariantSelector && selectedItem && (
+        <VariantSelector
+          visible={showVariantSelector}
+          item={selectedItem}
+          onSelect={handleVariantAdd}
+          onClose={() => setShowVariantSelector(false)}
+          showImage={enableMenuImages}
+          gstEnabled={!!restaurant?.restaurant_profiles?.gst_enabled}
+          pricesIncludeTax={
+            restaurant?.restaurant_profiles?.prices_include_tax === true ||
+            restaurant?.restaurant_profiles?.prices_include_tax === "true" ||
+            restaurant?.restaurant_profiles?.prices_include_tax === 1 ||
+            restaurant?.restaurant_profiles?.prices_include_tax === "1"
+          }
+          theme={{
+            main: brandColor,
+            soft: "#fff7ed",
+            border: "#ffedd5",
+            dark: brandColor,
+          }}
+        />
+      )}
+
+      {editingVariantItem && (
+        <VariantEditModal
+          item={editingVariantItem}
+          cartItems={cart.filter((cartItem) => cartItem.id === editingVariantItem.id)}
+          onUpdate={handleVariantEditUpdate}
+          onClose={() => setEditingVariantItem(null)}
+          themeColor={brandColor}
+        />
+      )}
 
       <AnimatePresence>
         {showToast && (
