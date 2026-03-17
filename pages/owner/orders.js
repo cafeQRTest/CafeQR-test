@@ -881,6 +881,7 @@ export default function OrdersPage() {
   const { user, checking } = useRequireAuth(supabase);
   const { restaurant, role, loading: restLoading } = useRestaurant();
   const canCancel = role !== 'staff'; // staff cannot cancel
+  const canEditInProgress = role !== 'staff'; // staff cannot edit orders once in progress
   const restaurantId = restaurant?.id;
 
   // NEW: state for showing the print modal
@@ -2224,6 +2225,7 @@ export default function OrdersPage() {
             <OrderCard
               key={order.id}
               canCancel={canCancel}
+              canEditInProgress={canEditInProgress}
               order={order}
               statusColor={COLORS[order.status] || COLORS.new}
               onChangeStatus={updateStatus}
@@ -2396,6 +2398,7 @@ export default function OrdersPage() {
                     <OrderCard
                       key={order.id}
                       canCancel={canCancel}
+                      canEditInProgress={canEditInProgress}
                       order={order}
                       statusColor={COLORS[order.status] || COLORS.new}
                       onChangeStatus={updateStatus}
@@ -2681,7 +2684,8 @@ function OrderCard({
   onEditPax,
   onEditTable,
   onShowItems,
-  canCancel = true
+  canCancel = true,
+  canEditInProgress = true
 }) {
   const items = toDisplayItems(order);
   const total = computeOrderTotalDisplay(order);
@@ -2821,7 +2825,9 @@ function OrderCard({
           {order.status === 'in_progress' && (
             <>
               <Button size="sm" onClick={() => onComplete(order)} disabled={generatingInvoice === order.id}>Done</Button>
-              <Button size="sm" variant="outline" onClick={() => onEditOrder(order)}>Edit</Button>
+              {canEditInProgress && (
+                <Button size="sm" variant="outline" onClick={() => onEditOrder(order)}>Edit</Button>
+              )}
               {/* Allow cancel if mistake */}
               {canCancel && (
                 <Button size="sm" variant="danger" onClick={() => onCancelOrderOpen(order)}>
@@ -2838,7 +2844,9 @@ function OrderCard({
               <Button size="sm" onClick={() => onComplete(order)} disabled={generatingInvoice === order.id}>
                 {generatingInvoice === order.id ? '...' : 'Done'}
               </Button>
-              <Button size="sm" variant="outline" onClick={() => onEditOrder(order)}>Edit</Button>
+              {canEditInProgress && (
+                <Button size="sm" variant="outline" onClick={() => onEditOrder(order)}>Edit</Button>
+              )}
               {canCancel && (
                 <Button size="sm" variant="danger" onClick={() => onCancelOrderOpen(order)}>
                   Cancel
